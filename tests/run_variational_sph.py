@@ -7,7 +7,8 @@
 """Validate variational SPH in the application.
 
 The driver runs Sod, Sedov blast, and hydroWave with every hydro-capable integrator,
-a CFL-halving check, and small SPH cosmologies for two adiabatic indices. Optional
+a CFL-halving check, and small gravity-free SPH cosmologies (expanding background
+only; PMMM has no SPH coupling yet) for two adiabatic indices. Optional
 runs compare two localities and CUDA against CPU. Every run uses a fresh directory
 under workdir, and any failed run or accuracy check produces a nonzero exit status.
 Chemistry and star-formation evolution and restart coverage lives in
@@ -495,7 +496,10 @@ def main():
         addCpu(f"cosmology_n8_gamma{gamma.replace('/', '_')}", "cosmology",
                ("cosmology", gamma), integrator=integrators[0],
                resolution=8, kind="cosmology", timeout=kCosmologyTimeout,
-               overrides={"chemistry.enabled": "false", "starFormation.enabled": "false",
+               # SPH has no self-gravity coupling in the PMMM solver, so the gas
+               # evolves on the expanding background alone until that returns.
+               overrides={"gravity.enabled": "false",
+                          "chemistry.enabled": "false", "starFormation.enabled": "false",
                           "hydro.heatCapacityRatio": gammas[gamma], "run.numberOfSteps": "2048",
                           "run.maxIterations": "5"})
 

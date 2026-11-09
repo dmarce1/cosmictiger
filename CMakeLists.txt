@@ -963,7 +963,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                 endif()
                 add_test(NAME ${source_timing_name} COMMAND ${source_timing_launcher}
                     $<TARGET_FILE:cosmictiger> ${source_timing_postflags} --run.test=sphSourceTiming
-                    --hydro.enabled=true --chemistry.enabled=true --starFormation.enabled=true
+                    ${cosmictiger_test_hydro_args} --chemistry.enabled=true --starFormation.enabled=true
                     --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --chemistry.initializationTemperature=10000
                     --gravity.cuda=${source_timing_cuda} --hydro.cuda=${source_timing_cuda}
                     --drift.cuda=${source_timing_cuda} --chemistry.cuda=${source_timing_cuda}
@@ -1108,7 +1108,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
         file(MAKE_DIRECTORY "${chemistry_timesteps_workdir}")
         add_test(NAME sph_chemistry_timesteps_cpu COMMAND cosmictiger
             --run.test=sphChemistryTimesteps --run.scenario=cosmology
-            --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --hydro.enabled=true --chemistry.enabled=true
+            --run.darkMatterParticleCount=512 --run.gasParticleCount=512 ${cosmictiger_test_hydro_args} --chemistry.enabled=true
             --chemistry.initializationTemperature=10000
             --gravity.cuda=false --hydro.cuda=false --drift.cuda=false --hpx:threads=2 --hpx:bind=none
                 ${cosmictiger_test_integrator_args})
@@ -1121,7 +1121,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                 ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS}
                 $<TARGET_FILE:cosmictiger> ${MPIEXEC_POSTFLAGS}
                 --run.test=sphChemistryTimesteps --run.scenario=cosmology
-                --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --hydro.enabled=true --chemistry.enabled=true
+                --run.darkMatterParticleCount=512 --run.gasParticleCount=512 ${cosmictiger_test_hydro_args} --chemistry.enabled=true
                 --starFormation.enabled=false --chemistry.initializationTemperature=10000
                 --gravity.cuda=false --hydro.cuda=false --drift.cuda=false --hpx:threads=1 --hpx:localities=2 --hpx:bind=none
                 ${cosmictiger_test_integrator_args}

@@ -38,7 +38,7 @@ def checkpoint_state(directory, iteration, rank=0, integer_bytes=None):
 
 
 def check_hydro_restart_roundoff(reference, resumed):
-    """Keep clocks/nonvelocity bytes exact and use the established per-axis float bound."""
+    """Keep clocks/nonvelocity bytes exact and use the shared velocity-scale float bound."""
     states = [decode_checkpoint((path / "checkpoint.0.dat").read_bytes())
               for path in (reference, resumed)]
 

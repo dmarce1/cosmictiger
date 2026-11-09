@@ -116,7 +116,7 @@ def main():
     # the global integrator remains fully active regardless of the threshold.
     blast = {"run.scenario": "blast", "run.endTime": 0.005,
              "run.numberOfSteps": 1, "run.maxIterations": 4,
-             "run.darkMatterParticleCount": 4096, "run.gasParticleCount": 4096}
+             "run.darkMatterParticleCount": 4096, "run.gasParticleCount": 3456}
     for integrator in integrators:
         for name, fraction in (("zero", 0), ("default", 1.0 / 3.0), ("one", 1)):
             label = f"{integrator}_{name}"
@@ -128,8 +128,8 @@ def main():
             counts = validate_events(output, label, integrator, fraction)
             events = EVENT.findall(output)
             _, _, _, species = checkpoint_state(directory, blast["run.maxIterations"], ranks)
-            # The blast initializer normalizes this requested resolution to
-            # two interleaved 12^3 lattices, giving 3,456 gas particles.
+            # The blast initializer rounds the request up to two interleaved
+            # n^3 lattices; 3,456 = 2 * 12^3 is already whole.
             require(species == (0, 3456), f"{label}: blast particle population changed")
             require(all(int(total) == sum(species) for _, _, total, _ in events),
                     f"{label}: lifecycle denominator differs from the total particle count")

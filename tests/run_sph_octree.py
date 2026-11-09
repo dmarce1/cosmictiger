@@ -59,7 +59,7 @@ def checkpoint_state(directory, iteration, ranks):
         state = decode_checkpoint(path.read_bytes(), ranks=ranks)
         require(state.hydro and not state.has_cooling and not state.has_stars,
                 f"{path}: expected ideal-gas SPH without additional sources")
-        require(130000 <= state.gas_version < 131000, f"{path}: obsolete SPH rate checkpoint")
+        require(140000 <= state.gas_version < 141000, f"{path}: obsolete SPH rate checkpoint")
         clocks.append((state.driver.tau, state.driver.integer_time,
                        state.driver.global_timestep, state.driver.global_hydro_timestep,
                        state.driver.iteration))
@@ -169,7 +169,7 @@ def main():
             base_timestep = state.driver.tau_max / state.header.steps
             counts["midpoints"] = validate_midpoints(output, label, base_timestep,
                 state.driver.tau, global_intervals=global_intervals if integrator == "global" else None)
-            require(species[1] > 0 and (name == "wave" or species[0] > 0),
+            require(species[1] > 0 and (name.startswith("wave") or species[0] > 0),
                     f"{label}: did not exercise the requested species")
             # One resumed event is sufficient to exercise tree reconstruction and
             # reading the current checkpoint without the removed gravity arrays.
@@ -184,12 +184,13 @@ def main():
                 resumed, final_iteration, ranks)
             require(clock == continued_clock and species == continued_species,
                     f"{label}: restart changed particle counts or simulation clock")
-            if name == "wave":
+            if name.startswith("wave"):
                 # Pair reduction order leaves transverse residuals below 0.12
-                # float eps in this wave. All nonvelocity payload bytes stay exact.
+                # float eps in this wave; a following drift may round a position to
+                # the neighboring fixed-point unit. Every other payload byte is exact.
                 counts["restart_maximum_velocity_errors"] = check_velocity_roundoff_restart(
                     reference / f"checkpoint.{final_iteration}",
-                    resumed / f"checkpoint.{final_iteration}")
+                    resumed / f"checkpoint.{final_iteration}", ranks=ranks)
             else:
                 require(final == continued,
                         f"{label}: restart changed exact particle/stage values")

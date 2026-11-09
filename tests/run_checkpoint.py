@@ -156,10 +156,22 @@ def hydro_particle_payload(checkpoint, expected_count=None):
     return state.physical
 
 
-def check_velocity_roundoff_restart(reference, resumed):
-    """Require exact nonvelocity bytes and at most four float eps per velocity axis."""
-    first, second = [decode_checkpoint((path / "checkpoint.0.dat").read_bytes())
-                     for path in (reference, resumed)]
+def check_velocity_roundoff_restart(reference, resumed, ranks=1):
+    """Require exact nonvelocity bytes and velocities within four float eps of the run's velocity scale.
+
+    Every rank file is compared; the decomposition must be the same, so each rank holds the
+    same particles in the same order in both runs."""
+    pairs = [[decode_checkpoint((path / f"checkpoint.{rank}.dat").read_bytes(), ranks=ranks)
+              for path in (reference, resumed)] for rank in range(ranks)]
+    scale = max(abs(value) for pair in pairs for state in pair for value in state.velocities)
+    errors = [0.0, 0.0, 0.0]
+    for first, second in pairs:
+        rankErrors = check_rank_velocity_roundoff_restart(first, second, scale)
+        errors = [max(a, b) for a, b in zip(errors, rankErrors)]
+    return errors
+
+
+def check_rank_velocity_roundoff_restart(first, second, scale):
     require(first.hydro and second.hydro and first.count == first.gas_count ==
             second.count == second.gas_count, "restart changed its all-gas population")
     require((first.integer_bytes, first.position_bytes) ==
@@ -170,18 +182,32 @@ def check_velocity_roundoff_restart(reference, resumed):
     # Physical payload begins with two particle counts, then three position
     # arrays and the interleaved float velocities. Keep every other byte exact,
     # including particle ordering, flags, viscosity state and entropy context.
-    begin = 2 * first.integer_bytes + 3 * first.count * first.position_bytes
+    positions = 2 * first.integer_bytes
+    begin = positions + 3 * first.count * first.position_bytes
     end = begin + 3 * first.count * 4
-    require(first.physical[:begin] == second.physical[:begin] and
+    require(first.physical[:positions] == second.physical[:positions] and
             first.physical[end:] == second.physical[end:],
             "restart changed a nonvelocity physical field")
+    # A drift after a kick whose velocity differs by float roundoff can round a
+    # fixed-point coordinate to the neighboring unit. Allow one unit, modulo the
+    # periodic wrap, and nothing more.
+    period = 1 << (8 * first.position_bytes)
+    for axis in range(3):
+        for old, new in zip(first.positions[axis], second.positions[axis]):
+            step = (new - old) % period
+            require(min(step, period - step) <= 1,
+                    "restart moved a position by more than one fixed-point unit")
+    # Pair impulses are accumulated in float compensated sums (SphCompensatedSum) in an
+    # order set by worker scheduling. A component that cancels exactly, such as the
+    # transverse axes of the wave, retains only roundoff of single pair impulses, so its
+    # own maximum is no scale for that roundoff. Bound every axis by the largest velocity
+    # component of the run, over every rank, instead, as tests/run_sph_dimensions.py does.
     errors = []
     for axis in range(3):
         old, new = first.velocities[axis::3], second.velocities[axis::3]
         error = max(abs(a - b) for a, b in zip(old, new))
-        scale = max(abs(value) for value in old + new)
         require(error <= 4 * 2 ** -23 * scale,
-                "restart velocity exceeded componentwise float accumulation tolerance")
+                "restart velocity exceeded float accumulation tolerance of the velocity scale")
         errors.append(error)
     return errors
 

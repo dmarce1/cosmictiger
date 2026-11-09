@@ -183,7 +183,9 @@ def main():
         raise RuntimeError(f"deprecated aliases remain in help: {sorted(set(deprecated_aliases) & option_names)}")
 
     sph_controls_available = not args.without_sph and not hydro_rejected
-    sph_control_options = ["--hydro.enabled=true"] if sph_controls_available else []
+    # SPH fixtures run without self-gravity: PMMM does not couple to SPH yet.
+    sph_enabled_options = ["--hydro.enabled=true", "--gravity.enabled=false"]
+    sph_control_options = sph_enabled_options if sph_controls_available else []
 
     def assertStartupOptions(output, hydroMethod):
         assertResolvedOptions(output)
@@ -281,10 +283,11 @@ viscosityEpsilon = 0.02
 conductionCoefficient = 0.3
 viscosityCoefficientMin = 0.15
 viscosityDecay = 0.3
-zPlaneAcceleration = 0.25
 heatCapacityRatio = 1.4
 neighborNumber = 48
 cfl = 0.3
+[scenario.rayleighTaylor]
+zPlaneAcceleration = 0.25
 [lightcone]
 mapSize = 8
 """)
@@ -467,8 +470,8 @@ mapSize = 8
     if sph_controls_available:
         options = [option for option in normalizationOptions
                    if not option.startswith("--hydro.enabled=")]
-        normalized = run("units_box_sph_combined_mass", options + [
-            "--hydro.enabled=true", f"--units.boxLength={boxLength}"])
+        normalized = run("units_box_sph_combined_mass", options + sph_enabled_options + [
+            f"--units.boxLength={boxLength}"])
         assertNormalization(normalized, boxLength, massSolar)
 
     normalizationConfig = args.workdir / "normalization.ini"
@@ -599,10 +602,12 @@ mapSize = 8
                                   ("gravity.pmmmCoarseMeshSize", mesh_size)):
                 assertNumericSetting(pmmm_output, key, expected)
             assertNumericSetting(pmmm_output, "gravity.openingAngle", math.sqrt(3) / (near_width + 1))
-        assertNumericSetting(balsara_default, "gravity.pmmmNearWidth", 2)
-        assertNumericSetting(balsara_default, "gravity.pmmmBatchParticles", 4096)
-        assertNumericSetting(balsara_default, "gravity.pmmmCoarseMeshSize", 8)
-        assertNumericSetting(balsara_default, "gravity.openingAngle", math.sqrt(3) / 3)
+        # balsara_default runs SPH without gravity, which leaves the coarse mesh
+        # unresolved; read the PMMM defaults from the gravity-only fixture.
+        assertNumericSetting(error_defaults, "gravity.pmmmNearWidth", 2)
+        assertNumericSetting(error_defaults, "gravity.pmmmBatchParticles", 4096)
+        assertNumericSetting(error_defaults, "gravity.pmmmCoarseMeshSize", 8)
+        assertNumericSetting(error_defaults, "gravity.openingAngle", math.sqrt(3) / 3)
         # Zero resolves to meshSize/8, never below the near-width minimum and
         # never above the mesh itself.
         for mesh_size, near_width, expected in ((64, None, 8), (8, None, 8),
@@ -906,7 +911,7 @@ mapSize = 8
     elif not hydro_rejected:
         star_options = [option for option in metadata_options
                         if not option.startswith("--hydro.enabled=")] + [
-                            "--hydro.enabled=true", "--starFormation.enabled=true",
+                            *sph_enabled_options, "--starFormation.enabled=true",
                             "--chemistry.enabled=true", "--chemistry.initializationTemperature=10000"]
         star_config = args.workdir / "star_formation.ini"
         star_config.write_text("[starFormation]\nenabled=true\nbeta=0.15\nseed=18446744073709551615\n"
@@ -968,8 +973,7 @@ mapSize = 8
         # Both checkpoint layouts round-trip: zero retains the existing SPH block,
         # while nonzero acceleration appends the flagged z-plane force parameter.
         hydro_metadata_options = [option for option in metadata_options
-                                  if not option.startswith("--hydro.enabled=")] + [
-                                      "--hydro.enabled=true"]
+                                  if not option.startswith("--hydro.enabled=")] + sph_enabled_options
         for acceleration in (0.0, 0.5):
             output = run(f"z_plane_checkpoint_{acceleration}", hydro_metadata_options + [
                 f"--configuration={config.resolve()}",
@@ -981,7 +985,7 @@ mapSize = 8
     if chemistryAvailable and coupledSourcesAvailable and not hydro_rejected:
         cooling_options = [option for option in metadata_options
                            if not option.startswith("--hydro.enabled=")] + [
-                               "--hydro.enabled=true", "--chemistry.enabled=true"]
+                               *sph_enabled_options, "--chemistry.enabled=true"]
         output = run("gadget4_cooling_defaults", cooling_options)
         assertNumericSetting(output, "chemistry.initializationTemperature", 10000.0)
         assertNumericSetting(output, "chemistry.minimumSpecificEnergy", 0.0)
@@ -1402,8 +1406,12 @@ mapSize = 8
                 starFormationAvailable and not hydro_rejected):
             enabled_options = [option for option in metadata_options
                                if not option.startswith("--hydro.enabled=")]
+            # SPH has no self-gravity coupling in the PMMM solver yet: check that the
+            # preset's own hydro, cooling and star formation switches survive with
+            # gravity (and its force-error sampling) switched off.
             enabled = run(f"enabled_physics_{case_name}", enabled_options +
-                          [f"--configuration={path}"] + runtime_overrides)
+                          [f"--configuration={path}", "--gravity.enabled=false",
+                           "--gravity.errorInterval=0"] + runtime_overrides)
             for section in ("hydro", "chemistry", "starFormation"):
                 key = section + ".enabled"
                 expected = "T" if ini.getboolean(section, "enabled") else "F"
@@ -1550,7 +1558,7 @@ mapSize = 8
                  "gravity.openingAngle": "0.8", "gravity.openingSchedule": "none",
                  "run.timeIntegrator": args.time_integrator
                  }.get(option, "false")
-        group, name = option.split(".")
+        group, name = option.split(".", 1)
         # Numeric legacy booleans must not abbreviate the plummer scenario category.
         values = [value, "0", "1"] if option == "initial.plummer" else [value]
         for value in values:

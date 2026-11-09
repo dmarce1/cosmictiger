@@ -6,7 +6,7 @@ import tempfile
 
 source = pathlib.Path(sys.argv[1]).resolve()
 features = source / "cmake/features.cmake"
-solvers = ("FMM", "PMMM_PP", "PMMM_FMM", "PM", "P3M_PP", "P3M_FMM")
+solvers = ("GRAVITY",)
 with tempfile.TemporaryDirectory(prefix="sph_dimension_config_") as directory:
     script = pathlib.Path(directory) / "check.cmake"
     script.write_text(f'include("{features}")\n')

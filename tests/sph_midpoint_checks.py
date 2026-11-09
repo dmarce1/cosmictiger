@@ -11,7 +11,7 @@ MIDPOINT = re.compile(r"SPH midpoint: time=(\S+) rung=(-?\d+) dt=(\S+)")
 
 
 def check_midpoint_state(state):
-    require(130000 <= state.gas_version < 131000,
+    require(140000 <= state.gas_version < 141000,
             "midpoint checkpoint retained obsolete per-particle force or entropy-rate arrays")
     require(len(state.proposed_rungs) == state.gas_count,
             "checkpoint omitted the persistent hydro timestep bounds")

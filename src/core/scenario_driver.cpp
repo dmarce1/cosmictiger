@@ -152,9 +152,14 @@ void runFixedScenario() {
         std::max(state.minrung0, baseOptions.run.minRung);
     bool const hierarchical = baseOptions.run.hierarchicalGravity;
     bool const global = usesGlobalIntegration(baseOptions.run);
-    profile::profileBegin("rebound");
-    domainsRebound();
-    profile::profileEnd();
+    // A restart keeps the decomposition read from the checkpoint: each rank's file holds
+    // the particles of its saved domain, and recomputing the boxes here would change
+    // which rank owns which particle, and with it the order of every distributed sum.
+    if (!restarting) {
+        profile::profileBegin("rebound");
+        domainsRebound();
+        profile::profileEnd();
+    }
     Timer checkpointTimer;
     checkpointTimer.start();
     Timer runtime;
