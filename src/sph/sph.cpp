@@ -214,6 +214,10 @@ SphTreeNeighborReturn sphTreeNeighborLocalWalks(SphTreeNeighborParameters params
     // neighbor state while the caller unwinds into cleanup.
     std::exception_ptr failure;
     try {
+        if (params.operation == SphNeighborOperation::FindNeighbors && sphGhostsActive()) {
+            // The sync that precedes every neighbor search has delivered every export.
+            sphGhostsFinalizeSync();
+        }
         TreeId const root = sphTreeLocalRoot();
         if (root.index >= 0) {
             Vector<TreeId> checklist;
@@ -755,6 +759,10 @@ SphRunReturn sphRunCompute(bool cuda) {
     return rc;
 }
 
+namespace detail {
+unsigned sphRunGhostFields(SphRunParameters const& params);
+}    // namespace detail
+
 SphRunReturn sphRun(SphRunParameters params, bool cuda) {
     // Initial density publication is provided by the CPU smoothing solver.
     cuda = cuda && !params.initializeDensity;
@@ -766,7 +774,7 @@ SphRunReturn sphRun(SphRunParameters params, bool cuda) {
     if (hpxRank() == 0 && (hpxSize() > 1 || params.midpointHydro)) {
         if (sphGhostsActive()) {
             // Owners push the fields this pass reads before anyone stages.
-            sphGhostsRefresh();
+            sphGhostsRefresh(detail::sphRunGhostFields(params));
         }
         sphRunStage(params, cuda);
         auto result = sphRunCompute(cuda);
@@ -883,6 +891,36 @@ void SphRunWorkspace::addWork(TreeId selfId) {
     r.first = neighborBegin;
     r.second = neighborEnd;
 }
+
+namespace detail {
+
+// The ghost field groups that stage() reads for remote sources, by the same conditions it
+// sizes its host arrays with. A group missing here makes the remote read throw.
+unsigned sphRunGhostFields(SphRunParameters const& params) {
+    unsigned fields = kSphGhostPositions;
+    switch (params.runType) {
+    case kSphRunSmoothingLengths:
+        break;
+    case kSphRunDensityAndGradients:
+        fields |= kSphGhostInternalEnergies | kSphGhostSmoothingLengths | kSphGhostRungs |
+            kSphGhostVelocities;
+        break;
+    case kSphRunRungs:
+        fields |= kSphGhostSmoothingLengths |
+            (sphRungBalanceActive() ? kSphGhostRungCandidates : kSphGhostRungs);
+        break;
+    case kSphRunHydro:
+        fields |= kSphGhostInternalEnergies | kSphGhostSmoothingLengths | kSphGhostDensities |
+            kSphGhostVelocities | (params.midpointHydro ? kSphGhostRungs : 0u);
+        break;
+    default:
+        fields = kSphGhostAllFields;
+        break;
+    }
+    return fields;
+}
+
+}    // namespace detail
 
 void SphRunWorkspace::stage() {
     size_t particleStorageSize = 0;

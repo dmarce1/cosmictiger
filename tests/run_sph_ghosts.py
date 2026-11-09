@@ -41,7 +41,8 @@ def relative_difference(first, second):
 
 
 GHOSTS = re.compile(r"^SPH ghosts: syncs=(\d+) refreshes=(\d+) leaves=(\d+) particles=(\d+) "
-                    r"exported leaves=(\d+) record bytes=(\d+) field bytes=(\d+)$", re.MULTILINE)
+                    r"exported leaves=(\d+) record bytes=(\d+) field bytes=(\d+) "
+                    r"needed field bytes=(\d+) all field bytes=(\d+)$", re.MULTILINE)
 
 
 def particles(states):
@@ -201,7 +202,8 @@ def main():
                 evidence[label + "_ghosts"] = {
                     "syncs": int(counters[1]), "refreshes": int(counters[2]),
                     "leaves": int(counters[3]), "particles": int(counters[4]),
-                    "field_bytes": int(counters[7])}
+                    "field_bytes": int(counters[7]), "needed_field_bytes": int(counters[8]),
+                    "all_field_bytes": int(counters[9])}
                 worst = compare(label, reference, states(directory, iteration, ranks),
                                 gravity_tolerances if gravity else {})
                 evidence[label] = worst

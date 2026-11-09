@@ -142,10 +142,20 @@ int hpx_main(int argc, char* argv[]) {
                     auto const ghosts = sphGhostsStatistics();
                     std::cout << std::format("SPH ghosts: syncs={} refreshes={} leaves={} "
                                              "particles={} exported leaves={} record bytes={} "
-                                             "field bytes={}\n",
+                                             "field bytes={} needed field bytes={} "
+                                             "all field bytes={}\n",
                                      ghosts.syncs, ghosts.refreshes, ghosts.leaves,
                                      ghosts.particles, ghosts.exportedLeaves, ghosts.recordBytes,
-                                     ghosts.fieldBytes)
+                                     ghosts.fieldBytes, ghosts.neededFieldBytes,
+                                     ghosts.allFieldBytes)
+                              << std::flush;
+                    std::cout << std::format("SPH ghost field bytes by group: positions={} "
+                                             "internal energies={} smoothing lengths={} rungs={} "
+                                             "velocities={} densities={} rung candidates={}\n",
+                                     ghosts.groupFieldBytes[0], ghosts.groupFieldBytes[1],
+                                     ghosts.groupFieldBytes[2], ghosts.groupFieldBytes[3],
+                                     ghosts.groupFieldBytes[4], ghosts.groupFieldBytes[5],
+                                     ghosts.groupFieldBytes[6])
                               << std::flush;
                     sphGhostsClear();
                 }

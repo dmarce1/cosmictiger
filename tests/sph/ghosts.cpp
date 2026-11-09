@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <format>
 #include <iostream>
 #include <stdexcept>
@@ -121,9 +122,174 @@ std::vector<GhostLeafBoxes> localLeafBoxes() {
     return leaves;
 }
 
+// Every pushed field of one owner leaf, as the gas readers stage it.
+struct GhostLeafFields {
+    int owner = -1;
+    Pair<ParticleInteger> range;
+    Vector<Position> x;
+    Vector<Position> y;
+    Vector<Position> z;
+    Vector<float> internalEnergy;
+    Vector<float> smoothingLength;
+    Vector<char> rung;
+    Vector<float> vx;
+    Vector<float> vy;
+    Vector<float> vz;
+    Vector<float> density;
+    Vector<float> balsaraFactor;
+    Vector<float> bulkViscosityCoefficient;
+    Vector<float> gradHCorrection;
+
+    template <class Archive>
+    void serialize(Archive&& archive, unsigned) {
+        archive & owner & range & x & y & z & internalEnergy & smoothingLength & rung & vx & vy &
+            vz & density & balsaraFactor & bulkViscosityCoefficient & gradHCorrection;
+    }
+
+    // The first field whose bytes differ, or nullptr. Bytes, not values: an unbuilt grad-h
+    // correction is NaN, and a ghost copy must carry it unchanged.
+    char const* firstDifference(GhostLeafFields const& other) const {
+        auto const same = [](auto const& a, auto const& b) {
+            return a.size() == b.size() &&
+                (a.empty() || std::memcmp(a.data(), b.data(), a.size() * sizeof(a[0])) == 0);
+        };
+        if (owner != other.owner || range != other.range) {
+            return "leaf";
+        }
+        if (!same(x, other.x) || !same(y, other.y) || !same(z, other.z)) {
+            return "positions";
+        }
+        if (!same(internalEnergy, other.internalEnergy)) {
+            return "internal energies";
+        }
+        if (!same(smoothingLength, other.smoothingLength)) {
+            return "smoothing lengths";
+        }
+        if (!same(rung, other.rung)) {
+            return "rungs";
+        }
+        if (!same(vx, other.vx) || !same(vy, other.vy) || !same(vz, other.vz)) {
+            return "velocities";
+        }
+        if (!same(density, other.density) || !same(balsaraFactor, other.balsaraFactor) ||
+            !same(bulkViscosityCoefficient, other.bulkViscosityCoefficient) ||
+            !same(gradHCorrection, other.gradHCorrection)) {
+            return "densities";
+        }
+        return nullptr;
+    }
+};
+
+// Read one owner leaf through the gas readers: its owner reads local gas, an importer reads
+// its ghost copy inside a staging bracket.
+GhostLeafFields readLeafFields(int owner, Pair<ParticleInteger> range) {
+    GhostLeafFields fields;
+    fields.owner = owner;
+    fields.range = range;
+    size_t const count = range.second - range.first;
+    for (auto* field : {&fields.x, &fields.y, &fields.z}) {
+        field->resize(count);
+    }
+    for (auto* field : {&fields.internalEnergy, &fields.smoothingLength, &fields.vx, &fields.vy,
+             &fields.vz, &fields.density, &fields.balsaraFactor, &fields.bulkViscosityCoefficient,
+             &fields.gradHCorrection}) {
+        field->resize(count);
+    }
+    fields.rung.resize(count);
+    ParticleGlobalRange global;
+    global.proc = owner;
+    global.range = range;
+    bool const remote = owner != hpxRank();
+    if (remote) {
+        sphGhostsBeginStaging();
+    }
+    try {
+        sphParticlesGlobalReadPositions(
+            global, fields.x.data(), fields.y.data(), fields.z.data(), 0);
+        sphParticlesGlobalReadInternalEnergyAndSmoothingLength(
+            global, fields.internalEnergy.data(), fields.smoothingLength.data(), 0);
+        sphParticlesGlobalReadRungs(global, fields.rung.data(), 0);
+        sphParticlesGlobalReadVelocities(
+            global, fields.vx.data(), fields.vy.data(), fields.vz.data(), 0);
+        sphParticlesGlobalReadDensity(global, fields.density.data(), 0, fields.balsaraFactor.data(),
+            fields.bulkViscosityCoefficient.data(), fields.gradHCorrection.data());
+    } catch (...) {
+        if (remote) {
+            sphGhostsEndStaging();
+        }
+        throw;
+    }
+    if (remote) {
+        sphGhostsEndStaging();
+    }
+    return fields;
+}
+
+// This locality's ghost copies of every ghost leaf.
+std::vector<GhostLeafFields> localGhostCopies() {
+    std::vector<GhostLeafFields> copies;
+    for (auto const id : sphGhostsLeafIds()) {
+        auto const& leaf = *sphGhostsFindNode(id);
+        copies.push_back(readLeafFields(id.proc, leaf.particleRange));
+    }
+    return copies;
+}
+
+// The owner's current values of the given local leaves.
+std::vector<GhostLeafFields> ownerLeafFields(std::vector<Pair<ParticleInteger>> ranges) {
+    std::vector<GhostLeafFields> fields;
+    for (auto const& range : ranges) {
+        fields.push_back(readLeafFields(hpxRank(), range));
+    }
+    return fields;
+}
+
+// Whether reading every ghost leaf's velocities throws, as it must when the last refresh did
+// not carry them.
+bool ghostVelocitiesThrow() {
+    for (auto const id : sphGhostsLeafIds()) {
+        auto const& leaf = *sphGhostsFindNode(id);
+        ParticleGlobalRange global;
+        global.proc = id.proc;
+        global.range = leaf.particleRange;
+        std::vector<float> v(leaf.numberOfParticles());
+        sphGhostsBeginStaging();
+        bool threw = false;
+        try {
+            sphParticlesGlobalReadVelocities(global, v.data(), v.data(), v.data(), 0);
+        } catch (std::exception const&) {
+            threw = true;
+        }
+        sphGhostsEndStaging();
+        if (!threw) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Change every third particle's support, velocity and internal energy, and nudge every fifth
+// position within its leaf, so a refresh has some changed and many unchanged slots.
+void perturbGhostSources(int round) {
+    for (ParticleInteger i = 0; i < sphParticlesSize(); ++i) {
+        if ((i + round) % 3 == 0) {
+            sphParticlesSmoothingLength(i) *= 1.01f;
+            sphParticlesVelocity(kXi, i) += 0.001f * float(round + 1);
+            sphParticlesSetInternalEnergy(i, 1.0f + 0.01f * float(round + 1));
+        }
+        if ((i + round) % 5 == 0) {
+            sphParticlesPosition(kYi, i) += Position(1.0e-7);
+        }
+    }
+}
+
 }    // namespace detail
 
 HPX_PLAIN_ACTION(detail::initializeGhostParticles, InitializeGhostParticlesAction);
+HPX_PLAIN_ACTION(detail::localGhostCopies, GhostLocalCopiesAction);
+HPX_PLAIN_ACTION(detail::ownerLeafFields, GhostOwnerLeafFieldsAction);
+HPX_PLAIN_ACTION(detail::ghostVelocitiesThrow, GhostVelocitiesThrowAction);
+HPX_PLAIN_ACTION(detail::perturbGhostSources, PerturbGhostSourcesAction);
 HPX_PLAIN_ACTION(detail::localNeighborTable, GhostLocalNeighborTableAction);
 HPX_PLAIN_ACTION(detail::localLeafBoxes, GhostLocalLeafBoxesAction);
 
@@ -202,6 +368,52 @@ std::int64_t compareNeighborTables(std::vector<NeighborTable> const& expected,
     return remoteLeafPairs;
 }
 
+// Every importer's ghost copy of every leaf equals its owner's current values bit for bit.
+std::int64_t verifyGhostCopies(char const* stage) {
+    std::vector<hpx::future<std::vector<GhostLeafFields>>> copies;
+    for (auto const& locality : hpxLocalities()) {
+        copies.push_back(hpx::async<GhostLocalCopiesAction>(locality));
+    }
+    std::int64_t particles = 0;
+    for (auto& future : copies) {
+        auto const held = future.get();
+        std::vector<std::vector<Pair<ParticleInteger>>> ranges(hpxSize());
+        for (auto const& copy : held) {
+            ranges[copy.owner].push_back(copy.range);
+        }
+        std::vector<std::vector<GhostLeafFields>> truth(hpxSize());
+        for (int owner = 0; owner < hpxSize(); ++owner) {
+            if (!ranges[owner].empty()) {
+                truth[owner] =
+                    hpx::async<GhostOwnerLeafFieldsAction>(hpxLocalities()[owner], ranges[owner])
+                        .get();
+            }
+        }
+        std::vector<size_t> next(hpxSize(), 0);
+        for (auto const& copy : held) {
+            auto const& expected = truth[copy.owner][next[copy.owner]++];
+            char const* const difference = copy.firstDifference(expected);
+            requireGhosts(difference == nullptr,
+                std::format("{}: the {} of a ghost copy of rank {} gas [{}, {}) differ from its "
+                            "owner's",
+                    stage, difference ? difference : "", copy.owner, copy.range.first,
+                    copy.range.second));
+            particles += copy.range.second - copy.range.first;
+        }
+    }
+    return particles;
+}
+
+void perturbSources(int round) {
+    std::vector<hpx::future<void>> futures;
+    for (auto const& locality : hpxLocalities()) {
+        futures.push_back(hpx::async<PerturbGhostSourcesAction>(locality, round));
+    }
+    for (auto& future : futures) {
+        future.get();
+    }
+}
+
 void findNeighbors(TreeId root, SphInteractionDirection direction) {
     SphTreeNeighborParameters parameters{};
     parameters.operation = SphNeighborOperation::FindNeighbors;
@@ -271,6 +483,50 @@ void sphGhostsTest() {
         }
     }
     if (hpxSize() > 1) {
+        // Changed-set pushes (M6): copies equal their owners after full, sparse and kept-block
+        // refreshes, a group outside the last refresh cannot be read, and an unchanged source
+        // set costs no field bytes.
+        constexpr unsigned kTestFields = kSphGhostAllFields & ~kSphGhostRungCandidates;
+        sphGhostsResetStatistics();
+        sphGhostsRefresh(kTestFields);
+        auto const copied = detail::verifyGhostCopies("first refresh");
+        detail::requireGhosts(copied > 0, "the fixture holds no ghost particles");
+        auto const first = sphGhostsStatistics();
+        detail::requireGhosts(first.fieldBytes == first.neededFieldBytes,
+            "a first refresh did not send every requested slot");
+        sphGhostsRefresh(kTestFields);
+        detail::verifyGhostCopies("unchanged refresh");
+        auto const unchanged = sphGhostsStatistics();
+        detail::requireGhosts(
+            unchanged.fieldBytes == first.fieldBytes, "an unchanged refresh sent field bytes");
+        detail::perturbSources(0);
+        sphGhostsRefresh(kTestFields);
+        detail::verifyGhostCopies("sparse refresh");
+        auto const sparse = sphGhostsStatistics();
+        std::int64_t const sparseBytes = sparse.fieldBytes - unchanged.fieldBytes;
+        detail::requireGhosts(sparseBytes > 0 && sparseBytes < first.fieldBytes,
+            "a partial change was not sent as a partial update");
+        sphGhostsRefresh(kSphGhostPositions);
+        bool allThrew = true;
+        for (auto const& locality : hpxLocalities()) {
+            allThrew = allThrew && hpx::async<GhostVelocitiesThrowAction>(locality).get();
+        }
+        detail::requireGhosts(allThrew, "velocities outside the last refresh were readable");
+        // A walk resyncs every export; unchanged exports keep their blocks and fields.
+        detail::perturbSources(1);
+        detail::findNeighbors(built.id, SphInteractionDirection::TargetSupport);
+        auto const beforeResyncRefresh = sphGhostsStatistics();
+        sphGhostsRefresh(kTestFields);
+        detail::verifyGhostCopies("refresh after a resync");
+        auto const afterResyncRefresh = sphGhostsStatistics();
+        // The same boxes give the same exports, so every block is kept and only the perturbed
+        // particles are sent, not a dense resend of every requested slot.
+        detail::requireGhosts(afterResyncRefresh.fieldBytes - beforeResyncRefresh.fieldBytes <
+                afterResyncRefresh.neededFieldBytes - beforeResyncRefresh.neededFieldBytes,
+            "a resync with unchanged exports did not keep the ghost blocks");
+        std::cout << std::format("SPH ghost changed-set pushes: first={} sparse={} bytes\n",
+                         first.fieldBytes, sparseBytes)
+                  << std::flush;
         detail::requireGhosts(remoteLeafPairs > 0, "the fixture has no cross-locality leaf pair");
         // There is no fetch path: a remote node that is not a ghost leaf, and remote gas read
         // outside the staging of a pass, must both throw.

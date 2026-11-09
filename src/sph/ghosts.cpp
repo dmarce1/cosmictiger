@@ -7,9 +7,12 @@
  */
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cstdint>
+#include <cstring>
 #include <exception>
+#include <map>
 #include <mutex>
 #include <stdexcept>
 #include <unordered_map>
@@ -70,138 +73,179 @@ struct SphGhostInterest {
     }
 };
 
-// The fields of an owner's exported particles, in the order of its exported leaves.
-struct SphGhostFields {
+// Field groups, in the bit order of the kSphGhost* masks. Each group is a fixed-size record
+// per particle, compared and copied as bytes.
+enum GhostGroup : int {
+    kGroupPositions,
+    kGroupInternalEnergy,
+    kGroupSmoothingLength,
+    kGroupRung,
+    kGroupVelocity,
+    kGroupDensity,
+    kGroupRungCandidate,
+    kGroupCount
+};
+
+struct GhostPosition {
+    Position x;
+    Position y;
+    Position z;
+};
+
+struct GhostVelocity {
+    float vx;
+    float vy;
+    float vz;
+};
+
+struct GhostDensity {
+    float density;
+    float balsaraFactor;
+    float bulkViscosityCoefficient;
+    float gradHCorrection;
+};
+
+static_assert(sizeof(GhostPosition) == 3 * sizeof(Position));
+static_assert(sizeof(GhostVelocity) == 3 * sizeof(float));
+static_assert(sizeof(GhostDensity) == 4 * sizeof(float));
+static_assert(kSphGhostAllFields == (1u << kGroupCount) - 1u);
+static_assert(std::tuple_size_v<decltype(SphGhostStatistics::groupFieldBytes)> == kGroupCount);
+
+inline constexpr std::array<size_t, kGroupCount> kGroupBytes = {sizeof(GhostPosition),
+    sizeof(float), sizeof(float), sizeof(char), sizeof(GhostVelocity), sizeof(GhostDensity),
+    sizeof(char)};
+
+inline constexpr std::array<char const*, kGroupCount> kGroupNames = {"positions",
+    "internal energies", "smoothing lengths", "rungs", "velocities", "densities",
+    "rung candidates"};
+
+constexpr bool hasGroup(unsigned mask, int group) {
+    return (mask >> group) & 1u;
+}
+
+// Owner side: what this locality exports to one importer, and what it last sent there. The
+// importer holds exactly `sent` for every valid group, slot for slot in export order, so a
+// refresh sends only the slots whose current bytes differ.
+struct GhostExport {
+    std::vector<int> leaves;
+    std::vector<Pair<ParticleInteger>> ranges;
+    ParticleInteger size = 0;
+    std::array<std::vector<char>, kGroupCount> sent;
+    std::array<bool, kGroupCount> valid{};
+};
+
+// Importer side: one owner's ghost leaves and the fields of their particles. A block survives
+// a sync whose export from its owner is unchanged, keeping its fields, and is dropped by the
+// first walk after a sync its owner did not confirm.
+struct GhostBlock {
+    std::int64_t syncEpoch = 0;
+    std::vector<SphTreeNode> nodes;
+    std::vector<int> indices;
+    std::vector<ParticleInteger> offsets;
+    ParticleInteger size = 0;
+    std::array<std::vector<char>, kGroupCount> fields;
+    // The refresh that last brought each group; a read requires the current refresh.
+    std::array<std::int64_t, kGroupCount> generations{};
+};
+
+struct GhostLocation {
+    GhostBlock const* block = nullptr;
+    int node = -1;
+};
+
+// One group of a refresh: either every slot in order, or the listed slots.
+struct GhostGroupUpdate {
+    int group = -1;
+    bool dense = false;
+    Vector<std::uint32_t> slots;
+    Vector<char> bytes;
+
+    template <class Archive>
+    void serialize(Archive&& archive, unsigned) {
+        archive & group;
+        archive & dense;
+        archive & slots;
+        archive & bytes;
+    }
+
+    std::int64_t payloadBytes() const {
+        return std::int64_t(bytes.size()) + std::int64_t(slots.size()) * sizeof(std::uint32_t);
+    }
+};
+
+struct GhostFieldsMessage {
     int owner = -1;
-    std::int64_t generation = 0;    // The refresh that packed these fields.
-    Vector<Position> x;
-    Vector<Position> y;
-    Vector<Position> z;
-    Vector<float> internalEnergy;
-    Vector<float> smoothingLength;
-    Vector<char> rung;
-    Vector<float> vx;
-    Vector<float> vy;
-    Vector<float> vz;
-    Vector<float> density;
-    Vector<float> balsaraFactor;
-    Vector<float> bulkViscosityCoefficient;
-    Vector<float> gradHCorrection;
-    Vector<char> rungCandidate;    // Empty unless the rung balance is active.
+    std::int64_t generation = 0;
+    unsigned mask = 0;
+    Vector<GhostGroupUpdate> updates;
 
     template <class Archive>
     void serialize(Archive&& archive, unsigned) {
         archive & owner;
         archive & generation;
-        archive & x;
-        archive & y;
-        archive & z;
-        archive & internalEnergy;
-        archive & smoothingLength;
-        archive & rung;
-        archive & vx;
-        archive & vy;
-        archive & vz;
-        archive & density;
-        archive & balsaraFactor;
-        archive & bulkViscosityCoefficient;
-        archive & gradHCorrection;
-        archive & rungCandidate;
+        archive & mask;
+        archive & updates;
     }
-
-    std::int64_t bytes() const {
-        return std::int64_t(x.size() + y.size() + z.size()) * sizeof(Position) +
-            std::int64_t(internalEnergy.size() + smoothingLength.size() + vx.size() + vy.size() +
-                vz.size() + density.size() + balsaraFactor.size() +
-                bulkViscosityCoefficient.size() + gradHCorrection.size()) *
-            sizeof(float) +
-            std::int64_t(rung.size() + rungCandidate.size());
-    }
-};
-
-// Ghost leaves held by this locality, and the fields of their particles.
-struct SphGhostStore {
-    std::vector<SphTreeNode> nodes;
-    std::vector<ParticleInteger> nodeOffsets;
-    std::unordered_map<std::uint64_t, int> nodeById;
-    std::unordered_map<std::uint64_t, int> nodeByRangeStart;
-    std::unordered_map<int, ParticleInteger> ownerOffsets;
-    // Per owner, the refresh whose fields the store holds and whether it carried rung
-    // candidates. A read requires the current refresh, so a stage after a sync without a
-    // refresh fails instead of reading the zeros the sync left.
-    std::unordered_map<int, std::int64_t> ownerGenerations;
-    std::unordered_map<int, bool> ownerCandidates;
-    Vector<TreeId> leafIds;
-    ParticleInteger size = 0;
-    SphGhostFields fields;
 };
 
 static MutexType storeMutex;
-static SphGhostStore store;
-// Exports of this locality: importer rank to the indices of exported local leaves.
-static std::unordered_map<int, std::vector<int>> exports;
+static std::unordered_map<int, GhostExport> exports;
+static std::map<int, GhostBlock> blocks;
+static std::unordered_map<std::uint64_t, GhostLocation> nodeById;
+static std::unordered_map<std::uint64_t, GhostLocation> nodeByRangeStart;
+static Vector<TreeId> leafIds;
+static std::int64_t syncEpoch = 0;
+static std::int64_t finalizedEpoch = 0;
 static SphGhostStatistics counters;
 static std::atomic<int> stagingDepth{0};
 // The current refresh on this locality, set when its part of the refresh collective starts.
-static std::atomic<std::int64_t> refreshGeneration{0};
+// Refreshes count from 1 and blocks start at 0, so before the first refresh nothing reads.
+static std::atomic<std::int64_t> refreshGeneration{-1};
 
 std::uint64_t ghostKey(int rank, std::int64_t index) {
     return (std::uint64_t(std::uint32_t(rank)) << 32) | std::uint64_t(std::uint32_t(index));
 }
 
-// The ghost leaf holding a whole remote range, and that range's first slot in the store. The
-// owner's fields must come from the current refresh, with rung candidates when asked for.
-ParticleInteger ghostOffset(ParticleGlobalRange const& range, bool candidates = false) {
-    auto const found = store.nodeByRangeStart.find(ghostKey(range.proc, range.range.first));
-    if (found == store.nodeByRangeStart.end()) {
+void clearLocalGhosts() {
+    std::lock_guard<MutexType> lock(storeMutex);
+    exports.clear();
+    blocks.clear();
+    nodeById.clear();
+    nodeByRangeStart.clear();
+    leafIds.clear();
+    finalizedEpoch = syncEpoch;
+}
+
+// The ghost leaf holding a whole remote range, and that range's first slot in its block. Every
+// group in `groups` must come from the current refresh.
+std::pair<GhostBlock const*, ParticleInteger> ghostSlot(
+    ParticleGlobalRange const& range, unsigned groups) {
+    if (finalizedEpoch != syncEpoch) {
+        THROW_ERROR(
+            "SPH ghosts: rank %i reads ghosts before the last sync was finalized\n", hpxRank());
+    }
+    auto const found = nodeByRangeStart.find(ghostKey(range.proc, range.range.first));
+    if (found == nodeByRangeStart.end()) {
         THROW_ERROR("SPH ghosts: rank %i holds no ghost leaf for rank %i gas range [%lli, %lli)\n",
             hpxRank(), range.proc, (long long) range.range.first, (long long) range.range.second);
     }
-    auto const& node = store.nodes[found->second];
-    if (range.range.second > node.particleRange.second) {
+    auto const& block = *found->second.block;
+    int const node = found->second.node;
+    if (range.range.second > block.nodes[node].particleRange.second) {
         THROW_ERROR("SPH ghosts: remote range outruns its ghost leaf\n");
     }
-    auto const generation = store.ownerGenerations.find(range.proc);
-    if (generation == store.ownerGenerations.end() || generation->second != refreshGeneration) {
-        THROW_ERROR("SPH ghosts: rank %i reads rank %i fields not refreshed since the last sync\n",
-            hpxRank(), range.proc);
+    for (int group = 0; group < kGroupCount; ++group) {
+        if (hasGroup(groups, group) && block.generations[group] != refreshGeneration) {
+            THROW_ERROR("SPH ghosts: rank %i reads rank %i %s that this pass did not refresh\n",
+                hpxRank(), range.proc, kGroupNames[group]);
+        }
     }
-    // Staging threads read concurrently; find() never inserts.
-    if (auto const pushed = store.ownerCandidates.find(range.proc);
-        candidates && (pushed == store.ownerCandidates.end() || !pushed->second)) {
-        THROW_ERROR("SPH ghosts: rank %i reads rank %i rung candidates that were not pushed\n",
-            hpxRank(), range.proc);
-    }
-    return store.nodeOffsets[found->second];
+    return {&block, block.offsets[node]};
 }
 
 template <class T>
-void resizeField(Vector<T>& field, ParticleInteger size) {
-    field.resize(size);
-}
-
-void resizeStore(ParticleInteger size) {
-    auto& f = store.fields;
-    resizeField(f.x, size);
-    resizeField(f.y, size);
-    resizeField(f.z, size);
-    resizeField(f.internalEnergy, size);
-    resizeField(f.smoothingLength, size);
-    resizeField(f.rung, size);
-    resizeField(f.vx, size);
-    resizeField(f.vy, size);
-    resizeField(f.vz, size);
-    resizeField(f.density, size);
-    resizeField(f.balsaraFactor, size);
-    resizeField(f.bulkViscosityCoefficient, size);
-    resizeField(f.gradHCorrection, size);
-    resizeField(f.rungCandidate, size);
-}
-
-void clearLocalGhosts() {
-    std::lock_guard<MutexType> lock(storeMutex);
-    store = SphGhostStore();
-    exports.clear();
+T const* groupData(GhostBlock const& block, int group) {
+    return reinterpret_cast<T const*>(block.fields[group].data());
 }
 
 void growUnion(Fixed32Range& total, Fixed32Range const& box) {
@@ -254,107 +298,143 @@ SphGhostInterest localInterest() {
     return interest;
 }
 
-// Pack the fields of local gas range [begin, end) as the readers stage them; unused axes of a
-// reduced-dimension build carry 0.5 for positions and zero for velocities.
-void packRange(
-    SphGhostFields& fields, ParticleInteger begin, ParticleInteger end, bool includeCandidates) {
-    for (ParticleInteger i = begin; i < end; i++) {
-        fields.x.push_back(sphParticlesPositionValue(kXi, i));
-        fields.y.push_back(
-            kSpatialDimensions > 1 ? sphParticlesPositionValue(kYi, i) : Position(0.5));
-        fields.z.push_back(
-            kSpatialDimensions > 2 ? sphParticlesPositionValue(kZi, i) : Position(0.5));
-        fields.internalEnergy.push_back(sphParticlesInternalEnergy(i));
-        fields.smoothingLength.push_back(sphParticlesSmoothingLength(i));
-        fields.rung.push_back(sphParticlesRung(i));
-        fields.vx.push_back(sphParticlesVelocityValue(kXi, i));
-        fields.vy.push_back(kSpatialDimensions > 1 ? sphParticlesVelocityValue(kYi, i) : 0.0f);
-        fields.vz.push_back(kSpatialDimensions > 2 ? sphParticlesVelocityValue(kZi, i) : 0.0f);
-        fields.density.push_back(sphParticlesDensity(i));
-        fields.balsaraFactor.push_back(sphParticlesBalsaraFactors ?
-                balsara::decodeFactor(sphParticlesBalsaraFactors[i]) :
-                1.0f);
-        fields.bulkViscosityCoefficient.push_back(float(sphParticlesBulkViscosityCoefficients[i]));
-        fields.gradHCorrection.push_back(sphParticlesGradHCorrections[i]);
-    }
-    if (includeCandidates) {
+// Append the current bytes of one group for local gas range [begin, end) as the readers stage
+// them; unused axes of a reduced-dimension build carry 0.5 for positions and zero for
+// velocities.
+void packGroup(std::vector<char>& out, int group, ParticleInteger begin, ParticleInteger end) {
+    size_t const first = out.size();
+    out.resize(first + size_t(end - begin) * kGroupBytes[group]);
+    char* destination = out.data() + first;
+    auto const put = [&destination](auto const& value) {
+        std::memcpy(destination, &value, sizeof(value));
+        destination += sizeof(value);
+    };
+    if (group == kGroupRungCandidate) {
         auto const candidates = sphFetchRungCandidates(Pair<ParticleInteger>(begin, end));
-        fields.rungCandidate.insert(
-            fields.rungCandidate.end(), candidates.begin(), candidates.end());
+        for (char const candidate : candidates) {
+            put(candidate);
+        }
+        return;
+    }
+    for (ParticleInteger i = begin; i < end; i++) {
+        switch (group) {
+        case kGroupPositions: {
+            GhostPosition value;
+            value.x = sphParticlesPositionValue(kXi, i);
+            value.y = kSpatialDimensions > 1 ? sphParticlesPositionValue(kYi, i) : Position(0.5);
+            value.z = kSpatialDimensions > 2 ? sphParticlesPositionValue(kZi, i) : Position(0.5);
+            put(value);
+        } break;
+        case kGroupInternalEnergy:
+            put(float(sphParticlesInternalEnergy(i)));
+            break;
+        case kGroupSmoothingLength:
+            put(float(sphParticlesSmoothingLength(i)));
+            break;
+        case kGroupRung:
+            put(char(sphParticlesRung(i)));
+            break;
+        case kGroupVelocity: {
+            GhostVelocity value;
+            value.vx = sphParticlesVelocityValue(kXi, i);
+            value.vy = kSpatialDimensions > 1 ? sphParticlesVelocityValue(kYi, i) : 0.0f;
+            value.vz = kSpatialDimensions > 2 ? sphParticlesVelocityValue(kZi, i) : 0.0f;
+            put(value);
+        } break;
+        case kGroupDensity: {
+            GhostDensity value;
+            value.density = sphParticlesDensity(i);
+            value.balsaraFactor = sphParticlesBalsaraFactors ?
+                balsara::decodeFactor(sphParticlesBalsaraFactors[i]) :
+                1.0f;
+            value.bulkViscosityCoefficient = float(sphParticlesBulkViscosityCoefficients[i]);
+            value.gradHCorrection = sphParticlesGradHCorrections[i];
+            put(value);
+        } break;
+        default:
+            ALWAYS_ASSERT(false);
+        }
     }
 }
 
-template <class T>
-void copyField(Vector<T>& destination, Vector<T> const& source, ParticleInteger offset) {
-    std::copy(source.begin(), source.end(), destination.begin() + offset);
-}
-
-void receiveGhostLeaves(int owner, Vector<SphTreeNode> records, Vector<int> indices) {
+// Install or update one owner's ghost leaves. `keep` means the owner exports the same leaves
+// with the same particle ranges as when the block was built, so its fields stay valid. Every
+// sync follows a bounds refresh, so the records themselves are always resent.
+void receiveGhostLeaves(
+    int owner, std::int64_t epoch, Vector<SphTreeNode> records, Vector<int> indices, bool keep) {
     std::lock_guard<MutexType> lock(storeMutex);
     ALWAYS_ASSERT(records.size() == indices.size());
-    if (store.ownerOffsets.contains(owner)) {
+    auto& block = blocks[owner];
+    if (block.syncEpoch == epoch) {
         THROW_ERROR("SPH ghosts: rank %i received two syncs from rank %i\n", hpxRank(), owner);
     }
-    store.ownerOffsets[owner] = store.size;
-    for (size_t leaf = 0; leaf < records.size(); leaf++) {
-        auto const& record = records[leaf];
-        int const slot = store.nodes.size();
-        store.nodes.push_back(record);
-        store.nodeOffsets.push_back(store.size);
-        store.nodeById[ghostKey(owner, indices[leaf])] = slot;
-        store.nodeByRangeStart[ghostKey(owner, record.particleRange.first)] = slot;
-        TreeId id;
-        id.proc = owner;
-        id.index = indices[leaf];
-        store.leafIds.push_back(id);
-        store.size += record.numberOfParticles();
+    if (keep) {
+        bool same = block.indices.size() == indices.size();
+        for (size_t leaf = 0; same && leaf < indices.size(); ++leaf) {
+            same = block.indices[leaf] == indices[leaf] &&
+                block.nodes[leaf].particleRange == records[leaf].particleRange;
+        }
+        if (!same) {
+            THROW_ERROR("SPH ghosts: rank %i keeps a rank %i block whose leaves changed\n",
+                hpxRank(), owner);
+        }
+        block.nodes.assign(records.begin(), records.end());
+    } else {
+        block = GhostBlock();
+        block.nodes.assign(records.begin(), records.end());
+        block.indices.assign(indices.begin(), indices.end());
+        for (auto const& record : block.nodes) {
+            block.offsets.push_back(block.size);
+            block.size += record.numberOfParticles();
+        }
+        for (int group = 0; group < kGroupCount; ++group) {
+            block.fields[group].assign(size_t(block.size) * kGroupBytes[group], 0);
+        }
     }
-    // Neighbor lists follow this order; sort it so it does not depend on arrival order.
-    std::sort(store.leafIds.begin(), store.leafIds.end());
-    resizeStore(store.size);
+    block.syncEpoch = epoch;
 }
 
-void receiveGhostFields(SphGhostFields fields) {
-    // The store was sized by the sync; owners write disjoint blocks, so no lock is needed
-    // for the copies, only for the lookup of the owner's block.
-    ParticleInteger offset;
+void receiveGhostFields(GhostFieldsMessage message) {
+    // Owners write disjoint blocks; the lock covers only the lookup. Blocks are erased only by
+    // the first walk after a sync, never while a refresh runs.
+    GhostBlock* block;
     {
         std::lock_guard<MutexType> lock(storeMutex);
-        auto const found = store.ownerOffsets.find(fields.owner);
-        if (found == store.ownerOffsets.end()) {
+        auto const found = blocks.find(message.owner);
+        if (found == blocks.end()) {
             THROW_ERROR("SPH ghosts: rank %i received fields from rank %i without a sync\n",
-                hpxRank(), fields.owner);
+                hpxRank(), message.owner);
         }
-        offset = found->second;
-        store.ownerGenerations[fields.owner] = fields.generation;
-        store.ownerCandidates[fields.owner] = !fields.rungCandidate.empty();
+        block = &found->second;
     }
-    ALWAYS_ASSERT(offset + ParticleInteger(fields.x.size()) <= store.size);
-    auto& f = store.fields;
-    copyField(f.x, fields.x, offset);
-    copyField(f.y, fields.y, offset);
-    copyField(f.z, fields.z, offset);
-    copyField(f.internalEnergy, fields.internalEnergy, offset);
-    copyField(f.smoothingLength, fields.smoothingLength, offset);
-    copyField(f.rung, fields.rung, offset);
-    copyField(f.vx, fields.vx, offset);
-    copyField(f.vy, fields.vy, offset);
-    copyField(f.vz, fields.vz, offset);
-    copyField(f.density, fields.density, offset);
-    copyField(f.balsaraFactor, fields.balsaraFactor, offset);
-    copyField(f.bulkViscosityCoefficient, fields.bulkViscosityCoefficient, offset);
-    copyField(f.gradHCorrection, fields.gradHCorrection, offset);
-    if (!fields.rungCandidate.empty()) {
-        copyField(f.rungCandidate, fields.rungCandidate, offset);
+    for (auto const& update : message.updates) {
+        size_t const recordBytes = kGroupBytes[update.group];
+        auto& field = block->fields[update.group];
+        if (update.dense) {
+            ALWAYS_ASSERT(update.bytes.size() == field.size());
+            std::copy(update.bytes.begin(), update.bytes.end(), field.begin());
+        } else {
+            ALWAYS_ASSERT(update.bytes.size() == update.slots.size() * recordBytes);
+            for (size_t k = 0; k < update.slots.size(); ++k) {
+                ALWAYS_ASSERT(update.slots[k] < std::uint32_t(block->size));
+                std::memcpy(field.data() + size_t(update.slots[k]) * recordBytes,
+                    update.bytes.data() + k * recordBytes, recordBytes);
+            }
+        }
+    }
+    for (int group = 0; group < kGroupCount; ++group) {
+        if (hasGroup(message.mask, group)) {
+            block->generations[group] = message.generation;
+        }
     }
 }
 
 }    // namespace detail
 
 void sphGhostsClear();
-Vector<detail::SphGhostInterest> sphGhostsPublish();
-void sphGhostsExport(Vector<detail::SphGhostInterest> interests);
-void sphGhostsRefreshLocal(std::int64_t generation);
+Vector<detail::SphGhostInterest> sphGhostsPublish(std::int64_t epoch);
+void sphGhostsExport(std::int64_t epoch, Vector<detail::SphGhostInterest> interests);
+void sphGhostsRefreshLocal(std::int64_t generation, unsigned fields);
 SphGhostStatistics sphGhostsStatistics();
 void sphGhostsResetStatistics();
 HPX_PLAIN_ACTION(sphGhostsClear, SphGhostsClearAction);
@@ -406,13 +486,17 @@ void sphGhostsClear() {
     detail::joinGhostFutures(children);
 }
 
-// Collective: drop this locality's ghosts and gather every locality's interest.
-Vector<detail::SphGhostInterest> sphGhostsPublish() {
+// Collective: start sync `epoch` and gather every locality's interest. Blocks are kept: the
+// exports decide which survive.
+Vector<detail::SphGhostInterest> sphGhostsPublish(std::int64_t epoch) {
     Vector<hpx::future<Vector<detail::SphGhostInterest>>> children;
     for (auto const& child : sphCollectiveChildren()) {
-        children.push_back(hpx::async<SphGhostsPublishAction>(child));
+        children.push_back(hpx::async<SphGhostsPublishAction>(child, epoch));
     }
-    detail::clearLocalGhosts();
+    {
+        std::lock_guard<MutexType> lock(detail::storeMutex);
+        detail::syncEpoch = epoch;
+    }
     Vector<detail::SphGhostInterest> interests{detail::localInterest()};
     std::exception_ptr failure;
     for (auto& child : children) {
@@ -432,47 +516,71 @@ Vector<detail::SphGhostInterest> sphGhostsPublish() {
 }
 
 // Collective: select this locality's exports against every interest and push the records.
-void sphGhostsExport(Vector<detail::SphGhostInterest> interests) {
+// An export identical to the previous one to that importer keeps the importer's fields.
+void sphGhostsExport(std::int64_t epoch, Vector<detail::SphGhostInterest> interests) {
     Vector<hpx::future<void>> children;
     for (auto const& child : sphCollectiveChildren()) {
-        children.push_back(hpx::async<SphGhostsExportAction>(child, interests));
+        children.push_back(hpx::async<SphGhostsExportAction>(child, epoch, interests));
     }
     Vector<hpx::future<void>> pushes;
     std::int64_t exportedLeaves = 0;
     std::int64_t recordBytes = 0;
-    for (auto const& interest : interests) {
-        if (interest.rank == hpxRank() || interest.empty()) {
-            continue;
-        }
-        Vector<SphTreeNode> records;
-        Vector<int> indices;
-        std::vector<int> exported;
-        for (int index = 0; index < sphTreeLeaflistSize(); index++) {
-            auto const id = sphTreeGetLeaf(index);
-            auto const& leaf = *sphTreeGetNode(id);
-            if (leaf.numberOfParticles() == 0) {
+    std::exception_ptr failure;
+    try {
+        for (auto const& interest : interests) {
+            if (interest.rank == hpxRank()) {
                 continue;
             }
-            // The walk's opening test against the importer's interest.
-            if (interest.reaches(leaf)) {
-                records.push_back(leaf);
-                indices.push_back(id.index);
-                exported.push_back(id.index);
+            Vector<SphTreeNode> records;
+            Vector<int> indices;
+            std::vector<Pair<ParticleInteger>> ranges;
+            if (!interest.empty()) {
+                for (int index = 0; index < sphTreeLeaflistSize(); index++) {
+                    auto const id = sphTreeGetLeaf(index);
+                    auto const& leaf = *sphTreeGetNode(id);
+                    if (leaf.numberOfParticles() == 0) {
+                        continue;
+                    }
+                    // The walk's opening test against the importer's interest.
+                    if (interest.reaches(leaf)) {
+                        records.push_back(leaf);
+                        indices.push_back(id.index);
+                        ranges.push_back(leaf.particleRange);
+                    }
+                }
             }
+            bool keep = false;
+            {
+                std::lock_guard<MutexType> lock(detail::storeMutex);
+                if (records.empty()) {
+                    // The importer drops this owner's block at its next walk.
+                    detail::exports.erase(interest.rank);
+                    continue;
+                }
+                std::vector<int> leaves(indices.begin(), indices.end());
+                auto const previous = detail::exports.find(interest.rank);
+                keep = previous != detail::exports.end() && previous->second.leaves == leaves &&
+                    previous->second.ranges == ranges;
+                if (!keep) {
+                    detail::GhostExport target;
+                    target.leaves = std::move(leaves);
+                    target.ranges = std::move(ranges);
+                    for (auto const& range : target.ranges) {
+                        target.size += range.second - range.first;
+                    }
+                    detail::exports[interest.rank] = std::move(target);
+                }
+            }
+            exportedLeaves += records.size();
+            recordBytes += std::int64_t(records.size()) * (sizeof(SphTreeNode) + sizeof(int));
+            pushes.push_back(
+                hpx::async<SphGhostsReceiveLeavesAction>(hpxLocalities()[interest.rank], hpxRank(),
+                    epoch, std::move(records), std::move(indices), keep));
         }
-        if (records.empty()) {
-            continue;
-        }
-        exportedLeaves += records.size();
-        recordBytes += std::int64_t(records.size()) * (sizeof(SphTreeNode) + sizeof(int));
-        {
-            std::lock_guard<MutexType> lock(detail::storeMutex);
-            detail::exports[interest.rank] = std::move(exported);
-        }
-        pushes.push_back(hpx::async<SphGhostsReceiveLeavesAction>(
-            hpxLocalities()[interest.rank], hpxRank(), std::move(records), std::move(indices)));
+    } catch (...) {
+        failure = std::current_exception();
     }
-    auto failure = detail::drainGhostFutures(pushes, nullptr);
+    failure = detail::drainGhostFutures(pushes, failure);
     {
         std::lock_guard<MutexType> lock(detail::storeMutex);
         detail::counters.syncs++;
@@ -487,46 +595,146 @@ void sphGhostsExport(Vector<detail::SphGhostInterest> interests) {
 
 void sphGhostsSync() {
     ALWAYS_ASSERT(hpxRank() == 0);
-    auto interests = sphGhostsPublish();
-    sphGhostsExport(std::move(interests));
+    static std::int64_t epoch = 0;
+    ++epoch;
+    auto interests = sphGhostsPublish(epoch);
+    sphGhostsExport(epoch, std::move(interests));
 }
 
-// Collective: push the current fields of every exported particle to its importer.
-void sphGhostsRefreshLocal(std::int64_t generation) {
+void sphGhostsFinalizeSync() {
+    std::lock_guard<MutexType> lock(detail::storeMutex);
+    if (detail::finalizedEpoch == detail::syncEpoch) {
+        return;
+    }
+    for (auto block = detail::blocks.begin(); block != detail::blocks.end();) {
+        if (block->second.syncEpoch != detail::syncEpoch) {
+            block = detail::blocks.erase(block);
+        } else {
+            ++block;
+        }
+    }
+    detail::nodeById.clear();
+    detail::nodeByRangeStart.clear();
+    detail::leafIds.clear();
+    for (auto const& [owner, block] : detail::blocks) {
+        for (int node = 0; node < int(block.nodes.size()); ++node) {
+            detail::GhostLocation location;
+            location.block = &block;
+            location.node = node;
+            detail::nodeById[detail::ghostKey(owner, block.indices[node])] = location;
+            detail::nodeByRangeStart[detail::ghostKey(
+                owner, block.nodes[node].particleRange.first)] = location;
+            TreeId id;
+            id.proc = owner;
+            id.index = block.indices[node];
+            detail::leafIds.push_back(id);
+        }
+    }
+    // Neighbor lists follow this order; keep it independent of arrival order.
+    std::sort(detail::leafIds.begin(), detail::leafIds.end());
+    detail::finalizedEpoch = detail::syncEpoch;
+}
+
+// Collective: push the requested groups of every exported particle to its importer, only the
+// slots whose bytes differ from what that importer already holds.
+void sphGhostsRefreshLocal(std::int64_t generation, unsigned fields) {
     Vector<hpx::future<void>> children;
     for (auto const& child : sphCollectiveChildren()) {
-        children.push_back(hpx::async<SphGhostsRefreshLocalAction>(child, generation));
+        children.push_back(hpx::async<SphGhostsRefreshLocalAction>(child, generation, fields));
     }
     detail::refreshGeneration = generation;
-    bool const includeCandidates = sphRungCandidatesActive();
-    std::unordered_map<int, std::vector<int>> localExports;
-    {
-        std::lock_guard<MutexType> lock(detail::storeMutex);
-        localExports = detail::exports;
-    }
+    // The all-resent baseline is what the M5 refresh sent: every group, candidates only while
+    // the rung balance runs.
+    bool const candidatesExist = sphRungCandidatesActive();
     Vector<hpx::future<void>> pushes;
     std::int64_t fieldBytes = 0;
-    for (auto const& [importer, leaves] : localExports) {
-        detail::SphGhostFields fields;
-        fields.owner = hpxRank();
-        fields.generation = generation;
-        for (int const index : leaves) {
-            TreeId id;
-            id.proc = hpxRank();
-            id.index = index;
-            auto const& leaf = *sphTreeGetNode(id);
-            detail::packRange(
-                fields, leaf.particleRange.first, leaf.particleRange.second, includeCandidates);
+    std::int64_t neededFieldBytes = 0;
+    std::int64_t allFieldBytes = 0;
+    std::array<std::int64_t, detail::kGroupCount> groupFieldBytes{};
+    std::exception_ptr failure;
+    try {
+        // Exports change only in the export collective, never during a refresh, so packing
+        // runs unlocked and other owners' deliveries to this locality are not held up.
+        for (auto& [importer, target] : detail::exports) {
+            // The export must still describe the current tree: a rebuild or migration without
+            // a sync would pack particles the importer's records do not name.
+            for (size_t leaf = 0; leaf < target.leaves.size(); ++leaf) {
+                TreeId id;
+                id.proc = hpxRank();
+                id.index = target.leaves[leaf];
+                if (target.ranges[leaf].second > sphParticlesSize() ||
+                    id.index >= sphTreeNodesSize() ||
+                    sphTreeGetNode(id)->particleRange != target.ranges[leaf]) {
+                    THROW_ERROR("SPH ghosts: rank %i refreshes an export to rank %i that predates "
+                                "the current tree; a sync must follow every rebuild\n",
+                        hpxRank(), importer);
+                }
+            }
+            detail::GhostFieldsMessage message;
+            message.owner = hpxRank();
+            message.generation = generation;
+            message.mask = fields;
+            for (int group = 0; group < detail::kGroupCount; ++group) {
+                size_t const recordBytes = detail::kGroupBytes[group];
+                if (group != detail::kGroupRungCandidate || candidatesExist) {
+                    allFieldBytes += target.size * std::int64_t(recordBytes);
+                }
+                if (!detail::hasGroup(fields, group)) {
+                    continue;
+                }
+                neededFieldBytes += target.size * std::int64_t(recordBytes);
+                std::vector<char> current;
+                current.reserve(size_t(target.size) * recordBytes);
+                for (auto const& range : target.ranges) {
+                    detail::packGroup(current, group, range.first, range.second);
+                }
+                detail::GhostGroupUpdate update;
+                update.group = group;
+                if (!target.valid[group]) {
+                    update.dense = true;
+                    update.bytes.assign(current.begin(), current.end());
+                } else {
+                    auto const& sent = target.sent[group];
+                    for (ParticleInteger slot = 0; slot < target.size; ++slot) {
+                        size_t const at = size_t(slot) * recordBytes;
+                        if (std::memcmp(current.data() + at, sent.data() + at, recordBytes) != 0) {
+                            update.slots.push_back(std::uint32_t(slot));
+                            update.bytes.insert(update.bytes.end(), current.begin() + at,
+                                current.begin() + at + recordBytes);
+                        }
+                    }
+                    // A dense update is smaller once most slots changed.
+                    if (update.payloadBytes() >= std::int64_t(current.size())) {
+                        update.dense = true;
+                        update.slots.clear();
+                        update.bytes.assign(current.begin(), current.end());
+                    }
+                }
+                fieldBytes += update.payloadBytes();
+                groupFieldBytes[group] += update.payloadBytes();
+                target.sent[group] = std::move(current);
+                target.valid[group] = true;
+                if (update.dense || !update.slots.empty()) {
+                    message.updates.push_back(std::move(update));
+                }
+            }
+            // Sent even when nothing changed: it moves the importer's groups to this refresh.
+            pushes.push_back(hpx::async<SphGhostsReceiveFieldsAction>(
+                hpxLocalities()[importer], std::move(message)));
         }
-        fieldBytes += fields.bytes();
-        pushes.push_back(
-            hpx::async<SphGhostsReceiveFieldsAction>(hpxLocalities()[importer], std::move(fields)));
+    } catch (...) {
+        failure = std::current_exception();
     }
-    auto failure = detail::drainGhostFutures(pushes, nullptr);
+    failure = detail::drainGhostFutures(pushes, failure);
     {
         std::lock_guard<MutexType> lock(detail::storeMutex);
         detail::counters.refreshes++;
         detail::counters.fieldBytes += fieldBytes;
+        detail::counters.neededFieldBytes += neededFieldBytes;
+        detail::counters.allFieldBytes += allFieldBytes;
+        for (int group = 0; group < detail::kGroupCount; ++group) {
+            detail::counters.groupFieldBytes[group] += groupFieldBytes[group];
+        }
     }
     failure = detail::drainGhostFutures(children, failure);
     if (failure) {
@@ -534,10 +742,14 @@ void sphGhostsRefreshLocal(std::int64_t generation) {
     }
 }
 
-void sphGhostsRefresh() {
+void sphGhostsRefresh(unsigned fields) {
     ALWAYS_ASSERT(hpxRank() == 0);
+    if (!sphRungCandidatesActive()) {
+        // Candidates exist only while the rung balance runs.
+        fields &= ~kSphGhostRungCandidates;
+    }
     static std::int64_t generation = 0;
-    sphGhostsRefreshLocal(++generation);
+    sphGhostsRefreshLocal(++generation, fields);
 }
 
 void sphGhostsBeginStaging() {
@@ -558,12 +770,17 @@ void sphGhostsRequireStaging(ParticleGlobalRange const& range) {
 }
 
 SphTreeNode const* sphGhostsFindNode(TreeId id) {
-    auto const found = detail::store.nodeById.find(detail::ghostKey(id.proc, id.index));
-    return found == detail::store.nodeById.end() ? nullptr : &detail::store.nodes[found->second];
+    if (detail::finalizedEpoch != detail::syncEpoch) {
+        THROW_ERROR(
+            "SPH ghosts: rank %i looks up a ghost before the last sync was finalized\n", hpxRank());
+    }
+    auto const found = detail::nodeById.find(detail::ghostKey(id.proc, id.index));
+    return found == detail::nodeById.end() ? nullptr :
+                                             &found->second.block->nodes[found->second.node];
 }
 
 Vector<TreeId> const& sphGhostsLeafIds() {
-    return detail::store.leafIds;
+    return detail::leafIds;
 }
 
 void sphGhostsReadPositions(
@@ -571,13 +788,13 @@ void sphGhostsReadPositions(
     if (range.range.first == range.range.second) {
         return;
     }
-    ParticleInteger const source = detail::ghostOffset(range);
+    auto const [block, source] = detail::ghostSlot(range, 1u << detail::kGroupPositions);
+    auto const* values = detail::groupData<detail::GhostPosition>(*block, detail::kGroupPositions);
     ParticleInteger const count = range.range.second - range.range.first;
-    auto const& f = detail::store.fields;
     for (ParticleInteger i = 0; i < count; i++) {
-        x[offset + i] = f.x[source + i];
-        y[offset + i] = f.y[source + i];
-        z[offset + i] = f.z[source + i];
+        x[offset + i] = values[source + i].x;
+        y[offset + i] = values[source + i].y;
+        z[offset + i] = values[source + i].z;
     }
 }
 
@@ -586,16 +803,17 @@ void sphGhostsReadInternalEnergyAndSmoothingLength(ParticleGlobalRange range, fl
     if (range.range.first == range.range.second) {
         return;
     }
-    ParticleInteger const source = detail::ghostOffset(range);
+    unsigned const groups = (internalEnergy ? 1u << detail::kGroupInternalEnergy : 0u) |
+        (smoothingLength ? 1u << detail::kGroupSmoothingLength : 0u);
+    auto const [block, source] = detail::ghostSlot(range, groups);
     ParticleInteger const count = range.range.second - range.range.first;
-    auto const& f = detail::store.fields;
-    for (ParticleInteger i = 0; i < count; i++) {
-        if (internalEnergy) {
-            internalEnergy[offset + i] = f.internalEnergy[source + i];
-        }
-        if (smoothingLength) {
-            smoothingLength[offset + i] = f.smoothingLength[source + i];
-        }
+    if (internalEnergy) {
+        auto const* values = detail::groupData<float>(*block, detail::kGroupInternalEnergy);
+        std::copy(values + source, values + source + count, internalEnergy + offset);
+    }
+    if (smoothingLength) {
+        auto const* values = detail::groupData<float>(*block, detail::kGroupSmoothingLength);
+        std::copy(values + source, values + source + count, smoothingLength + offset);
     }
 }
 
@@ -603,10 +821,10 @@ void sphGhostsReadRungs(ParticleGlobalRange range, char* rungs, ParticleInteger 
     if (range.range.first == range.range.second) {
         return;
     }
-    ParticleInteger const source = detail::ghostOffset(range);
+    auto const [block, source] = detail::ghostSlot(range, 1u << detail::kGroupRung);
+    auto const* values = detail::groupData<char>(*block, detail::kGroupRung);
     ParticleInteger const count = range.range.second - range.range.first;
-    auto const& f = detail::store.fields;
-    std::copy(f.rung.begin() + source, f.rung.begin() + source + count, rungs + offset);
+    std::copy(values + source, values + source + count, rungs + offset);
 }
 
 void sphGhostsReadVelocities(
@@ -614,13 +832,13 @@ void sphGhostsReadVelocities(
     if (range.range.first == range.range.second) {
         return;
     }
-    ParticleInteger const source = detail::ghostOffset(range);
+    auto const [block, source] = detail::ghostSlot(range, 1u << detail::kGroupVelocity);
+    auto const* values = detail::groupData<detail::GhostVelocity>(*block, detail::kGroupVelocity);
     ParticleInteger const count = range.range.second - range.range.first;
-    auto const& f = detail::store.fields;
     for (ParticleInteger i = 0; i < count; i++) {
-        vx[offset + i] = f.vx[source + i];
-        vy[offset + i] = f.vy[source + i];
-        vz[offset + i] = f.vz[source + i];
+        vx[offset + i] = values[source + i].vx;
+        vy[offset + i] = values[source + i].vy;
+        vz[offset + i] = values[source + i].vz;
     }
 }
 
@@ -629,21 +847,22 @@ void sphGhostsReadDensity(ParticleGlobalRange range, float* density, ParticleInt
     if (range.range.first == range.range.second) {
         return;
     }
-    ParticleInteger const source = detail::ghostOffset(range);
+    auto const [block, source] = detail::ghostSlot(range, 1u << detail::kGroupDensity);
+    auto const* values = detail::groupData<detail::GhostDensity>(*block, detail::kGroupDensity);
     ParticleInteger const count = range.range.second - range.range.first;
-    auto const& f = detail::store.fields;
     for (ParticleInteger i = 0; i < count; i++) {
+        auto const& value = values[source + i];
         if (density) {
-            density[offset + i] = f.density[source + i];
+            density[offset + i] = value.density;
         }
         if (balsaraFactor) {
-            balsaraFactor[offset + i] = f.balsaraFactor[source + i];
+            balsaraFactor[offset + i] = value.balsaraFactor;
         }
         if (bulkViscosityCoefficient) {
-            bulkViscosityCoefficient[offset + i] = f.bulkViscosityCoefficient[source + i];
+            bulkViscosityCoefficient[offset + i] = value.bulkViscosityCoefficient;
         }
         if (gradHCorrection) {
-            gradHCorrection[offset + i] = f.gradHCorrection[source + i];
+            gradHCorrection[offset + i] = value.gradHCorrection;
         }
     }
 }
@@ -652,11 +871,10 @@ void sphGhostsReadRungCandidates(ParticleGlobalRange range, char* rungs, Particl
     if (range.range.first == range.range.second) {
         return;
     }
-    ParticleInteger const source = detail::ghostOffset(range, true);
+    auto const [block, source] = detail::ghostSlot(range, 1u << detail::kGroupRungCandidate);
+    auto const* values = detail::groupData<char>(*block, detail::kGroupRungCandidate);
     ParticleInteger const count = range.range.second - range.range.first;
-    auto const& f = detail::store.fields;
-    std::copy(
-        f.rungCandidate.begin() + source, f.rungCandidate.begin() + source + count, rungs + offset);
+    std::copy(values + source, values + source + count, rungs + offset);
 }
 
 SphGhostStatistics& SphGhostStatistics::operator+=(SphGhostStatistics const& other) {
@@ -667,6 +885,11 @@ SphGhostStatistics& SphGhostStatistics::operator+=(SphGhostStatistics const& oth
     refreshes = std::max(refreshes, other.refreshes);
     recordBytes += other.recordBytes;
     fieldBytes += other.fieldBytes;
+    neededFieldBytes += other.neededFieldBytes;
+    allFieldBytes += other.allFieldBytes;
+    for (size_t group = 0; group < groupFieldBytes.size(); ++group) {
+        groupFieldBytes[group] += other.groupFieldBytes[group];
+    }
     return *this;
 }
 
@@ -679,8 +902,12 @@ SphGhostStatistics sphGhostsStatistics() {
     {
         std::lock_guard<MutexType> lock(detail::storeMutex);
         result = detail::counters;
-        result.leaves = detail::store.nodes.size();
-        result.particles = detail::store.size;
+        result.leaves = 0;
+        result.particles = 0;
+        for (auto const& [owner, block] : detail::blocks) {
+            result.leaves += block.nodes.size();
+            result.particles += block.size;
+        }
     }
     std::exception_ptr failure;
     for (auto& child : children) {

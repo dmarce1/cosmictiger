@@ -9,6 +9,7 @@
 #ifndef SPH_GHOSTS_HPP_
 #define SPH_GHOSTS_HPP_
 
+#include <array>
 #include <cstdint>
 
 #include <cosmictiger/core/tree_id.hpp>
@@ -36,8 +37,10 @@
  * exported: the ghost set is complete for that walk by construction, and the walk need only
  * visit the local root and the ghost leaves.
  *
- * Refresh, before every pass: each owner pushes the current fields of its exported particles,
- * tagged with the refresh generation; a read of fields older than the current refresh throws.
+ * Refresh, before every pass: each owner pushes the field groups the pass reads, tagged with
+ * the refresh generation. It sends only the particles whose bytes differ from what it last
+ * sent that importer (M6), so a block kept across syncs is updated, not resent. A read of a
+ * group older than the current refresh throws.
  *
  * Messages are pushes acknowledged inside one collective; no pass issues a request and waits
  * for a reply.
@@ -46,11 +49,27 @@
 // Whether there are remote leaves to mirror: more than one locality.
 bool sphGhostsActive();
 
+// Field groups of a refresh, one bit each.
+inline constexpr unsigned kSphGhostPositions = 1u << 0;
+inline constexpr unsigned kSphGhostInternalEnergies = 1u << 1;
+inline constexpr unsigned kSphGhostSmoothingLengths = 1u << 2;
+inline constexpr unsigned kSphGhostRungs = 1u << 3;
+inline constexpr unsigned kSphGhostVelocities = 1u << 4;
+inline constexpr unsigned kSphGhostDensities = 1u << 5;    // ρ, Balsara factor, α, ζ
+inline constexpr unsigned kSphGhostRungCandidates = 1u << 6;
+inline constexpr unsigned kSphGhostAllFields = (1u << 7) - 1u;
+
 // Collective from rank 0: recompute every locality's exports from the current leaf boxes and
-// install the ghost leaf records. Drops any previous ghosts.
+// install the ghost leaf records. A block whose owner exports the same leaves with the same
+// particle ranges keeps its fields; the others are rebuilt or, if unconfirmed, dropped by
+// sphGhostsFinalizeSync.
 void sphGhostsSync();
-// Collective from rank 0: push the current fields of every exported particle.
-void sphGhostsRefresh();
+// Local, after a sync and before the walk: drop unconfirmed blocks and rebuild the lookups.
+void sphGhostsFinalizeSync();
+// Collective from rank 0: push the requested field groups of every exported particle, only
+// the particles whose values differ from what the importer holds (M6). Rung candidates are
+// pushed only while the rung balance runs.
+void sphGhostsRefresh(unsigned fields);
 // Collective from rank 0: drop every ghost and export list.
 void sphGhostsClear();
 
@@ -89,6 +108,10 @@ struct SphGhostStatistics {
     std::int64_t refreshes = 0;         // Refreshes since the last reset (each is collective).
     std::int64_t recordBytes = 0;       // Bytes of leaf records sent by syncs.
     std::int64_t fieldBytes = 0;        // Bytes of particle fields sent by refreshes.
+    std::int64_t neededFieldBytes = 0;    // Bytes the requested groups would take, all resent.
+    std::int64_t allFieldBytes = 0;       // Bytes every group would take, all resent.
+    // Bytes sent per field group, in kSphGhost* bit order.
+    std::array<std::int64_t, 7> groupFieldBytes{};
 
     SphGhostStatistics& operator+=(SphGhostStatistics const& other);
 
@@ -101,6 +124,9 @@ struct SphGhostStatistics {
         archive & refreshes;
         archive & recordBytes;
         archive & fieldBytes;
+        archive & neededFieldBytes;
+        archive & allFieldBytes;
+        archive & groupFieldBytes;
     }
 };
 
