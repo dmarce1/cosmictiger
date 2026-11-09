@@ -5,13 +5,14 @@
 #  Distributed under the Boost Software License, Version 1.0.
 #  See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
 
-"""Compare SPH evolution with ghost leaves against the remote fetch path.
+"""Compare distributed SPH evolution on ghost leaves against one locality.
 
-Milestone 2 of docs/sph_parent_tree_plan.md. Each case runs the same scenario on 2, 3
-and 4 localities twice, with compute.sphGhosts on and off. The ghosts carry exactly the
-values the fetches read, but each locality discovers its neighbor leaves in a different
-order, so staging order and with it float summation order differ. Every rank must hold
-the same particles; positions, velocities and the gas state must agree to roundoff.
+Ghost leaves are the only distributed SPH path (docs/sph_parent_tree_plan.md, M5), so the
+reference is the same scenario on a single locality, where every neighbor is local. Each
+case then runs on 2, 3 and 4 localities. The particle pairs within each support are the
+same, but the leaves, their order and the staging order differ, so float summation order
+differs. The same particles must exist; positions, velocities and the gas state must agree
+to roundoff.
 """
 
 import argparse
@@ -61,20 +62,19 @@ def particles(states):
     return rows
 
 
-def pair(label, fetched, ghosted, tolerance):
+def pair(label, reference, distributed, tolerance):
     """Pair each particle with the unique one within tolerance units in every axis.
 
-    Ranks may order (and with the global integrator even own) particles differently
-    after roundoff moves one across a sort or domain plane, so pair by position."""
+    Ranks order and own particles differently, so pair by position."""
     # A power-of-two cell divides the fixed-point period, so cell keys wrap exactly.
     cell = 1 << max(0, (4 * tolerance - 1).bit_length())
     grid = {}
-    for index, row in enumerate(ghosted):
+    for index, row in enumerate(distributed):
         key = tuple(coordinate // cell for coordinate in row["position"])
         grid.setdefault(key, []).append(index)
     pairs = []
     used = set()
-    for row in fetched:
+    for row in reference:
         period = row["period"]
         key = tuple(coordinate // cell for coordinate in row["position"])
         best = None
@@ -85,7 +85,7 @@ def pair(label, fetched, ghosted, tolerance):
                     neighbor = ((key[0] + dx) % cells, (key[1] + dy) % cells, (key[2] + dz) % cells)
                     for index in grid.get(neighbor, ()):
                         steps = []
-                        for old, new in zip(row["position"], ghosted[index]["position"]):
+                        for old, new in zip(row["position"], distributed[index]["position"]):
                             step = (new - old) % period
                             steps.append(min(step, period - step))
                         distance = max(steps)
@@ -94,19 +94,19 @@ def pair(label, fetched, ghosted, tolerance):
         require(best is not None, f"{label}: a particle has no counterpart within {tolerance} units")
         require(best[1] not in used, f"{label}: two particles share one counterpart")
         used.add(best[1])
-        pairs.append((row, ghosted[best[1]], best[0]))
-    require(len(used) == len(ghosted), f"{label}: particle populations differ")
+        pairs.append((row, distributed[best[1]], best[0]))
+    require(len(used) == len(distributed), f"{label}: particle populations differ")
     return pairs
 
 
-def compare(label, fetched, ghosted):
-    require(len(fetched) == len(ghosted), f"{label}: rank count differs")
-    first, second = particles(fetched), particles(ghosted)
+def compare(label, reference, distributed, tolerances):
+    first, second = particles(reference), particles(distributed)
     require(len(first) == len(second), f"{label}: gas populations differ")
     period = first[0]["period"]
-    # Float summation order alone: velocities differ by about 1e-7 of their scale, and a few
-    # steps integrate that into about 1e-8 of the box. A real error is of order a smoothing
-    # length, 1e-2 of the box.
+    # Float summation order alone: velocities and gas fields differ by about 1e-7 of their
+    # scale, and a few steps integrate that into about 1e-8 of the box. A real error is far
+    # larger: gas fields paired with the wrong particle after the domain sort moved Sod
+    # particles by 2e-4 of the box in one step.
     tolerance = int(1.0e-6 * period)
     pairs = pair(label, first, second, tolerance)
     worst = {"position_units": max(distance for _, _, distance in pairs)}
@@ -117,7 +117,7 @@ def compare(label, fetched, ghosted):
         scale = max(abs(row[field]) for row in first + second)
         worst[field] = max(abs(x[field] - y[field]) for x, y, _ in pairs) / scale
     for field in ("velocity", "entropy", "smoothing_length", "density"):
-        require(worst[field] <= 1.0e-4,
+        require(worst[field] <= tolerances.get(field, 1.0e-5),
                 f"{label}: {field} differs by {worst[field]:.3e} of its scale")
     return worst
 
@@ -137,8 +137,9 @@ def main():
     root = args.workdir.resolve()
     root.mkdir(parents=True, exist_ok=True)
     available = compiled_algorithms(str(executable))
-    integrators = [name for name in ("traditional", "global") if name in available["integrator"]]
-    require(integrators, "traditional or global integration is required")
+    integrators = [name for name in ("traditional", "global", "hierarchical")
+                   if name in available["integrator"]]
+    require(integrators, "an SPH-capable integrator is required")
     common = {"hpx:threads": 1, "hpx:bind": "none", **cpu_backend_options(),
               "hydro.enabled": "true", "gravity.enabled": "false",
               "chemistry.enabled": "false", "starFormation.enabled": "false",
@@ -154,6 +155,17 @@ def main():
         "sod": {"run.scenario": "sod", "run.numberOfSteps": 8, "run.maxIterations": 6,
                 "run.darkMatterParticleCount": 2048, "run.gasParticleCount": 2048},
     }
+    # SPH couples to PMMM self-gravity only on the hierarchical integrator, which needs gravity.
+    preset = Path(__file__).resolve().parents[1] / "configurations" / "jeans_wave.ini"
+    gravity_scenarios = {
+        "jeans": {"configuration": preset, "gravity.enabled": "true",
+                  "run.gasParticleCount": 4096, "gravity.meshSize": 16,
+                  "run.maxIterations": 6},
+    }
+    # PMMM needs a power-of-two locality count, and its tree approximation depends on the
+    # decomposition: velocities differ by about 5e-5 of their scale between any two counts.
+    gravity_ranks = [ranks for ranks in args.ranks or [2, 4] if ranks & (ranks - 1) == 0]
+    gravity_tolerances = {"velocity": 5.0e-4}
 
     def run(directory, options, integrator, ranks):
         command = [str(executable), *args.hpx_argument,
@@ -168,38 +180,36 @@ def main():
 
     evidence = {}
     for integrator in integrators:
-        for name, options in scenarios.items():
-            for ranks in args.ranks or [2, 3, 4]:
+        for name, options in (gravity_scenarios if integrator == "hierarchical" else
+                              scenarios).items():
+            iteration = options["run.maxIterations"]
+            label = f"{integrator}_{name}"
+            directory = prepareCase(root, f"{label}_1")
+            output = run(directory, options, integrator, 1)
+            require("SPH midpoint:" in output, f"{label}_1: no midpoint hydro event")
+            require(GHOSTS.search(output) is None, f"{label}_1: one locality used ghosts")
+            reference = states(directory, iteration, 1)
+            gravity = integrator == "hierarchical"
+            for ranks in gravity_ranks if gravity else args.ranks or [2, 3, 4]:
                 label = f"{integrator}_{name}_{ranks}"
-                directories = {}
-                for ghosts in ("false", "true"):
-                    directory = prepareCase(root, f"{label}_ghosts_{ghosts}")
-                    output = run(directory, dict(options, **{"compute.sphGhosts": ghosts}),
-                                 integrator, ranks)
-                    require("SPH midpoint:" in output, f"{label}: no midpoint hydro event")
-                    require(f"compute.sphGhosts                     : "
-                            f"{'T' if ghosts == 'true' else 'F'}" in output,
-                            f"{label}: compute.sphGhosts was not applied")
-                    counters = GHOSTS.search(output)
-                    if ghosts == "true":
-                        require(counters and int(counters[2]) > 0 and int(counters[7]) > 0,
-                                f"{label}: the ghost run pushed no ghost fields")
-                        evidence[label + "_ghosts"] = {
-                            "syncs": int(counters[1]), "refreshes": int(counters[2]),
-                            "leaves": int(counters[3]), "particles": int(counters[4]),
-                            "field_bytes": int(counters[7])}
-                    else:
-                        require(counters is None, f"{label}: the fetch run used ghosts")
-                    directories[ghosts] = directory
-                iteration = options["run.maxIterations"]
-                worst = compare(label, states(directories["false"], iteration, ranks),
-                                states(directories["true"], iteration, ranks))
+                directory = prepareCase(root, label)
+                output = run(directory, options, integrator, ranks)
+                require("SPH midpoint:" in output, f"{label}: no midpoint hydro event")
+                counters = GHOSTS.search(output)
+                require(counters and int(counters[2]) > 0 and int(counters[7]) > 0,
+                        f"{label}: the run pushed no ghost fields")
+                evidence[label + "_ghosts"] = {
+                    "syncs": int(counters[1]), "refreshes": int(counters[2]),
+                    "leaves": int(counters[3]), "particles": int(counters[4]),
+                    "field_bytes": int(counters[7])}
+                worst = compare(label, reference, states(directory, iteration, ranks),
+                                gravity_tolerances if gravity else {})
                 evidence[label] = worst
                 print(f"{label}: " + ", ".join(
                     f"{key}={value:.3e}" if isinstance(value, float) else f"{key}={value}"
                     for key, value in worst.items()), flush=True)
     (root / "evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
-    print("SPH ghost evolution matches the fetch path", flush=True)
+    print("Distributed SPH evolution on ghost leaves matches one locality", flush=True)
 
 
 if __name__ == "__main__":

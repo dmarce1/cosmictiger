@@ -71,13 +71,15 @@ void particlesSwap(ParticleInteger first, ParticleInteger second) {
         detail::swapParticleBytes(particlesSph[first], particlesSph[second]);
         detail::swapParticleBytes(particlesTy[first], particlesTy[second]);
 #if COSMICTIGER_WITH_SPH
-        if (usesHierarchicalIntegration(options.run)) {
-            if (particlesTy[first] == kSphType) {
-                sphParticlesParticleIndex(particlesSph[first]) = first;
-            }
-            if (particlesTy[second] == kSphType) {
-                sphParticlesParticleIndex(particlesSph[second]) = second;
-            }
+        // Keep the gas-to-particle map in step under every integrator: an SPH tree build
+        // rebuilds each particle's gas index from this map (sphParticlesResolveWithParticles),
+        // so a stale entry pairs gas fields with another particle, for example after the
+        // domain rebound partitions and before the gas migration.
+        if (particlesTy[first] == kSphType) {
+            sphParticlesParticleIndex(particlesSph[first]) = first;
+        }
+        if (particlesTy[second] == kSphType) {
+            sphParticlesParticleIndex(particlesSph[second]) = second;
         }
 #endif
     }

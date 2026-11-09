@@ -92,6 +92,34 @@ NeighborTable localNeighborTable() {
     return table;
 }
 
+// One leaf's identity and stored boxes, for the brute-force reference.
+struct GhostLeafBoxes {
+    TreeId id;
+    Fixed32Range innerBox;
+    Fixed32Range outerBox;
+
+    template <class Archive>
+    void serialize(Archive&& archive, unsigned) {
+        archive & id;
+        archive & innerBox;
+        archive & outerBox;
+    }
+};
+
+// This locality's leaves, read on their owner so the reference never touches a ghost.
+std::vector<GhostLeafBoxes> localLeafBoxes() {
+    std::vector<GhostLeafBoxes> leaves;
+    for (int index = 0; index < sphTreeLeaflistSize(); ++index) {
+        GhostLeafBoxes record;
+        record.id = sphTreeGetLeaf(index);
+        auto const& leaf = *sphTreeGetNode(record.id);
+        record.innerBox = leaf.innerBox;
+        record.outerBox = leaf.outerBox;
+        leaves.push_back(record);
+    }
+    return leaves;
+}
+
 std::int64_t localRemoteNodeReads() {
     return sphTreeRemoteNodeReads();
 }
@@ -104,6 +132,7 @@ void resetLocalRemoteNodeReads() {
 
 HPX_PLAIN_ACTION(detail::initializeGhostParticles, InitializeGhostParticlesAction);
 HPX_PLAIN_ACTION(detail::localNeighborTable, GhostLocalNeighborTableAction);
+HPX_PLAIN_ACTION(detail::localLeafBoxes, GhostLocalLeafBoxesAction);
 HPX_PLAIN_ACTION(detail::localRemoteNodeReads, GhostLocalRemoteNodeReadsAction);
 HPX_PLAIN_ACTION(detail::resetLocalRemoteNodeReads, GhostResetRemoteNodeReadsAction);
 
@@ -119,6 +148,67 @@ std::vector<NeighborTable> gatherNeighborTables() {
         tables.push_back(future.get());
     }
     return tables;
+}
+
+// Brute-force neighbor leaf lists: every leaf of every locality against every leaf of every
+// locality with the walk's leaf test, target support outer(s) ∩ inner(l) and source support
+// inner(s) ∩ outer(l). Node boxes contain their children's, so the walk opens every ancestor
+// of such a leaf and its lists must equal these exactly.
+std::vector<NeighborTable> bruteForceNeighborTables(SphInteractionDirection direction) {
+    std::vector<hpx::future<std::vector<GhostLeafBoxes>>> futures;
+    for (auto const& locality : hpxLocalities()) {
+        futures.push_back(hpx::async<GhostLocalLeafBoxesAction>(locality));
+    }
+    std::vector<std::vector<GhostLeafBoxes>> leavesByRank;
+    for (auto& future : futures) {
+        leavesByRank.push_back(future.get());
+    }
+    bool const target = direction == SphInteractionDirection::TargetSupport ||
+        direction == SphInteractionDirection::EitherSupport;
+    bool const source = direction == SphInteractionDirection::SourceSupport ||
+        direction == SphInteractionDirection::EitherSupport;
+    std::vector<NeighborTable> tables(leavesByRank.size());
+    for (size_t rank = 0; rank < leavesByRank.size(); ++rank) {
+        for (auto const& self : leavesByRank[rank]) {
+            std::vector<TreeId> neighbors;
+            for (auto const& others : leavesByRank) {
+                for (auto const& other : others) {
+                    if ((target && self.outerBox.periodicIntersects(other.innerBox)) ||
+                        (source && self.innerBox.periodicIntersects(other.outerBox))) {
+                        neighbors.push_back(other.id);
+                    }
+                }
+            }
+            std::sort(neighbors.begin(), neighbors.end());
+            tables[rank].emplace_back(self.id, std::move(neighbors));
+        }
+        std::sort(tables[rank].begin(), tables[rank].end(),
+            [](auto const& a, auto const& b) { return a.first < b.first; });
+    }
+    return tables;
+}
+
+// Every locality's walked lists equal the brute-force lists.
+std::int64_t compareNeighborTables(std::vector<NeighborTable> const& expected,
+    std::vector<NeighborTable> const& actual, char const* name) {
+    std::int64_t remoteLeafPairs = 0;
+    requireGhosts(expected.size() == actual.size(), "locality count changed");
+    for (size_t rank = 0; rank < expected.size(); ++rank) {
+        requireGhosts(expected[rank].size() == actual[rank].size(),
+            std::format("{}: rank {} has a different leaf count", name, rank));
+        for (size_t leaf = 0; leaf < expected[rank].size(); ++leaf) {
+            auto const& [id, wanted] = expected[rank][leaf];
+            auto const& [walkedId, walked] = actual[rank][leaf];
+            requireGhosts(id == walkedId, "leaf identities differ");
+            requireGhosts(wanted == walked,
+                std::format("{}: leaf ({}, {}) has {} neighbors by brute force and {} walked", name,
+                    id.proc, id.index, wanted.size(), walked.size()));
+            for (auto const& neighbor : wanted) {
+                remoteLeafPairs += neighbor.proc != id.proc;
+            }
+        }
+    }
+    return remoteLeafPairs;
 }
 
 std::int64_t remoteNodeReads() {
@@ -211,6 +301,8 @@ void sphGhostsTest() {
         detail::findNeighbors(built.id, testCase.direction);
         auto const ghosted = detail::gatherNeighborTables();
         auto const reads = detail::remoteNodeReads();
+        detail::compareNeighborTables(
+            detail::bruteForceNeighborTables(testCase.direction), ghosted, testCase.name);
         if (hpxSize() > 1) {
             detail::requireGhosts(reads == 0,
                 std::format("{}: the ghost walk read {} remote nodes", testCase.name, reads));

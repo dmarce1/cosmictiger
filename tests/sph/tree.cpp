@@ -9,7 +9,9 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <iostream>
+#include <iterator>
 #include <limits>
 #include <set>
 #include <stdexcept>
@@ -180,19 +182,26 @@ int expectedSphSplitMask(SphTreeNode const& node) {
     return mask;
 }
 
-// Roots to traverse for a tree id: every locality's octree when `id` is a root of the
-// distributed tree (no node routes between localities), otherwise `id` alone.
-std::vector<TreeId> sphTreeTraversalRoots(TreeId id) {
-    auto const& roots = sphTreeLocalRoots();
-    if (std::find(roots.begin(), roots.end(), id) != roots.end()) {
-        return std::vector<TreeId>(roots.begin(), roots.end());
-    }
-    return std::vector<TreeId>{id};
-}
+// Volume ratios of the occupied leaf-owning nodes below `root`, all on this locality.
+struct SphTreeVolumeRatios {
+    double minimum = 0.0;
+    double maximum = 0.0;
+    std::int64_t count = 0;
 
-void verifySphTreeVolumeRatios(SphTreeCreateReturn const& tree) {
-    std::vector<double> ratios;
-    std::vector<TreeId> pending = sphTreeTraversalRoots(tree.id);
+    template <class Archive>
+    void serialize(Archive&& archive, unsigned) {
+        archive & minimum;
+        archive & maximum;
+        archive & count;
+    }
+};
+
+SphTreeVolumeRatios localSphTreeVolumeRatios(TreeId root) {
+    SphTreeVolumeRatios result;
+    std::vector<TreeId> pending;
+    if (root.index >= 0) {
+        pending.push_back(root);
+    }
     while (!pending.empty()) {
         auto const id = pending.back();
         pending.pop_back();
@@ -209,7 +218,9 @@ void verifySphTreeVolumeRatios(SphTreeCreateReturn const& tree) {
                     "occupied spatial node has invalid volume bounds");
                 ratio *= evolvedSpan / originalSpan;
             }
-            ratios.push_back(ratio);
+            result.minimum = result.count ? std::min(result.minimum, ratio) : ratio;
+            result.maximum = result.count ? std::max(result.maximum, ratio) : ratio;
+            result.count++;
         }
         for (auto const child : node.children) {
             if (child.index >= 0) {
@@ -217,15 +228,43 @@ void verifySphTreeVolumeRatios(SphTreeCreateReturn const& tree) {
             }
         }
     }
-    double expectedMinimum = 0.0;
-    double expectedMaximum = 0.0;
-    if (!ratios.empty()) {
-        auto const extrema = std::minmax_element(ratios.begin(), ratios.end());
-        expectedMinimum = *extrema.first;
-        expectedMaximum = *extrema.second;
+    return result;
+}
+
+SphTreeVolumeRatios localRootSphTreeVolumeRatios() {
+    return localSphTreeVolumeRatios(sphTreeLocalRoot());
+}
+
+}    // namespace detail
+
+HPX_PLAIN_ACTION(detail::localRootSphTreeVolumeRatios, SphTreeLocalVolumeRatiosAction);
+
+namespace detail {
+
+// The tree's merged volume extrema against the occupied nodes. Each locality owns its own
+// octree with no node above it, so every locality measures its own tree.
+void verifySphTreeVolumeRatios(SphTreeCreateReturn const& tree) {
+    SphTreeVolumeRatios expected;
+    if (hpxSize() == 1) {
+        expected = localSphTreeVolumeRatios(tree.id);
+    } else {
+        std::vector<hpx::future<SphTreeVolumeRatios>> futures;
+        for (auto const& locality : hpxLocalities()) {
+            futures.push_back(hpx::async<SphTreeLocalVolumeRatiosAction>(locality));
+        }
+        for (auto& future : futures) {
+            auto const part = future.get();
+            if (part.count) {
+                expected.minimum =
+                    expected.count ? std::min(expected.minimum, part.minimum) : part.minimum;
+                expected.maximum =
+                    expected.count ? std::max(expected.maximum, part.maximum) : part.maximum;
+                expected.count += part.count;
+            }
+        }
     }
-    requireSphTree(std::abs(tree.minVolumeRatio - expectedMinimum) <= 1.0e-12 * expectedMinimum &&
-            std::abs(tree.maxVolumeRatio - expectedMaximum) <= 1.0e-12 * expectedMaximum,
+    requireSphTree(std::abs(tree.minVolumeRatio - expected.minimum) <= 1.0e-12 * expected.minimum &&
+            std::abs(tree.maxVolumeRatio - expected.maximum) <= 1.0e-12 * expected.maximum,
         "tree volume extrema disagree with occupied spatial nodes");
 }
 
@@ -1180,6 +1219,13 @@ void verifyRetainedSphOctree(SphTreeCreateParameters const& params) {
     // memberships intact; the inverse mapping is the only link that changes.
     particlesSwap(0, 7);
     particlesSwap(1, 6);
+    // The swap itself keeps the gas-to-particle map current under every integrator: a tree
+    // build rebuilds particle-to-gas indices from it, so a stale entry would pair gas fields
+    // with another particle (multi-locality Sod after the domain rebound sort).
+    for (ParticleInteger particle = 0; particle < sphParticlesSize(); ++particle) {
+        requireSphTree(particlesCatIndex(sphParticlesParticleIndex(particle)) == particle,
+            "a particle swap left the gas-to-particle mapping stale");
+    }
     particlesResolveWithSphParticles();
     requireSphTree(sphTreeIsValid(), "gravity permutation invalidated SPH membership");
     for (ParticleInteger particle = 0; particle < sphParticlesSize(); ++particle) {
@@ -1412,7 +1458,43 @@ size_t driftDistributedSphOctree() {
 }
 HPX_PLAIN_ACTION(driftDistributedSphOctree, DriftDistributedSphOctreeAction);
 
-void verifyDistributedSphOctree(Vector<TreeId> const& allLeaves) {
+// One leaf's identity, swept box and particle positions, read on its owner so the reference
+// never goes through the distributed neighbor machinery it checks.
+struct DistributedSphLeafRecord {
+    TreeId id;
+    Fixed32Range driftBox;
+    std::vector<Vector3<double>> positions;
+
+    template <class Archive>
+    void serialize(Archive&& archive, unsigned) {
+        archive & id;
+        archive & driftBox;
+        archive & positions;
+    }
+};
+
+std::vector<DistributedSphLeafRecord> distributedSphLeafRecords() {
+    std::vector<DistributedSphLeafRecord> records;
+    for (int leafIndex = 0; leafIndex < sphTreeLeaflistSize(); ++leafIndex) {
+        DistributedSphLeafRecord record;
+        record.id = sphTreeGetLeaf(leafIndex);
+        auto const& leaf = *sphTreeGetNode(record.id);
+        record.driftBox = leaf.driftBox;
+        for (ParticleInteger particle = leaf.particleRange.first;
+            particle < leaf.particleRange.second; ++particle) {
+            Vector3<double> position;
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                position[dim] = sphParticlesPosition(dim, particle).toDouble();
+            }
+            record.positions.push_back(position);
+        }
+        records.push_back(std::move(record));
+    }
+    return records;
+}
+HPX_PLAIN_ACTION(distributedSphLeafRecords, DistributedSphLeafRecordsAction);
+
+void verifyDistributedSphOctree(std::vector<DistributedSphLeafRecord> const& allLeaves) {
     for (int leafIndex = 0; leafIndex < sphTreeLeaflistSize(); ++leafIndex) {
         auto const& target = *sphTreeGetNode(sphTreeGetLeaf(leafIndex));
         std::set<TreeId> neighbors;
@@ -1425,20 +1507,12 @@ void verifyDistributedSphOctree(Vector<TreeId> const& allLeaves) {
                 continue;
             }
             bool remotePair = false;
-            for (auto const sourceId : allLeaves) {
-                auto const& source = *sphTreeGetNode(sourceId);
-                size_t const count = source.numberOfParticles();
-                Vector<Position> positions[3];
-                for (auto& coordinate : positions) {
-                    coordinate.resize(count);
-                }
-                sphParticlesGlobalReadPositions(source.globalParticleRange(), positions[0].data(),
-                    positions[1].data(), positions[2].data(), 0);
-                for (size_t neighbor = 0; neighbor < count; ++neighbor) {
+            for (auto const& source : allLeaves) {
+                for (auto const& sourcePosition : source.positions) {
                     double squaredDistance = 0.0;
                     Vector3<Position> position;
                     for (int dim = 0; dim < kDimensions; ++dim) {
-                        position[dim] = positions[dim][neighbor];
+                        position[dim] = sourcePosition[dim];
                         double const separation =
                             std::remainder(sphParticlesPosition(dim, particle).toDouble() -
                                     position[dim].toDouble(),
@@ -1448,9 +1522,9 @@ void verifyDistributedSphOctree(Vector<TreeId> const& allLeaves) {
                     detail::requireSphTree(source.driftBox.contains(position),
                         "remote swept bounds missed a particle after crossing domains");
                     if (squaredDistance < 0.09 * 0.09) {
-                        detail::requireSphTree(neighbors.contains(sourceId),
+                        detail::requireSphTree(neighbors.contains(source.id),
                             "retained distributed tree missed a brute-force neighbor");
-                        remotePair = remotePair || sourceId.proc != hpxRank();
+                        remotePair = remotePair || source.id.proc != hpxRank();
                     }
                 }
             }
@@ -1607,23 +1681,6 @@ void distributedSphOctreeTest() {
     detail::verifySphTreeVolumeRatios(built);
     detail::requireSphTree(built.numberOfActiveParticles == 2 && !sphTreeShouldRebuild(2, 16),
         "distributed fixture is not below the rebuild threshold");
-    Vector<TreeId> leaves;
-    auto pending = detail::sphTreeTraversalRoots(built.id);
-    while (!pending.empty()) {
-        auto const id = pending.back();
-        pending.pop_back();
-        auto const& node = *sphTreeGetNode(id);
-        if (node.leaf) {
-            leaves.push_back(id);
-        } else {
-            for (auto const child : node.children) {
-                if (child.index >= 0) {
-                    pending.push_back(child);
-                }
-            }
-        }
-    }
-    // The traversal above intentionally populated remote cache lines before drift.
     std::vector<hpx::future<size_t>> drifts;
     for (auto const& locality : hpxLocalities()) {
         drifts.push_back(hpx::async<DriftDistributedSphOctreeAction>(locality));
@@ -1644,6 +1701,18 @@ void distributedSphOctreeTest() {
     neighbors.interactionDirection = SphInteractionDirection::EitherSupport;
     neighbors.minimumRung = 2;
     sphTreeNeighbor(neighbors, refreshed.id, Vector<TreeId>{refreshed.id}).get();
+    std::vector<DistributedSphLeafRecord> leaves;
+    {
+        std::vector<hpx::future<std::vector<DistributedSphLeafRecord>>> gathers;
+        for (auto const& locality : hpxLocalities()) {
+            gathers.push_back(hpx::async<DistributedSphLeafRecordsAction>(locality));
+        }
+        for (auto& gather : gathers) {
+            auto records = gather.get();
+            leaves.insert(leaves.end(), std::make_move_iterator(records.begin()),
+                std::make_move_iterator(records.end()));
+        }
+    }
     std::vector<hpx::future<void>> validation;
     for (auto const& locality : hpxLocalities()) {
         validation.push_back(hpx::async<VerifyDistributedSphOctreeAction>(locality, leaves));
