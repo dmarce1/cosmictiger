@@ -109,6 +109,7 @@ function(cosmictiger_feature_sources output)
             src/scenarios/disc.cpp
             src/scenarios/polytropic_star.cpp
             src/scenarios/hydro_wave.cpp
+            src/scenarios/jeans_wave.cpp
             src/scenarios/gresho.cpp
             src/scenarios/exact_sod.cpp
             src/scenarios/sedov.cpp
@@ -123,9 +124,9 @@ function(cosmictiger_feature_sources output)
             src/sph/rungs.cu
             src/sph/rungs_cpu.cpp
             src/sph/tree.cpp
-            src/sph/time_integration.cpp
             src/sph/parent_tree.cpp
             src/sph/ghosts.cpp
+            src/sph/time_integration.cpp
             src/scenarios/sphere.cpp
             src/scenarios/sphere.cu
         )

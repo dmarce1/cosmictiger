@@ -58,7 +58,8 @@ def read_rank(path, expected_iteration, ranks, time_integrator):
                 2 * extension[3] + 1 <= coarse <= extension[1],
                 f"{path}: invalid PMMM coarse mesh size")
     if decoded.viscosity:
-        require(all(decoded.viscosity[index] > 0.0 for index in (0, 1, 3, 4, 5, 6)),
+        # Rosswog-limited alpha bounds, decay and Balsara coefficient.
+        require(all(value > 0.0 for value in decoded.viscosity),
                 f"{path}: invalid variable-viscosity parameters")
     require(driver.iteration == expected_iteration, f"{path}: driver layout/iteration mismatch")
     require(all(math.isfinite(value) for value in
@@ -67,10 +68,13 @@ def read_rank(path, expected_iteration, ranks, time_integrator):
     scale = 2 ** (8 * decoded.position_bytes)
     rows = []
     for index, kind in enumerate(decoded.types):
-        gas = decoded.gas[decoded.gas_indices[index]] if kind == 1 else ()
-        if gas:
-            require(gas[0] > 0 and gas[1] > 0 and gas[6] > 0,
-                    f"{path}: nonpositive gas energy, support radius, or density")
+        gas = ()
+        if kind == 1:
+            record = decoded.gas_indices[index]
+            gas = (decoded.entropies[record], decoded.smoothing_lengths[record],
+                   decoded.densities[record])
+            require(all(value > 0 and math.isfinite(value) for value in gas),
+                    f"{path}: nonpositive gas entropy, smoothing length, or density")
         rows.append({"x": tuple(decoded.positions[dim][index] / scale for dim in range(3)),
                      "v": decoded.velocities[3 * index:3 * index + 3],
                      "rung": decoded.rungs[index], "type": kind, "gas": gas})

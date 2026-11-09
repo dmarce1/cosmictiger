@@ -17,6 +17,7 @@
 #include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_SPH
 #include <cosmictiger/sph/particles.hpp>
+#include <cosmictiger/sph/time_integration.hpp>
 #endif
 
 namespace {
@@ -123,6 +124,7 @@ KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& a
     float const oldKinetic = 0.5f * mass * sqr(vx, vy, vz);
 #if COSMICTIGER_WITH_SPH
     bool const gas = options.hydro.enabled && particlesType(index) == kSphType;
+    bool const midpointGas = gas && sphMidpointEnabled();
     if (!parameters.htime && gas) {
         // The hydro integrator owns the gas momentum and timestep. As in the
         // ordinary FMM kick, publish the active short gas force without a
@@ -196,8 +198,27 @@ KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& a
         result.zmom = mass * vz;
         result.nmom = mass * std::sqrt(sqr(vx, vy, vz));
         if (parameters.descending) {
-            int const nextRung = std::max(
+            int nextRung = std::max(
                 parameters.minRung + int(proposedRung > parameters.minRung), int(rung) - 1);
+#if COSMICTIGER_WITH_SPH
+            if (midpointGas) {
+                // Hydro owns the gas rung between common boundaries (kick.hpp). At a
+                // common boundary the top level chooses it from the full gravity bound
+                // and the hydro proposal; the boundary balance then closes it over
+                // touching neighbors. Derived quantization of the full-force bound:
+                // r = max(ceil(log₂(Δτ₀/Δτ_G)), r_old − 1, r_min).
+                // Symbol directory: Δτ₀ → base timestep; Δτ_G → gravity timestep; r → rung.
+                if (parameters.freezeGasRungs) {
+                    nextRung = int(rung);
+                } else {
+                    if (parameters.fullGasRungSelection) {
+                        ALWAYS_ASSERT(parameters.top);
+                        nextRung = std::max({proposedRung, int(rung) - 1, parameters.minRung});
+                    }
+                    nextRung = std::max(nextRung, sphParticlesHydroRung(particlesCatIndex(index)));
+                }
+            }
+#endif
             result.maxRung = nextRung;
             ALWAYS_ASSERT(nextRung >= 0 && nextRung < kMaxRung);
             rung = nextRung;
@@ -208,9 +229,25 @@ KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& a
                 openStep = 0.5f * rungDt[parameters.minRung] * parameters.t0;
                 flops += 2;
             }
-            applyKick(openStep);
-            if (parameters.top) {
-                applyLong(parameters.sign, longKick.openHalf);
+#if COSMICTIGER_WITH_SPH
+            if (midpointGas && parameters.deferHydroOpening) {
+                // A coarse hydro event at this instant must see the closing side only:
+                // collect the opening impulse until hydro finishes (kick.hpp).
+                auto& increment = gravityDeferredGasOpeningData()[particlesCatIndex(index)];
+                increment[kXi] = std::fma(sign * gx, openStep, increment[kXi]);
+                increment[kYi] = std::fma(sign * gy, openStep, increment[kYi]);
+                increment[kZi] = std::fma(sign * gz, openStep, increment[kZi]);
+                flops += 3 * kDimensions;
+                // An outer boundary never coincides with a hydro event (sph_midpoint.hpp),
+                // so no long opening half-kick is pending here.
+                ALWAYS_ASSERT(!(parameters.top && longKick.active && longKick.openHalf > 0.0f));
+            } else
+#endif
+            {
+                applyKick(openStep);
+                if (parameters.top) {
+                    applyLong(parameters.sign, longKick.openHalf);
+                }
             }
         }
     } else {

@@ -70,9 +70,9 @@ def main():
                     "kickSharedExpansion", "kickHandoffBlocks", "kickFineHandoffBlocks",
                     "kickListReserve")
 
-    # Hierarchical integration steps gravity alone; SPH has no self-gravity coupling.
+    # The hierarchical ladder needs gravity; these option cases run SPH without it.
     hydro_rejected = args.time_integrator == "hierarchical"
-    hydro_error = "hierarchical requires gravity without SPH"
+    hydro_error = "hierarchical requires gravity"
 
     def run(name, options, success=True, pmmm_mesh=8, selectors=True):
         if selectors:
@@ -739,7 +739,7 @@ mapSize = 8
             raise RuntimeError("disabled SPH chemistry request lacked build guidance")
     else:
         for gravity_enabled in ("true", "false"):
-            # SPH has no self-gravity coupling in the PMMM solver.
+            # SPH with PMMM self-gravity runs only on the hierarchical ladder.
             coupled = gravity_enabled == "true" and gravity_compiled
             rejected_here = hydro_rejected or coupled
             output = run(f"sph_cli_gravity_{gravity_enabled}", sph_options + [
@@ -748,8 +748,8 @@ mapSize = 8
             if rejected_here:
                 if hydro_rejected and hydro_error not in output:
                     raise RuntimeError("hierarchical hydro rejection lacked guidance")
-                if not hydro_rejected and "SPH with self-gravity is not supported" not in output:
-                    raise RuntimeError("SPH with gravity lacked the PMMM coupling diagnostic")
+                if not hydro_rejected and "SPH with PMMM self-gravity requires" not in output:
+                    raise RuntimeError("SPH with gravity on a block integrator lacked its diagnostic")
                 continue
             assertCompiledSettings(output)
             if not re.search(r"^hydro\.enabled\s*:\s*T\s*$", output, re.MULTILINE):

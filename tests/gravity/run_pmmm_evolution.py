@@ -144,16 +144,15 @@ def main():
         options = dict(common, **{"hydro.enabled": str(hydro).lower(),
                                   "hydro.cuda": str(args.cuda and hydro and args.with_sph).lower(),
                                   "run.scenario": "cosmology" if hydro else "plummer"})
-        if hydro:
+        if hydro and not (args.with_sph and args.time_integrator == "hierarchical"):
+            # SPH with PMMM self-gravity runs only on the hierarchical ladder.
             rejected = prepareCase(root, label + "_rejected")
             log = run(rejected, dict(options, **{"run.maxIterations": 0}), False)
-            diagnostic = ("hierarchical requires gravity without SPH"
-                          if args.with_sph and args.time_integrator == "hierarchical" else
-                          "SPH with self-gravity is not supported by the PMMM solver"
+            diagnostic = ("SPH with PMMM self-gravity requires run.timeIntegrator=hierarchical"
                           if args.with_sph else "COSMICTIGER_ENABLE_SPH=ON")
             require(diagnostic in log or "COSMICTIGER_ENABLE_SPH=ON" in log,
                     "unavailable SPH was not rejected with the expected diagnostic")
-            print(f"{label}: deferred mesh/SPH coupling rejected at startup")
+            print(f"{label}: mesh/SPH coupling rejected on the {args.time_integrator} integrator")
             continue
         baseline = prepareCase(root, label + "_baseline")
         log = run(baseline, dict(options, **{"run.maxIterations": 4}))
@@ -184,8 +183,13 @@ def main():
             cells = {tuple(min(mesh_size - 1, int(coordinate * mesh_size))
                            for coordinate in row["x"]) for row in gas}
             require(len(cells) > 8, "SPH fixture did not occupy multiple PMMM cells")
-            require(any(any(row["gas"][index] != 0.0 for index in (9, 10, 11))
-                        for row in gas), "PMMM did not deliver gravity acceleration to gas")
+            # Checkpoints store no acceleration; gravity and hydro must move the gas.
+            # tests/run_jeans_wave.py checks the coupling quantitatively.
+            first_gas = sorted((row["x"], row["v"]) for row in states[0][2] if row["type"] == 1)
+            last_gas = sorted((row["x"], row["v"]) for row in states[-1][2] if row["type"] == 1)
+            require(len(first_gas) == len(last_gas) and
+                    any(a[1] != b[1] for a, b in zip(first_gas, last_gas)),
+                    "gas velocities did not evolve under PMMM gravity and SPH")
         source = baseline / "checkpoint.2"
         resumed = prepareCase(root, label + "_resumed", source)
         log = run(resumed, dict(options, **{"checkpoint.readIndex": 2,

@@ -27,6 +27,7 @@ SCENARIOS = (
     ("disc", "disc", True, True, False),
     ("polytropic_star", "polytropicStar", True, True, False),
     ("hydro_wave", "hydroWave", False, True, False),
+    ("jeans_wave", "jeansWave", True, True, False),
     ("gresho", "gresho", False, True, False),
     ("cosmology", "cosmology", True, True, True),
     ("glass", "glass", True, False, False),
@@ -116,9 +117,16 @@ def main():
         directory.mkdir()
         return directory
 
+    def with_integrator(integrator):
+        """The shared command with run.timeIntegrator replaced."""
+        return [f"--run.timeIntegrator={integrator}" if part.startswith("--run.timeIntegrator=")
+                else part for part in command]
+
     def exercise(stem, scenario, gravity, hydro, chemistry, name=None, overrides=None,
                  relative_output=None, silo=True):
         directory = prepare(name or scenario)
+        # SPH with PMMM self-gravity runs only on the hierarchical ladder.
+        scenario_command = with_integrator("hierarchical" if gravity and hydro else "traditional")
         # Cosmology derives its initial power and thermal history internally.
         # Every generated product must remain under output.directory.
         options = {
@@ -137,7 +145,7 @@ def main():
         if args.without_chemistry:
             options["chemistry.enabled"] = "false"
             chemistry = False
-        output = run_process(command + [f"--{key}={value}" for key, value in options.items()],
+        output = run_process(scenario_command + [f"--{key}={value}" for key, value in options.items()],
                              directory)
         if setting(output, "run.scenario") != scenario:
             raise RuntimeError(f"{name or scenario}: incorrect scenario dispatch")
@@ -183,23 +191,22 @@ def main():
         return directory, destination, options
 
     def expect_coupled_rejection(stem, scenario):
-        # Self-gravitating gas scenarios cannot run until the PMMM solver couples
-        # to SPH; their presets must be rejected at startup, before initialization.
-        directory = prepare(scenario)
+        # Self-gravitating gas runs only on the hierarchical ladder; a block-step request
+        # must be rejected at startup, before initialization.
+        directory = prepare(scenario + "_traditional")
         output = run_process(command + [f"--configuration={root / 'configurations' / (stem + '.ini')}",
                                         "--run.maxIterations=0", *[f"--{key}={value}" for key, value in
                                                                    cpu_backend_options().items()]],
                              directory, success=False)
-        if "SPH with self-gravity is not supported by the PMMM solver" not in output:
-            raise RuntimeError(f"{scenario}: coupled SPH/gravity preset was not rejected at startup")
-        print(f"{scenario}: self-gravitating gas preset rejected at startup (PMMM/SPH coupling pending)")
+        if "SPH with PMMM self-gravity requires run.timeIntegrator=hierarchical" not in output:
+            raise RuntimeError(f"{scenario}: coupled SPH/gravity preset accepted a block integrator")
+        print(f"{scenario}: self-gravitating gas rejected on the traditional integrator")
 
     results = {}
     for case in SCENARIOS:
         stem, scenario, gravity, hydro, chemistry = case
         if gravity and hydro:
             expect_coupled_rejection(stem, scenario)
-            continue
         results[scenario] = exercise(*case, overrides={"initial.closePack": "true", "run.gasParticleCount": str(4 * 8**3)}
                                      if scenario == "gresho" else None)
 

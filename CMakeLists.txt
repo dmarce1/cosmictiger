@@ -322,6 +322,7 @@ set(cosmictiger_header_files
     cosmictiger/scenarios/disc.hpp
     cosmictiger/scenarios/polytropic_star.hpp
     cosmictiger/scenarios/hydro_wave.hpp
+    cosmictiger/scenarios/jeans_wave.hpp
     cosmictiger/scenarios/cosmology.hpp
     cosmictiger/scenarios/glass.hpp
     cosmictiger/scenarios/exact_sod.hpp
@@ -335,9 +336,9 @@ set(cosmictiger_header_files
     cosmictiger/sph/particles.hpp
     cosmictiger/sph/particle_flags.hpp
     cosmictiger/sph/tree.hpp
-    cosmictiger/scenarios/sphere.hpp
     cosmictiger/sph/parent_tree.hpp
     cosmictiger/sph/ghosts.hpp
+    cosmictiger/scenarios/sphere.hpp
     cosmictiger/core/tree_id.hpp
     cosmictiger/gravity/fmm_geometry.hpp
     cosmictiger/gravity/kick_context.hpp
@@ -664,6 +665,11 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
     # Test fixtures select algorithms explicitly so mixed-capability builds
     # exercise their intended path without changing normal option validation.
     set(cosmictiger_test_integrator_args --run.timeIntegrator=${cosmictiger_default_integrator})
+    # SPH with PMMM self-gravity runs only on the hierarchical ladder.
+    set(cosmictiger_sph_gravity_integrator_args ${cosmictiger_test_integrator_args})
+    if(COSMICTIGER_WITH_GRAVITY AND COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL)
+        set(cosmictiger_sph_gravity_integrator_args --run.timeIntegrator=hierarchical)
+    endif()
     # PMMM is the only gravity solver; its near field defaults to fmm.
     set(cosmictiger_test_gravity_args)
     if(COSMICTIGER_WITH_GRAVITY)
@@ -916,12 +922,19 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             PROPERTIES TIMEOUT 120 PROCESSORS 1)
         # Coupled particle evolution shares the endpoint source contract.
         if(cosmictiger_entropy_sources_ready)
+            # SPH with PMMM self-gravity runs only on the hierarchical ladder; gas-only
+            # fixtures keep a block or global integrator, which need no gravity.
             if(COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
-                set(star_formation_test_integrator traditional)
+                set(source_timing_integrator traditional)
             elseif(COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL)
-                set(star_formation_test_integrator global)
+                set(source_timing_integrator global)
             else()
+                set(source_timing_integrator hierarchical)
+            endif()
+            if(COSMICTIGER_WITH_GRAVITY AND COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL)
                 set(star_formation_test_integrator hierarchical)
+            else()
+                set(star_formation_test_integrator ${source_timing_integrator})
             endif()
             set(star_formation_workdir "${PROJECT_BINARY_DIR}/tests/star_formation_cpu")
             file(MAKE_DIRECTORY "${star_formation_workdir}")
@@ -970,7 +983,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                     --gravity.cuda=${source_timing_cuda} --hydro.cuda=${source_timing_cuda}
                     --drift.cuda=${source_timing_cuda} --chemistry.cuda=${source_timing_cuda}
                     --starFormation.cuda=${source_timing_cuda}
-                    --run.timeIntegrator=${star_formation_test_integrator}
+                    --run.timeIntegrator=${source_timing_integrator}
                     ${cosmictiger_test_gravity_args}
                     --hpx:threads=1 --hpx:bind=none ${source_timing_args})
                 set_tests_properties(${source_timing_name} PROPERTIES
@@ -1457,7 +1470,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                 --run.test=groupsCatalogue ${cosmictiger_test_gravity_args} --gravity.cuda=false --hydro.cuda=false --drift.cuda=false --hydro.enabled=true
                 --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --analysis.groups=true
                 --hpx:threads=2 --hpx:bind=none
-                ${cosmictiger_test_integrator_args})
+                ${cosmictiger_sph_gravity_integrator_args})
             set_tests_properties(groupsCatalogue_hydro_cpu PROPERTIES
                 WORKING_DIRECTORY "${halo_workdir}" TIMEOUT 180 PROCESSORS 2)
         endif()
@@ -1470,9 +1483,11 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                 if(halo_mpi_variant STREQUAL "hydro")
                     set(halo_mpi_test groupsCatalogue_hydro_mpi)
                     set(halo_mpi_hydro true)
+                    set(halo_mpi_integrator_args ${cosmictiger_sph_gravity_integrator_args})
                 else()
                     set(halo_mpi_test groupsCatalogue_mpi)
                     set(halo_mpi_hydro false)
+                    set(halo_mpi_integrator_args ${cosmictiger_test_integrator_args})
                 endif()
                 set(halo_mpi_workdir "${PROJECT_BINARY_DIR}/tests/${halo_mpi_test}")
                 file(MAKE_DIRECTORY "${halo_mpi_workdir}")
@@ -1482,7 +1497,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                     --run.test=groupsCatalogueDistributed ${cosmictiger_test_gravity_args} --gravity.cuda=false --hydro.cuda=false --drift.cuda=false --hydro.enabled=${halo_mpi_hydro}
                     --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --analysis.groups=true
                     --hpx:threads=2 --hpx:bind=none --hpx:localities=2 ${MPIEXEC_POSTFLAGS}
-                    ${cosmictiger_test_integrator_args})
+                    ${halo_mpi_integrator_args})
                 set_tests_properties(${halo_mpi_test} PROPERTIES
                     WORKING_DIRECTORY "${halo_mpi_workdir}" TIMEOUT 240 PROCESSORS 4 RUN_SERIAL TRUE)
             endforeach()
@@ -1864,6 +1879,17 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             --position-type ${COSMICTIGER_POSITION_TYPE} ${pmmm_sph_args})
         set_tests_properties(pmmm_evolution_cpu PROPERTIES TIMEOUT 600 PROCESSORS 2
             RUN_SERIAL TRUE LABELS "pmmm;cpu")
+        # Gas and dark matter under PMMM gravity on the hierarchical ladder, the only
+        # integrator that couples SPH to PMMM: four steps, gas gravity, restart.
+        if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL)
+            add_test(NAME pmmm_evolution_sph_hierarchical_cpu COMMAND ${Python3_EXECUTABLE}
+                ${PROJECT_SOURCE_DIR}/tests/gravity/run_pmmm_evolution.py $<TARGET_FILE:cosmictiger>
+                ${PROJECT_BINARY_DIR}/tests/pmmm_evolution_sph_hierarchical_cpu
+                --order ${cosmictiger_default_fmm_order} --time-integrator hierarchical
+                --position-type ${COSMICTIGER_POSITION_TYPE} --with-sph)
+            set_tests_properties(pmmm_evolution_sph_hierarchical_cpu PROPERTIES TIMEOUT 900
+                PROCESSORS 2 LABELS "pmmm;sph;hierarchical;cpu")
+        endif()
         # Outer interval with frozen near membership (docs/pmmm.md).
         if(COSMICTIGER_WITH_GRAVITY)
             add_test(NAME pmmm_interval_cpu COMMAND ${Python3_EXECUTABLE}
@@ -1970,6 +1996,16 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                 --position-type ${COSMICTIGER_POSITION_TYPE} ${pmmm_sph_args})
             set_tests_properties(pmmm_evolution_mpi PROPERTIES TIMEOUT 600 PROCESSORS 4
                 RUN_SERIAL TRUE LABELS "pmmm;mpi")
+            if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL)
+                add_test(NAME pmmm_evolution_sph_hierarchical_mpi COMMAND ${Python3_EXECUTABLE}
+                    ${PROJECT_SOURCE_DIR}/tests/gravity/run_pmmm_evolution.py $<TARGET_FILE:cosmictiger>
+                    ${PROJECT_BINARY_DIR}/tests/pmmm_evolution_sph_hierarchical_mpi
+                    ${pm_launcher_args} --ranks 2 --order ${cosmictiger_default_fmm_order}
+                    --time-integrator hierarchical --position-type ${COSMICTIGER_POSITION_TYPE}
+                    --with-sph)
+                set_tests_properties(pmmm_evolution_sph_hierarchical_mpi PROPERTIES TIMEOUT 900
+                    PROCESSORS 4 LABELS "pmmm;sph;hierarchical;mpi")
+            endif()
             add_test(NAME particle_mesh_dispatch_failures_mpi COMMAND ${Python3_EXECUTABLE}
                 ${PROJECT_SOURCE_DIR}/tests/gravity/run_particle_mesh_failures.py $<TARGET_FILE:cosmictiger>
                 ${PROJECT_BINARY_DIR}/tests/particle_mesh_dispatch_failures_mpi ${pm_launcher_args})
@@ -2453,7 +2489,6 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             set_tests_properties(sph_tree PROPERTIES
                 WORKING_DIRECTORY "${sph_tree_workdir}" RUN_SERIAL TRUE TIMEOUT 120 PROCESSORS 6)
         endif()
-        foreach(kernel_case IN ITEMS wendland_spline ferrers_wendland)
         if(COSMICTIGER_WITH_SPH)
             # SPH parent tree of HPX components (docs/sph_parent_tree_plan.md, M1): topology
             # for every rank count, then the distributed tree on 1, 2, 3 and 4 localities.
@@ -2483,6 +2518,22 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                         WORKING_DIRECTORY "${parent_tree_workdir}" TIMEOUT 180
                         PROCESSORS ${parent_tree_ranks} LABELS "sph;cpu;hpx;mpi")
                 endforeach()
+            endif()
+            # SPH coupled to PMMM self-gravity on the hierarchical ladder (M7): the
+            # linear Jeans wave on 1 locality, and on 2 and 4 against it.
+            if(COSMICTIGER_WITH_GRAVITY AND COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL AND
+                    COSMICTIGER_DIMENSION_COUNT EQUAL 3)
+                set(jeans_wave_mpi_args)
+                set(jeans_wave_processors 8)
+                if(cosmictiger_mpi_tests)
+                    set(jeans_wave_mpi_args ${cosmictiger_python_mpi_args})
+                endif()
+                add_test(NAME sph_jeans_wave COMMAND ${Python3_EXECUTABLE}
+                    ${PROJECT_SOURCE_DIR}/tests/run_jeans_wave.py $<TARGET_FILE:cosmictiger>
+                    ${PROJECT_BINARY_DIR}/tests/sph_jeans_wave ${jeans_wave_mpi_args})
+                set_tests_properties(sph_jeans_wave PROPERTIES
+                    TIMEOUT 1500 PROCESSORS ${jeans_wave_processors}
+                    LABELS "integration;sph;gravity;hierarchical;mpi")
             endif()
             # Ghost leaves against remote fetches in evolution on 2, 3 and 4 localities (M2).
             if(cosmictiger_mpi_tests AND (COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL OR
@@ -2523,6 +2574,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                 endforeach()
             endif()
         endif()
+        foreach(kernel_case IN ITEMS wendland_spline ferrers_wendland)
             if(NOT COSMICTIGER_WITH_SPH OR NOT COSMICTIGER_WITH_CUDA OR
                     NOT COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
                 continue()

@@ -302,10 +302,10 @@ cells remain outstanding. `storedAccelerationParticles` and
 `storedPotentialParticles` expose retained solve-result arrays: both are zero
 for the ordinary streamed kick path.
 
-PMMM supports SPH with traditional and global integration when
-`COSMICTIGER_ENABLE_SPH=ON` and the selected integrator is compiled; hierarchical
-integration is collisionless only. Set `hydro.enabled=false` explicitly for gravity-only
-cosmological PMMM runs, whose scenario otherwise enables SPH when compiled.
+SPH couples to PMMM self-gravity on the hierarchical integrator only (next section);
+the traditional and global integrators run SPH without self-gravity. Set
+`hydro.enabled=false` explicitly for gravity-only cosmological PMMM runs, whose scenario
+otherwise enables SPH when compiled.
 Particle chemistry additionally requires `COSMICTIGER_ENABLE_CHEMISTRY=ON`
 (the default). Setting it to `OFF` retains SPH without particle chemistry;
 homogeneous cosmological recombination remains available.
@@ -585,7 +585,34 @@ summary prints intervals, transforms and force passes.
 Not implemented: `gravity.method.near = fmm` with the outer interval (the
 near-FMM cell trees assume particles inside their cells and infer periodic
 images from current positions) and the `global` integrator; both are rejected
-at startup. SPH with PMMM remains rejected.
+at startup.
+
+## SPH with PMMM self-gravity
+
+Gas is kicked by the hierarchical (HOLD) ladder exactly as dark matter is: every
+ladder stage selects one particle range as sources and sinks, and gas takes part in
+the signed ascending and descending half-kicks and the long half-kicks of an outer
+boundary (`src/gravity/pm_kick.cpp`). Two things differ, both because the SPH
+midpoint integrator owns the gas rung and the hydro kick:
+
+- Gas rungs change only at common boundaries. There the top level chooses each gas
+  rung from the full gravity bound and the gas's hydro proposal,
+  r = max(ceil(log₂(Δτ₀/Δτ_G)), r_old − 1, r_min, r_hydro), and the boundary rung
+  balance closes it over touching neighbors. On all other levels the gas rung is held.
+- The hydro kick of a rung-r interval is applied once, at its midpoint, for the whole
+  interval (pair-once RK2). With dyadic rungs that midpoint is a boundary of every finer
+  rung, so a coarse hydro event coincides with gravity half-kicks of finer gas. The
+  hydro event must see the closing side only: gas opening half-kicks at that instant
+  are collected (`gravityBeginDeferredGasOpening`) and applied right after it
+  (`gravityFinishDeferredGasOpening`). An outer boundary never coincides with a hydro
+  event, so no long half-kick is ever deferred.
+
+Each SPH neighbor walk and pass is distributed with ghost leaves (see
+`docs/sph_parent_tree_plan.md`). `tests/run_jeans_wave.py` (`ctest -R sph_jeans_wave`)
+checks the coupling against the Jeans dispersion relation ω² = c²k² − 4πGρ₀ on 1, 2 and 4
+localities; the measured frequency is within a few percent of ω_J at 20 particles per
+wavelength, comparable to the SPH sound-speed error at that resolution, and the
+localities agree to roundoff.
 
 ## Restart and regression checks
 

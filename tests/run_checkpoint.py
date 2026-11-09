@@ -32,13 +32,13 @@ def fnv1a64(payload):
     return checksum
 
 
-def runSimulation(command, workdir, logName, expectSuccess=True):
+def runSimulation(command, workdir, logName, expectSuccess=True, timeout=240):
     logPath = workdir / logName
     with logPath.open("w") as log:
         with subprocess.Popen(command, cwd=workdir, text=True, stdout=log,
                               stderr=subprocess.STDOUT, start_new_session=True) as process:
             try:
-                returnCode = process.wait(timeout=240)
+                returnCode = process.wait(timeout=timeout)
             except subprocess.TimeoutExpired:
                 os.killpg(process.pid, signal.SIGTERM)
                 try:

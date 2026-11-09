@@ -374,12 +374,12 @@ void setOptions(Options const& requested) {
             (opts.run.timeIntegrator == "hierarchical" && integration::kBuildHasHierarchical) ||
             (opts.run.timeIntegrator == "global" && integration::kBuildHasGlobal)) ||
         opts.run.hierarchicalGravity != usesHierarchicalIntegration(opts.run) ||
-        (opts.run.hierarchicalGravity && opts.hydro.enabled)) {
+        (opts.run.hierarchicalGravity && opts.hydro.enabled && !opts.gravity.enabled)) {
         throw std::invalid_argument("run.timeIntegrator is unavailable or inconsistent");
     }
-    if (opts.hydro.enabled && opts.gravity.enabled) {
+    if (opts.hydro.enabled && opts.gravity.enabled && opts.run.timeIntegrator != "hierarchical") {
         throw std::invalid_argument(
-            "SPH with self-gravity is not supported by the PMMM solver; disable gravity");
+            "SPH with PMMM self-gravity requires the hierarchical integrator");
     }
 #if COSMICTIGER_WITH_GRAVITY
     setFmmOrder(opts.gravity.fmmOrder);
@@ -666,7 +666,7 @@ bool processOptions(int argc, char* argv[]) {
         po::value<std::string>(&opts.run.scenario)->default_value(opts.run.scenario),
 #if COSMICTIGER_WITH_GRAVITY
         "physical scenario: plummer, sod, blast, rayleighTaylor, kelvinHelmholtz, disc, "
-        "polytropicStar, hydroWave, gresho, cosmology, glass"
+        "polytropicStar, hydroWave, jeansWave, gresho, cosmology, glass"
 #elif COSMICTIGER_DIMENSION_COUNT == 1
         "physical scenario: sod, blast, hydroWave"
 #elif COSMICTIGER_DIMENSION_COUNT == 2
@@ -1726,8 +1726,10 @@ bool processOptions(int argc, char* argv[]) {
 #endif
     // Hierarchical gravity supplies the independent signed kick ladder; SPH has
     // no self-gravity coupling in the PMMM solver, so it keeps its own integrators.
-    bool const hierarchicalEligible = integration::kBuildHasHierarchical &&
-        COSMICTIGER_WITH_GRAVITY && opts.gravity.enabled && !opts.hydro.enabled;
+    // The hierarchical ladder kicks with self-gravity; with SPH it is the only integrator
+    // that couples gas to PMMM (pm_kick.cpp).
+    bool const hierarchicalEligible =
+        integration::kBuildHasHierarchical && COSMICTIGER_WITH_GRAVITY && opts.gravity.enabled;
     if (opts.run.timeIntegrator.empty()) {
         int const choices = int(integration::kBuildHasTraditional) + int(hierarchicalEligible) +
             int(integration::kBuildHasGlobal);
@@ -1745,7 +1747,7 @@ bool processOptions(int argc, char* argv[]) {
             (opts.run.timeIntegrator == "global" && integration::kBuildHasGlobal))) {
         detail::throwOptionError(
             "run.timeIntegrator is unavailable for the selected physics; hierarchical "
-            "requires gravity without SPH\n");
+            "requires gravity\n");
     }
     opts.run.hierarchicalGravity = usesHierarchicalIntegration(opts.run);
     if (opts.run.minRung < 0 ||
@@ -1753,9 +1755,10 @@ bool processOptions(int argc, char* argv[]) {
         detail::throwOptionError(
             "run.minRung must be nonnegative and less than %i for rung integrators\n", kMaxRung);
     }
-    if (opts.hydro.enabled && opts.gravity.enabled) {
-        detail::throwOptionError("SPH with self-gravity is not supported by the PMMM solver; "
-                                 "set gravity.enabled=false\n");
+    // PMMM kicks midpoint SPH gas only on the hierarchical ladder (pm_kick.cpp).
+    if (opts.hydro.enabled && opts.gravity.enabled && opts.run.timeIntegrator != "hierarchical") {
+        detail::throwOptionError("SPH with PMMM self-gravity requires "
+                                 "run.timeIntegrator=hierarchical\n");
     }
     if (opts.gravity.pmmmOuterInterval) {
         if (opts.gravity.enabled && opts.gravity.pmmmNearMethod != "pp") {

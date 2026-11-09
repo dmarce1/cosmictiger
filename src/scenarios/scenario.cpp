@@ -13,6 +13,7 @@
 #include <cosmictiger/scenarios/disc.hpp>
 #include <cosmictiger/scenarios/gresho.hpp>
 #include <cosmictiger/scenarios/hydro_wave.hpp>
+#include <cosmictiger/scenarios/jeans_wave.hpp>
 #include <cosmictiger/scenarios/kelvin_helmholtz.hpp>
 #include <cosmictiger/scenarios/polytropic_star.hpp>
 #include <cosmictiger/scenarios/rayleigh_taylor.hpp>
@@ -87,6 +88,10 @@ ScenarioDefinition const& definition(std::string const& name) {
         {"polytropicStar", true, true, true, 275, initializePolytropicStar},
 #endif
         {"hydroWave", false, true, true, 64, initializeHydroWave},
+#if COSMICTIGER_WITH_GRAVITY
+        // SPH coupled to PMMM self-gravity: the Jeans dispersion relation.
+        {"jeansWave", true, true, true, 32, initializeJeansWave},
+#endif
 #if COSMICTIGER_DIMENSION_COUNT >= 2
         {"gresho", false, true, true, 16, initializeGresho},
 #endif
@@ -103,7 +108,8 @@ ScenarioDefinition const& definition(std::string const& name) {
     }
 #if !COSMICTIGER_WITH_SPH
     if (name == "sod" || name == "blast" || name == "rayleighTaylor" || name == "kelvinHelmholtz" ||
-        name == "disc" || name == "polytropicStar" || name == "hydroWave" || name == "gresho") {
+        name == "disc" || name == "polytropicStar" || name == "hydroWave" || name == "gresho" ||
+        name == "jeansWave") {
         throw std::invalid_argument("run.scenario=" + name + " requires COSMICTIGER_ENABLE_SPH=ON");
     }
 #endif
