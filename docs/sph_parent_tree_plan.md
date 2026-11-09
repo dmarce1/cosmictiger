@@ -10,7 +10,7 @@
 | M3 | Subsumed by the per-walk sync. Margins could later skip syncs that would export nothing new. |
 | M4 to M6 | Open: route the `hpxChildren()` collectives through the parent tree and drop the routing nodes; remove the fetch path; changed-set pushes. |
 | M7 gravity | Done on the hierarchical (HOLD) integrator only, at the user's direction; traditional and global reject SPH with gravity. Gate: `sph_jeans_wave`, `pmmm_evolution_sph_hierarchical_{cpu,mpi}`. |
-| M8 | Open: CUDA staging reads the same readers but is untested with ghosts; restart inside an interval; docs. |
+| M8 | Partly done: CUDA staging with ghosts passes the CUDA tree's 124 SPH tests (traditional integrator; no hierarchical CUDA tree yet). Open: restart inside an outer interval with gas. |
 
 
 November 8, 2026. The plan as written then; see the status table above for what is implemented. It turns the design Dominic
