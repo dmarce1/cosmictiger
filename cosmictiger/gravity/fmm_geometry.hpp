@@ -172,7 +172,7 @@ inline SimdFloat fmmPositionDifference(SimdPosition const& sink, SimdPosition co
     if (geometry.meshSize == 0) {
         detail::addFmmGeometryFlops(counts, kSimdFloatSize, 0);
         return simdCast<SimdFloat>(simdPositionDifference(sink, source)) *
-            simdBroadcast<SimdFloat>(kPositionToFloat);
+            math::broadcast<SimdFloat>(kPositionToFloat);
     }
     return SimdFloat([&](auto lane) {
         Position a, b;

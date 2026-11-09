@@ -4,7 +4,7 @@
 
 | Representation | Storage through degree d | Use |
 | --- | --- | --- |
-| Cartesian tracefree | `(d + 1)^2` symmetric trace-free coefficients; a local Laplacian slot | PMMM near-field FMM |
+| Cartesian tracefree | `(d + 1)^2` symmetric trace-free coefficients | PMMM near-field FMM |
 | Spherical | `(d + 1)^2` real slots for complex-conjugate harmonic coefficients | PMMM far field: free-space and periodic Ewald kernels |
 
 The checked-in headers contain both families for local degrees 2 through 8,
@@ -51,8 +51,10 @@ python3 tests/gravity/check_generated_fmm_flops.py --generated-dir cosmictiger/g
 Generated headers and their operation report are checked in under
 `cosmictiger/gravity/kernels/`:
 
-- `cartesian_tracefree_m2l.hpp`, `cartesian_tracefree_kernels.hpp`, and
-  `cartesian_tracefree_config.hpp` contain the STF operators and degree configuration.
+- `cartesian_tracefree_types.hpp` contains named STF coefficient structs;
+  `cartesian_tracefree_config.hpp` records the generated degree range.
+- `cartesian_tracefree/{p2m,p2l,m2m,m2l,m2p,l2l,l2p,l2l_warp}.hpp`
+  contains one Cartesian operator per header, with `geometry.hpp` for radius work.
 - `spherical_kernels.hpp` and `spherical_ewald_kernels.hpp` contain the
   spherical kernels.
 - `operation_counts.json` records the generated arithmetic counts and selections.
@@ -78,27 +80,32 @@ tests exercise that range. `generated_fmm_current` checks reproducibility of
 the complete source output. CTest's `generated_fmm_flops` passes the configured
 range through `--min-fmm-order` and `--max-fmm-order`, compiling and executing
 the selected Cartesian and spherical arithmetic specializations with an
-independent counting scalar. Its `CompleteKernel` checks verify that selected
-kernel classes are defined and excluded classes are not. Cartesian checks cover
-both M2L source-degree branches and verify FMA counts as well as both
+independent counting scalar. Its availability checks verify that selected
+Cartesian overloads and spherical kernel classes are defined, while excluded
+orders are unavailable. Cartesian checks cover
+the single M2L source degree and verify FMA counts under both
 operation-count conventions. The direct Python counting command above omits
 the range options and checks all generated orders 3 through 9.
 
 ## Cartesian tracefree fused arithmetic
 
 The shared Cartesian emitter fuses single-use products into addition,
-subtraction, and destination accumulation through explicit `simdFma` calls.
-Products used elsewhere remain shared temporaries. The final emission pass
-preserves the rational DAG's factoring and checks uses across both M2L source
-degree branches before folding a product. Fused rounding is intentional.
-Fused output operands are copied at their original evaluation point, preserving
-the existing read order when input and output buffers overlap.
+subtraction, and destination accumulation through explicit `fma` calls.
+Each generated function imports `math` locally; the local `Fma` callable keeps
+CPU SIMD overload resolution on the fused helper. Products used elsewhere remain
+shared temporaries. The final emission pass
+preserves the rational DAG's factoring and checks uses before folding a
+product. Fused rounding is intentional. Fused output operands are passed
+directly to `fma`; source and destination must be distinct.
 
-Ordinary Cartesian kernels expose `kWeightedFlops_` with FMA = 1, and retain
-`kFlops_` with FMA = 2 for the application's existing performance counters.
-The M2L `Full` constants describe the optional source-degree-equals-local-degree
-branch. In the JSON report, arithmetic dictionaries count each explicit FMA
-once; accumulation counts include only standalone additions/subtractions.
+Cartesian kernels expose order-specific `k*Flops` constants with FMA = 2 for application performance
+counters. Its JSON report retains weighted counts with FMA = 1 for generation
+comparisons. M2L source degree is always local degree minus one. The optional
+`--independent-m2l-ratios` generator flag emits separately scaled source and
+target ratio inputs; the default kernel computes inverse radius from its `Vector3`
+displacement. In the JSON
+report, arithmetic dictionaries count each explicit FMA once; accumulation
+counts include only standalone additions/subtractions.
 Thus weighted cost is the arithmetic sum plus accumulations; conventional cost
 adds one more per FMA. The cooperative CUDA L2L schedule and periodic Green
 derivative emitter retain their existing explicit FMAs and count conventions.
@@ -135,10 +142,9 @@ performed during generation.
 ## Traces and periodic fields
 
 Spherical Ewald is a lattice correction, so it uses a general harmonic
-contraction rather than the free-space axial shortcut. The generator carries
-separate source radial-second-moment and local background-trace values. These
-are required for the uniform periodic background, including nonzero dipoles and
-translation/evaluation of the quadratic local term. The formulas follow
+contraction rather than the free-space axial shortcut. The periodic background is
+handled separately from the Cartesian trace-free coefficient arrays.
+The formulas follow
 [Nitadori's PMMM paper, Appendix B](https://arxiv.org/html/1409.5981v2).
 See [the spherical API](generated_spherical.md) and
 [the Ewald convention and validation](generated_spherical_ewald.md) for signs,

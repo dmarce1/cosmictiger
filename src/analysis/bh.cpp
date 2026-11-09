@@ -115,7 +115,7 @@ void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& si
     float const gm = getOptions().gravity.gm;
     float const hinv = 1.0 / h;
     float const h2 = h * h;
-    SimdFloat const tiny = simdBroadcast<SimdFloat>(1e-20);
+    SimdFloat const tiny = math::broadcast<SimdFloat>(1e-20);
     int const numberOfThreads =
         std::max(std::min((int) parts.size() / 512, 2 * (int) hpxHardwareConcurrency()), 1);
     Vector<hpx::future<void>> futs;
@@ -190,19 +190,19 @@ void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& si
                                 dx[dim] = xValue[dim] - yValue[dim];    // 3
                             }
                             SimdFloat const separationSquared = sqr(dx[kXi], dx[kYi], dx[kZi]);
-                            SimdFloat const r2 = simdMax(separationSquared, tiny);
+                            SimdFloat const r2 = math::max(separationSquared, tiny);
                             auto const farFlag = separationSquared > h2;
                             SimdFloat rinv1{};
-                            if (simdAllOf(farFlag)) {     // 7/8
+                            if (math::allOf(farFlag)) {     // 7/8
                                 rinv1 = simdRsqrt(r2);    // 5
                             } else {
-                                SimdFloat const r = simdSqrt(separationSquared);
-                                SimdFloat const rinv1Far = simdBroadcast<SimdFloat>(1) /
-                                    (r + simdBroadcast<SimdFloat>(1e-30));    // 5
+                                SimdFloat const r = math::sqrt(separationSquared);
+                                SimdFloat const rinv1Far = math::broadcast<SimdFloat>(1) /
+                                    (r + math::broadcast<SimdFloat>(1e-30));    // 5
                                 SimdFloat const q = r * hinv;
                                 SimdFloat const rinv1Near =
                                     radial_kernel::potential(selectedGravityKernel(), q) * hinv;
-                                rinv1 = simdSelect(farFlag, rinv1Far, rinv1Near);    // 4
+                                rinv1 = math::select(farFlag, rinv1Far, rinv1Near);    // 4
                             }
                             phi[i] -= simdSum(mValue * rinv1);    // 1
                         }
@@ -221,7 +221,7 @@ void bhTreeEvaluatePoint(DeviceVector<BhTreeNode> const& nodes, Vector3<float> p
     float const gm = getOptions().gravity.gm;
     float const hinv = 1.0f / h;
     float const h2 = h * h;
-    SimdFloat const tiny = simdBroadcast<SimdFloat>(1e-20);
+    SimdFloat const tiny = math::broadcast<SimdFloat>(1e-20);
     int const numberOfThreads =
         std::max(std::min((int) parts.size() / 512, 2 * (int) hpxHardwareConcurrency()), 1);
     Vector<hpx::future<void>> futs;
@@ -284,20 +284,20 @@ void bhTreeEvaluatePoint(DeviceVector<BhTreeNode> const& nodes, Vector3<float> p
             dx[dim] = xValue[dim] - yValue[dim];    // 3
         }
         SimdFloat const separationSquared = sqr(dx[kXi], dx[kYi], dx[kZi]);
-        SimdFloat const r2 = simdMax(separationSquared, tiny);
+        SimdFloat const r2 = math::max(separationSquared, tiny);
         auto const farFlag = separationSquared > h2;
         SimdFloat rinv1{};
-        if (simdAllOf(farFlag)) {     // 7/8
+        if (math::allOf(farFlag)) {     // 7/8
             rinv1 = simdRsqrt(r2);    // 5
         } else {
-            SimdFloat const r = simdSqrt(separationSquared);
+            SimdFloat const r = math::sqrt(separationSquared);
             SimdFloat const rinv1Far =
-                simdBroadcast<SimdFloat>(1) / (r + simdBroadcast<SimdFloat>(1e-30f));    // 5
+                math::broadcast<SimdFloat>(1) / (r + math::broadcast<SimdFloat>(1e-30f));    // 5
             SimdFloat const q = r * hinv;
-            SimdFloat const rinv1Near = simdSelect(separationSquared > simdBroadcast<SimdFloat>(0),
+            SimdFloat const rinv1Near = math::select(separationSquared > math::broadcast<SimdFloat>(0),
                 radial_kernel::potential(selectedGravityKernel(), q) * hinv,
-                simdBroadcast<SimdFloat>(0));
-            rinv1 = simdSelect(farFlag, rinv1Far, rinv1Near);    // 4
+                math::broadcast<SimdFloat>(0));
+            rinv1 = math::select(farFlag, rinv1Far, rinv1Near);    // 4
         }
         phi -= simdSum(mValue * rinv1);    // 1
     }

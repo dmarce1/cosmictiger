@@ -101,7 +101,7 @@ CUDA_EXPORT inline FlopCount accumulateNearPair(PmmmNearParticle const& sink,
     Real const dx = (Real(sink.offset[0]) - Real(source.offset[0])) * cellWidth;
     Real const dy = (Real(sink.offset[1]) - Real(source.offset[1])) * cellWidth;
     Real const dz = (Real(sink.offset[2]) - Real(source.offset[2])) * cellWidth;
-    Real const q = simdSqrt(dx * dx + dy * dy + dz * dz) * inverseSmoothingLength;
+    Real const q = math::sqrt(dx * dx + dy * dy + dz * dz) * inverseSmoothingLength;
     Real const factor = Real(source.mass) * inverseSmoothingLengthCubed * forceFactor(kernel, q);
     field[1] -= factor * dx;
     field[2] -= factor * dy;

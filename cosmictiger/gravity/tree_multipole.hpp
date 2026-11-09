@@ -68,8 +68,8 @@ FlopCounts treeComputeMultipole(MultipoleBuffer& multi, MultipoleBuffer const& l
     FlopCounts counts;
     counts.singlePrecision = 0;
     counts.doublePrecision = 2 *
-            cosmictiger::gravity::cartesian::tracefree::detail::M2M<
-                FmmOrder<order>::kMultipoleDegree_>::kFlops_ +
+            cosmictiger::gravity::cartesian::tracefree::detail::kM2MFlops<
+                FmmOrder<order>::kMultipoleDegree_> +
         12 + 4 * kMultipoleCoefficients;
     counts.unclassified = 0;
     return counts;
@@ -89,7 +89,7 @@ FlopCounts treeComputeMultipole(MultipoleBuffer& multi, Pair<ParticleInteger> pa
         particleRange.first;
     Vector3<SimdPosition> y{};
     for (int dim = 0; dim < kDimensions; dim++) {
-        y[dim] = simdBroadcast<SimdPosition>(Position(center[dim]).raw());
+        y[dim] = math::broadcast<SimdPosition>(Position(center[dim]).raw());
     }
     for (ParticleInteger i = particleRange.first; i < maxi; i += kSimdFloatSize) {
         Vector3<SimdPosition> xValue{};
@@ -114,7 +114,7 @@ FlopCounts treeComputeMultipole(MultipoleBuffer& multi, Pair<ParticleInteger> pa
         }
         cosmictiger::gravity::cartesian::tracefree::Multipole<SimdFloat, order> m{};
         cosmictiger::gravity::cartesian::tracefree::P2M(
-            m, simdBroadcast<SimdFloat>(1), fmmScaleDisplacement(dx));
+            m, math::broadcast<SimdFloat>(1), fmmScaleDisplacement(dx));
         for (int j = 0; j < kMultipoleCoefficients; j++) {
             m[j] *= mask;
             mValue[j] += simdSum(m[j]);
@@ -136,8 +136,8 @@ FlopCounts treeComputeMultipole(MultipoleBuffer& multi, Pair<ParticleInteger> pa
     // coefficient widens and accumulates in double, then narrows into storage.
     FlopCounts counts;
     counts.singlePrecision = lanes *
-            (cosmictiger::gravity::cartesian::tracefree::detail::P2M<
-                 FmmOrder<order>::kMultipoleDegree_>::kFlops_ +
+            (cosmictiger::gravity::cartesian::tracefree::detail::kP2MFlops<
+                 FmmOrder<order>::kMultipoleDegree_> +
                 6 + kMultipoleCoefficients) +
         packets * (kSimdFloatSize - 1) * kMultipoleCoefficients;
     counts.doublePrecision = centerConversions + (2 * packets + 1) * kMultipoleCoefficients;

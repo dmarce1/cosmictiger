@@ -140,7 +140,7 @@ template <Operation operation, Path path, class Value>
             ::erfcexp(input, &first, second);
             return first;
         } else if constexpr (operation == Operation::Sqrt) {
-            return ::simdSqrt(input);
+            return ::math::sqrt(input);
         } else {
             return ::simdRsqrt(input);
         }
@@ -249,7 +249,7 @@ template <Operation operation, Path path, class Value>
                     [](float value) { return float(std::exp(-double(value) * double(value))); }) :
                 std::experimental::exp(-square);
             if constexpr (path == Path::LibraryFma) {
-                gaussian = simdFma(simdFma(-input, input, square), gaussian, gaussian);
+                gaussian = math::fma(math::fma(-input, input, square), gaussian, gaussian);
             }
             *second = gaussian;
             return std::experimental::erfc(input);

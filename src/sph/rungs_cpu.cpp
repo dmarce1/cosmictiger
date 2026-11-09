@@ -36,11 +36,11 @@ SphRunReturn sphCpuRungs(SphRunParameters const&, SphRunData const& data, int ta
                 return index < neighbors.size() ? float(data.sourceRungs[neighbors[index]]) : 0.0f;
             });
             auto const intersects =
-                detail::sphCpuValidLanes(neighbors, first) && r2𞁑𞁓 <= simdMax(h2𞁑, sqr(h𞁓));
+                detail::sphCpuValidLanes(neighbors, first) && r2𞁑𞁓 <= math::max(h2𞁑, sqr(h𞁓));
             // Fixed scales, dot, h𞁓², including arithmetic in padded SIMD lanes.
             flops += (sph_flops::kVectorOperation + sph_flops::kDotProduct + 1) * SimdFloat::size();
-            maximumNeighborRungs = simdMax(
-                maximumNeighborRungs, simdSelect(intersects, neighborRungs, SimdFloat(0.0f)));
+            maximumNeighborRungs = math::max(
+                maximumNeighborRungs, math::select(intersects, neighborRungs, SimdFloat(0.0f)));
         }
         int const maximumNeighborRung = int(simdMaximum(maximumNeighborRungs));
         // Each pass of the closure above reads a frozen source snapshot.

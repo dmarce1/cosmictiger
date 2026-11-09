@@ -86,12 +86,12 @@ public:
 };
 }    // namespace counted
 template <>
-inline counted::Real simdSqrt(counted::Real const& value) {
+inline counted::Real math::sqrt(counted::Real const& value) {
     counted::operations += 7;
     return counted::Real(std::sqrt(value.value()));
 }
 template <>
-inline counted::Real simdFma(
+inline counted::Real math::fma(
     counted::Real const& a, counted::Real const& b, counted::Real const& c) {
     ++counted::operations;
     return counted::Real(std::fma(a.value(), b.value(), c.value()));

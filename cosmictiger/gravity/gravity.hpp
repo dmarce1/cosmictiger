@@ -139,13 +139,13 @@ template <class T>
 CUDA_EXPORT inline FlopCount gravitySofteningKernel(T& force, T& phi, T radiusSquared,
     T inverseSupport, T inverseSupportSquared, T inverseSupportCubed, bool doPhi,
     FlopCounts* operations = nullptr) {
-    T const q = simdSqrt(radiusSquared * inverseSupportSquared);
+    T const q = math::sqrt(radiusSquared * inverseSupportSquared);
     auto const& kernel = selectedGravityKernel();
     force = radial_kernel::forceFactor(kernel, q) * inverseSupportCubed;
     if (doPhi) {
         phi = radial_kernel::potential(kernel, q) * inverseSupport;
     } else {
-        phi = simdBroadcast<T>(0);
+        phi = math::broadcast<T>(0);
     }
     if constexpr (kCountFlops) {
         if (operations != nullptr) {

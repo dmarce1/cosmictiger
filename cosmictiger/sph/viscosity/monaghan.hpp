@@ -73,7 +73,7 @@ CUDA_EXPORT constexpr Real lengthPerSupport(Real smoothingLengthPerEffectiveRadi
 // clang-format on
 template <typename Real>
 CUDA_EXPORT inline Real pairLength(Real h𞁑, Real h𞁓, Real h_M_over_h) {
-    return simdBroadcast<Real>(0.5) * (h𞁑 + h𞁓) * h_M_over_h;
+    return math::broadcast<Real>(0.5) * (h𞁑 + h𞁓) * h_M_over_h;
 }
 
 /*
@@ -102,7 +102,7 @@ template <typename Real>
 CUDA_EXPORT inline Real viscosityMu(Real r2𞁑𞁓, Real v𞁑𞁓_dot_r𞁑𞁓, Real h̄_M𞁑𞁓, Real ε) {
     Real const η2 = ε * h̄_M𞁑𞁓 * h̄_M𞁑𞁓;    // η²
     Real const μ𞁑𞁓 = h̄_M𞁑𞁓 * v𞁑𞁓_dot_r𞁑𞁓 / (r2𞁑𞁓 + η2);
-    return simdSelect(v𞁑𞁓_dot_r𞁑𞁓 < Real(0), μ𞁑𞁓, Real(0));
+    return math::select(v𞁑𞁓_dot_r𞁑𞁓 < Real(0), μ𞁑𞁓, Real(0));
 }
 
 /*
@@ -129,10 +129,10 @@ CUDA_EXPORT inline Real viscosityMu(Real r2𞁑𞁓, Real v𞁑𞁓_dot_r𞁑�
 template <typename Real>
 CUDA_EXPORT inline Real artificialViscosity(
     Real ρ𞁑, Real ρ𞁓, Real c𞁑, Real c𞁓, Real μ𞁑𞁓, Real α, Real β) {
-    Real const c̄𞁑𞁓 = simdBroadcast<Real>(0.5) * (c𞁑 + c𞁓);
-    Real const ρ̄𞁑𞁓 = simdBroadcast<Real>(0.5) * (ρ𞁑 + ρ𞁓);
+    Real const c̄𞁑𞁓 = math::broadcast<Real>(0.5) * (c𞁑 + c𞁓);
+    Real const ρ̄𞁑𞁓 = math::broadcast<Real>(0.5) * (ρ𞁑 + ρ𞁓);
     Real const Π𞁑𞁓 = (-α * c̄𞁑𞁓 * μ𞁑𞁓 + β * μ𞁑𞁓 * μ𞁑𞁓) / ρ̄𞁑𞁓;
-    return simdSelect(μ𞁑𞁓 < Real(0), Π𞁑𞁓, Real(0));
+    return math::select(μ𞁑𞁓 < Real(0), Π𞁑𞁓, Real(0));
 }
 
 }    // namespace monaghan

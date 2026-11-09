@@ -75,9 +75,9 @@ CUDA_EXPORT inline float decodeFactor(uint8_t q) {
 // clang-format on
 template <typename Real>
 CUDA_EXPORT inline Real balsaraFactor(Real div_v_a, Real abs_curl_v𞁑, Real c𞁑_over_h𞁑, Real ε_B) {
-    Real const abs_div_v𞁑 = simdMax(div_v_a, -div_v_a);
+    Real const abs_div_v𞁑 = math::max(div_v_a, -div_v_a);
     Real const denominator = abs_div_v𞁑 + abs_curl_v𞁑 + ε_B * c𞁑_over_h𞁑;
-    Real const fᴬⱽ𞁑 = abs_div_v𞁑 / simdSelect(denominator > Real(0), denominator, Real(1));
+    Real const fᴬⱽ𞁑 = abs_div_v𞁑 / math::select(denominator > Real(0), denominator, Real(1));
     return fᴬⱽ𞁑;
 }
 

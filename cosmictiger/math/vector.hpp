@@ -136,7 +136,7 @@ public:
         return dot(static_cast<Result const&>(*this));
     }
     CUDA_EXPORT T norm() const {
-        return simdSqrt(squaredNorm());
+        return math::sqrt(squaredNorm());
     }
     // SIMD elements return a per-lane mask; scalar elements return bool.
     friend CUDA_EXPORT constexpr auto operator==(Result const& left, Result const& right) {
@@ -179,18 +179,17 @@ namespace detail {
     template <class Result, class Mask, class Input, size_t... indices>
     CUDA_EXPORT inline Result selectVector(
         Mask const& mask, Input const& yes, Input const& no, std::index_sequence<indices...>) {
-        return Result(simdSelect(mask, yes[indices], no[indices])...);
+        return Result(math::select(mask, yes[indices], no[indices])...);
     }
 
 }    // namespace detail
-}    // namespace math
 
 template <class Mask, class T, int dimensions, class Derived>
-CUDA_EXPORT inline auto simdSelect(Mask const& mask,
-    math::Vector<T, dimensions, Derived> const& yes,
+CUDA_EXPORT inline auto select(Mask const& mask, math::Vector<T, dimensions, Derived> const& yes,
     math::Vector<T, dimensions, Derived> const& no) {
     using Result =
         std::conditional_t<std::is_void_v<Derived>, math::Vector<T, dimensions, Derived>, Derived>;
     return math::detail::selectVector<Result>(
         mask, yes, no, std::make_index_sequence<dimensions>{});
 }
+}    // namespace math

@@ -266,8 +266,8 @@ void testVector3() {
     Vector3<double> const difference = u - v;
     double const expectedDifference[3] = {1.5, -6.0, 1.0};
     Vector3<float> const converted(u);
-    Vector3<double> const first = simdSelect(true, u, v);
-    Vector3<double> const second = simdSelect(false, u, v);
+    Vector3<double> const first = math::select(true, u, v);
+    Vector3<double> const second = math::select(false, u, v);
     for (int dim = 0; dim < 3; dim++) {
         requireClose("vector arithmetic", w[dim], u[dim], 1.0e-15);
         requireClose("vector difference", difference[dim], expectedDifference[dim], 1.0e-15);

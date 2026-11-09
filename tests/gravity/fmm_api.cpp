@@ -48,7 +48,7 @@ void checkPointFields() {
             displacement[dim] = -center[dim];
             radiusSquared += center[dim] * center[dim];
         }
-        double const inverseRadius = 1.0 / std::sqrt(radiusSquared);
+        double const iR = 1.0 / std::sqrt(radiusSquared);
         Multipole moments{};
         Expansion local{};
         Field multipoleField{};
@@ -58,10 +58,9 @@ void checkPointFields() {
         M2P(multipoleField, moments, displacement);
         L2P(localField, local, zero);
         for (Field const& field : {multipoleField, localField}) {
-            EXPECT_NEAR(field.potential(), -2.0 * inverseRadius, 1e-12);
+            EXPECT_NEAR(field.potential(), -2.0 * iR, 1e-12);
             for (int dim = 0; dim < kDimensions; ++dim) {
-                EXPECT_NEAR(field[dim + 1],
-                    -2.0 * displacement[dim] * inverseRadius / radiusSquared, 1e-12);
+                EXPECT_NEAR(field[dim + 1], -2.0 * displacement[dim] * iR / radiusSquared, 1e-12);
             }
         }
         Field accumulated{};

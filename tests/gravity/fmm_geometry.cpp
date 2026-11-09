@@ -340,9 +340,9 @@ TEST(FmmGeometry, PeriodicBoxContainmentUsesTheWrappedInterval) {
         Range<SimdDouble8> packedBox;
         Vector3<SimdPosition> packedPoint;
         for (int dim = 0; dim < kDimensions; ++dim) {
-            packedBox.begin[dim] = simdBroadcast<SimdDouble8>(box.begin[dim].toDouble());
-            packedBox.end[dim] = simdBroadcast<SimdDouble8>(box.end[dim].toDouble());
-            packedPoint[dim] = simdBroadcast<SimdPosition>(point[dim].raw());
+            packedBox.begin[dim] = math::broadcast<SimdDouble8>(box.begin[dim].toDouble());
+            packedBox.end[dim] = math::broadcast<SimdDouble8>(box.end[dim].toDouble());
+            packedPoint[dim] = math::broadcast<SimdPosition>(point[dim].raw());
         }
         auto const distances = boxDistanceSquared(packedBox, packedPoint);
         for (int lane = 0; lane < kSimdFloatSize; ++lane) {

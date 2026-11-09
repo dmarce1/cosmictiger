@@ -535,9 +535,9 @@ inline SimdFloat boxDistanceSquared(Range<SimdDouble8> const& box, Vector3<SimdP
     SimdFloat d2 = 0.0f;
     for (int dim = 0; dim < kDimensions; dim++) {
         SimdDouble8 xValue =
-            simdCast<SimdDouble8>(x[dim]) * simdBroadcast<SimdDouble8>(Position::kToFloatFactor_);
+            simdCast<SimdDouble8>(x[dim]) * math::broadcast<SimdDouble8>(Position::kToFloatFactor_);
         // Positions are unsigned coordinates in [0, 1), not signed displacements.
-        xValue = simdSelect(xValue < SimdDouble8(0.0), xValue + SimdDouble8(1.0), xValue);
+        xValue = math::select(xValue < SimdDouble8(0.0), xValue + SimdDouble8(1.0), xValue);
         // Q0.32 values and Q32.32 box endpoints are exact in double.
         // Measure from the lower endpoint modulo one, then test containment
         // in that same periodic interval before choosing the nearest endpoint.
@@ -545,9 +545,9 @@ inline SimdFloat boxDistanceSquared(Range<SimdDouble8> const& box, Vector3<SimdP
         offset -= simdFloor(offset);
         SimdDouble8 const length = box.end[dim] - box.begin[dim];
         auto const outside = (length < SimdDouble8(1.0)) & (offset > length);
-        SimdDouble8 const nearest = simdMin(offset - length, SimdDouble8(1.0) - offset);
-        SimdFloat const delta = simdCast<SimdFloat>(simdSelect(outside, nearest, SimdDouble8(0.0)));
-        d2 = simdFma(delta, delta, d2);
+        SimdDouble8 const nearest = math::min(offset - length, SimdDouble8(1.0) - offset);
+        SimdFloat const delta = simdCast<SimdFloat>(math::select(outside, nearest, SimdDouble8(0.0)));
+        d2 = math::fma(delta, delta, d2);
     }
     return d2;
 }

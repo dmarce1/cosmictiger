@@ -58,10 +58,10 @@ __device__ inline void sharedReduceAdd(T& number) {
     }
 }
 
-template <class T, int nValue>
-__device__ inline void sharedReduceAddArray(Array<T, nValue>& number) {
+template <class Values>
+__device__ inline void sharedReduceAddArray(Values& number) {
     for (int p = warpSize / 2; p >= 1; p /= 2) {
-        for (int n = 0; n < nValue; n++) {
+        for (int n = 0; n < number.size(); n++) {
             number[n] += __shfl_xor_sync(0xffffffff, number[n], p);
         }
     }

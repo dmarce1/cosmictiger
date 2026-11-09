@@ -76,7 +76,7 @@ inline constexpr FlopCount kInverseVolume = kSpatialDimensions - 1;
 inline constexpr FlopCount kInverseGradientScale = kSpatialDimensions == 1 ? 1 : 2;
 
 // Costs of the expressions in sph/viscosity/monaghan.hpp. Selection and unary signs
-// are free; both expressions passed to simdSelect are evaluated. The pair length
+// are free; both expressions passed to math::select are evaluated. The pair length
 // h̄_M𞁑𞁓 (3 operations) is formed and counted once per pair by the caller.
 constexpr FlopCount kViscosityMu = 5;
 constexpr FlopCount kArtificialViscosity = 10;
@@ -128,7 +128,7 @@ CUDA_EXPORT inline FlopCount forceKernelFlops(
 
 // Arithmetic-only helpers above support the CountingReal references. Production
 // counts additionally classify runtime conversions when table and lane precisions differ.
-// simdBroadcast narrows once before broadcasting, so these are per span, not
+// math::broadcast narrows once before broadcasting, so these are per span, not
 // per SIMD lane. Polynomial arithmetic remains at the scalar/lane precision.
 template <class Real, class Kernel>
 CUDA_EXPORT inline Operations densityKernelOperations(

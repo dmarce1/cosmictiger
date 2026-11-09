@@ -42,9 +42,9 @@ template <typename Real>
 CUDA_EXPORT inline Real exchangeRate(Real ρ𞁑, Real ρ𞁓, Real c_E𞁑, Real c_E𞁓, Real h̄_M𞁑𞁓, Real r2𞁑𞁓,
     Real a_vₚₕ𞁟ₛ𞁑𞁓_dot_x𞁑𞁓, Real F𞁑𞁓, Real g, Real ε, Real m𞁓_over_a) {
     Real const η2_plus_r2𞁑𞁓 = r2𞁑𞁓 + ε * h̄_M𞁑𞁓 * h̄_M𞁑𞁓;
-    Real const μ_E𞁑𞁓 = simdMin(h̄_M𞁑𞁓 * a_vₚₕ𞁟ₛ𞁑𞁓_dot_x𞁑𞁓 / η2_plus_r2𞁑𞁓, Real(0));
-    Real const c̄𞁑𞁓 = simdBroadcast<Real>(0.5) * (c_E𞁑 + c_E𞁓);
-    Real const ρ̄𞁑𞁓 = simdBroadcast<Real>(0.5) * (ρ𞁑 + ρ𞁓);
+    Real const μ_E𞁑𞁓 = math::min(h̄_M𞁑𞁓 * a_vₚₕ𞁟ₛ𞁑𞁓_dot_x𞁑𞁓 / η2_plus_r2𞁑𞁓, Real(0));
+    Real const c̄𞁑𞁓 = math::broadcast<Real>(0.5) * (c_E𞁑 + c_E𞁓);
+    Real const ρ̄𞁑𞁓 = math::broadcast<Real>(0.5) * (ρ𞁑 + ρ𞁓);
     Real const q𞁑_plus_q𞁓 = g * h̄_M𞁑𞁓 * (c̄𞁑𞁓 - Real(4) * μ_E𞁑𞁓);
     return -m𞁓_over_a * q𞁑_plus_q𞁓 * r2𞁑𞁓 * F𞁑𞁓 / (ρ̄𞁑𞁓 * η2_plus_r2𞁑𞁓);
 }

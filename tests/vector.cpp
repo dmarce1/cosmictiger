@@ -77,7 +77,7 @@ static_assert(std::same_as<decltype(std::declval<Spatial const&>().norm()), doub
 static_assert(
     std::same_as<decltype(std::declval<Spatial const&>().cross(std::declval<Spatial const&>())),
         Spatial>);
-static_assert(std::same_as<decltype(simdSelect(true, std::declval<Spatial const&>(),
+static_assert(std::same_as<decltype(math::select(true, std::declval<Spatial const&>(),
                                std::declval<Spatial const&>())),
     Spatial>);
 static_assert(std::same_as<decltype(std::declval<Spatial>() == std::declval<Spatial>()), bool>);
@@ -134,8 +134,8 @@ void verifyDimension() {
     }
     actual[dimensions - 1] += 1.0;
     EXPECT_NE(actual, kValues);
-    EXPECT_EQ(simdSelect(true, kValues, actual), kValues);
-    EXPECT_EQ(simdSelect(false, kValues, actual), actual);
+    EXPECT_EQ(math::select(true, kValues, actual), kValues);
+    EXPECT_EQ(math::select(false, kValues, actual), actual);
     EXPECT_DOUBLE_EQ(kValues.norm(), std::sqrt(kSquaredNorm));
 }
 
@@ -211,7 +211,7 @@ TEST(Vector, SimdArithmeticAndMasksCoverEveryComponent) {
     simdSetLane(right[3], 2, 13.0f);
     auto const equal = left == right;
     auto const unequal = left != right;
-    auto const selected = simdSelect(equal, left + Spatial(Pack(10.0f)), right);
+    auto const selected = math::select(equal, left + Spatial(Pack(10.0f)), right);
     auto const combined = Pack(2.0f) * (left + right) - left;
     auto const dot = left.dot(right);
     for (int lane = 0; lane < 4; ++lane) {
@@ -230,7 +230,7 @@ TEST(Vector, SimdArithmeticAndMasksCoverEveryComponent) {
     Vector3<Pack> const axis(Pack(1.0f), Pack(0.0f), Pack(0.0f));
     Vector3<Pack> const spatial(left[0], left[1], left[3]);
     auto const perpendicular = axis.cross(spatial);
-    auto const chosen = simdSelect(equal, perpendicular, spatial);
+    auto const chosen = math::select(equal, perpendicular, spatial);
     static_assert(std::same_as<std::remove_cv_t<decltype(chosen)>, Vector3<Pack>>);
     for (int lane = 0; lane < 4; ++lane) {
         EXPECT_EQ(float(perpendicular[0][lane]), 0.0f);

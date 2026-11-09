@@ -218,9 +218,9 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
     Vector<TreeId>& cplist = workspace.cplist;
     Vector<TreeId>& pclist = workspace.pclist;
     Vector<TreeId>& leaflist = workspace.leaflist;
-    SimdFloat const thetainv = simdBroadcast<SimdFloat>(fmmInverseOpeningAngle(params.theta));
+    SimdFloat const thetainv = math::broadcast<SimdFloat>(fmmInverseOpeningAngle(params.theta));
     // Every node shares the fixed gravity support, so it bounds every pair.
-    SimdFloat const smoothingLengthPack = simdBroadcast<SimdFloat>(smoothingLength);
+    SimdFloat const smoothingLengthPack = math::broadcast<SimdFloat>(smoothingLength);
     // Internal sinks retest opened sources at their own level under the
     // open-larger rule, and hand down only what the rule defers.
     bool const openLargerCell = params.openLargerCell;
@@ -236,7 +236,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
     SimdFloat otherLeaf{};
     Range<SimdDouble8> otherBox{};
     for (int dim = 0; dim < kDimensions; dim++) {
-        selfPos[dim] = simdBroadcast<SimdPosition>(selfPtr->pos[dim].raw());
+        selfPos[dim] = math::broadcast<SimdPosition>(selfPtr->pos[dim].raw());
         selfBox.begin[dim] = (double) selfPtr->box.begin[dim].raw();
         selfBox.end[dim] = (double) selfPtr->box.end[dim].raw();
     }
@@ -254,8 +254,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
     cosmictiger::gravity::cartesian::tracefree::L2L(
         translated, expansion, fmmScaleDisplacement(ldx), params.doPhi);
     expansion = translated;
-    flops +=
-        cosmictiger::gravity::cartesian::tracefree::detail::L2L<kLocalDegree, true>::kFlops_ + 5;
+    flops += cosmictiger::gravity::cartesian::tracefree::detail::kL2LFlops<kLocalDegree> + 5;
     // Box scaling stays double; each local displacement scales in double and
     // narrows before the float L2L coordinate scaling. Two reciprocals are float.
     doubleFlops += 6 + 6 * kSimdFloatSize;
@@ -305,13 +304,13 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                         selfPos[dim], otherPos[dim], dim, params.geometry, &geometryFlops);
                 }
                 SimdFloat const r2 =
-                    simdFma(dx[kXi], dx[kXi], simdFma(dx[kYi], dx[kYi], dx[kZi] * dx[kZi]));
+                    math::fma(dx[kXi], dx[kXi], math::fma(dx[kYi], dx[kYi], dx[kZi] * dx[kZi]));
                 auto acceptance =
-                    computeFmmAcceptance(r2, selfRadius, otherRadius, simdBroadcast<SimdFloat>(0),
-                        simdBroadcast<SimdFloat>(0), smoothingLengthPack, thetainv);
+                    computeFmmAcceptance(r2, selfRadius, otherRadius, math::broadcast<SimdFloat>(0),
+                        math::broadcast<SimdFloat>(0), smoothingLengthPack, thetainv);
                 flops += kSimdFloatSize *
                     24;    // Float norm and acceptance; geometry counted separately.
-                if (selfPtr->leaf || simdAnyOf(otherLeaf != simdBroadcast<SimdFloat>(0.0f))) {
+                if (selfPtr->leaf || math::anyOf(otherLeaf != math::broadcast<SimdFloat>(0.0f))) {
                     for (int i = 0; i < maxi; i++) {
                         for (int dim = 0; dim < kDimensions; dim++) {
                             simdSetLane(otherBox.begin[dim], i, otherPtrs[i]->box.begin[dim].raw());
@@ -441,8 +440,8 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                     output.acceleration[kXi][outputIndex] = forces.gx[j];
                     output.acceleration[kYi][outputIndex] = forces.gy[j];
                     output.acceleration[kZi][outputIndex] = forces.gz[j];
-                    flops += cosmictiger::gravity::cartesian::tracefree::detail::L2P<kLocalDegree,
-                                 true>::kFlops_ +
+                    flops += cosmictiger::gravity::cartesian::tracefree::detail::kL2PFlops<
+                                 kLocalDegree> +
                         11;
                     continue;
                 }
@@ -662,8 +661,8 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                     kr.pot += 0.5f * mass * forces.phi[j];
                     kr.dkin += 0.5f * mass * sqr(vx, vy, vz) - kin0;
                 }
-                flops += cosmictiger::gravity::cartesian::tracefree::detail::L2P<kLocalDegree,
-                             true>::kFlops_ +
+                flops +=
+                    cosmictiger::gravity::cartesian::tracefree::detail::kL2PFlops<kLocalDegree> +
                     15;
             }
         }

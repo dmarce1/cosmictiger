@@ -10,6 +10,8 @@
 #include <cstdint>
 #include <type_traits>
 
+#include <cosmictiger/math/simd_math.hpp>
+
 namespace detail {
 
 // An independent execution oracle for source-operation estimates. Constants,
@@ -85,16 +87,6 @@ public:
         return left.value_ == right.value_;
     }
 
-    friend CountingReal simdFma(CountingReal first, CountingReal second, CountingReal third) {
-        CountingReal::add(2);
-        return std::fma(first.value(), second.value(), third.value());
-    }
-
-    friend CountingReal simdSqrt(CountingReal value) {
-        CountingReal::add(1);
-        return std::sqrt(value.value());
-    }
-
     friend CountingReal exp(CountingReal value) {
         CountingReal::add(1);
         return std::exp(value.value());
@@ -114,3 +106,18 @@ public:
 };
 
 }    // namespace detail
+
+namespace math {
+template <>
+inline ::detail::CountingReal fma(::detail::CountingReal const& first,
+    ::detail::CountingReal const& second, ::detail::CountingReal const& third) {
+    ::detail::CountingReal::add(2);
+    return std::fma(first.value(), second.value(), third.value());
+}
+
+template <>
+inline ::detail::CountingReal sqrt(::detail::CountingReal const& value) {
+    ::detail::CountingReal::add(1);
+    return std::sqrt(value.value());
+}
+}    // namespace math

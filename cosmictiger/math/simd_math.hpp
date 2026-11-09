@@ -34,9 +34,11 @@ struct SimdScalarType<Real, std::void_t<typename Real::value_type>> {
 template <class Real>
 using SimdScalar = typename detail::SimdScalarType<Real>::Type;
 
+namespace math {
+
 // Pass values directly so CUDA does not bind references to host constexpr storage.
 template <class Real, class Value>
-CUDA_EXPORT inline Real simdBroadcast(Value value) {
+CUDA_EXPORT inline Real broadcast(Value value) {
     if constexpr (std::is_same_v<Real, Value>) {
         return value;
     } else if constexpr (std::is_arithmetic_v<Real>) {
@@ -47,7 +49,7 @@ CUDA_EXPORT inline Real simdBroadcast(Value value) {
 }
 
 template <class Mask, class Real>
-CUDA_EXPORT inline Real simdSelect(Mask const& mask, Real const& yes, Real const& no) {
+CUDA_EXPORT inline Real select(Mask const& mask, Real const& yes, Real const& no) {
     if constexpr (std::is_same_v<Mask, bool>) {
         return mask ? yes : no;
     } else {
@@ -62,17 +64,17 @@ CUDA_EXPORT inline Real simdSelect(Mask const& mask, Real const& yes, Real const
 }
 
 template <class Real>
-CUDA_EXPORT inline Real simdMin(Real const& left, Real const& right) {
-    return simdSelect(left < right, left, right);
+CUDA_EXPORT inline Real min(Real const& left, Real const& right) {
+    return select(left < right, left, right);
 }
 
 template <class Real>
-CUDA_EXPORT inline Real simdMax(Real const& left, Real const& right) {
-    return simdSelect(left > right, left, right);
+CUDA_EXPORT inline Real max(Real const& left, Real const& right) {
+    return select(left > right, left, right);
 }
 
 template <class Real>
-CUDA_EXPORT inline Real simdSqrt(Real const& value) {
+CUDA_EXPORT inline Real sqrt(Real const& value) {
     if constexpr (std::is_arithmetic_v<Real>) {
         return std::sqrt(value);
     } else {
@@ -89,7 +91,7 @@ template <class Real>
 #if defined(__GNUC__) && !defined(__CUDACC__)
 [[gnu::always_inline]]
 #endif
-CUDA_EXPORT inline Real simdFma(Real const& first, Real const& second, Real const& third) {
+CUDA_EXPORT inline Real fma(Real const& first, Real const& second, Real const& third) {
     if constexpr (std::is_arithmetic_v<Real>) {
         return std::fma(first, second, third);
     } else {
@@ -108,8 +110,17 @@ CUDA_EXPORT inline Real simdFma(Real const& first, Real const& second, Real cons
     }
 }
 
+// A local callable named fma suppresses argument-dependent lookup of SIMD
+// library overloads when generated kernels import the math namespace.
+struct Fma {
+    template <class Real>
+    CUDA_EXPORT Real operator()(Real const& first, Real const& second, Real const& third) const {
+        return math::fma(first, second, third);
+    }
+};
+
 template <class Mask>
-CUDA_EXPORT inline bool simdAnyOf(Mask const& mask) {
+CUDA_EXPORT inline bool anyOf(Mask const& mask) {
     if constexpr (std::is_same_v<Mask, bool>) {
         return mask;
     } else {
@@ -122,7 +133,7 @@ CUDA_EXPORT inline bool simdAnyOf(Mask const& mask) {
 }
 
 template <class Mask>
-CUDA_EXPORT inline bool simdAllOf(Mask const& mask) {
+CUDA_EXPORT inline bool allOf(Mask const& mask) {
     if constexpr (std::is_same_v<Mask, bool>) {
         return mask;
     } else {
@@ -133,6 +144,8 @@ CUDA_EXPORT inline bool simdAllOf(Mask const& mask) {
 #endif
     }
 }
+
+}    // namespace math
 
 #ifndef __CUDACC__
 
@@ -225,12 +238,12 @@ inline Pack simdPositionDifference(Pack const& left, Pack const& right) {
 
 template <class Pack>
 inline Pack simdRsqrt(Pack const& value) {
-    return simdBroadcast<Pack>(1) / simdSqrt(value);
+    return math::broadcast<Pack>(1) / math::sqrt(value);
 }
 
 template <class Pack>
 inline Pack simdAbs(Pack const& value) {
-    return simdMax(value, -value);
+    return math::max(value, -value);
 }
 
 template <class Destination, class Source>

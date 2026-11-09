@@ -13,8 +13,7 @@
 #include <cosmictiger/cuda/cuda_export.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/gravity/kernels/cartesian_tracefree_config.hpp>
-#include <cosmictiger/gravity/kernels/cartesian_tracefree_kernels.hpp>
-#include <cosmictiger/gravity/kernels/cartesian_tracefree_m2l.hpp>
+#include <cosmictiger/gravity/kernels/cartesian_tracefree_operators.hpp>
 
 namespace detail {
 
@@ -29,12 +28,12 @@ static_assert(
     "The generated Cartesian kernels do not cover FMM orders 3 to 9");
 
 constexpr int kFieldCount = 4;
-constexpr int kGeometryCount = 12;
+constexpr int kGeometryCount = 9;
 constexpr int kOrderCount = kFmmMaxOrder - kFmmMinOrder + 1;
 
 // Compact rank-major Cartesian storage: (degree + 1)^2 harmonic coefficients.
-// Local expansions append one constant Laplacian (the periodic background trace); only the
-// trace-carrying L2L output writes that extra slot. The result buffer concatenates every kernel
+// Local expansions append one constant Laplacian (the periodic background trace).
+// The result buffer concatenates every kernel
 // output of one order at these offsets.
 template <int order>
 struct KernelLayout {
@@ -43,22 +42,16 @@ struct KernelLayout {
     static constexpr int kLocalDegree_ = Order::kLocalDegree_;
     static constexpr int kMultipoleCount_ = Order::kMultipoleCoefficients_;
     static constexpr int kLocalHarmonicCount_ = Order::kLocalHarmonicCoefficients_;
-    static constexpr int kLocalTraceIndex_ = Order::kLocalTraceIndex_;
     static constexpr int kLocalCount_ = Order::kLocalCoefficients_;
     static constexpr int kP2mOffset_ = 0;
     static constexpr int kM2mOffset_ = kP2mOffset_ + kMultipoleCount_;
     static constexpr int kP2lOffset_ = kM2mOffset_ + kMultipoleCount_;
     static constexpr int kM2lOffset_ = kP2lOffset_ + kLocalHarmonicCount_;
-    static constexpr int kM2lCenteredOffset_ = kM2lOffset_ + kLocalHarmonicCount_;
-    static constexpr int kL2lOffset_ = kM2lCenteredOffset_ + kLocalHarmonicCount_;
-    static constexpr int kL2lHarmonicOffset_ = kL2lOffset_ + kLocalCount_;
-    static constexpr int kM2pOffset_ = kL2lHarmonicOffset_ + kLocalHarmonicCount_;
-    static constexpr int kM2pCenteredOffset_ = kM2pOffset_ + kFieldCount;
-    static constexpr int kL2pOffset_ = kM2pCenteredOffset_ + kFieldCount;
-    static constexpr int kL2pHarmonicOffset_ = kL2pOffset_ + kFieldCount;
-    static constexpr int kEwaldM2lOffset_ = kL2pHarmonicOffset_ + kFieldCount;
-    static constexpr int kEwaldM2lCenteredOffset_ = kEwaldM2lOffset_ + kLocalHarmonicCount_;
-    static constexpr int kResultCount_ = kEwaldM2lCenteredOffset_ + kLocalHarmonicCount_;
+    static constexpr int kL2lOffset_ = kM2lOffset_ + kLocalHarmonicCount_;
+    static constexpr int kM2pOffset_ = kL2lOffset_ + kLocalCount_;
+    static constexpr int kL2pOffset_ = kM2pOffset_ + kFieldCount;
+    static constexpr int kEwaldM2lOffset_ = kL2pOffset_ + kFieldCount;
+    static constexpr int kResultCount_ = kEwaldM2lOffset_ + kLocalHarmonicCount_;
 };
 
 template <typename Real, int count>
@@ -76,10 +69,10 @@ struct Coefficients {
 
 template <typename Real, int order>
 struct KernelInput {
-    Coefficients<Real, KernelLayout<order>::kMultipoleCount_> multipole;
-    Coefficients<Real, KernelLayout<order>::kLocalCount_> local;
-    // Unit direction, inverse distance, source/distance, target/distance,
-    // normalized translation, scale ratio, particle mass, inverse local scale.
+    cosmictiger::gravity::cartesian::tracefree::Multipole<Real, order> multipole{};
+    cosmictiger::gravity::cartesian::tracefree::Expansion<Real, order> local{};
+    // Separation, center translation, translation scale ratio, particle mass,
+    // and inverse local scale.
     Coefficients<Real, kGeometryCount> geometry;
 };
 
@@ -90,41 +83,46 @@ template <typename Real, int order>
 CUDA_EXPORT void evaluateKernels(
     KernelInput<Real, order> const& input, KernelResult<Real, order>& result) {
     using Layout = KernelLayout<order>;
-    using Multipole = Coefficients<Real, Layout::kMultipoleCount_>;
-    constexpr int kMultipoleDegree = Layout::kMultipoleDegree_;
-    constexpr int kLocalDegree = Layout::kLocalDegree_;
+    using Multipole = cosmictiger::gravity::cartesian::tracefree::Multipole<Real, order>;
+    using Expansion = cosmictiger::gravity::cartesian::tracefree::Expansion<Real, order>;
+    using Green = cosmictiger::gravity::cartesian::tracefree::Green<Real, order>;
+    using Field = cosmictiger::gravity::Field<Real>;
     auto const& g = input.geometry;
-    auto* p2m = result.values + Layout::kP2mOffset_;
-    kernels::P2M<kMultipoleDegree>::add(p2m, g[10], g[6], g[7], g[8]);
-    auto* m2m = result.values + Layout::kM2mOffset_;
-    kernels::M2M<kMultipoleDegree>::add(m2m, input.multipole, g[6], g[7], g[8], g[9]);
-    auto* p2l = result.values + Layout::kP2lOffset_;
-    kernels::P2L<kLocalDegree>::add(p2l, g[10], g[0], g[1], g[2], g[3], g[5]);
-    auto* m2l = result.values + Layout::kM2lOffset_;
-    kernels::M2L<kLocalDegree, false>::template add<Real, Real*, Multipole, kMultipoleDegree>(
-        m2l, input.multipole, g[0], g[1], g[2], g[3], g[4], g[5]);
-    auto* m2lCentered = result.values + Layout::kM2lCenteredOffset_;
-    kernels::M2L<kLocalDegree, true>::template add<Real, Real*, Multipole, kMultipoleDegree>(
-        m2lCentered, input.multipole, g[0], g[1], g[2], g[3], g[4], g[5]);
-    auto* l2l = result.values + Layout::kL2lOffset_;
-    kernels::L2L<kLocalDegree, true>::add(l2l, input.local, g[6], g[7], g[8], g[9]);
-    auto* l2lHarmonic = result.values + Layout::kL2lHarmonicOffset_;
-    kernels::L2L<kLocalDegree, false>::add(l2lHarmonic, input.local, g[6], g[7], g[8], g[9]);
-    auto* m2p = result.values + Layout::kM2pOffset_;
-    kernels::M2P<kMultipoleDegree, false>::add(m2p, input.multipole, g[0], g[1], g[2], g[3], g[4]);
-    auto* m2pCentered = result.values + Layout::kM2pCenteredOffset_;
-    kernels::M2P<kMultipoleDegree, true>::add(
-        m2pCentered, input.multipole, g[0], g[1], g[2], g[3], g[4]);
-    auto* l2p = result.values + Layout::kL2pOffset_;
-    kernels::L2P<kLocalDegree, true>::add(l2p, input.local, g[6], g[7], g[8], g[11]);
-    auto* l2pHarmonic = result.values + Layout::kL2pHarmonicOffset_;
-    kernels::L2P<kLocalDegree, false>::add(l2pHarmonic, input.local, g[6], g[7], g[8], g[11]);
-    auto* ewaldM2l = result.values + Layout::kEwaldM2lOffset_;
-    kernels::M2LDerivatives<kLocalDegree, false>::template add<Real>(
-        ewaldM2l, input.multipole, input.local);
-    auto* ewaldM2lCentered = result.values + Layout::kEwaldM2lCenteredOffset_;
-    kernels::M2LDerivatives<kLocalDegree, true>::template add<Real>(
-        ewaldM2lCentered, input.multipole, input.local);
+    Vector3<Real> const separation{g[0], g[1], g[2]};
+    Vector3<Real> const translation{g[3], g[4], g[5]};
+    auto store = [&](auto const& value, int offset, int count) {
+        for (int i = 0; i < count; i++) {
+            result[offset + i] = value[i];
+        }
+    };
+    Multipole p2m{};
+    kernels::P2M(p2m, g[7], translation);
+    store(p2m, Layout::kP2mOffset_, Layout::kMultipoleCount_);
+    Multipole m2m{};
+    kernels::M2M(m2m, input.multipole, translation, g[6]);
+    store(m2m, Layout::kM2mOffset_, Layout::kMultipoleCount_);
+    Expansion p2l{};
+    kernels::P2L(p2l, g[7], separation);
+    store(p2l, Layout::kP2lOffset_, Layout::kLocalHarmonicCount_);
+    Expansion m2l{};
+    kernels::M2L(m2l, input.multipole, separation);
+    store(m2l, Layout::kM2lOffset_, Layout::kLocalHarmonicCount_);
+    Expansion l2l{};
+    kernels::L2L(l2l, input.local, translation, g[6]);
+    store(l2l, Layout::kL2lOffset_, Layout::kLocalCount_);
+    Field m2p{};
+    kernels::M2P(m2p, input.multipole, separation);
+    store(m2p, Layout::kM2pOffset_, kFieldCount);
+    Field l2p{};
+    kernels::L2P(l2p, input.local, translation, g[8]);
+    store(l2p, Layout::kL2pOffset_, kFieldCount);
+    Green derivatives{};
+    for (int i = 0; i < Layout::kLocalCount_; i++) {
+        derivatives[i] = input.local[i];
+    }
+    Expansion ewald{};
+    kernels::M2L(ewald, input.multipole, derivatives);
+    store(ewald, Layout::kEwaldM2lOffset_, Layout::kLocalHarmonicCount_);
 }
 
 template <typename Real, int order>
@@ -141,19 +139,15 @@ KernelInput<Real, order> makeKernelInput(int sample) {
     double const x = std::sin(.73 * sample + .11);
     double const y = std::cos(.39 * sample + .17);
     double const z = std::sin(.53 * sample + .29);
-    double const inverseNorm = 1 / std::sqrt(x * x + y * y + z * z);
-    input.geometry[0] = Real(x * inverseNorm);
-    input.geometry[1] = Real(y * inverseNorm);
-    input.geometry[2] = Real(z * inverseNorm);
-    input.geometry[3] = Real(.41 + .002 * sample);
-    input.geometry[4] = Real(.17 + .001 * sample);
-    input.geometry[5] = Real(.23 + .001 * sample);
-    input.geometry[6] = Real(.13 * x);
-    input.geometry[7] = Real(.09 * y);
-    input.geometry[8] = Real(.11 * z);
-    input.geometry[9] = Real(.67 + .003 * sample);
-    input.geometry[10] = Real(.7 + .011 * sample);
-    input.geometry[11] = Real(1.1 + .002 * sample);
+    input.geometry[0] = Real(x);
+    input.geometry[1] = Real(y);
+    input.geometry[2] = Real(z);
+    input.geometry[3] = Real(.13 * x);
+    input.geometry[4] = Real(.09 * y);
+    input.geometry[5] = Real(.11 * z);
+    input.geometry[6] = Real(.67 + .003 * sample);
+    input.geometry[7] = Real(.7 + .011 * sample);
+    input.geometry[8] = Real(1.1 + .002 * sample);
     return input;
 }
 

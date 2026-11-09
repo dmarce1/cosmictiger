@@ -66,7 +66,7 @@ inline constexpr float kMinimumWellConditionedOmega = 0.1f;
 // clang-format on
 template <typename Real>
 CUDA_EXPORT inline Real kernelSupportDerivative(Real w, Real wʹ, Real q, Real ih) {
-    return -(simdBroadcast<Real>(kSpatialDimensions) * w + q * wʹ) *
+    return -(math::broadcast<Real>(kSpatialDimensions) * w + q * wʹ) *
         sph_geometry::inverseGradientScale(ih);
 }
 
@@ -97,7 +97,7 @@ struct SupportSums {
 
 template <typename Real>
 CUDA_EXPORT inline SupportSums<Real> emptySupportSums() {
-    Real const zero = simdBroadcast<Real>(0);
+    Real const zero = math::broadcast<Real>(0);
     return SupportSums<Real>{zero, zero, zero, zero};
 }
 
@@ -158,7 +158,7 @@ CUDA_EXPORT inline Real numberDensity(SupportSums<Real> const& sums, Real ih) {
 // clang-format on
 template <typename Real>
 CUDA_EXPORT inline Real numberDensityDerivative(SupportSums<Real> const& sums, Real ih) {
-    return -(simdBroadcast<Real>(kSpatialDimensions) * sums.numberSum + sums.numberMoment) *
+    return -(math::broadcast<Real>(kSpatialDimensions) * sums.numberSum + sums.numberMoment) *
         sph_geometry::inverseGradientScale(ih);
 }
 
@@ -189,7 +189,7 @@ CUDA_EXPORT inline Real weightedDensity(SupportSums<Real> const& sums, Real ih) 
 // clang-format on
 template <typename Real>
 CUDA_EXPORT inline Real weightedDensityDerivative(SupportSums<Real> const& sums, Real ih) {
-    return -(simdBroadcast<Real>(kSpatialDimensions) * sums.weightedSum + sums.weightedMoment) *
+    return -(math::broadcast<Real>(kSpatialDimensions) * sums.weightedSum + sums.weightedMoment) *
         sph_geometry::inverseGradientScale(ih);
 }
 
@@ -237,7 +237,7 @@ CUDA_EXPORT inline Real volumeDensity(Real mᵢ, Real xᵢ, Real yᵢ) {
 // clang-format on
 template <typename Real>
 CUDA_EXPORT inline Real supportJacobian(SupportSums<Real> const& sums) {
-    return -sums.numberMoment / (simdBroadcast<Real>(kSpatialDimensions) * sums.numberSum);
+    return -sums.numberMoment / (math::broadcast<Real>(kSpatialDimensions) * sums.numberSum);
 }
 
 // ζᵢ = h/(D n Ω) dy/dh = (D sum x w + sum x q w') / sum q w', in units of x.
@@ -255,7 +255,7 @@ CUDA_EXPORT inline Real supportJacobian(SupportSums<Real> const& sums) {
 // clang-format on
 template <typename Real>
 CUDA_EXPORT inline Real weightedSupportCorrection(SupportSums<Real> const& sums) {
-    return (simdBroadcast<Real>(kSpatialDimensions) * sums.weightedSum + sums.weightedMoment) /
+    return (math::broadcast<Real>(kSpatialDimensions) * sums.weightedSum + sums.weightedMoment) /
         sums.numberMoment;
 }
 
@@ -271,7 +271,7 @@ CUDA_EXPORT inline Real weightedSupportCorrection(SupportSums<Real> const& sums)
 // clang-format on
 template <typename Real>
 CUDA_EXPORT inline Real correctionFactor(Real ζᵢ, Real xⱼ) {
-    return simdBroadcast<Real>(1) - ζᵢ / xⱼ;
+    return math::broadcast<Real>(1) - ζᵢ / xⱼ;
 }
 
 // How the stored support depends on the particle positions.
@@ -309,7 +309,7 @@ template <typename Real>
 CUDA_EXPORT inline GradHCorrection<Real> gradHCorrection(
     SupportSums<Real> const& sums, SupportConstraint constraint) {
     if (constraint != SupportConstraint::Free) {
-        return GradHCorrection<Real>{simdBroadcast<Real>(1), simdBroadcast<Real>(0)};
+        return GradHCorrection<Real>{math::broadcast<Real>(1), math::broadcast<Real>(0)};
     }
     return GradHCorrection<Real>{supportJacobian(sums), weightedSupportCorrection(sums)};
 }

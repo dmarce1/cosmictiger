@@ -75,8 +75,8 @@ namespace detail {
     template <size_t dimension, class TableReal, typename Real>
     CUDA_EXPORT inline auto densityMask(
         DensityKernelTable<dimension, TableReal> const& table, int piece, Real q) {
-        auto const upper = q < simdBroadcast<Real>(table.changePoints[piece + 1]);
-        return piece == 0 ? upper : upper && (q >= simdBroadcast<Real>(table.changePoints[piece]));
+        auto const upper = q < math::broadcast<Real>(table.changePoints[piece + 1]);
+        return piece == 0 ? upper : upper && (q >= math::broadcast<Real>(table.changePoints[piece]));
     }
 
 }    // namespace detail
@@ -172,15 +172,15 @@ constexpr DensityKernelTable<dimension, TableReal> makeDensityKernelTable(Kernel
 
 template <size_t dimension, class TableReal, typename Real>
 CUDA_EXPORT inline Real value(DensityKernelTable<dimension, TableReal> const& table, Real q) {
-    Real result = simdBroadcast<Real>(0);
+    Real result = math::broadcast<Real>(0);
     for (int piece = 0; piece < table.pieceCount; ++piece) {
         if constexpr (std::is_arithmetic_v<Real>) {
-            if (q < simdBroadcast<Real>(table.changePoints[piece + 1])) {
+            if (q < math::broadcast<Real>(table.changePoints[piece + 1])) {
                 return detail::evaluateDensitySpan(table.coefficients[piece], table.degree, q,
                     table.changePoints[piece], table.changePoints[piece + 1]);
             }
         } else {
-            result = simdSelect(detail::densityMask(table, piece, q),
+            result = math::select(detail::densityMask(table, piece, q),
                 detail::evaluateDensitySpan(table.coefficients[piece], table.degree, q,
                     table.changePoints[piece], table.changePoints[piece + 1]),
                 result);
@@ -191,15 +191,15 @@ CUDA_EXPORT inline Real value(DensityKernelTable<dimension, TableReal> const& ta
 
 template <size_t dimension, class TableReal, typename Real>
 CUDA_EXPORT inline Real derivative(DensityKernelTable<dimension, TableReal> const& table, Real q) {
-    Real result = simdBroadcast<Real>(0);
+    Real result = math::broadcast<Real>(0);
     for (int piece = 0; piece < table.pieceCount; ++piece) {
         if constexpr (std::is_arithmetic_v<Real>) {
-            if (q < simdBroadcast<Real>(table.changePoints[piece + 1])) {
+            if (q < math::broadcast<Real>(table.changePoints[piece + 1])) {
                 return detail::evaluateDensitySpan(table.derivativeCoefficients[piece],
                     table.degree - 1, q, table.changePoints[piece], table.changePoints[piece + 1]);
             }
         } else {
-            result = simdSelect(detail::densityMask(table, piece, q),
+            result = math::select(detail::densityMask(table, piece, q),
                 detail::evaluateDensitySpan(table.derivativeCoefficients[piece], table.degree - 1,
                     q, table.changePoints[piece], table.changePoints[piece + 1]),
                 result);

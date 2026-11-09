@@ -163,7 +163,7 @@ class Dag:
         operation, *arguments = self.nodes[node]
         if operation == 'constant':
             value = arguments[0]
-            return f'simdBroadcast<Real>({value.numerator}.0 / {value.denominator}.0)'
+            return f'math::broadcast<Real>({value.numerator}.0 / {value.denominator}.0)'
         if operation == 'symbol':
             return arguments[0]
         if operation == 'negate':
@@ -183,11 +183,11 @@ class Dag:
                 symbol = {'add':'+','subtract':'-','multiply':'*','divide':'/'}[operation]
                 expression = f'{values[0]} {symbol} {values[1]}'
             elif operation == 'fma':
-                expression = f'simdFma({", ".join(values)})'
+                expression = f'math::fma({", ".join(values)})'
             elif operation == 'sqrt':
-                expression = f'simdSqrt({values[0]})'
+                expression = f'math::sqrt({values[0]})'
             elif operation == 'selectZero':
-                expression = f'simdSelect({values[0]} == simdBroadcast<Real>(0), {values[1]}, {values[2]})'
+                expression = f'math::select({values[0]} == math::broadcast<Real>(0), {values[1]}, {values[2]})'
             else:
                 raise ValueError(operation)
             lines.append(f'        Real const t{node} = {expression};')
