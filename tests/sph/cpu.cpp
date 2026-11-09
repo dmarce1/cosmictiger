@@ -621,22 +621,18 @@ void testPeriodicSupport() {
     require(sphSupportIntersects(box, source, 0.10f), "periodic support crosses the box boundary");
 }
 
-// Bound-layer helpers of the variational reference below.
-double targetKernelSum(Fixture const& fixture);
-enum class Layer { Lower, Upper };
-void requireLayerSupports(Fixture const& fixture, Layer layer);
-double referenceStiffness(Fixture const& fixture, double support);
-
-// A 6³ lattice: the free support of 32 neighbors, 0.33, lies below the upper layer of the
-// half-box bound 0.49 (which starts at 0.392) and above bounds of 0.24 and below.
 void testLattice() {
-    constexpr int kSide = 6;
+    constexpr int kSide = 5;
     Fixture fixture(kSide * kSide * kSide);
     initializeLattice(fixture, kSide);
     fixture.solveSmoothing(0.1f, 0.24f, 0.2f);
-    requireLayerSupports(fixture, Layer::Upper);
+    for (int i = 0; i < fixture.count_; i++) {
+        requireClose("upper support bound", fixture.data_.sourceSmoothingLength[i], 0.24f, 1.0e-7);
+    }
     fixture.solveSmoothing(0.43f, 0.49f, 0.48f);
-    requireLayerSupports(fixture, Layer::Lower);
+    for (int i = 0; i < fixture.count_; i++) {
+        requireClose("lower support bound", fixture.data_.sourceSmoothingLength[i], 0.43f, 1.0e-7);
+    }
     fixture.solveSmoothing(0.3f, 0.3f, 0.17f);
     for (int i = 0; i < fixture.count_; i++) {
         requireClose("fixed support bound", fixture.data_.sourceSmoothingLength[i], 0.3f, 1.0e-7);
@@ -775,12 +771,8 @@ void testSelectedKernel() {
             "selected kernel scalar/SIMD density", data.sourceDensity[i], expectedDensity, 3.0e-6);
         double const normalizedRadius = radius / support;
         double const derivative = dkernelWDq(normalizedRadius);
-        // The second support, 0.42, lies in the upper layer of the 0.49 bound: Omega blends
-        // the free value -q w'/(3 sum w) with one by the stiffness psi.
-        auto const sums = sph_volume::equalWeightSupportSums<double>(
-            kernelW(0.0) + kernelW(normalizedRadius), normalizedRadius * derivative, data.gasMass);
         double const supportJacobian =
-            sph_volume::gradHCorrection(sums, referenceStiffness(fixture, support)).supportJacobian;
+            -normalizedRadius * derivative / (3.0 * (kernelW(0.0) + kernelW(normalizedRadius)));
         double const pressureFactor =
             (data.adiabaticIndex - 1.0f) * data.sourceInternalEnergy[i] / data.sourceDensity[i];
         pressureForce +=
@@ -835,14 +827,11 @@ void testUnequalPairEos() {
         double const radialGradient = derivative / std::pow(support, 4);
         double const pressureFactor =
             pressureEnergyRatio * data.sourceInternalEnergy[i] / data.sourceDensity[i];
-        // Equal masses: zeta = m (1 - 1/Omega), with Omega blended toward one by the
-        // stiffness of the 0.42 support inside the upper layer of the 0.49 bound.
+        // Equal masses: Omega = -sum(q w') / (3 sum(w)), zeta = m (1 - 1/Omega).
         // These unequal supports give distinct, nonzero corrections and gradients.
-        auto const sums = sph_volume::equalWeightSupportSums<double>(
-            kernelW(0.0) + kernelW(normalizedRadius), normalizedRadius * derivative, data.gasMass);
-        double const weightedSupportCorrection =
-            sph_volume::gradHCorrection(sums, referenceStiffness(fixture, support))
-                .weightedSupportCorrection;
+        double const supportJacobian =
+            -normalizedRadius * derivative / (3.0 * (kernelW(0.0) + kernelW(normalizedRadius)));
+        double const weightedSupportCorrection = data.gasMass * (1.0 - 1.0 / supportJacobian);
         require(std::abs(weightedSupportCorrection) > 0.1 * data.gasMass,
             "unequal pair exercises a nonzero grad-H correction");
         requireClose("unequal-pair grad-H correction", data.sourceGradHCorrection[i],
@@ -1333,13 +1322,8 @@ void testSupportRefresh() {
     result = sphCpuSmoothingLengths(active.params_, data, 0);
     require(!result.needsAnotherPass && data.sinkFlags[0].converged(),
         "active smoothing converges after neighbor refresh");
-    // An isolated particle sums only its self term w(0), so its support sits in the upper
-    // layer where the bounded target N₀ (1 − t³) equals that sum: t³ = 1 − w(0)/(3N₀/4π).
-    double const selfTerm = kernelW(0.0);
-    double const layerCoordinate = std::cbrt(1.0 - selfTerm / targetKernelSum(active));
-    requireClose("sparse gas settles inside the upper layer of the support ceiling",
-        data.sinkSmoothingLength[0], 0.24 + 0.06 * layerCoordinate, 2.0e-4);
-    require(data.sinkSmoothingLength[0] < 0.3f, "sparse gas stays below the support ceiling");
+    requireClose("sparse gas reaches the configured support ceiling", data.sinkSmoothingLength[0],
+        0.3f, 1.0e-7);
 
     Fixture semiactive(2);
     auto& semiData = semiactive.data_;
@@ -1473,108 +1457,28 @@ double kernelSumAt(Fixture const& fixture, int i, double support) {
     return sum;
 }
 
-// The interior target 3 N₀/(4π).
 double targetKernelSum(Fixture const& fixture) {
     return fixture.data_.targetNeighborCount * 3.0 / (4.0 * kPi);
 }
 
-// The production solve's open interval: a margin of each bound layer inside the bounds.
-struct SolveLimits {
-    sph_volume::SupportLayers<double> layers;
-    double lower;
-    double upper;
-};
-
-SolveLimits solveLimits(Fixture const& fixture) {
-    double const minimum = fixture.params_.minimumSmoothingLength;
-    double const maximum = fixture.params_.maximumSmoothingLength;
-    SolveLimits limits;
-    limits.layers = sph_volume::supportLayers(minimum, maximum);
-    limits.lower = minimum + sph_volume::kSupportMargin * (limits.layers.lowerJunction - minimum);
-    limits.upper = maximum - sph_volume::kSupportMargin * (maximum - limits.layers.upperJunction);
-    return limits;
-}
-
-// Whether the fixture's grad-H evaluation treats a support as having a constraint:
-// strictly inside distinct bounds. Mirrors sphGradHEvaluation.
-bool referenceConstrained(Fixture const& fixture, double support) {
-    return fixture.params_.minimumSmoothingLength < fixture.params_.maximumSmoothingLength &&
-        support > fixture.params_.minimumSmoothingLength &&
-        support < fixture.params_.maximumSmoothingLength;
-}
-
-// The bounded target 3 N(h)/(4π) at a support, the interior target for a support without
-// a constraint.
-double referenceTargetSum(Fixture const& fixture, double support) {
-    if (!referenceConstrained(fixture, support)) {
-        return targetKernelSum(fixture);
-    }
-    auto const limits = solveLimits(fixture);
-    return targetKernelSum(fixture) *
-        sph_volume::boundedTarget<double>(support, fixture.params_.minimumSmoothingLength,
-            fixture.params_.maximumSmoothingLength, limits.layers)
-            .factor;
-}
-
-// The support stiffness psi of the grad-H correction: zero without a constraint.
-double referenceStiffness(Fixture const& fixture, double support) {
-    if (!referenceConstrained(fixture, support)) {
-        return 0.0;
-    }
-    auto const limits = solveLimits(fixture);
-    return sph_volume::boundedTarget<double>(support, fixture.params_.minimumSmoothingLength,
-        fixture.params_.maximumSmoothingLength, limits.layers)
-        .stiffness;
-}
-
-// Supports solving sum_j w(r_ij/h) = bounded target to roundoff on the production solve's
-// open interval; an iterate pinned at a limit with the bound's residual sign stays there.
+// Supports solving the constraint to roundoff, then clamped to the fixture's bounds.
 std::vector<double> exactSupports(Fixture const& fixture) {
-    auto const limits = solveLimits(fixture);
     std::vector<double> supports(fixture.count_);
     for (int i = 0; i < fixture.count_; i++) {
-        auto const residual = [&](double support) {
-            return kernelSumAt(fixture, i, support) - referenceTargetSum(fixture, support);
-        };
-        double lower = limits.lower;
-        double upper = limits.upper;
-        if (residual(lower) >= 0.0) {
-            supports[i] = lower;
-            continue;
-        }
-        if (residual(upper) <= 0.0) {
+        double lower = 1.0e-3;
+        double upper = fixture.params_.maximumSmoothingLength;
+        if (kernelSumAt(fixture, i, upper) < targetKernelSum(fixture)) {
             supports[i] = upper;
             continue;
         }
         for (int iteration = 0; iteration < 200 && upper - lower > 1.0e-15 * upper; iteration++) {
             double const middle = 0.5 * (lower + upper);
-            (residual(middle) < 0.0 ? lower : upper) = middle;
+            (kernelSumAt(fixture, i, middle) < targetKernelSum(fixture) ? lower : upper) = middle;
         }
-        supports[i] = 0.5 * (lower + upper);
+        supports[i] =
+            std::max(0.5 * (lower + upper), double(fixture.params_.minimumSmoothingLength));
     }
     return supports;
-}
-
-// Every solved support lies strictly inside the bounds, in the expected layer, and meets
-// the bounded target to the solve tolerance unless it is pinned at the open interval's
-// limit with the bound's residual sign.
-void requireLayerSupports(Fixture const& fixture, Layer layer) {
-    auto const limits = solveLimits(fixture);
-    for (int i = 0; i < fixture.count_; i++) {
-        double const support = fixture.data_.sourceSmoothingLength[fixture.sourceIndex(i)];
-        require(support > fixture.params_.minimumSmoothingLength &&
-                support < fixture.params_.maximumSmoothingLength,
-            "bounded support stays strictly inside the bounds");
-        require(layer == Layer::Lower ? support < limits.layers.lowerJunction :
-                                        support > limits.layers.upperJunction,
-            "bounded support lies in the expected layer");
-        double const target = referenceTargetSum(fixture, support);
-        double const residual = kernelSumAt(fixture, i, support) - target;
-        bool const pinned = (support <= limits.lower && residual >= 0.0) ||
-            (support >= limits.upper && residual <= 0.0);
-        require(pinned || std::abs(residual) <= 3.0 * kSphSmoothingLengthTolerance * target,
-            "bounded support meets the bounded target");
-    }
 }
 
 VariationalReference variationalReference(
@@ -1616,11 +1520,13 @@ VariationalReference variationalReference(
             }
         }
         result.density[i] = sph_volume::weightedDensity(sums, 1.0 / support[i]);
-        double const target = referenceTargetSum(fixture, support[i]);
-        result.residual[i] = (sums.numberSum - target) / target;
-        result.weightedSupportCorrection[i] =
-            sph_volume::gradHCorrection(sums, referenceStiffness(fixture, support[i]))
-                .weightedSupportCorrection;
+        result.residual[i] = (sums.numberSum - targetKernelSum(fixture)) / targetKernelSum(fixture);
+        auto const constraint = sph_volume::classifySupport(float(support[i]),
+            fixture.params_.minimumSmoothingLength, fixture.params_.maximumSmoothingLength,
+            float(result.residual[i]), kSphSmoothingLengthTolerance);
+        result.weightedSupportCorrection[i] = constraint == sph_volume::SupportConstraint::Free ?
+            sph_volume::weightedSupportCorrection(sums) :
+            0.0;
         // (1/mᵢ) Pᵢ xᵢ/yᵢ^2 with x = m.
         pressureFactor[i] =
             (gamma - 1.0) * data.sourceInternalEnergy[fixture.sourceIndex(i)] / result.density[i];
@@ -1763,32 +1669,30 @@ void testVariationalIsolatedCluster() {
             }
         }
     }
-    // The interior supports of the cluster, 0.18, stay below the upper layer of the 0.25
-    // bound (which starts at 0.2); the edge and corner supports enter it.
-    fixture.solveSmoothing(0.05f, 0.25f, 0.15f);
+    fixture.solveSmoothing(0.05f, 0.2f, 0.15f);
     fixture.density();
     require(
         fixture.reduction_->heldSupports > 0 && fixture.reduction_->heldSupports < fixture.count_,
-        "cluster edge supports lie in the upper layer of the maximum");
+        "cluster edge supports are held at the maximum");
     std::vector<double> supports(fixture.count_);
     for (int k = 0; k < fixture.count_; k++) {
         supports[k] = fixture.data_.sourceSmoothingLength[fixture.sourceIndex(k)];
-        require(
-            supports[k] < fixture.params_.maximumSmoothingLength, "no support reaches the maximum");
     }
     auto const reference = variationalReference(fixture, supports);
     int referenceHeld = 0;
     for (int k = 0; k < fixture.count_; k++) {
         float const productionZeta = fixture.data_.sinkGradHCorrection[fixture.sinkIndex(k)];
-        if (referenceStiffness(fixture, supports[k]) < 1.0) {
+        if (reference.weightedSupportCorrection[k] == 0.0) {
             referenceHeld++;
+            require(productionZeta == 0.0f, "held supports use zeta = 0");
+        } else {
+            require(productionZeta != 0.0f, "free supports are not held");
+            requireClose("free-support zeta", productionZeta,
+                reference.weightedSupportCorrection[k], 2.0e-5 * fixture.data_.gasMass);
         }
-        require(productionZeta != 0.0f, "no support is held");
-        requireClose("bounded-support zeta", productionZeta, reference.weightedSupportCorrection[k],
-            2.0e-5 * fixture.data_.gasMass);
     }
     require(referenceHeld == fixture.reduction_->heldSupports,
-        "production and reference count the same layer supports");
+        "production and reference hold the same supports");
     // Random velocities with viscosity: momentum and angular momentum of the pair kicks.
     fixture.setBulkViscosityCoefficient(1.0f);
     fixture.params_.vonNeumannRichtmyerCoefficient = 2.0f;
@@ -1822,11 +1726,9 @@ void testVariationalIsolatedCluster() {
     }
 }
 
-// Bounded supports: every lattice support in the lower layer, in the upper layer, and
-// fixed. Layer supports carry the stiffness-blended zeta of the reference; fixed supports
-// use zeta = 0.
+// Held supports: every lattice support at hₘᵢₙ, at hₘₐₓ, and fixed.
 void testVariationalHeldSupports() {
-    constexpr int kSide = 6;
+    constexpr int kSide = 5;
     Fixture fixture(kSide * kSide * kSide);
     initializeLattice(fixture, kSide);
     struct Bounds {
@@ -1841,26 +1743,10 @@ void testVariationalHeldSupports() {
             fixture.data_.sinkGradHCorrection[fixture.sinkIndex(i)] = -7.0f;
         }
         fixture.density();
-        require(fixture.reduction_->heldSupports == fixture.count_,
-            "every support is in a layer or fixed");
-        bool const fixed = bounds.minimum == bounds.maximum;
-        std::vector<double> supports(fixture.count_);
+        require(fixture.reduction_->heldSupports == fixture.count_, "every support is held");
         for (int i = 0; i < fixture.count_; i++) {
-            supports[i] = fixture.data_.sourceSmoothingLength[fixture.sourceIndex(i)];
-        }
-        if (!fixed) {
-            requireLayerSupports(fixture, bounds.minimum > 0.4f ? Layer::Lower : Layer::Upper);
-        }
-        auto const reference = variationalReference(fixture, supports);
-        for (int i = 0; i < fixture.count_; i++) {
-            float const zeta = fixture.data_.sinkGradHCorrection[fixture.sinkIndex(i)];
-            if (fixed) {
-                require(zeta == 0.0f, "fixed supports use zeta = 0");
-            } else {
-                require(zeta != 0.0f, "layer supports keep a grad-H correction");
-                requireClose("layer-support zeta", zeta, reference.weightedSupportCorrection[i],
-                    2.0e-5 * fixture.data_.gasMass);
-            }
+            require(fixture.data_.sinkGradHCorrection[fixture.sinkIndex(i)] == 0.0f,
+                "held supports use zeta = 0");
         }
     }
     uint64_t state = 5;
@@ -1885,7 +1771,7 @@ void testVariationalHeldSupports() {
 // A uniform free lattice has no pressure force, and the homogeneous expansion of E leaves A
 // unchanged.
 void testVariationalUniformLattice() {
-    constexpr int kSide = 6;
+    constexpr int kSide = 5;
     Fixture fixture(kSide * kSide * kSide);
     initializeLattice(fixture, kSide);
     fixture.enableKickObservation();
@@ -2303,6 +2189,38 @@ void testVariationalStaleCorrections() {
     require(stopped, "a stale interacting correction stops the variational force pass");
 }
 
+// Two particles cannot supply the neighbor target at any support. With the bound at half
+// the periodic box the solve stops the run; a smaller configured bound still holds the
+// support there.
+void testSmoothingLengthBeyondHalfBoxStops() {
+    for (float const maximum : {0.49f, kSphHalfBoxSmoothingLength}) {
+        Fixture fixture(2);
+        fixture.params_.minimumSmoothingLength = 0.01f;
+        fixture.params_.maximumSmoothingLength = maximum;
+        for (int i = 0; i < fixture.count_; i++) {
+            int const source = fixture.sourceIndex(i);
+            fixture.data_.sourcePositionX[source] = i == 0 ? 0.4 : 0.6;
+            fixture.data_.sourcePositionY[source] = fixture.data_.sourcePositionZ[source] = 0.5;
+            fixture.data_.sinkFlags[fixture.sinkIndex(i)].setConverged(false);
+            fixture.data_.sourceSmoothingLength[source] =
+                fixture.data_.sinkSmoothingLength[fixture.sinkIndex(i)] = 0.3f;
+        }
+        bool stopped = false;
+        try {
+            fixture.run(kSphRunSmoothingLengths);
+        } catch (std::runtime_error const&) {
+            stopped = true;
+        }
+        if (maximum < kSphHalfBoxSmoothingLength) {
+            require(!stopped, "a configured bound below half the box holds the support");
+            requireClose("held support", fixture.data_.sinkSmoothingLength[fixture.sinkIndex(0)],
+                maximum, 0.0);
+        } else {
+            require(stopped, "a support beyond half the periodic box stops the solve");
+        }
+    }
+}
+
 }    // namespace detail
 
 namespace detail {
@@ -2489,8 +2407,7 @@ TEST_F(SphCpuTest, DensityAndRungsCountPaddedPackets) {
     // width subtraction. Include distance/normalization, density accumulation,
     // four scalar setup operations and a width-1 additive reduction per sink.
     // Grad-h adds both quadratic derivative spans, three sums per lane, two
-    // reductions, and twenty-four scalar operations for its layers, bounded target,
-    // residual and correction.
+    // reductions, and eight scalar operations for its residual and correction.
     // Float tables add four scalar FP32 width subtractions per packet;
     // there are no table precision conversions. Geometry still contributes FP64.
     // The single target node also computes gamma - 1 once.
@@ -2502,8 +2419,8 @@ TEST_F(SphCpuTest, DensityAndRungsCountPaddedPackets) {
     // one product per lane in both packets, and h_M/h is formed once per call.
     detail::submittedSphFlops = {};
     auto const density = fixture.run(kSphRunDensityAndGradients);
-    EXPECT_EQ(density.floatingPointOperations, double(fixture.count_) * (57 + 281 * width) + 2);
-    EXPECT_EQ(detail::submittedSphFlops.singlePrecision, fixture.count_ * (51 + 281 * width) + 2);
+    EXPECT_EQ(density.floatingPointOperations, double(fixture.count_) * (41 + 281 * width) + 2);
+    EXPECT_EQ(detail::submittedSphFlops.singlePrecision, fixture.count_ * (35 + 281 * width) + 2);
     EXPECT_EQ(detail::submittedSphFlops.doublePrecision, 6 * fixture.count_);
     EXPECT_EQ(detail::submittedSphFlops.unclassified, 0);
 }
@@ -2665,6 +2582,10 @@ TEST_F(SphCpuTest, VariationalUniformLattice) {
 
 TEST_F(SphCpuTest, VariationalStaleCorrections) {
     detail::testVariationalStaleCorrections();
+}
+
+TEST_F(SphCpuTest, SmoothingLengthBeyondHalfBoxStops) {
+    detail::testSmoothingLengthBeyondHalfBoxStops();
 }
 
 TEST_F(SphCpuTest, SoundWaveTimestepRefinement) {

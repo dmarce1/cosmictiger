@@ -200,10 +200,9 @@ using the gravity kernel. `gravity.softening` is a deprecated alias for
 `gravity.effectiveRadius`: it keeps its meaning but prints a deprecation warning naming
 the replacement key.
 
-SPH adapts each particle's support radius to its density, bounded smoothly by
+SPH adapts each particle's support radius to its density, bounded by
 `hydro.minSmoothingLength` and `hydro.maxSmoothingLength`, in initial interparticle
-spacings (the neighbor target rises to infinity at the minimum and falls to zero at the
-maximum, so no support reaches either bound). Neighbor and force evaluation use support radii; timestep limits use
+spacings. Neighbor and force evaluation use support radii; timestep limits use
 effective radii.
 
 Both representations may be supplied. An explicit effective-radius key wins

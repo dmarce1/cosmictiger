@@ -31,12 +31,11 @@
  *   ζᵢ  = hᵢ/(D nᵢ Ωᵢ) dyᵢ/dhᵢ.
  *
  * The Hopkins factor fᵢⱼ = 1 - ζᵢ/xⱼ reduces to 1/Ωᵢ for equal-mass
- * density SPH. Near a bound the constraint's target depends on h itself (the bounded
- * target below); the support stiffens continuously, Ωᵢ → 1 and ζᵢ → 0 at the bound, and a
- * fixed support (hₘᵢₙ = hₘₐₓ) has ζᵢ = 0. The pressure force and thermal work that use these
- * corrections are in cosmictiger/sph/variable_smoothing_lengths.hpp. docs/variational_sph.md
- * derives the equations and cosmological scale factors. Sums are taken in units of h, using h^(D+1)
- * dW/dh = -D w - q w', so that no power of h multiplies a correction.
+ * density SPH. A support held at a constant bound has dhᵢ/dr = 0, so ζᵢ = 0
+ * there. The pressure force and thermal work that use these corrections are in
+ * cosmictiger/sph/variable_smoothing_lengths.hpp. docs/variational_sph.md derives the
+ * equations and cosmological scale factors. Sums are taken in units of h, using
+ * h^(D+1) dW/dh = -D w - q w', so that no power of h multiplies a correction.
  */
 #pragma once
 
@@ -275,131 +274,44 @@ CUDA_EXPORT inline Real correctionFactor(Real ζᵢ, Real xⱼ) {
     return simdBroadcast<Real>(1) - ζᵢ / xⱼ;
 }
 
-// clang-format off
-/*
- * Bounded neighbor target (derived; no source equation). The smoothing-length solve
- * holds Σⱼ w(qᵢⱼ) = N(h)/V_D, with V_D the unit D-ball volume, for a target that
- * depends on the smoothing length itself,
- *   N(h) = N₀ f(h),
- *   f = 1/(1 − s³),  s = (h₁ − h)/(h₁ − hₘᵢₙ)    for hₘᵢₙ < h < h₁ = λ hₘᵢₙ,
- *   f = 1                                      for h₁ ≤ h ≤ h₂,
- *   f = 1 − t³,      t = (h − h₂)/(hₘₐₓ − h₂)    for h₂ = μ hₘₐₓ < h < hₘₐₓ.
- * f → ∞ at hₘᵢₙ and f → 0 at hₘₐₓ; f, f′ and f″ are continuous at both junctions
- * because each layer departs from one as a cubic. When λ hₘᵢₙ ≥ μ hₘₐₓ both junctions
- * move to (hₘᵢₙ + hₘₐₓ)/2 and the constant piece disappears. Σⱼ w is nondecreasing and
- * N(h) strictly decreasing in h, so the residual Σⱼ w − N(h)/V_D has exactly one root,
- * strictly inside (hₘᵢₙ, hₘₐₓ): the bounds are never reached, and no support is held.
- *
- * The slopes:
- *   lower layer: f′ = −3 s² f²/(h₁ − hₘᵢₙ),   upper layer: f′ = −3 t²/(hₘₐₓ − h₂).
- * The grad-h terms need the logarithmic slope χ = −d ln N/d ln h = −h f′/f through
- *   ψ = D/(D + χ) ∈ [0, 1],
- *   lower layer: ψ = D (h₁ − hₘᵢₙ)(1 − s³) / [D (h₁ − hₘᵢₙ)(1 − s³) + 3 s² h],
- *   upper layer: ψ = D (hₘₐₓ − h₂)(1 − t³) / [D (hₘₐₓ − h₂)(1 − t³) + 3 t² h],
- * which is one in the interior and zero at either bound; ψ is formed directly so that it
- * stays finite where χ diverges. A fixed support (hₘᵢₙ = hₘₐₓ) also has ψ = 0.
- *
- * Symbol directory:
- *   h → smoothing length; hₘᵢₙ, hₘₐₓ → its bounds; h₁, h₂ → layer junctions
- *   λ, μ → junction ratios; s, t → lower, upper layer coordinates
- *   N₀ → requested neighbor number; f → N(h)/N₀; f′ → df/dh
- *   χ → logarithmic slope of N(h); ψ → support stiffness D/(D + χ); D → dimension.
- *   Code names: h_1 = h₁; h_2 = h₂; kLowerLayerRatio = λ; kUpperLayerRatio = μ;
- *   one_minus_s3 = 1 − s³; one_minus_t3 = 1 − t³.
- */
-// clang-format on
-inline constexpr double kLowerLayerRatio = 1.5;    // λ: the lower layer ends at λ hₘᵢₙ
-inline constexpr double kUpperLayerRatio = 0.8;    // μ: the upper layer starts at μ hₘₐₓ
-
-// Iterates of the smoothing-length solve stay this fraction of a layer inside the
-// bounds, where the target is singular.
-inline constexpr double kSupportMargin = 1.0 / 65536.0;
-
-template <typename Real>
-struct SupportLayers {
-    Real lowerJunction;    // h₁
-    Real upperJunction;    // h₂
+// How the stored support depends on the particle positions.
+enum class SupportConstraint : int {
+    Free,          // h follows h^D n = constant
+    LowerBound,    // held at hₘᵢₙ with more than the target neighbor sum
+    UpperBound,    // held at hₘₐₓ (or the periodic cap) with fewer
+    Fixed          // hₘᵢₙ = hₘₐₓ
 };
 
-template <typename Real>
-CUDA_EXPORT inline SupportLayers<Real> supportLayers(Real hₘᵢₙ, Real hₘₐₓ) {
-    Real h_1 = Real(kLowerLayerRatio) * hₘᵢₙ;
-    Real h_2 = Real(kUpperLayerRatio) * hₘₐₓ;
-    if (!(h_1 < h_2)) {
-        h_1 = h_2 = Real(0.5) * (hₘᵢₙ + hₘₐₓ);
+// relativeResidual is (sum_j w - target)/target at the stored h. A residual within
+// the solve tolerance satisfies the constraint and is free even at a bound.
+// h → stored smoothing length; hₘᵢₙ, hₘₐₓ → its bounds.
+CUDA_EXPORT inline SupportConstraint classifySupport(
+    float h, float hₘᵢₙ, float hₘₐₓ, float relativeResidual, float tolerance) {
+    if (hₘᵢₙ == hₘₐₓ) {
+        return SupportConstraint::Fixed;
     }
-    return SupportLayers<Real>{h_1, h_2};
-}
-
-template <typename Real>
-struct BoundedTarget {
-    Real factor;       // f = N(h)/N₀
-    Real slope;        // f′ = df/dh, nonpositive
-    Real stiffness;    // ψ = D/(D + χ): one in the interior, zero at a bound
-};
-
-// The hydro sources are compiled with -ffast-math, which lets the compiler evaluate both
-// layer branches speculatively; a layer of zero width (merged junctions at a fixed support)
-// therefore takes a positive stand-in width so that no speculative 0/0 can trap.
-template <typename Real>
-CUDA_EXPORT inline BoundedTarget<Real> boundedTarget(
-    Real h, Real hₘᵢₙ, Real hₘₐₓ, SupportLayers<Real> const& layers) {
-    Real const D = Real(kSpatialDimensions);
-    BoundedTarget<Real> result{Real(1), Real(0), Real(1)};
-    if (h < layers.lowerJunction) {
-        Real const width = layers.lowerJunction > hₘᵢₙ ? layers.lowerJunction - hₘᵢₙ : Real(1);
-        Real const s = (layers.lowerJunction - h) / width;
-        Real const s2 = s * s;
-        Real const one_minus_s3 = Real(1) - s2 * s;
-        result.factor = Real(1) / one_minus_s3;
-        result.slope = -Real(3) * s2 * result.factor * result.factor / width;
-        Real const interior = D * width * one_minus_s3;
-        result.stiffness = interior / (interior + Real(3) * s2 * h);
-    } else if (h > layers.upperJunction) {
-        Real const width = hₘₐₓ > layers.upperJunction ? hₘₐₓ - layers.upperJunction : Real(1);
-        Real const t = (h - layers.upperJunction) / width;
-        Real const t2 = t * t;
-        Real const one_minus_t3 = Real(1) - t2 * t;
-        result.factor = one_minus_t3;
-        result.slope = -Real(3) * t2 / width;
-        Real const interior = D * width * one_minus_t3;
-        result.stiffness = interior / (interior + Real(3) * t2 * h);
+    if (h <= hₘᵢₙ && relativeResidual > tolerance) {
+        return SupportConstraint::LowerBound;
     }
-    return result;
+    if (h >= hₘₐₓ && relativeResidual < -tolerance) {
+        return SupportConstraint::UpperBound;
+    }
+    return SupportConstraint::Free;
 }
 
 template <typename Real>
 struct GradHCorrection {
-    Real supportJacobian;              // Ωᵢ
-    Real weightedSupportCorrection;    // ζᵢ in units of x
+    Real supportJacobian;              // Ωᵢ of a free support; one when the support is held
+    Real weightedSupportCorrection;    // ζᵢ in units of x; zero when the support is held
 };
 
-// clang-format off
-/*
- * Grad-h correction of a support with stiffness ψ (derived from the bounded target
- * above by repeating the Price (2012) and Hopkins (2013) derivations with the
- * h-dependent constraint hᴰ nᵢ = N(hᵢ)/V_D):
- *   Ωᵢ = ψ Ω⁰ᵢ + (1 − ψ),                 Ω⁰ᵢ = −Σⱼ qw′/(DΣ_j w),
- *   ζᵢ = ψ (DΣxw + Σxqw′) / [ψ Σqw′ − D (1 − ψ) Σw].
- * ψ = 1 recovers Price (2012) equation (27) and Hopkins (2013) equation (13); ψ = 0
- * gives Ωᵢ = 1 and ζᵢ = 0, the fixed-support limit. For equal weights
- * ζᵢ = x (1 − 1/Ωᵢ) holds for every ψ. Both forms are finite for every ψ in [0, 1].
- * References: Hopkins (2013), https://arxiv.org/abs/1206.5006;
- * Price (2012), https://arxiv.org/abs/1012.1885; full citations above.
- * Symbol directory:
- *   ψ → support stiffness; Ω⁰ᵢ → free-support Jacobian (supportJacobian)
- *   Σw, Σqw′ → number sum, number moment; Σxw, Σxqw′ → weighted sum, weighted moment
- *   Ωᵢ, ζᵢ → return values. Code names: one_minus_ψ = 1 − ψ.
- */
-// clang-format on
 template <typename Real>
-CUDA_EXPORT inline GradHCorrection<Real> gradHCorrection(SupportSums<Real> const& sums, Real ψ) {
-    Real const D = simdBroadcast<Real>(kSpatialDimensions);
-    Real const one_minus_ψ = simdBroadcast<Real>(1) - ψ;
-    Real const Ω = ψ * supportJacobian(sums) + one_minus_ψ;
-    Real const ζ = ψ * (D * sums.weightedSum + sums.weightedMoment) /
-        (ψ * sums.numberMoment - D * one_minus_ψ * sums.numberSum);
-    return GradHCorrection<Real>{Ω, ζ};
+CUDA_EXPORT inline GradHCorrection<Real> gradHCorrection(
+    SupportSums<Real> const& sums, SupportConstraint constraint) {
+    if (constraint != SupportConstraint::Free) {
+        return GradHCorrection<Real>{simdBroadcast<Real>(1), simdBroadcast<Real>(0)};
+    }
+    return GradHCorrection<Real>{supportJacobian(sums), weightedSupportCorrection(sums)};
 }
 
 // Inspect the exponent bits: -ffast-math may fold std::isfinite to true.

@@ -33,14 +33,12 @@ namespace detail {
  * Section 6 of Monaghan (1992): the resolution length follows the local density,
  * h𞁑 ∝ ρ𞁑^(−1/ν) with ν = 3 (equations 6.1-6.2). Instead of integrating equation 6.2
  * or 6.7 of Monaghan (1992), the solve holds
- *   (4π/3) ρ𞁑 h𞁑³/m = N(h𞁑),   i.e.   ΣW = Σ𞁓 w(|r𞁑𞁓|/h𞁑) = ΣWₛₑₜ(h𞁑) = 3 N(h𞁑)/(4π)
- * for the selected kernel W(r, h) = w(r/h)/h³, where N(h) = N₀ f(h) is the bounded target
- * of sph_volume::boundedTarget: N₀ between the layer junctions, infinite at hₘᵢₙ and zero
- * at hₘₐₓ, so the root always lies strictly inside the bounds. A bounded Newton
- * iteration on h𞁑 uses dΣW/dh𞁑 = −Σ𞁓 q𞁑𞁓 w'(q𞁑𞁓)/h𞁑, q𞁑𞁓 = |r𞁑𞁓|/h𞁑, and the target
- * slope dΣWₛₑₜ/dh𞁑 = 3 N₀ f′/(4π). Iterates stay a margin inside the bounds, where the
- * target is singular; an iterate pinned at the margin with a residual of the bound's
- * sign is accepted, as is a fixed support (hₘᵢₙ = hₘₐₓ).
+ *   (4π/3) ρ𞁑 h𞁑³/m = Nₛₑₜ,   i.e.   ΣW = Σ𞁓 w(|r𞁑𞁓|/h𞁑) = 3 Nₛₑₜ/(4π)
+ * for the selected kernel W(r, h) = w(r/h)/h³, by a bounded Newton iteration on the
+ * smoothing length h𞁑 with dΣW/dh𞁑 = −Σ𞁓 q𞁑𞁓 w'(q𞁑𞁓)/h𞁑, q𞁑𞁓 = |r𞁑𞁓|/h𞁑. The bounds
+ * limit the smoothing length without modifying the density sum. A support that reaches
+ * half the periodic box (kSphHalfBoxSmoothingLength) and still lacks neighbors stops the
+ * run: the nearest-image neighbor search cannot serve a larger one.
  *
  * Symbol directory (in the code below):
  *   q𞁑𞁓 → normalized radius
@@ -48,12 +46,9 @@ namespace detail {
  *   h𞁑, h𞁑⁻¹ → sink kernel smoothing length, its inverse; hₘᵢₙ, hₘₐₓ → smoothing length bounds
  *   ρ𞁑 → density
  *   ΣW, dΣW/dh𞁑 → kernel sum, its smoothing-length derivative
- *   N₀ → requested neighbor number; f, f′ → target factor and its slope
- *   ΣWₛₑₜ, dΣWₛₑₜ/dh𞁑 → target kernel sum at h𞁑, its slope; ΣW_0 → interior target 3N₀/(4π)
- *   dF/dh𞁑 → slope of the residual ΣW − ΣWₛₑₜ
+ *   Nₛₑₜ, ΣWₛₑₜ → target neighbor count, target kernel sum
  *   paddedX_a → sink position as the three-axis record that the search-box bounds compare.
- *   Code names: abs_r𞁑𞁓 = |r𞁑𞁓|; ih𞁑 = h𞁑⁻¹; dΣW_dh𞁑 = dΣW/dh𞁑; dΣWₛₑₜ_dh𞁑 = dΣWₛₑₜ/dh𞁑;
- *   dF_dh𞁑 = dF/dh𞁑.
+ *   Code names: abs_r𞁑𞁓 = |r𞁑𞁓|; ih𞁑 = h𞁑⁻¹; dΣW_dh𞁑 = dΣW/dh𞁑.
  */
 // clang-format on
 bool solveSphCpuSmoothingLength(SphRunParameters const& parameters, SphRunData const& data,
@@ -62,12 +57,7 @@ bool solveSphCpuSmoothingLength(SphRunParameters const& parameters, SphRunData c
     float const hₘᵢₙ = parameters.minimumSmoothingLength;
     float const hₘₐₓ = parameters.maximumSmoothingLength;
     ALWAYS_ASSERT(hₘᵢₙ > 0.0f && hₘₐₓ >= hₘᵢₙ && data.targetNeighborCount > 0.0f);
-    auto const layers = sph_volume::supportLayers(hₘᵢₙ, hₘₐₓ);
-    float const lowerLimit =
-        hₘᵢₙ + float(sph_volume::kSupportMargin) * (layers.lowerJunction - hₘᵢₙ);
-    float const upperLimit =
-        hₘₐₓ - float(sph_volume::kSupportMargin) * (hₘₐₓ - layers.upperJunction);
-    h𞁑 = std::min(std::max(h𞁑, lowerLimit), upperLimit);
+    h𞁑 = std::min(std::max(h𞁑, hₘᵢₙ), hₘₐₓ);
     Vector3<Position> const paddedX_a = data.sourcePaddedPosition(particleIndex);
     // Distances do not change during the bounded smoothing-length solve.
     std::vector<SimdFloat> abs_r𞁑𞁓;    // |r𞁑𞁓| for each pack of neighbors
@@ -79,10 +69,10 @@ bool solveSphCpuSmoothingLength(SphRunParameters const& parameters, SphRunData c
         // Fixed scales, dot, root.
         flops += (sph_flops::kVectorOperation + sph_flops::kNorm) * SimdFloat::size();
     }
-    float lower = lowerLimit;
-    float upper = upperLimit;
-    float const ΣW_0 = sphTargetKernelSum(data.targetNeighborCount);
-    flops += 7;    // Interior target, junctions and limits.
+    float lower = hₘᵢₙ;
+    float upper = hₘₐₓ;
+    float const ΣWₛₑₜ = sphTargetKernelSum(data.targetNeighborCount);
+    flops += 1;
     for (int iteration = 0; iteration < 128; ++iteration) {
         for (int dim = 0; dim < kDimensions; ++dim) {
             flops.singlePrecision += 1;    // Single-precision fixed-point scale.
@@ -126,14 +116,21 @@ bool solveSphCpuSmoothingLength(SphRunParameters const& parameters, SphRunData c
                 flops += 3 + sph_flops::kInverseVolume;
             }
         };
-        auto const target = sph_volume::boundedTarget(h𞁑, hₘᵢₙ, hₘₐₓ, layers);
-        float const ΣWₛₑₜ = ΣW_0 * target.factor;
-        float const dΣWₛₑₜ_dh𞁑 = ΣW_0 * target.slope;
         float const residual = ΣW - ΣWₛₑₜ;
-        // Reduction, target (12), residual and tolerance; abs is a sign operation.
-        flops += SimdFloat::size() - 1 + 14;
-        if (std::abs(residual) <= kSphSmoothingLengthTolerance * ΣWₛₑₜ ||
-            (h𞁑 <= lowerLimit && residual >= 0.0f) || (h𞁑 >= upperLimit && residual <= 0.0f)) {
+        flops += SimdFloat::size() - 1 +
+            2;    // Reduction, residual and tolerance; abs is a sign operation.
+        float const tolerance = kSphSmoothingLengthTolerance * ΣWₛₑₜ;
+        if (hₘₐₓ >= kSphHalfBoxSmoothingLength && h𞁑 >= hₘₐₓ && residual < -tolerance) {
+            // The support spans half the periodic box and still lacks neighbors.
+            std::cout << std::format("SPH smoothing length exceeds half the periodic box: "
+                                     "smoothingLength={:e} kernelSum={:e} targetSum={:e} "
+                                     "target={:e}\n",
+                             h𞁑, ΣW, ΣWₛₑₜ, data.targetNeighborCount)
+                      << std::flush;
+            ALWAYS_ASSERT(false);
+        }
+        if (std::abs(residual) <= tolerance || (h𞁑 <= hₘᵢₙ && residual >= 0.0f) ||
+            (h𞁑 >= hₘₐₓ && residual <= 0.0f)) {
             publishInitialDensity();
             return true;
         }
@@ -142,11 +139,11 @@ bool solveSphCpuSmoothingLength(SphRunParameters const& parameters, SphRunData c
         } else {
             lower = h𞁑;
         }
-        float const dF_dh𞁑 = simdSum(dΣW_dh𞁑Pack) - dΣWₛₑₜ_dh𞁑;
-        flops += SimdFloat::size() - 1 + 5;    // Reduction, slope, change, two bounds, next h.
-        float change = dF_dh𞁑 > 0.0f ? -residual / dF_dh𞁑 : 0.2f * h𞁑;
+        float const dΣW_dh𞁑 = simdSum(dΣW_dh𞁑Pack);
+        flops += SimdFloat::size() - 1 + 4;    // Reduction, change, two bounds, next h.
+        float change = dΣW_dh𞁑 > 0.0f ? -residual / dΣW_dh𞁑 : 0.2f * h𞁑;
         change = std::min(std::max(change, -0.2f * h𞁑), 0.2f * h𞁑);
-        float next = std::min(std::max(h𞁑 + change, lowerLimit), upperLimit);
+        float next = std::min(std::max(h𞁑 + change, hₘᵢₙ), hₘₐₓ);
         if (next < lower || next > upper) {
             next = 0.5f * (lower + upper);
             flops += 2;
@@ -167,13 +164,11 @@ bool solveSphCpuSmoothingLength(SphRunParameters const& parameters, SphRunData c
 
 // clang-format off
 /*
- * A support inside a bound layer, or a fixed one, counts as held; a fixed support has
- * Ω𞁑 = 1 and ζ𞁑 = 0 and no constraint to meet, so it leaves the residual and Ω𞁑
- * statistics alone. Any other correction that is non-finite or has Ω𞁑 ≤ 0 cannot be
- * used and stops the run; a small positive Ω𞁑 is counted.
+ * A held support uses ζ𞁑 = 0. A free support whose correction is non-finite or has
+ * Ω𞁑 ≤ 0 cannot be used and stops the run; a small positive Ω𞁑 is counted.
  *
  * Symbol directory (in the code below):
- *   ζ𞁑 → weighted support correction; ψ → support stiffness
+ *   ζ𞁑 → weighted support correction
  *   h𞁑, ρ𞁑 → sink kernel smoothing length, density
  *   ΣW, Σ𞁓 q𞁑𞁓 w′ → kernel sum, kernel derivative moment
  *   Code names: Σqwʹ = Σ𞁓 q𞁑𞁓 w′.
@@ -181,20 +176,16 @@ bool solveSphCpuSmoothingLength(SphRunParameters const& parameters, SphRunData c
 // clang-format on
 void recordSphCpuGradH(SphGradHEvaluation const& gradH, float h𞁑, float ρ𞁑, float ΣW, float Σqwʹ,
     SphRunReturn& result) {
-    if (gradH.stiffness < 1.0f) {
+    if (gradH.constraint != sph_volume::SupportConstraint::Free) {
         result.heldSupports++;
-    }
-    if (gradH.stiffness <= 0.0f) {
         return;
     }
     if (!sph_volume::isUsable(gradH.correction)) {
         std::cout << std::format(
                          "SPH grad-H correction is unusable: smoothingLength={:e} density={:e} "
-                         "\u03a3W={:e} \u03a3q dw/dq={:e} \u03a9={:e} \u03b6={:e} \u03c8={:e} "
-                         "residual={:e}\n",
+                         "\u03a3W={:e} \u03a3q dw/dq={:e} \u03a9={:e} \u03b6={:e} residual={:e}\n",
                          h𞁑, ρ𞁑, ΣW, Σqwʹ, gradH.correction.supportJacobian,
-                         gradH.correction.weightedSupportCorrection, gradH.stiffness,
-                         gradH.relativeResidual)
+                         gradH.correction.weightedSupportCorrection, gradH.relativeResidual)
                   << std::flush;
         ALWAYS_ASSERT(false);
     }
@@ -422,9 +413,9 @@ SphRunReturn sphCpuDensityAndGradients(
         auto const gradH = sphGradHEvaluation(h𞁑, parameters.minimumSmoothingLength,
             parameters.maximumSmoothingLength, data.targetNeighborCount, data.gasMass, ΣW, Σqwʹ);
         /*
-         * Reductions, layers and target (12), residual (2), Ω, ζ, the weighted sums (8).
+         * Reductions, residual (2), and Ω, ζ, the weighted sums (6).
          */
-        flops += 2 * (SimdFloat::size() - 1) + 24;
+        flops += 2 * (SimdFloat::size() - 1) + 8;
         detail::recordSphCpuGradH(gradH, h𞁑, ρ𞁑, ΣW, Σqwʹ, result);
         data.sinkGradHCorrection[sinkIndex] = gradH.correction.weightedSupportCorrection;
         float const c𞁑 = std::sqrt(γ * γ_minus_1 * data.sourceInternalEnergy[particleIndex]);

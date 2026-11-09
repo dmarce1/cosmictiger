@@ -31,9 +31,7 @@
 namespace detail {
 
 using Vector = Vector3<double>;
-
-// Where a solved support sits relative to its bound layers.
-enum class SupportClass { Interior, LowerLayer, UpperLayer, Fixed };
+using sph_volume::SupportConstraint;
 
 std::vector<radial_kernel::KernelSpec> selectableKernels() {
     std::vector<radial_kernel::KernelSpec> kernels;
@@ -83,12 +81,11 @@ struct System {
     std::vector<double> weight;
     std::vector<double> entropy;    // Pᵢ = Kᵢ rho*_i^gamma
     double gamma = 5.0 / 3.0;
-    double targetSum = 0.0;    // interior target sum_j w(qᵢⱼ) = 3 N₀/(4π)
+    double targetSum = 0.0;    // sum_j w(qᵢⱼ) of the constraint h^3 n = constant
     double minimumSupport = 1.0e-3;
     double maximumSupport = 1.0e3;
     std::vector<double> support;
-    std::vector<double> stiffness;    // psi of each support: one in the interior
-    std::vector<SupportClass> supportClass;
+    std::vector<SupportConstraint> constraint;
 
     int size() const {
         return int(position.size());
@@ -103,58 +100,40 @@ struct System {
         return sum;
     }
 
-    sph_volume::SupportLayers<double> layers() const {
-        return sph_volume::supportLayers(minimumSupport, maximumSupport);
-    }
-
-    // The bounded target of the solve, sum_j w = targetSum f(h), and its stiffness.
-    sph_volume::BoundedTarget<double> target(double smoothingLength) const {
-        return sph_volume::boundedTarget(smoothingLength, minimumSupport, maximumSupport, layers());
-    }
-
-    // The support solving sum_j w(rᵢⱼ/h) = targetSum f(h) on the production solve's open
-    // interval, bracketed and bisected to roundoff; the residual increases monotonically
-    // with h. An iterate pinned at a limit with the bound's residual sign stays there.
-    double boundedSupport(int i) const {
-        auto const junctions = layers();
-        double lower = minimumSupport +
-            sph_volume::kSupportMargin * (junctions.lowerJunction - minimumSupport);
-        double upper = maximumSupport -
-            sph_volume::kSupportMargin * (maximumSupport - junctions.upperJunction);
-        auto const residual = [&](double smoothingLength) {
-            return kernelSum(i, smoothingLength) - targetSum * target(smoothingLength).factor;
-        };
-        if (residual(lower) >= 0.0) {
-            return lower;
-        }
-        if (residual(upper) <= 0.0) {
-            return upper;
+    // The support solving sum_j w(rᵢⱼ/h) = target, bracketed and bisected to roundoff;
+    // the sum increases monotonically with h.
+    double freeSupport(int i) const {
+        double lower = 1.0e-3;
+        double upper = 0.05;
+        detail::require(kernelSum(i, lower) < targetSum, "target exceeds the self term");
+        while (kernelSum(i, upper) < targetSum) {
+            upper *= 2.0;
         }
         for (int iteration = 0; iteration < 200 && upper - lower > 1.0e-15 * upper; ++iteration) {
             double const middle = 0.5 * (lower + upper);
-            (residual(middle) < 0.0 ? lower : upper) = middle;
+            (kernelSum(i, middle) < targetSum ? lower : upper) = middle;
         }
         return 0.5 * (lower + upper);
     }
 
     void solveSupports() {
         support.resize(size());
-        stiffness.resize(size());
-        supportClass.resize(size());
-        auto const junctions = layers();
+        constraint.resize(size());
         for (int i = 0; i < size(); ++i) {
+            double const free = freeSupport(i);
             if (minimumSupport == maximumSupport) {
                 support[i] = minimumSupport;
-                stiffness[i] = 0.0;
-                supportClass[i] = SupportClass::Fixed;
-                continue;
+                constraint[i] = SupportConstraint::Fixed;
+            } else if (free < minimumSupport) {
+                support[i] = minimumSupport;
+                constraint[i] = SupportConstraint::LowerBound;
+            } else if (free > maximumSupport) {
+                support[i] = maximumSupport;
+                constraint[i] = SupportConstraint::UpperBound;
+            } else {
+                support[i] = free;
+                constraint[i] = SupportConstraint::Free;
             }
-            support[i] = boundedSupport(i);
-            stiffness[i] = target(support[i]).stiffness;
-            supportClass[i] = support[i] < junctions.lowerJunction ?
-                SupportClass::LowerLayer :
-                (support[i] > junctions.upperJunction ? SupportClass::UpperLayer :
-                                                        SupportClass::Interior);
         }
     }
 
@@ -215,7 +194,7 @@ struct System {
             factor[i] =
                 variational::pressureVolumeFactor(pressure(i), weight[i], weightedDensity(i));
             weightedSupportCorrection[i] =
-                sph_volume::gradHCorrection(sums(i), stiffness[i]).weightedSupportCorrection;
+                sph_volume::gradHCorrection(sums(i), constraint[i]).weightedSupportCorrection;
         }
         Rates result{std::vector<Vector>(size(), Vector{}), std::vector<double>(size(), 0.0)};
         for (int i = 0; i < size(); ++i) {
@@ -269,25 +248,31 @@ System makeSystem(radial_kernel::KernelSpec spec, WeightModel model, double gamm
     return system;
 }
 
-// Bounds whose layer junctions sit at the given quantiles of the free supports, so that
-// the supports below the lower quantile fall into the lower layer and those above the
-// upper quantile into the upper layer, while the rest stay interior. The layers are
-// smooth, so finite-difference perturbations may move a support across a junction.
-void boundSupportsInLayers(System& system, double lowerQuantile, double upperQuantile) {
+// Bounds between well-separated free supports near the given quantiles, so that
+// finite-difference perturbations cannot move a support across a bound.
+void holdSupportsAtBothBounds(System& system, double lowerQuantile, double upperQuantile) {
     std::vector<double> sorted = system.support;
     std::sort(sorted.begin(), sorted.end());
-    system.minimumSupport =
-        sorted[std::size_t(lowerQuantile * (sorted.size() - 1))] / sph_volume::kLowerLayerRatio;
-    system.maximumSupport =
-        sorted[std::size_t(upperQuantile * (sorted.size() - 1))] / sph_volume::kUpperLayerRatio;
-    auto const junctions = system.layers();
-    detail::require(junctions.lowerJunction < junctions.upperJunction,
-        "the layers of the quantile bounds overlap");
+    auto const gapBound = [&](double quantile) {
+        int const centre = int(quantile * (sorted.size() - 1));
+        int best = centre;
+        for (int k = std::max(0, centre - 3); k <= std::min(int(sorted.size()) - 2, centre + 3);
+            ++k) {
+            if (sorted[k + 1] - sorted[k] > sorted[best + 1] - sorted[best]) {
+                best = k;
+            }
+        }
+        detail::require((sorted[best + 1] - sorted[best]) > 1.0e-4 * sorted[best],
+            "free supports too close to place a bound");
+        return 0.5 * (sorted[best] + sorted[best + 1]);
+    };
+    system.minimumSupport = gapBound(lowerQuantile);
+    system.maximumSupport = gapBound(upperQuantile);
     system.solveSupports();
 }
 
-int countClass(System const& system, SupportClass supportClass) {
-    return int(std::count(system.supportClass.begin(), system.supportClass.end(), supportClass));
+int countConstraint(System const& system, SupportConstraint constraint) {
+    return int(std::count(system.constraint.begin(), system.constraint.end(), constraint));
 }
 
 }    // namespace detail
@@ -484,8 +469,7 @@ TEST(SphVolume, ConstrainedDensityDerivatives) {
 }
 
 // The force is minus the gradient of sum_i mᵢ uᵢ(rho*_i) at fixed entropy, with every
-// support re-solved, for interior supports, fixed supports and supports in both bound
-// layers, where the stiffness-blended Omega and zeta must match the h-dependent target.
+// support re-solved, for free supports, fixed supports and both active bounds.
 TEST(SphVolume, ForceIsTheGradientOfTheDiscreteThermalEnergy) {
     struct Case {
         char const* label;
@@ -513,14 +497,14 @@ TEST(SphVolume, ForceIsTheGradientOfTheDiscreteThermalEnergy) {
         if (testCase.supports == 1) {
             system.minimumSupport = system.maximumSupport = 0.42;
             system.solveSupports();
-            EXPECT_EQ(countClass(system, SupportClass::Fixed), system.size());
+            EXPECT_EQ(countConstraint(system, SupportConstraint::Fixed), system.size());
         } else if (testCase.supports == 2) {
-            boundSupportsInLayers(system, 0.25, 0.75);
-            EXPECT_GT(countClass(system, SupportClass::LowerLayer), 5);
-            EXPECT_GT(countClass(system, SupportClass::UpperLayer), 5);
-            EXPECT_GT(countClass(system, SupportClass::Interior), 5);
+            holdSupportsAtBothBounds(system, 0.25, 0.75);
+            EXPECT_GT(countConstraint(system, SupportConstraint::LowerBound), 5);
+            EXPECT_GT(countConstraint(system, SupportConstraint::UpperBound), 5);
+            EXPECT_GT(countConstraint(system, SupportConstraint::Free), 5);
         } else {
-            EXPECT_EQ(countClass(system, SupportClass::Interior), system.size());
+            EXPECT_EQ(countConstraint(system, SupportConstraint::Free), system.size());
         }
         std::vector<Vector> const still(system.size(), Vector{});
         auto const rates = system.rates(still);
@@ -534,9 +518,11 @@ TEST(SphVolume, ForceIsTheGradientOfTheDiscreteThermalEnergy) {
                 auto perturbed = system;
                 perturbed.position[k][dim] += step;
                 perturbed.solveSupports();
+                ASSERT_EQ(perturbed.constraint, system.constraint);
                 double const energyPlus = perturbed.energy();
                 perturbed.position[k][dim] -= 2.0 * step;
                 perturbed.solveSupports();
+                ASSERT_EQ(perturbed.constraint, system.constraint);
                 double const numeric = -(energyPlus - perturbed.energy()) / (2.0 * step);
                 EXPECT_NEAR(rates.force[k][dim], numeric, 1.0e-6 * scale)
                     << "particle " << k << " dimension " << dim;
@@ -551,7 +537,7 @@ TEST(SphVolume, PairRatesConserveMomentumAngularMomentumAndEnergy) {
         auto system =
             makeSystem({radial_kernel::Family::Spline, 3}, WeightModel::UnequalWeight, 1.4, 3);
         if (supports == 1) {
-            boundSupportsInLayers(system, 0.3, 0.7);
+            holdSupportsAtBothBounds(system, 0.3, 0.7);
         }
         Generator generator(99);
         std::vector<Vector> velocity(system.size());
@@ -588,7 +574,7 @@ TEST(SphVolume, WorkMatchesDensityContinuityAtFixedEntropy) {
         auto system =
             makeSystem({radial_kernel::Family::Ferrers, 4}, WeightModel::UnequalWeight, 1.4, 61);
         if (supports == 1) {
-            boundSupportsInLayers(system, 0.3, 0.7);
+            holdSupportsAtBothBounds(system, 0.3, 0.7);
         }
         Generator generator(7);
         std::vector<Vector> velocity(system.size());
@@ -606,6 +592,7 @@ TEST(SphVolume, WorkMatchesDensityContinuityAtFixedEntropy) {
                 }
             }
             moved.solveSupports();
+            EXPECT_EQ(moved.constraint, system.constraint);
             return moved;
         };
         auto const forward = advanced(step);
@@ -625,16 +612,14 @@ TEST(SphVolume, WorkMatchesDensityContinuityAtFixedEntropy) {
     }
 }
 
-// For an interior support, sum_j (xⱼ - zeta_i) rᵢⱼ . grad_i Wᵢⱼ = -3 yᵢ exactly, so the
+// For a free support, sum_j (xⱼ - zeta_i) rᵢⱼ . grad_i Wᵢⱼ = -3 yᵢ exactly, so the
 // Hubble flow's pair work is the analytic homogeneous term -3 (da/dt / a) Pᵢ Vᵢ.
-// A support inside a bound layer does not dilate with the flow, because its target depends
-// on h against fixed bounds, so the identity fails there; with comoving bounds the layers
-// dilate with the box and the analytic term is exact for every support
-// (docs/variational_sph.md).
+// A held support has dh/dr = 0 and no such identity; with comoving bounds its support
+// dilates with the box, which the analytic term supplies (docs/variational_sph.md).
 TEST(SphVolume, HubbleFlowWorkIsTheHomogeneousExpansionWork) {
     auto system =
         makeSystem({radial_kernel::Family::Spline, 3}, WeightModel::UnequalWeight, 5.0 / 3.0, 77);
-    boundSupportsInLayers(system, 0.3, 0.7);
+    holdSupportsAtBothBounds(system, 0.3, 0.7);
     double const hubble = 0.37;
     std::vector<Vector> velocity(system.size());
     for (int i = 0; i < system.size(); ++i) {
@@ -648,7 +633,7 @@ TEST(SphVolume, HubbleFlowWorkIsTheHomogeneousExpansionWork) {
         double const y = system.weightedDensity(i);
         double const expansionWork =
             -3.0 * hubble * system.pressure(i) * sph_volume::volume(system.weight[i], y);
-        if (system.supportClass[i] == SupportClass::Interior) {
+        if (system.constraint[i] == SupportConstraint::Free) {
             EXPECT_NEAR(rates.work[i], expansionWork, 1.0e-12 * std::abs(expansionWork));
         } else {
             heldMismatch = std::max(heldMismatch, std::abs(rates.work[i] / expansionWork - 1.0));
@@ -680,97 +665,30 @@ TEST(SphVolume, HubbleFlowWorkIsTheHomogeneousExpansionWork) {
     }
 }
 
-// The bound layers: junctions, the merged case, and the piecewise target with its slope,
-// its C² joins, its limits and the stiffness psi = D/(D + chi).
-TEST(SphVolume, BoundedTargetLayersAndStiffness) {
-    auto const wide = sph_volume::supportLayers(1.0, 1000.0);
-    EXPECT_DOUBLE_EQ(wide.lowerJunction, 1.5);
-    EXPECT_DOUBLE_EQ(wide.upperJunction, 800.0);
-    auto const narrow = sph_volume::supportLayers(0.1, 0.2);
-    EXPECT_NEAR(narrow.lowerJunction, 0.15, 1.0e-15);
-    EXPECT_NEAR(narrow.upperJunction, 0.16, 1.0e-15);
-    auto const merged = sph_volume::supportLayers(0.43, 0.49);
-    EXPECT_NEAR(merged.lowerJunction, 0.46, 1.0e-15);
-    EXPECT_NEAR(merged.upperJunction, 0.46, 1.0e-15);
-    auto const fixed = sph_volume::supportLayers(0.3, 0.3);
-    EXPECT_DOUBLE_EQ(fixed.lowerJunction, 0.3);
-    EXPECT_DOUBLE_EQ(fixed.upperJunction, 0.3);
-    auto const fixedTarget = sph_volume::boundedTarget(0.3, 0.3, 0.3, fixed);
-    EXPECT_DOUBLE_EQ(fixedTarget.factor, 1.0);
-    EXPECT_DOUBLE_EQ(fixedTarget.stiffness, 1.0);
-
-    double const minimum = 1.0;
-    double const maximum = 1000.0;
-    auto const target = [&](double h) {
-        return sph_volume::boundedTarget(h, minimum, maximum, wide);
-    };
-    for (double const h : {1.5, 2.0, 10.0, 100.0, 800.0}) {
-        auto const interior = target(h);
-        EXPECT_DOUBLE_EQ(interior.factor, 1.0);
-        EXPECT_DOUBLE_EQ(interior.slope, 0.0);
-        EXPECT_DOUBLE_EQ(interior.stiffness, 1.0);
-    }
-    // Strictly decreasing, with the analytic slope and stiffness psi = D/(D + chi),
-    // chi = -h f'/f, across both layers.
-    double previous = std::numeric_limits<double>::infinity();
-    for (double const h : {1.0001, 1.001, 1.01, 1.1, 1.25, 1.4, 1.49, 805.0, 850.0, 900.0, 950.0,
-             990.0, 999.0, 999.9}) {
-        auto const value = target(h);
-        EXPECT_LT(value.factor, previous) << h;
-        previous = value.factor;
-        EXPECT_LT(value.slope, 0.0) << h;
-        double const step = 1.0e-4 *
-            std::min({h - minimum, maximum - h, std::abs(h - wide.lowerJunction),
-                std::abs(h - wide.upperJunction)});
-        double const numeric = (target(h + step).factor - target(h - step).factor) / (2.0 * step);
-        EXPECT_NEAR(value.slope, numeric, 1.0e-6 * std::abs(value.slope)) << h;
-        double const chi = -h * value.slope / value.factor;
-        EXPECT_NEAR(value.stiffness, 3.0 / (3.0 + chi), 1.0e-12) << h;
-        EXPECT_GT(value.stiffness, 0.0);
-        EXPECT_LT(value.stiffness, 1.0);
-    }
-    // Limits: infinite at the minimum, zero at the maximum, stiffness zero at both.
-    auto const nearMinimum = target(1.0 + 1.0e-6 * 0.5);
-    EXPECT_GT(nearMinimum.factor, 1.0e5);
-    EXPECT_LT(nearMinimum.stiffness, 1.0e-4);
-    auto const nearMaximum = target(1000.0 - 1.0e-6 * 200.0);
-    EXPECT_LT(nearMaximum.factor, 1.0e-5);
-    EXPECT_LT(nearMaximum.stiffness, 1.0e-4);
-    // C² joins: each layer departs from one as the cube of its coordinate, so at a
-    // coordinate of 0.01 the value is off by 1e-6, the slope by 3e-4/width and the second
-    // derivative by 0.06/width².
-    for (auto const [junction, width, sign] :
-        {std::array<double, 3>{1.5, 0.5, -1.0}, std::array<double, 3>{800.0, 200.0, 1.0}}) {
-        double const h = junction + sign * 0.01 * width;
-        auto const value = target(h);
-        EXPECT_NEAR(value.factor, 1.0, 2.0e-6);
-        EXPECT_NEAR(value.slope * width, 0.0, 4.0e-4);
-        double const step = 1.0e-3 * width;
-        double const second =
-            (target(h + step).factor - 2.0 * value.factor + target(h - step).factor) /
-            (step * step);
-        EXPECT_NEAR(second * width * width, 0.0, 0.1);
-        EXPECT_NEAR(value.stiffness, 1.0, 1.0e-3);
-    }
-
-    // The corrections: psi = 1 is the free formula, psi = 0 the fixed-support limit, and
-    // the equal-weight identity zeta = x (1 - 1/Omega) holds for every psi.
+TEST(SphVolume, SupportClassificationAndHeldCorrections) {
+    float const tolerance = 1.0e-4f;
+    EXPECT_EQ(
+        sph_volume::classifySupport(0.3f, 0.3f, 0.3f, 0.0f, tolerance), SupportConstraint::Fixed);
+    EXPECT_EQ(sph_volume::classifySupport(0.1f, 0.1f, 0.5f, 2.0e-4f, tolerance),
+        SupportConstraint::LowerBound);
+    EXPECT_EQ(
+        sph_volume::classifySupport(0.1f, 0.1f, 0.5f, 5.0e-5f, tolerance), SupportConstraint::Free);
+    EXPECT_EQ(
+        sph_volume::classifySupport(0.1f, 0.1f, 0.5f, -0.3f, tolerance), SupportConstraint::Free);
+    EXPECT_EQ(sph_volume::classifySupport(0.5f, 0.1f, 0.5f, -2.0e-4f, tolerance),
+        SupportConstraint::UpperBound);
+    EXPECT_EQ(
+        sph_volume::classifySupport(0.5f, 0.1f, 0.5f, 0.2f, tolerance), SupportConstraint::Free);
+    EXPECT_EQ(
+        sph_volume::classifySupport(0.3f, 0.1f, 0.5f, 0.2f, tolerance), SupportConstraint::Free);
+    // A held support uses zeta = 0 even where its sums alone would be singular.
     auto const selfOnly = sph_volume::equalWeightSupportSums(2.5f, 0.0f, 0.01f);
-    auto const held = sph_volume::gradHCorrection(selfOnly, 0.0f);
-    EXPECT_EQ(held.weightedSupportCorrection, 0.0f);
-    EXPECT_EQ(held.supportJacobian, 1.0f);
-    EXPECT_TRUE(sph_volume::isWellConditioned(held));
-    auto const sums = sph_volume::equalWeightSupportSums(4.0, -9.0, 0.02);
-    auto const free = sph_volume::gradHCorrection(sums, 1.0);
-    EXPECT_NEAR(free.supportJacobian, sph_volume::supportJacobian(sums), 1.0e-15);
-    EXPECT_NEAR(
-        free.weightedSupportCorrection, sph_volume::weightedSupportCorrection(sums), 1.0e-15);
-    for (double const psi : {0.0, 0.2, 0.37, 0.9, 1.0}) {
-        auto const blended = sph_volume::gradHCorrection(sums, psi);
-        EXPECT_NEAR(
-            blended.supportJacobian, psi * sph_volume::supportJacobian(sums) + 1.0 - psi, 1.0e-15);
-        EXPECT_NEAR(blended.weightedSupportCorrection, 0.02 * (1.0 - 1.0 / blended.supportJacobian),
-            1.0e-15);
+    for (auto const held :
+        {SupportConstraint::LowerBound, SupportConstraint::UpperBound, SupportConstraint::Fixed}) {
+        auto const correction = sph_volume::gradHCorrection(selfOnly, held);
+        EXPECT_EQ(correction.weightedSupportCorrection, 0.0f);
+        EXPECT_EQ(correction.supportJacobian, 1.0f);
+        EXPECT_TRUE(sph_volume::isWellConditioned(correction));
     }
 }
 

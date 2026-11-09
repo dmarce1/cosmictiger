@@ -126,65 +126,35 @@ source-specific tests are disabled. Source updates must convert their energy
 changes back to entropy before these paths can be enabled again; that work is
 outside the present entropy-integration change.
 
-## Supports near the bounds
+## Supports at bounds
 
-The target of the support solve depends on the support itself. With the requested
-neighbor number \(N_0\) (`hydro.neighborNumber`), the bounds \(H_{\min}\le H_{\max}\)
-(`hydro.minSmoothingLength`, `hydro.maxSmoothingLength`) and the junctions
-\(H_1=\lambda H_{\min}\), \(H_2=\mu H_{\max}\) with \(\lambda=1.5\) and \(\mu=0.8\)
-(`sph_volume::kLowerLayerRatio`, `kUpperLayerRatio`), the solve holds
-\[
-\sum_j w(q_{ij})=\frac{3}{4\pi}N(H_i),\qquad N(H)=N_0 f(H),\qquad
-f(H)=\begin{cases}
-1/(1-s^3), & s=\dfrac{H_1-H}{H_1-H_{\min}}, & H_{\min}<H<H_1,\\[4pt]
-1, & & H_1\le H\le H_2,\\[2pt]
-1-t^3, & t=\dfrac{H-H_2}{H_{\max}-H_2}, & H_2<H<H_{\max}.
-\end{cases}
-\]
-\(f\) is one over the interior, diverges at \(H_{\min}\) and vanishes at \(H_{\max}\); each
-layer departs from one as a cubic, so \(f\), \(f'\) and \(f''\) are continuous at both
-junctions. When \(\lambda H_{\min}\ge\mu H_{\max}\) both junctions move to
-\((H_{\min}+H_{\max})/2\). The kernel sum is nondecreasing and \(N(H)\) strictly decreasing
-in \(H\), so the residual has exactly one root, strictly inside \((H_{\min},H_{\max})\): a
-support is never clamped and never held at a bound. In a uniform medium a particle whose
-free support would be \(H_{\min}\) settles near \(1.15H_{\min}\), and one whose free support
-would be \(H_{\max}\) near \(0.92H_{\max}\). The Newton iteration uses the residual slope
-\(d\sum_jw/dH-\tfrac{3}{4\pi}N_0f'\) and keeps its iterates a margin
-(`sph_volume::kSupportMargin`, \(2^{-16}\) of a layer) inside the bounds, where the target
-is singular; an iterate pinned at the margin with the bound's residual sign is accepted.
-The periodic search still caps \(H_{\max}\) at half the box, and \(H_{\min}=H_{\max}\)
-fixes every support.
+The support solve accepts \(H_i=H_{\min}\) with more than the target sum and
+\(H_i=H_{\max}\) with less; these supports do not meet the constraint and do not
+move with the particles, \(dH_i/dr=0\). The periodic search caps \(H_{\max}\) at half
+the box, and a requested \(H_{\min}=H_{\max}\) fixes every support. For such a held
+support the derivation above gives \(\zeta_i=0\) (a density grad-H factor of one) and
+\(m_i\,du_i/dt=\sum_j x_jP_ix_i/y_i^2\,v_{ij}\cdot g_i\).
+`sph_volume::classifySupport` decides from the support and its relative residual at
+the stored \(H\):
 
-Repeating the derivation above with the \(H\)-dependent constraint \(H_i^3n_i=N(H_i)/V_3\)
-gives, with the logarithmic slope \(\chi=-d\ln N/d\ln H\) and the stiffness
-\(\psi=3/(3+\chi)\in[0,1]\) (`sph_volume::BoundedTarget::stiffness`),
-\[
-\Omega_i=\psi\,\Omega^0_i+(1-\psi),\qquad
-\zeta_i=\frac{\psi\,(3\sum_jx_jw+\sum_jx_jq_{ij}w')}{\psi\sum_jq_{ij}w'-3(1-\psi)\sum_jw},
-\]
-where \(\Omega^0_i\) is the free-support value of the previous section. \(\psi=1\) in the
-interior recovers the free formulas; \(\psi\to0\) at either bound gives \(\Omega_i\to1\) and
-\(\zeta_i\to0\), the limit of a support that does not move with the particles, reached
-continuously instead of by a switch. A fixed support (\(H_{\min}=H_{\max}\)) uses
-\(\psi=0\); so does a stored support placed on or outside a bound, which the solve never
-produces. The equal-weight identity \(\zeta_i=x(1-1/\Omega_i)\) holds for every \(\psi\).
-`SphVolume.ForceIsTheGradientOfTheDiscreteThermalEnergy` checks that the force with supports
-in both layers is still the gradient of the discrete thermal energy with every support
-re-solved, and `SphCpuTest.VariationalHeldSupports` compares the production \(\zeta\) of
-layer supports with the double reference and checks \(\zeta=0\) for fixed supports.
+| Classification | Condition | \(\zeta_i\) |
+| --- | --- | --- |
+| `Fixed` | \(H_{\min}=H_{\max}\) | 0 |
+| `LowerBound` | \(H_i\le H_{\min}\) and residual \(>10^{-4}\) | 0 |
+| `UpperBound` | \(H_i\ge H_{\max}\) and residual \(<-10^{-4}\) | 0 |
+| `Free` | otherwise, including a bound met within tolerance | formula above |
 
-The `held` count of the density diagnostics is the number of supports with \(\psi<1\):
-inside a layer or fixed. The free-support Hubble identity of the cosmology section does not
-hold inside a layer, because the target there depends on \(H\) against fixed bounds; with
-comoving bounds the layers dilate with the box and the analytic expansion term is exact for
-every support.
+At \(H_{\min}=H_{\max}\) with equal supports, the gradients coincide, \(g_i=g_j\).
+`SphCpuTest.VariationalHeldSupports` checks zero corrections for held supports and
+compares the fixed-support pressure force and directed work with the independent
+variational reference.
 
 ## Conditioning and diagnostics
 
-A support whose \(\Omega_i\) or \(\zeta_i\) is non-finite, or whose \(\Omega_i\le0\),
+A free support whose \(\Omega_i\) or \(\zeta_i\) is non-finite, or whose \(\Omega_i\le0\),
 stops the run with a diagnostic naming its support, density, sums and residual; the
 code never clamps a correction to unity. Finiteness is tested on the exponent bits
-because the hydro sources are compiled with `-ffast-math`. A support with
+because the hydro sources are compiled with `-ffast-math`. A free support with
 \(0<\Omega_i<0.1\) (`sph_volume::kMinimumWellConditionedOmega`) is counted as
 ill-conditioned: its force amplifies the support-solve residual and the summation
 error by \(1/\Omega_i\). Each density preparation prints
@@ -194,8 +164,8 @@ SPH grad-H: Omega_min = ... residual_max = ... held = ... ill-conditioned (Omega
 ```
 
 and a warning when any support is ill-conditioned. `Omega_min` and `residual_max`
-are taken over every support with a constraint (all but fixed ones); counts include
-supports that a later pass of the same preparation evaluates again.
+are taken over free supports; counts include supports that a later pass of the
+same preparation evaluates again.
 
 The production solve stops at a relative residual of \(10^{-4}\). The float rates at
 the converged supports match a double-precision evaluation at the same supports to
@@ -229,11 +199,11 @@ the same \(m/a\) prefactor as the Monaghan pair terms. The pair work uses the st
 comoving coordinates \(V_i=a^3V^c_i\) with \(V^c_i\) a function of comoving positions
 and comoving supports, so
 \(d(m_iu_i)/dt=P_iV_i/y^c_i\,dy^c_i/dt-3(\dot a/a)P_iV_i\). The first term is the
-peculiar pair work, the second the analytic homogeneous term, for interior supports and
-for supports inside the layers of comoving bounds alike. For an interior support the
-Hubble flow's own pair work is also exactly \(-3(\dot a/a)P_iV_i\), because
+peculiar pair work, the second the analytic homogeneous term, for free supports and
+for supports held at comoving bounds alike. For a free support the Hubble flow's own
+pair work is also exactly \(-3(\dot a/a)P_iV_i\), because
 \(\sum_j(x_j-\zeta_i)\,r_{ij}\cdot g_i=-3y_i\) identically; adding the Hubble flow to
-the pair work would therefore count it twice. A layer support has no such identity,
+the pair work would therefore count it twice. A held support has no such identity,
 which is why the analytic term, not physical pair velocities, is used.
 For a constant-\(\gamma\) ideal gas, \(\chi_i=\gamma-1\) recovers the
 \(5-3\gamma\) coefficient. For \(\gamma=5/3\) the expansion term vanishes and these variables evolve as a static
@@ -244,10 +214,10 @@ gas in \(ds=d\tau/a\): the stored \(\sum_im_i(w_i^2/2+E_i)\) is conserved by the
 - **Density pass** (`kSphRunDensityAndGradients`, CPU `src/sph/prehydro_cpu.cpp`, CUDA
   `src/sph/prehydro.cu`): for every semiactive particle, after its support has
   converged, the loop also accumulates \(\sum_jw\) and \(\sum_jqw'\);
-  `sphGradHEvaluation` (`cosmictiger/sph/run_data.hpp`) evaluates the bounded target and
-  its stiffness \(\psi\) (`sph_volume::boundedTarget`) and calls
-  `sph_volume::gradHCorrection` in `volume.hpp`, which blends \(\Omega\) and \(\zeta\) by
-  \(\psi\); a fixed support passes \(\psi=0\) and gets \(\Omega=1\), \(\zeta=0\).
+  `sphGradHEvaluation` (`cosmictiger/sph/run_data.hpp`) classifies the support and
+  calls `sph_volume::gradHCorrection` in `volume.hpp`. For free supports that helper
+  calls `sph_volume::omega` and `sph_volume::zeta` to form \(\Omega\) and \(\zeta\).
+  Held supports use \(\Omega=1\) and \(\zeta=0\) without calling either function.
   The correction \(\zeta\) is written beside the density; \(\Omega\) is used for
   conditioning checks and diagnostics.
 - **Storage**: `sphParticlesGradHCorrections` holds one float per gas particle.
@@ -335,12 +305,11 @@ solved to roundoff in a 48-particle isolated cloud):
 - The force equals minus the finite-difference gradient of
   \(\sum_im_iu_i(\rho^*_i)\) at fixed entropy, with every support re-solved, to
   \(10^{-6}\) of the largest force, for free supports (cubic, Wendland C4, Ferrers F3,
-  spline 5), unequal masses, unequal weights, fixed supports and supports in both bound
-  layers, at \(\gamma=5/3\) and \(7/5\).
+  spline 5), unequal masses, unequal weights, fixed supports and both bounds active,
+  at \(\gamma=5/3\) and \(7/5\).
 - Pair rates conserve momentum, angular momentum and kinetic plus internal energy to
   \(10^{-13}\); each particle's work equals its own adiabatic rate (zero entropy rate)
-  for interior and layer supports; the interior-support Hubble identity holds to
-  \(10^{-12}\) and fails inside the layers.
+  for free and held supports; the free-support Hubble identity holds to \(10^{-12}\).
 - A pressure-coefficient mutation that drops \(\zeta\) fails four of these tests.
 
 **Production kernels, float** (`sph_cpu` CTest, `SphCpuTest.Variational*`):
@@ -349,9 +318,9 @@ solved to roundoff in a 48-particle isolated cloud):
 | --- | --- |
 | Rates vs double reference at the production supports (perturbed 6³ lattice, \(a=0.7\), \(\gamma=1.4\)) | \(4.7\times10^{-7}\) acceleration, \(2.3\times10^{-7}\) energy rate |
 | Rates vs exactly solved supports | \(7.7\times10^{-5}\), \(5.0\times10^{-5}\) (solve tolerance \(10^{-4}\)) |
-| Isolated cluster with edge supports in the upper layer of \(H_{\max}\) | no support reaches the bound; \(\zeta\) matches the reference, layer count matches; momentum, angular momentum and energy rates vanish to \(3\times10^{-5}\) with viscosity |
-| Hubble flow through a free support | pair work \(=-3hP/\rho\) to \(2\times10^{-5}\); layer supports differ (no identity) |
-| All supports in the lower layer, in the upper layer, or fixed | layer supports stay strictly inside the bounds and match the reference \(\zeta\); fixed supports use \(\zeta=0\) and the force equals the Monaghan force |
+| Isolated cluster with supports held at \(H_{\max}\) | \(\zeta\) matches, held count matches; momentum, angular momentum and energy rates vanish to \(3\times10^{-5}\) with viscosity |
+| Hubble flow through a free support | pair work \(=-3hP/\rho\) to \(2\times10^{-5}\); held supports differ (no identity) |
+| All supports held (\(H_{\min}\), \(H_{\max}\), fixed) | \(\zeta=0\); with fixed equal supports the force equals the Monaghan force |
 | Uniform lattice | zero force and work; homogeneous source exact at \(\gamma=5/3\), \(7/5\) |
 | NaN correction on a non-interacting source | masked under FP traps; on an interacting source the pass stops |
 

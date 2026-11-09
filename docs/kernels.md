@@ -96,9 +96,7 @@ The accepted radius options are:
 | Imposed central force | `scenario.disc.centralEffectiveRadius` | `scenario.disc.centralSmoothingLength` | Box units; gravity kernel |
 
 SPH support bounds take only support radii: `hydro.minSmoothingLength` and
-`hydro.maxSmoothingLength`, in initial interparticle spacings. Supports approach the
-bounds smoothly through the bounded target of `docs/variational_sph.md` and never reach
-them.
+`hydro.maxSmoothingLength`, in initial interparticle spacings.
 
 Gravity's reference spacing is `numberOfParticles^-1/3` in box units, preserving
 the existing radius-input convention. Cosmological SPH runs use

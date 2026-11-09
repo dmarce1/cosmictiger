@@ -109,8 +109,8 @@ struct SphRunReturn {
     // A leaf repeated by a later pass contributes again to the counts.
     float minimumGradHOmega = std::numeric_limits<float>::max();    // Over free supports.
     float maximumSupportResidual = 0.0f;    // Largest |sum w - target|/target of a free support.
-    int heldSupports = 0;              // Supports inside a bound layer or fixed (stiffness < 1).
-    int illConditionedSupports = 0;    // Supports with a small Omega.
+    int heldSupports = 0;                   // Supports at an active bound, with zeta = 0.
+    int illConditionedSupports = 0;         // Free supports with a small Omega.
     template <typename Archive>
     void serialize(Archive&& arc, unsigned) {
         arc & minimumTimestep;

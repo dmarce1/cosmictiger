@@ -106,7 +106,8 @@ std::vector<State> states(std::vector<SpatialVector> const& positions) {
                 radial_kernel::derivative(kernel, radius), radius);
         }
         double const density = sph_volume::weightedDensity(sums, 1.0 / support);
-        auto const correction = sph_volume::gradHCorrection(sums, 1.0);
+        auto const correction =
+            sph_volume::gradHCorrection(sums, sph_volume::SupportConstraint::Free);
         result.push_back(
             {support, density, correction.weightedSupportCorrection, std::pow(density, 5.0 / 3.0)});
     }
