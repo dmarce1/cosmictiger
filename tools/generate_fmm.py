@@ -182,9 +182,9 @@ class Dag:
             if self.nodes[a][0]!='constant':
                 continue
             expression=self.expr(a)[len('math::broadcast<Real>('):-1]
-            name=f'kCoefficient{a}'
+            name=f'k{len(self.constantNames)}'
             self.constantNames[a]=name
-            out.append(f'{indent}[[maybe_unused]] constexpr auto {name} = {expression};')
+            out.append(f'{indent}constexpr auto {name} = {expression};')
         return out
 
     def emit(self,live,already=frozenset(),indent='\t\t'):
