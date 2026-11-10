@@ -162,9 +162,9 @@ struct Gravity {
     int errorInterval{};
     // Evenly spaced global particle indices, capped at the particle count.
     int errorSampleSize{100};
-    int meshSize{};    // Full-particle PMMM side; a power of two, scaled by rung per stage.
+    int meshSize{};    // Full-particle PMMM side; any positive integer, scaled per stage.
     // Coarsest hierarchical stage mesh and the granularity of particle-domain
-    // cuts; a power of two. Zero resolves to meshSize/8, at least the near minimum.
+    // cuts; a divisor of meshSize. Zero chooses a compatible divisor near meshSize/8.
     int pmmmCoarseMeshSize{};
     int pmmmNearWidth{2};    // Direct neighbor cube radius for periodic PMMM, one to four cells.
     // Near field of the PMMM solver: fmm, or its direct particle-pair fallback pp.

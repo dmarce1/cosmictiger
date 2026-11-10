@@ -22,8 +22,8 @@ std::array<int, 3> coordinates(uint64_t key) {
     return {int(key / (n * n)), int(key / n % n), int(key % n)};
 }
 
-// Particle domains cut only on coarse-mesh planes and every stage mesh is a
-// power of two no coarser than the coarse mesh, so one locality owns all the
+// Particle domains cut only on coarse-mesh planes and every stage side is a
+// multiple of the coarse side, so one locality owns all the
 // particles of any cell. The cell center identifies that locality.
 int cellOwner(uint64_t key) {
     auto const cell = coordinates(key);
@@ -189,29 +189,33 @@ CellData rootMoments(size_t cellIndex, TreeCreateReturn const& root) {
     }
     auto const cellCoordinates = coordinates(range.key);
     Vector3<Position> center;
+    Vector3<double> centerCorrection;
     for (int axis = 0; axis < kDimensions; ++axis) {
-        center[axis] = (cellCoordinates[axis] + 0.5) / cache.meshSize;
+        double const coordinate = (cellCoordinates[axis] + 0.5) / cache.meshSize;
+        center[axis] = coordinate;
+        centerCorrection[axis] = center[axis].toDouble() - coordinate;
     }
     CellData cell;
     cell.key = range.key;
     cell.coefficients.resize(cache.sourceCount);
     FlopCount flops = fmmDispatch([&](auto tag) {
-        return treeSourceToMesh<decltype(tag)::value>(
-            cell.coefficients.data(), root.multi.precise(), root.pos, center, cache.meshSize);
+        return treeSourceToMesh<decltype(tag)::value>(cell.coefficients.data(),
+            root.multi.precise(), root.pos, center, cache.meshSize, centerCorrection);
     });
     // Independent radial summary about the mesh center. No source trace is
     // inferred from the STF moments, and no second harmonic P2M is performed.
     for (ParticleInteger i = range.begin; i < range.end; ++i) {
         double const mass = particlesMass(i);
         for (int axis = 0; axis < kDimensions; ++axis) {
-            double const offset =
-                unwrappedDoubleDistance(particlesPos(axis, i), center[axis]) * cache.meshSize;
+            double const offset = (unwrappedDoubleDistance(particlesPos(axis, i), center[axis]) +
+                                      centerCorrection[axis]) *
+                cache.meshSize;
             cell.radialTrace += mass * offset * offset;
         }
         state.stageRungs[i - state.activeRange.first] = particlesRung(i);
-        flops += 1 + 6 * kDimensions;
+        flops += 1 + 7 * kDimensions;
     }
-    addCpuFlops(flops + kDimensions * (kPositionBits == 64 ? 6 : 3), FlopPrecision::Double);
+    addCpuFlops(flops + kDimensions * (kPositionBits == 64 ? 9 : 6), FlopPrecision::Double);
     return cell;
 }
 

@@ -108,9 +108,9 @@ def main():
     root = args.workdir.resolve()
     root.mkdir(parents=True, exist_ok=True)
     ranks = args.ranks if args.mpi_exec else 1
-    # A sixteen-cell mesh with width two resolves the default coarse mesh to
-    # eight, so a coarse mesh of sixteen is a valid mismatch below.
-    mesh_size = 16
+    # A non-power-of-two mesh exercises FFT layout, aligned domains and restart.
+    # Width two resolves side 30 to coarse side 10; side 30 is a valid mismatch.
+    mesh_size = 30
     common = {"hpx:threads": 2, "hpx:bind": "none",
               "gravity.meshSize": mesh_size, "gravity.pmmmNearWidth": 2,
               "gravity.method.near": args.near_method,
@@ -202,7 +202,7 @@ def main():
                   "gas state, particle mappings, gravity handoff, and restart state passed")
             continue
         # Historical extensions predate the coarse mesh (and version four's
-        # retired prime factor limit). A saved power-of-two mesh restarts under
+        # retired prime factor limit). A saved arbitrary mesh restarts under
         # the requested coarse mesh and reproduces the current-version restart.
         for version in ((1, 2, 3, 4) if near_method == "pp" else (2, 3, 4)):
             legacy = prepareCase(root, f"{label}_legacy_v{version}", source)

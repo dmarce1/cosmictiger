@@ -55,7 +55,8 @@ FlopCounts treeComputeWideReductionMultipole(SourceMultipoleBuffer& multi,
     FmmSourceView const& sources);
 template <int order>
 FlopCount treeSourceToMesh(double* output, SourceMultipoleBuffer const& source,
-    Vector3<Position> const& sourceCenter, Vector3<Position> const& meshCenter, int meshSize);
+    Vector3<Position> const& sourceCenter, Vector3<Position> const& meshCenter, int meshSize,
+    Vector3<double> const& meshCenterCorrection = {});
 
 #ifdef COSMICTIGER_FMM_INSTANCE_ORDER
 // The definitions pull in the generated kernels, so only the per-order instance
@@ -90,9 +91,8 @@ FlopCounts treeComputeMultipole(MultipoleBuffer& multi, MultipoleBuffer const& l
     // per stored coefficient. Only the two populated SIMD lanes are counted.
     FlopCounts counts;
     counts.singlePrecision = 0;
-    counts.doublePrecision = 2 *
-            cosmictiger::gravity::cartesian::detail::kM2MFlops<
-                FmmOrder<order>::kMultipoleDegree_> +
+    counts.doublePrecision =
+        2 * cosmictiger::gravity::cartesian::detail::kM2MFlops<FmmOrder<order>::kMultipoleDegree_> +
         12 + 4 * kMultipoleCoefficients;
     counts.unclassified = 0;
     return counts;
@@ -262,7 +262,8 @@ FlopCounts treeComputeMultipole(SourceMultipoleBuffer& multi, Pair<ParticleInteg
 
 template <int order>
 FlopCount treeSourceToMesh(double* output, SourceMultipoleBuffer const& source,
-    Vector3<Position> const& sourceCenter, Vector3<Position> const& meshCenter, int meshSize) {
+    Vector3<Position> const& sourceCenter, Vector3<Position> const& meshCenter, int meshSize,
+    Vector3<double> const& meshCenterCorrection) {
     namespace cartesian = cosmictiger::gravity::cartesian;
     namespace conversion = cosmictiger::gravity::basis_conversion;
     cartesian::Multipole<double, order> input{}, shifted{};
@@ -272,7 +273,10 @@ FlopCount treeSourceToMesh(double* output, SourceMultipoleBuffer const& source,
     }
     Vector3<double> displacement;
     for (int dim = 0; dim < kDimensions; ++dim) {
-        displacement[dim] = unwrappedDoubleDistance(sourceCenter[dim], meshCenter[dim]);
+        // Recover the rational mesh center after its fixed-point quantization,
+        // while retaining native fixed64 subtraction for tiny displacements.
+        displacement[dim] =
+            unwrappedDoubleDistance(sourceCenter[dim], meshCenter[dim]) + meshCenterCorrection[dim];
     }
     cartesian::M2M(shifted, input, fmmScaleDisplacement(displacement));
     conversion::sourceToSpherical(spherical, shifted);
@@ -292,7 +296,7 @@ FlopCount treeSourceToMesh(double* output, SourceMultipoleBuffer const& source,
         }
     }
     return cartesian::detail::kM2MFlops<order - 2> +
-        conversion::kSourceToSphericalConventionalFlops<order> + 9 + input.size() + order - 2;
+        conversion::kSourceToSphericalConventionalFlops<order> + 12 + input.size() + order - 2;
 }
 
 #endif

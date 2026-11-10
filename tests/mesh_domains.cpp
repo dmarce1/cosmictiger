@@ -29,9 +29,9 @@ namespace detail {
 
 // Full PMMM mesh of the fixtures. Seam particles straddle its cell planes; the
 // coarse meshes below cut the particle domains on a subset of those planes.
-constexpr int kMeshDomainMeshSize = 16;
+constexpr int kMeshDomainMeshSize = 30;
 constexpr int kMeshDomainNearWidth = 1;
-constexpr int kMeshDomainCoarseMeshSizes[] = {4, 8};
+constexpr int kMeshDomainCoarseMeshSizes[] = {5, 10};
 constexpr int kMeshDomainFixtures = 4;
 constexpr int kMeshDomainDenseFixture = 2;
 
@@ -65,7 +65,7 @@ PositionInteger meshDomainPosition(int identity, int dim, int fixture, int phase
         // on both sides of every coarse plane. Every 21st particle straddles
         // the periodic seam at 0 / 1.
         int const plane = 1 + ((identity / 3 + 2 * dim) % (kMeshDomainMeshSize - 1));
-        raw = cellWidth * plane;
+        raw = (period * plane + kMeshDomainMeshSize - 1) / kMeshDomainMeshSize;
         int const offset = (identity + dim) % 3 - 1;
         raw = offset < 0 ? raw - 1 : raw + offset;
         if (identity % 21 == 0) {
@@ -86,9 +86,9 @@ PositionInteger meshDomainPosition(int identity, int dim, int fixture, int phase
                                       (identity * 5 + 2 * dim) % kMeshDomainMeshSize;
         raw = cellWidth * (2 * cell + 1) / 2 + identity % 3;
     }
-    // Half a period is an exact multiple of every power-of-two cell width, so
-    // the translation moves particles through existing rank boundaries while
-    // keeping each seam particle on its side of a mesh plane.
+    // Translate through existing rank boundaries. The even full side keeps
+    // the full-mesh planes aligned; the odd coarse side also exercises cuts
+    // that do not share the translation's half-period symmetry.
     raw += period / 2 * phase;
     return static_cast<PositionInteger>(raw);
 }
@@ -194,14 +194,14 @@ void checkGravitySampleCheckpointReset() {
     }
 }
 
-long double meshDomainCoordinate(PositionInteger raw) {
-    return std::ldexp(static_cast<long double>(raw), -kPositionBits);
-}
-
 bool meshDomainContains(Range<double> const& box, MeshDomainRecord const& record) {
     for (int dim = 0; dim < kDimensions; ++dim) {
-        auto const coordinate = meshDomainCoordinate(record.raw[dim]);
-        if (coordinate < box.begin[dim] || coordinate >= box.end[dim]) {
+        int const coarse = getOptions().gravity.pmmmCoarseMeshSize;
+        auto const scaled = static_cast<unsigned __int128>(record.raw[dim]) * coarse;
+        unsigned __int128 const period = static_cast<unsigned __int128>(1) << kPositionBits;
+        auto const begin = uint32_t(std::llround(box.begin[dim] * coarse));
+        auto const end = uint32_t(std::llround(box.end[dim] * coarse));
+        if (scaled < begin * period || scaled >= end * period) {
             return false;
         }
     }
@@ -356,7 +356,7 @@ HPX_PLAIN_ACTION(
 
 namespace detail {
 
-// No cell of the coarse mesh, nor of any finer power-of-two mesh, may hold
+// No cell of the coarse mesh, nor of any integer refinement of it, may hold
 // particles owned by two localities.
 void verifyMeshDomainCellOwnership(
     Vector<MeshDomainRecord> const& records, Vector<int> const& owners, int meshSize) {

@@ -1,5 +1,6 @@
 /* CosmicTiger - Nitadori PMMM ghost exchange; BSL-1.0. */
 
+#include <cosmictiger/gravity/mesh_size.hpp>
 #include "../actions.hpp"
 
 namespace pmmm::detail {
@@ -35,9 +36,9 @@ std::vector<uint64_t> neighbors(uint64_t key) {
     auto const center = coordinates(key);
     int const n = cache.meshSize;
     int const width = cache.nearWidth;
-    for (int x = -width; x <= width; ++x) {
-        for (int y = -width; y <= width; ++y) {
-            for (int z = -width; z <= width; ++z) {
+    for (int x = nearOffsetBegin(n, width); x <= nearOffsetEnd(n, width); ++x) {
+        for (int y = nearOffsetBegin(n, width); y <= nearOffsetEnd(n, width); ++y) {
+            for (int z = nearOffsetBegin(n, width); z <= nearOffsetEnd(n, width); ++z) {
                 uint64_t const sx = periodicIndex(center[0] + x);
                 uint64_t const sy = periodicIndex(center[1] + y);
                 uint64_t const sz = periodicIndex(center[2] + z);

@@ -29,6 +29,7 @@
 #include <cosmictiger/gravity/fmm/ghost_storage.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/gravity/kernels/spherical_ewald_kernels.hpp>
+#include <cosmictiger/gravity/mesh_size.hpp>
 #include <cosmictiger/gravity/pp_near_pp.hpp>
 #include <cosmictiger/gravity/solver.hpp>
 #include <cosmictiger/gravity/sources.hpp>
@@ -2334,12 +2335,64 @@ void checkPmmmFmmNear() {
 
 }    // namespace detail
 
+namespace detail {
+
+void checkPmmmArbitraryMeshes() {
+    auto const saved = getOptions();
+    auto options = saved;
+    options.gravity.pmmmCoarseMeshSize = 0;
+    options.gravity.pmmmNearWidth = 2;
+    for (int side : {1, 2, 3, 5, 6, 7, 11, 12}) {
+        if (side < pmmm::detail::minimumCoarseMeshSizeForLocalities(hpxSize())) {
+            continue;
+        }
+        pmmmDestroy();
+        options.gravity.meshSize = side;
+        setOptions(options);
+        // Mixed masses and positions span cells and the periodic seam. Compare
+        // against the independently contracted finite expansion: very coarse
+        // meshes need not satisfy the old fixtures' Ewald truncation budgets.
+        for (int fixture : {0, 1, 4}) {
+            detail::preparePmmmFixture(fixture);
+            detail::distributePmmmFixture(fixture);
+            pmmmSolve(true);
+            auto const samples = detail::gatherPmmmSamples();
+            for (size_t sink = 0; sink < samples.size(); ++sink) {
+                auto const expected = detail::directPmmmExpansionReference(sink, samples);
+                for (int component = 0; component < 4; ++component) {
+                    double const actual = component == 0 ?
+                        samples[sink].potential :
+                        samples[sink].acceleration[component - 1];
+                    double const allowance =
+                        component == 0 && options.gravity.pmmmNearMethod == "fmm" ?
+                        4 * std::numeric_limits<float>::epsilon() *
+                            std::abs(options.gravity.gm * samples[sink].mass *
+                                selectedGravityKernel().centralPotential /
+                                options.gravity.smoothingLength) :
+                        0;
+                    detail::requirePmmm(std::isfinite(actual) &&
+                            std::abs(actual - expected[component]) <
+                                2.0e-5 * std::max(1.0, std::abs(expected[component])) + allowance,
+                        "arbitrary mesh differs from finite expansion: side=" +
+                            std::to_string(side) + " component=" + std::to_string(component));
+                }
+            }
+            pmmmSolve(false);
+            detail::comparePmmmSamples(samples, detail::gatherPmmmSamples(), false);
+        }
+    }
+    pmmmDestroy();
+    setOptions(saved);
+}
+
+}    // namespace detail
+
 void pmmmTest() {
     detail::checkSourceMomentSerialization();
     detail::checkGhostMassPermutation();
     auto options = getOptions();
-    // Every PMMM mesh side is a power of two; the legacy force oracles cover
-    // sides 8 and 16 at every near width, and the default coarse mesh (zero).
+    // Keep the legacy power-of-two Ewald force oracles as well as the
+    // arbitrary-side numerical matrix and default coarse mesh (zero).
     options.gravity.pmmmCoarseMeshSize = 0;
     // Keep the live kick fixtures collisionless while mesh/SPH coupling is deferred.
     options.hydro.enabled = false;
@@ -2382,6 +2435,7 @@ void pmmmTest() {
         std::cout << "PMMM owned-root source pipeline matrix passed\n" << std::flush;
         return;
     }
+    detail::checkPmmmArbitraryMeshes();
     if (options.gravity.pmmmNearMethod == "pp") {
         detail::checkPmmmNearEdges();
         detail::checkPmmmNearBatches();

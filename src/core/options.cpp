@@ -896,11 +896,11 @@ bool processOptions(int argc, char* argv[]) {
         po::value<int>(&opts.gravity.errorSampleSize)->default_value(100),
         "number of evenly spaced particles for gravity error checks (capped at particle count)")(
         "gravity.meshSize", po::value<int>(&opts.gravity.meshSize)->default_value(0),
-        "PMMM mesh cells per axis, a power of two of at least 2*pmmmNearWidth+1; required "
+        "PMMM mesh cells per axis, any positive integer; required "
         "when gravity is enabled")("gravity.pmmmCoarseMeshSize",
         po::value<int>(&opts.gravity.pmmmCoarseMeshSize)->default_value(0),
-        "coarsest PMMM stage mesh and particle-domain cut granularity, a power of two; "
-        "0 selects meshSize/8")("gravity.pmmmBatchParticles",
+        "coarsest PMMM stage mesh and particle-domain cut granularity, a divisor of meshSize; "
+        "0 selects a compatible divisor near meshSize/8")("gravity.pmmmBatchParticles",
         po::value<int>(&opts.gravity.pmmmBatchParticles)->default_value(4096),
         "target sink particles per ready PMMM batch; oversized cells run alone")(
         "gravity.pmmmNearWidth", po::value<int>(&opts.gravity.pmmmNearWidth)->default_value(2),
@@ -1267,22 +1267,16 @@ bool processOptions(int argc, char* argv[]) {
     if (opts.gravity.enabled) {
         // The near-field FMM angle follows from the neighbor cube geometry.
         opts.gravity.openingAngle = std::sqrt(3.0) / (opts.gravity.pmmmNearWidth + 1);
-        if (opts.gravity.meshSize < 2 * opts.gravity.pmmmNearWidth + 1) {
-            detail::throwOptionError(
-                "gravity.meshSize must be at least 2*gravity.pmmmNearWidth+1 for PMMM\n");
+        if (opts.gravity.meshSize < 1) {
+            detail::throwOptionError("gravity.meshSize must be positive for PMMM\n");
         }
-        if (!pmmm::detail::isPowerOfTwo(opts.gravity.meshSize)) {
-            detail::throwOptionError("gravity.meshSize must be a power of two for PMMM\n");
-        }
-        int const minimumCoarse = pmmm::detail::minimumMeshSize(opts.gravity.pmmmNearWidth);
         opts.gravity.pmmmCoarseMeshSize = pmmm::detail::resolvedCoarseMeshSize(
             opts.gravity.meshSize, opts.gravity.pmmmCoarseMeshSize, opts.gravity.pmmmNearWidth);
-        if (!pmmm::detail::isPowerOfTwo(opts.gravity.pmmmCoarseMeshSize) ||
-            opts.gravity.pmmmCoarseMeshSize < minimumCoarse ||
-            opts.gravity.pmmmCoarseMeshSize > opts.gravity.meshSize) {
+        if (opts.gravity.pmmmCoarseMeshSize < 1 ||
+            opts.gravity.pmmmCoarseMeshSize > opts.gravity.meshSize ||
+            opts.gravity.meshSize % opts.gravity.pmmmCoarseMeshSize != 0) {
             detail::throwOptionError(
-                "gravity.pmmmCoarseMeshSize must be a power of two between the smallest "
-                "power of two at least 2*gravity.pmmmNearWidth+1 and gravity.meshSize\n");
+                "gravity.pmmmCoarseMeshSize must be a positive divisor of gravity.meshSize\n");
         }
         if (!pmmm::detail::isPowerOfTwo(uint64_t(hpxSize()))) {
             detail::throwOptionError("PMMM gravity requires a power-of-two locality count; "

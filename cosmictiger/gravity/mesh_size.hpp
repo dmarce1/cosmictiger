@@ -8,9 +8,7 @@
 
 namespace pmmm::detail {
 
-// Every PMMM mesh is a cube with a power-of-two side. Power-of-two sides make
-// each cell boundary an exact fixed-point plane shared by every coarser mesh,
-// so particle domains cut on the coarse mesh never split a cell of any finer one.
+// Locality counts still use a binary domain tree; mesh sides are unrestricted.
 inline constexpr bool isPowerOfTwo(uint64_t value) {
     return value != 0 && (value & (value - 1)) == 0;
 }
@@ -29,8 +27,7 @@ inline constexpr int nextPowerOfTwo(int value) {
     return result;
 }
 
-// The smallest valid side for a near width: periodic near cells must be
-// distinct, so the side is at least 2*w+1 and therefore the next power of two.
+// Preferred coarse side. Smaller full meshes use each periodic neighbor once.
 inline constexpr int minimumMeshSize(int nearWidth) {
     if (nearWidth < 1 || nearWidth > 4) {
         throw std::invalid_argument("PMMM near width must be between 1 and 4");
@@ -40,16 +37,27 @@ inline constexpr int minimumMeshSize(int nearWidth) {
 
 // The coarsest mesh any hierarchical stage may use, and the granularity of
 // particle-domain cuts. Zero requests the default: eight times coarser per
-// axis than the full mesh, never below the minimum side for the near width,
-// and never above the full mesh. A zero or invalid full mesh resolves to zero.
+// axis than the full mesh, raised to the preferred near-field side and then
+// to a divisor of the full mesh. Divisibility keeps domain cuts on stage planes.
 inline int resolvedCoarseMeshSize(int meshSize, int coarseMeshSize, int nearWidth) {
     if (coarseMeshSize > 0) {
         return coarseMeshSize;
     }
-    if (meshSize <= 0 || !isPowerOfTwo(meshSize)) {
+    if (meshSize <= 0) {
         return 0;
     }
-    return std::min(meshSize, std::max(meshSize / 8, minimumMeshSize(nearWidth)));
+    int const minimum = std::min(meshSize, std::max(meshSize / 8, minimumMeshSize(nearWidth)));
+    int result = meshSize;
+    for (int factor = 1; factor <= meshSize / factor; ++factor) {
+        if (meshSize % factor == 0) {
+            for (int side : {factor, meshSize / factor}) {
+                if (side >= minimum) {
+                    result = std::min(result, side);
+                }
+            }
+        }
+    }
+    return result;
 }
 
 // Particle domains bisect the box along x, y, z in turn, once per halving of
@@ -66,12 +74,12 @@ inline int minimumCoarseMeshSizeForLocalities(int localities) {
     return 1 << ((levels + 2) / 3);
 }
 
-// Select the smallest power-of-two side, between the coarse and full meshes,
-// whose volume is at least the full mesh volume times active / total.
+// Select the smallest divisor of the full side that is a multiple of the
+// coarse side and whose volume meets the selected particle fraction.
 inline int hierarchicalMeshSize(
     int baseSize, int coarseSize, uint64_t activeCount, uint64_t totalCount) {
-    if (baseSize < 1 || coarseSize < 1 || coarseSize > baseSize || !isPowerOfTwo(baseSize) ||
-        !isPowerOfTwo(coarseSize) || activeCount > totalCount) {
+    if (baseSize < 1 || coarseSize < 1 || coarseSize > baseSize || baseSize % coarseSize != 0 ||
+        activeCount > totalCount) {
         throw std::invalid_argument("Invalid hierarchical PMMM mesh or particle counts");
     }
     auto const cube = [](int side) {
@@ -87,11 +95,29 @@ inline int hierarchicalMeshSize(
     // Exact integer comparisons avoid rounding an exact cube ratio upward or
     // losing a one-particle increment in large global populations.
     auto const target = cube(baseSize) * activeCount;
-    int side = coarseSize;
-    while (side < baseSize && cube(side) * totalCount < target) {
-        side <<= 1;
+    int result = baseSize;
+    int const ratio = baseSize / coarseSize;
+    for (int factor = 1; factor <= ratio / factor; ++factor) {
+        if (ratio % factor == 0) {
+            for (int multiplier : {factor, ratio / factor}) {
+                int const side = coarseSize * multiplier;
+                if (cube(side) * totalCount >= target) {
+                    result = std::min(result, side);
+                }
+            }
+        }
     }
-    return side;
+    return result;
+}
+
+// Unique sink-minus-source offsets, with the same positive half-box tie as
+// signedIndex and FmmGeometry. Tiny meshes must not count periodic cells twice.
+inline int nearOffsetBegin(int meshSize, int nearWidth) {
+    return -std::min(nearWidth, (meshSize - 1) / 2);
+}
+
+inline int nearOffsetEnd(int meshSize, int nearWidth) {
+    return std::min(nearWidth, meshSize / 2);
 }
 
 }    // namespace pmmm::detail

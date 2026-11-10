@@ -29,10 +29,11 @@ The supplied configurations choose traditional integration.
 `gravity.expansionDegree` chooses a compiled degree and defaults to the largest.
 The implementation's historical order is one greater than potential degree.
 The near-field opening angle is derived as `sqrt(3)/(gravity.pmmmNearWidth+1)`.
-PMMM requires an explicit valid `gravity.meshSize`: a power of two at least
-`2*gravity.pmmmNearWidth+1`; override the supplied zero with, for example,
+PMMM requires an explicit positive integer `gravity.meshSize`; arbitrary
+cubic sizes are supported. Override the supplied zero with, for example,
 `--gravity.meshSize=32`.
-`gravity.pmmmCoarseMeshSize` (default `meshSize/8`) is the coarsest hierarchical
+`gravity.pmmmCoarseMeshSize` (default: a compatible divisor near `meshSize/8`)
+is the coarsest hierarchical
 stage mesh and the granularity of PMMM particle-domain cuts; PMMM runs need a
 power-of-two locality count.
 

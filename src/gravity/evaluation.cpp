@@ -1,5 +1,6 @@
 /* CosmicTiger - Nitadori PMMM evaluation; BSL-1.0. */
 
+#include <cosmictiger/gravity/mesh_size.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include "actions.hpp"
 
@@ -144,9 +145,9 @@ void evaluateParticles(bool doPotential) {
             };
             std::unordered_map<int, Request> requests;
             std::unordered_map<uint64_t, std::array<int, 3>> displacements;
-            for (int x = -width; x <= width; ++x) {
-                for (int y = -width; y <= width; ++y) {
-                    for (int z = -width; z <= width; ++z) {
+            for (int x = nearOffsetBegin(n, width); x <= nearOffsetEnd(n, width); ++x) {
+                for (int y = nearOffsetBegin(n, width); y <= nearOffsetEnd(n, width); ++y) {
+                    for (int z = nearOffsetBegin(n, width); z <= nearOffsetEnd(n, width); ++z) {
                         int const sx = periodicIndex(center[0] - x);
                         int const sy = periodicIndex(center[1] - y);
                         int const sz = periodicIndex(center[2] - z);
@@ -214,7 +215,6 @@ void evaluateParticles(bool doPotential) {
     });
     ++state.diagnostics.solveCount;
 }
-
 
 // Boundary far solve of the PMMM outer interval (docs/pmmm.md).
 //

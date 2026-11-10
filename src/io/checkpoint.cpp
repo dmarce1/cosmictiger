@@ -672,8 +672,8 @@ bool pmmmCheckpointCompatible(std::array<uint64_t, 11> parameters, Options const
     }
     if (parameters[0] == 3 || parameters[0] == 4) {
         // Versions three and four predate the coarse mesh; version four's prime
-        // factor limit is retired. Every mesh is now a power of two, so a saved
-        // power-of-two base mesh restarts under the requested coarse mesh.
+        // factor limit is retired. Saved base meshes restart under the requested
+        // compatible coarse mesh, including non-power-of-two base sizes.
         parameters[10] = expected[10];
         parameters[0] = 5;
     }

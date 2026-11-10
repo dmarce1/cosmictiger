@@ -94,13 +94,13 @@ void initialize(int meshSize) {
     int const baseMeshSize = options.meshSize;
     int const coarseMeshSize =
         resolvedCoarseMeshSize(options.meshSize, options.pmmmCoarseMeshSize, options.pmmmNearWidth);
-    if (options.meshSize < 3 || !isPowerOfTwo(baseMeshSize) || options.pmmmNearWidth < 1 ||
-        options.pmmmNearWidth > 4 || options.pmmmNearWidth > (options.meshSize - 1) / 2 ||
-        coarseMeshSize < 2 * options.pmmmNearWidth + 1 || coarseMeshSize > baseMeshSize ||
-        !isPowerOfTwo(coarseMeshSize) || options.fmmOrder < kFmmMinOrder ||
-        options.fmmOrder > kFmmMaxOrder || !(options.smoothingLength > 0) ||
+    if (baseMeshSize < 1 || options.pmmmNearWidth < 1 || options.pmmmNearWidth > 4 ||
+        coarseMeshSize < 1 || coarseMeshSize > baseMeshSize || baseMeshSize % coarseMeshSize != 0 ||
+        options.fmmOrder < kFmmMinOrder || options.fmmOrder > kFmmMaxOrder ||
+        !(options.smoothingLength > 0) ||
         options.smoothingLength > double(options.pmmmNearWidth) / baseMeshSize ||
-        meshSize < coarseMeshSize || meshSize > baseMeshSize || !isPowerOfTwo(meshSize)) {
+        meshSize < coarseMeshSize || meshSize > baseMeshSize || baseMeshSize % meshSize != 0 ||
+        meshSize % coarseMeshSize != 0) {
         throw std::runtime_error("Invalid PMMM mesh, order, near width or softening support");
     }
     if (meshCachePool.baseMeshSize != 0) {
@@ -281,18 +281,34 @@ void initialize(int meshSize) {
                 {
                     std::lock_guard<std::mutex> lock(fftwPlannerMutex());
                     fftwf_plan_with_nthreads(fftThreads);
-                    cache.forward = fftwf_mpi_plan_many_dft_r2c(3, realDimensions,
-                        cache.sourceCount, FFTW_MPI_DEFAULT_BLOCK, FFTW_MPI_DEFAULT_BLOCK,
-                        cache.sourceReal, cache.sourceSpectrum, cache.communicator,
-                        FFTW_ESTIMATE | FFTW_MPI_TRANSPOSED_OUT);
-                    cache.greenForward = fftwf_mpi_plan_many_dft_r2c(3, realDimensions,
-                        cache.localCount, FFTW_MPI_DEFAULT_BLOCK, FFTW_MPI_DEFAULT_BLOCK,
-                        cache.localReal, cache.greenSpectrum, cache.communicator,
-                        FFTW_ESTIMATE | FFTW_MPI_TRANSPOSED_OUT);
-                    cache.inverse = fftwf_mpi_plan_many_dft_c2r(3, realDimensions, cache.localCount,
-                        FFTW_MPI_DEFAULT_BLOCK, FFTW_MPI_DEFAULT_BLOCK, cache.localSpectrum,
-                        cache.localReal, cache.communicator,
-                        FFTW_ESTIMATE | FFTW_MPI_TRANSPOSED_IN);
+                    if (n == 1 && localityCount == 1) {
+                        // FFTW-MPI cannot plan a single-cell transform. Its sole
+                        // mode uses serial interleaved batch plans (the identity),
+                        // with the same coefficient layout and execution path.
+                        int const dimensions[3] = {1, 1, 1};
+                        cache.forward = fftwf_plan_many_dft_r2c(3, dimensions, cache.sourceCount,
+                            cache.sourceReal, nullptr, cache.sourceCount, 1, cache.sourceSpectrum,
+                            nullptr, cache.sourceCount, 1, FFTW_ESTIMATE);
+                        cache.greenForward = fftwf_plan_many_dft_r2c(3, dimensions,
+                            cache.localCount, cache.localReal, nullptr, cache.localCount, 1,
+                            cache.greenSpectrum, nullptr, cache.localCount, 1, FFTW_ESTIMATE);
+                        cache.inverse = fftwf_plan_many_dft_c2r(3, dimensions, cache.localCount,
+                            cache.localSpectrum, nullptr, cache.localCount, 1, cache.localReal,
+                            nullptr, cache.localCount, 1, FFTW_ESTIMATE);
+                    } else {
+                        cache.forward = fftwf_mpi_plan_many_dft_r2c(3, realDimensions,
+                            cache.sourceCount, FFTW_MPI_DEFAULT_BLOCK, FFTW_MPI_DEFAULT_BLOCK,
+                            cache.sourceReal, cache.sourceSpectrum, cache.communicator,
+                            FFTW_ESTIMATE | FFTW_MPI_TRANSPOSED_OUT);
+                        cache.greenForward = fftwf_mpi_plan_many_dft_r2c(3, realDimensions,
+                            cache.localCount, FFTW_MPI_DEFAULT_BLOCK, FFTW_MPI_DEFAULT_BLOCK,
+                            cache.localReal, cache.greenSpectrum, cache.communicator,
+                            FFTW_ESTIMATE | FFTW_MPI_TRANSPOSED_OUT);
+                        cache.inverse = fftwf_mpi_plan_many_dft_c2r(3, realDimensions,
+                            cache.localCount, FFTW_MPI_DEFAULT_BLOCK, FFTW_MPI_DEFAULT_BLOCK,
+                            cache.localSpectrum, cache.localReal, cache.communicator,
+                            FFTW_ESTIMATE | FFTW_MPI_TRANSPOSED_IN);
+                    }
                     // Plans retain their thread limit. Cosmology already parallelizes
                     // independent 1D transforms with HPX, so keep its future plans serial.
                     fftwf_plan_with_nthreads(1);

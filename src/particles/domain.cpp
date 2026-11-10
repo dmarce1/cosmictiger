@@ -31,7 +31,9 @@
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/domain.hpp>
+#include <cosmictiger/particles/mesh_domain.hpp>
 #include <cosmictiger/particles/particle_mesh_sort.hpp>
+#include <cosmictiger/particles/particle_partition.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_SPH
 #include <cosmictiger/sph/particles.hpp>
@@ -68,6 +70,35 @@ static void domainsCheck();
 static Vector<DomainLocal> localDomains;
 
 namespace detail {
+
+int domainCoarseMeshSize() {
+    auto const& options = getOptions().gravity;
+    return options.enabled && options.meshSize > 0 ?
+        pmmm::detail::resolvedCoarseMeshSize(
+            options.meshSize, options.pmmmCoarseMeshSize, options.pmmmNearWidth) :
+        0;
+}
+
+Position domainSplitPosition(double boundary) {
+    int const meshSize = domainCoarseMeshSize();
+    if (meshSize == 0) {
+        return Position(boundary);
+    }
+    uint32_t const plane = mesh_domain::boundaryIndex(boundary, meshSize);
+    unsigned __int128 const period = static_cast<unsigned __int128>(1) << kPositionBits;
+    Position result;
+    result.raw() = static_cast<PositionInteger>((plane * period + meshSize - 1) / meshSize);
+    return result;
+}
+
+// Routing through a coarse cell's center preserves exact half-open ownership
+// even when a fixed64 position rounds across a non-dyadic double boundary.
+double particleDomainCoordinate(Position position) {
+    int const meshSize = domainCoarseMeshSize();
+    return meshSize > 0 ?
+        (double(particleMeshCoordinate(position.raw(), uint32_t(meshSize))) + 0.5) / meshSize :
+        positionDomainCoordinate(position);
+}
 
 template <typename Record>
 size_t migrationPayloadBytes(Record const& record, size_t count) {
@@ -126,7 +157,7 @@ std::vector<std::vector<size_t>> countDomainCoarseSlabs(int depth, int coarseMes
 }
 
 // PMMM particle domains cut only on coarse-mesh planes, so no cell of the coarse
-// mesh or of any finer power-of-two mesh ever spans two localities. The cut at
+// mesh or of any stage mesh whose side is a multiple ever spans two localities. The cut at
 // this depth bisects the locality range; each child must keep enough coarse
 // cells along this axis for the cuts it still owes on it. Among the admissible
 // planes, the one whose particle count comes closest to the balanced target
@@ -298,7 +329,7 @@ Vector<size_t> domainsCountBelow(Vector<double> bounds, int depth) {
                         (size_t) 1);
                     Vector<hpx::future<void>> futs;
                     int const xdim = depth % kSpatialDimensions;
-                    Position const xmid(bounds[i]);
+                    Position const xmid(detail::domainSplitPosition(bounds[i]));
                     std::atomic<size_t> count(0);
                     auto const func = [numberOfThreads, rng, xdim, xmid, &count](int proc) {
                         size_t const begin =
@@ -391,8 +422,8 @@ void domainsReboundSort(Vector<double> bounds, int depth) {
         if (localDomains[i].depth == depth) {
             futs.push_back(hpx::async(hpx::annotated_function(
                 [i, &bounds, depth, &mids]() {
-                    mids[i] = particlesSort(
-                        localDomains[i].particleRange, bounds[i], depth % kSpatialDimensions);
+                    mids[i] = particlesPartition(localDomains[i].particleRange,
+                        detail::domainSplitPosition(bounds[i]), depth % kSpatialDimensions);
                 },
                 "particles.domainsReboundSort")));
         }
@@ -503,11 +534,10 @@ void domainsRebound() {
             }
         }
         for (size_t i = 0; i < domains.size(); ++i) {
-            // Counting and sorting use Position comparisons. Store the same
-            // representable plane so migration agrees after repeated cuts on
-            // an axis, including when the double midpoint rounds up to one.
-            // Coarse-mesh planes are exact in both representations.
-            double const midx = positionDomainCoordinate(Position(bounds[i]));
+            // Preserve rational mesh planes; counting and partitioning recover
+            // their exact fixed-point boundary. Unaligned cuts stay quantized.
+            double const midx =
+                coarseMeshSize > 0 ? bounds[i] : positionDomainCoordinate(Position(bounds[i]));
             boxesByKey[domains[i].key].midx = midx;
             bounds[i] = midx;
         }
@@ -674,7 +704,7 @@ static void beginSphMigration(int rung) {
     for (ParticleInteger i = 0; i < particlesSize(); i++) {
         Vector3<double> position;
         for (int dim = 0; dim < kDimensions; dim++) {
-            position[dim] = positionDomainCoordinate(particlesPositionValue(dim, i));
+            position[dim] = detail::particleDomainCoordinate(particlesPositionValue(dim, i));
         }
         auto record = packSphParticle(i);
         bool const eligible = rung < 0 || !getOptions().run.hierarchicalGravity ||
@@ -814,8 +844,8 @@ void domainsBegin(int rung) {
                             !getOptions().gravity.enabled || particlesRung(i) == rung) {
                             Vector3<double> position;
                             for (ParticleInteger dim = 0; dim < kDimensions; dim++) {
-                                position[dim] =
-                                    positionDomainCoordinate(particlesPositionValue(dim, i));
+                                position[dim] = detail::particleDomainCoordinate(
+                                    particlesPositionValue(dim, i));
                             }
                             if (!myDomain.contains(position)) {
                                 ParticleInteger const rank = findParticleDomain(position);
@@ -978,7 +1008,8 @@ static void domainsCheck() {
                 for (ParticleInteger i = begin; i < end; i++) {
                     Vector3<double> position;
                     for (int dim = 0; dim < kDimensions; dim++) {
-                        position[dim] = positionDomainCoordinate(particlesPositionValue(dim, i));
+                        position[dim] =
+                            detail::particleDomainCoordinate(particlesPositionValue(dim, i));
                     }
                     if (!myDomain.contains(position)) {
                         std::cout

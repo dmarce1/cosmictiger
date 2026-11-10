@@ -157,7 +157,11 @@ acceleration is divided by h to become physical acceleration. With
 
 The tree background coefficient is independent of mesh width. Centers must
 be subtracted in native fixed-point coordinates before conversion to floating
-point, especially across the periodic seam.
+point, especially across the periodic seam. For a mesh center that is not
+exactly representable in fixed point, add the fixed-center minus geometric-center
+residual after native subtraction. Source translation, radial summaries and
+mesh-to-root local translation retain this residual, so arbitrary mesh sides
+use the same geometric origin as the FFT and direct-pair paths.
 
 ## Cost and verification
 

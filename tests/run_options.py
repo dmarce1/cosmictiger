@@ -592,8 +592,8 @@ mapSize = 8
         assertCompiledSettings(output)
     run("gravity_negative_mesh", metadata_options + ["--gravity.meshSize=-1"], success=False)
     if gravity_compiled:
-        # The smallest power-of-two mesh with distinct periodic near cells.
-        minimum_mesh = {1: 4, 2: 8, 3: 8, 4: 16}
+        # All positive mesh sizes are accepted, including smaller near cubes.
+        minimum_mesh = {1: 1, 2: 2, 3: 3, 4: 4}
         for near_width, mesh_size in minimum_mesh.items():
             pmmm_output = run(f"pmmm_metadata_{near_width}", metadata_options + [
                 f"--gravity.meshSize={mesh_size}", f"--gravity.pmmmNearWidth={near_width}"])
@@ -612,13 +612,14 @@ mapSize = 8
         # Zero resolves to meshSize/8, never below the near-width minimum and
         # never above the mesh itself.
         for mesh_size, near_width, expected in ((64, None, 8), (8, None, 8),
-                                                (16, 4, 16), (32, 1, 4)):
+                                                (16, 4, 16), (32, 1, 4), (7, 2, 7),
+                                                (12, 2, 12), (30, 2, 10), (120, 2, 15)):
             width_options = [] if near_width is None else [f"--gravity.pmmmNearWidth={near_width}"]
             output = run(f"pmmm_coarse_default_{mesh_size}_{near_width}", metadata_options + [
                 f"--gravity.meshSize={mesh_size}"] + width_options)
             assertNumericSetting(output, "gravity.meshSize", mesh_size)
             assertNumericSetting(output, "gravity.pmmmCoarseMeshSize", expected)
-        for coarse in (8, 16, 64):
+        for coarse in (1, 4, 8, 16, 64):
             output = run(f"pmmm_coarse_cli_{coarse}", metadata_options + [
                 "--gravity.meshSize=64", f"--gravity.pmmmCoarseMeshSize={coarse}"])
             assertNumericSetting(output, "gravity.pmmmCoarseMeshSize", coarse)
@@ -640,24 +641,18 @@ mapSize = 8
         assertNumericSetting(output, "gravity.pmmmCoarseMeshSize", 16)
         rejected = run("pmmm_coarse_invalid_ini", metadata_options + [
             f"--configuration={coarse_config.resolve()}"], success=False, pmmm_mesh=None)
-        if "gravity.pmmmCoarseMeshSize must be a power of two" not in rejected:
+        if "gravity.pmmmCoarseMeshSize must be a positive divisor" not in rejected:
             raise RuntimeError("INI coarse mesh rejection lacked its option diagnostic")
-        power_of_two = "gravity.meshSize must be a power of two for PMMM"
-        coarse_range = ("gravity.pmmmCoarseMeshSize must be a power of two between the smallest "
-                        "power of two at least 2*gravity.pmmmNearWidth+1 and gravity.meshSize")
+        coarse_range = "gravity.pmmmCoarseMeshSize must be a positive divisor of gravity.meshSize"
         for label, options, diagnostic in (
-                ("mesh_7", ["--gravity.meshSize=7"], power_of_two),
-                ("mesh_12", ["--gravity.meshSize=12"], power_of_two),
-                ("mesh_6", ["--gravity.meshSize=6"], power_of_two),
-                ("mesh_overflow", ["--gravity.meshSize=2147483647"], power_of_two),
+                ("mesh_overflow", ["--gravity.meshSize=2147483647"],
+                 "gravity.meshSize cubed exceeds mesh indexing/allocation limits"),
                 ("mesh_allocation", ["--gravity.meshSize=1073741824"],
                  "gravity.meshSize cubed exceeds mesh indexing/allocation limits"),
                 ("coarse_3", ["--gravity.meshSize=64", "--gravity.pmmmCoarseMeshSize=3"],
                  coarse_range),
                 ("coarse_12", ["--gravity.meshSize=64", "--gravity.pmmmCoarseMeshSize=12"],
                  coarse_range),
-                ("coarse_below_minimum", ["--gravity.meshSize=64", "--gravity.pmmmNearWidth=2",
-                                          "--gravity.pmmmCoarseMeshSize=4"], coarse_range),
                 ("coarse_above_mesh", ["--gravity.meshSize=16", "--gravity.pmmmCoarseMeshSize=32"],
                  coarse_range),
                 ("coarse_negative", ["--gravity.meshSize=64", "--gravity.pmmmCoarseMeshSize=-1"],
@@ -682,13 +677,9 @@ mapSize = 8
             assertNumericSetting(pmmm_output, "gravity.openingAngle", math.sqrt(3) / 3)
     if gravity_compiled:
         for index, invalid in enumerate((
-                [], ["--gravity.meshSize=4"], ["--gravity.meshSize=12"],
+                [],
                 ["--gravity.meshSize=8", "--gravity.pmmmNearWidth=0"],
                 ["--gravity.meshSize=16", "--gravity.pmmmNearWidth=5"],
-                ["--gravity.meshSize=6", "--gravity.pmmmNearWidth=3"],
-                ["--gravity.meshSize=4", "--gravity.pmmmNearWidth=3"],
-                ["--gravity.meshSize=8", "--gravity.pmmmNearWidth=4"],
-                ["--gravity.meshSize=2", "--gravity.pmmmNearWidth=1"],
                 ["--gravity.meshSize=8", "--gravity.smoothingLength=8"],
                 ["--gravity.meshSize=8", "--gravity.pmmmBatchParticles=0"],
                 ["--gravity.meshSize=8", "--gravity.pmmmBatchParticles=-1"],

@@ -167,7 +167,11 @@ TEST(PmmmMeshSize, ResolvesTheDefaultCoarseMesh) {
     EXPECT_EQ(resolvedCoarseMeshSize(64, 3, 2), 3);
     // An unset or invalid full mesh has no coarse mesh.
     EXPECT_EQ(resolvedCoarseMeshSize(0, 0, 2), 0);
-    EXPECT_EQ(resolvedCoarseMeshSize(12, 0, 2), 0);
+    EXPECT_EQ(resolvedCoarseMeshSize(12, 0, 2), 12);
+    EXPECT_EQ(resolvedCoarseMeshSize(1, 0, 2), 1);
+    EXPECT_EQ(resolvedCoarseMeshSize(7, 0, 2), 7);
+    EXPECT_EQ(resolvedCoarseMeshSize(30, 0, 2), 10);
+    EXPECT_EQ(resolvedCoarseMeshSize(120, 0, 2), 15);
 }
 
 TEST(PmmmMeshSize, LocalityCountsNeedEnoughCoarseCellsPerAxis) {
@@ -219,6 +223,52 @@ TEST(PmmmMeshSize, ScalesCellVolumeWithTheActiveFraction) {
     }
 }
 
+TEST(PmmmMeshSize, ArbitrarySidesKeepStageBoundariesAligned) {
+    auto const select = pmmm::detail::hierarchicalMeshSize;
+    EXPECT_EQ(select(1, 1, 1, 1), 1);
+    EXPECT_EQ(select(11, 11, 1, 1000), 11);
+    EXPECT_EQ(select(30, 5, 1, 8), 15);
+    EXPECT_EQ(select(30, 5, 1, 27), 10);
+    for (int base : {1, 2, 3, 5, 6, 7, 11, 12, 30, 60}) {
+        for (int coarse = 1; coarse <= base; ++coarse) {
+            if (base % coarse != 0) {
+                continue;
+            }
+            for (uint64_t active = 0; active <= 64; ++active) {
+                int const side = select(base, coarse, active, 64);
+                EXPECT_EQ(base % side, 0);
+                EXPECT_EQ(side % coarse, 0);
+                EXPECT_GE(uint64_t(side) * side * side * 64, uint64_t(base) * base * base * active);
+                for (int smaller = coarse; smaller < side; smaller += coarse) {
+                    if (base % smaller == 0) {
+                        EXPECT_LT(uint64_t(smaller) * smaller * smaller * 64,
+                            uint64_t(base) * base * base * active);
+                    }
+                }
+            }
+        }
+    }
+}
+
+TEST(PmmmMeshSize, NearOffsetsVisitEachPeriodicCellOnce) {
+    for (int side = 1; side <= 12; ++side) {
+        for (int width = 1; width <= 4; ++width) {
+            std::vector<int> visits(side, 0);
+            for (int offset = pmmm::detail::nearOffsetBegin(side, width);
+                offset <= pmmm::detail::nearOffsetEnd(side, width); ++offset) {
+                ++visits[(offset + side) % side];
+            }
+            int count = 0;
+            for (int cell = 0; cell < side; ++cell) {
+                EXPECT_LE(visits[cell], 1);
+                EXPECT_EQ(visits[cell] != 0, std::min(cell, side - cell) <= width);
+                count += visits[cell];
+            }
+            EXPECT_EQ(count, std::min(side, 2 * width + 1));
+        }
+    }
+}
+
 TEST(PmmmMeshSize, ResolvesCubeBoundariesWithLargeParticleCounts) {
     constexpr uint64_t kTotal = uint64_t(1) << 63;
     constexpr uint64_t kEighth = kTotal / 8;
@@ -234,7 +284,7 @@ TEST(PmmmMeshSize, ResolvesCubeBoundariesWithLargeParticleCounts) {
 
 TEST(PmmmMeshSize, RejectsInvalidGeometryAndCounts) {
     auto const meshSize = pmmm::detail::hierarchicalMeshSize;
-    EXPECT_THROW(meshSize(12, 4, 1, 1), std::invalid_argument);
+    EXPECT_EQ(meshSize(12, 4, 1, 1), 12);
     EXPECT_THROW(meshSize(16, 3, 1, 1), std::invalid_argument);
     EXPECT_THROW(meshSize(16, 32, 1, 1), std::invalid_argument);
     EXPECT_THROW(meshSize(16, 0, 1, 1), std::invalid_argument);

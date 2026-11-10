@@ -14,9 +14,9 @@ namespace pmmm::detail {
 // the original owned source tree and keeps one order-sized local per depth.
 template <int order>
 void descendFar(TreeId id,
-    cosmictiger::gravity::cartesian::Expansion<float, order> const& expansion,
-    float curvature, FmmForceResult const& near, size_t& compact, KickReturn& result,
-    FlopCount& flops, FlopCount& singleFlops, FlopCounts& kickFlops) {
+    cosmictiger::gravity::cartesian::Expansion<float, order> const& expansion, float curvature,
+    FmmForceResult const& near, size_t& compact, KickReturn& result, FlopCount& flops,
+    FlopCount& singleFlops, FlopCounts& kickFlops) {
     namespace local = cosmictiger::gravity::tree_local;
     auto const* node = treeGetNode(id);
     if (compact == near.particleIndices.size() ||
@@ -193,12 +193,15 @@ void computeReadyCells() {
                 auto const coefficients = localExpansion(cell.key);
                 hpx::scoped_annotation farWork("gravity.pmmm.cartesianFarDescent");
                 Vector3<Position> meshCenter;
+                Vector3<double> centerCorrection;
                 for (int axis = 0; axis < kDimensions; ++axis) {
-                    meshCenter[axis] = (center[axis] + .5) * h;
+                    double const coordinate = (center[axis] + .5) * h;
+                    meshCenter[axis] = coordinate;
+                    centerCorrection[axis] = meshCenter[axis].toDouble() - coordinate;
                 }
                 // Cell-index promotion/add/product and native fixed conversion;
                 // the host Fixed64 conversion separates two safe 32-bit limbs.
-                flops += kDimensions * (kPositionBits == 64 ? 10 : 5);
+                flops += kDimensions * (kPositionBits == 64 ? 13 : 8);
                 auto const root = state.sourceCells[sink]->ready.get();
                 fmmDispatch([&](auto tag) {
                     constexpr int kOrder = decltype(tag)::value;
@@ -207,11 +210,15 @@ void computeReadyCells() {
                         local, coefficients.data(), localTrace, cache.meshSize);
                     auto const rootPosition = treeGetNode(root.id)->pos;
                     cosmictiger::gravity::cartesian::Expansion<double, kOrder> atRoot{};
+                    Vector3<double> displacement;
+                    for (int axis = 0; axis < kDimensions; ++axis) {
+                        displacement[axis] = double(kScaleFactor) *
+                            (unwrappedDoubleDistance(rootPosition[axis], meshCenter[axis]) +
+                                centerCorrection[axis]);
+                    }
                     flops += cosmictiger::gravity::tree_local::translate(atRoot, local,
-                                 cosmictiger::gravity::tree_local::displacement(
-                                     rootPosition, meshCenter),
-                                 curvature, state.request.doPotential) +
-                        9;
+                                 displacement, curvature, state.request.doPotential) +
+                        12;
                     cosmictiger::gravity::cartesian::Expansion<float, kOrder> treeLocal;
                     for (int coefficient = 0; coefficient < treeLocal.size(); ++coefficient) {
                         treeLocal[coefficient] = atRoot[coefficient];

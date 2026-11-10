@@ -69,20 +69,19 @@ resolved option output reports the runtime selections.
 
 `gravity.meshSize=n` requests `n` full-particle cells on each axis of the
 normalized unit box, independently of the initial-condition particle count.
-The default value zero is unset and is rejected for PMMM. `n` must be a power
-of two; all three sides use that same length, and no rounding is applied.
-Power-of-two sides make every cell boundary an exact fixed-point plane that
-every coarser power-of-two mesh shares, which is what lets particle domains
-avoid splitting cells (below).
+The default value zero is unset and is rejected for PMMM. `n` may be any
+positive integer within indexing and memory limits; all three sides use that
+same length, and no rounding or prime-factor restriction is applied.
 
 `gravity.pmmmCoarseMeshSize=c` sets the coarsest mesh any hierarchical stage may
-use and the granularity of particle-domain cuts. It must be a power of two no
-smaller than the smallest power of two at least `2*w+1` (4, 8, 8, or 16 for
-near widths one through four) and no larger than `gravity.meshSize`. The
-default zero resolves to `n/8`, raised to that minimum when necessary, so a
-`256^3` full mesh uses a `32^3` coarse mesh. The same keys work in the
-`[gravity]` INI section. Resolved output reports `gravity.meshSize` and the
-resolved `gravity.pmmmCoarseMeshSize`.
+use and the granularity of particle-domain cuts. An explicit value must be a
+positive divisor of `n`. The default zero chooses the smallest divisor of `n`
+at least `max(n/8, preferredMinimum)`, capped at `n`. The preferred minimum is
+the smallest power of two at least `2*w+1`. This preserves the previous
+power-of-two defaults: a `256^3` full mesh uses a `32^3` coarse mesh. A `120^3`
+mesh uses `15^3` at width two; a prime side uses the full mesh at every stage.
+The same keys work in the `[gravity]` INI section. Resolved output reports
+`gravity.meshSize` and the resolved `gravity.pmmmCoarseMeshSize`.
 
 PMMM also requires a power-of-two locality count, and the coarse mesh must
 have at least `2^ceil(log2(localities)/3)` cells per axis so every locality
@@ -91,8 +90,12 @@ receives whole coarse cells.
 `gravity.pmmmNearWidth=w` sets the ghost
 width and accepts integers from one through four, defaulting to two. The near
 region contains `(2*w+1)^3` cells (27, 125, 343, or 729, respectively),
-including the sink cell. The mesh must satisfy `n >= 2*w+1`, so periodic near
-cells are distinct.
+including the sink cell when `n >= 2*w+1`. Smaller meshes visit each periodic
+cell once, so the near region contains `min(n, 2*w+1)^3` distinct cells.
+The positive half-box offset resolves even-mesh image ties consistently in
+the Green function and both near methods. Very coarse meshes can have large
+finite-expansion truncation errors; accepting their size is not an accuracy
+guarantee.
 
 `gravity.method.near=fmm|pp` selects how those near cells are evaluated. The
 `fmm` method (the default) uses the Cartesian FMM operators and adaptive tree
@@ -234,20 +237,23 @@ The near opening angle is fixed by the near width.
 The runtime solver, near method, and degree remain fixed during an evolution.
 Changing them between runs requires a new build only if the requested capability
 or degree was not compiled.
-Plans use `FFTW_ESTIMATE`; there is no persistent disk-wisdom cache. MPI calls
+Plans use `FFTW_ESTIMATE`; there is no persistent disk-wisdom cache. The
+single-cell mesh uses serial batched identity transforms because FFTW-MPI
+cannot create its plans; buffer layout and convolution are unchanged. MPI calls
 run on native OS threads through HPX, use a communicator separate from HPX
 parcel traffic, and require the application's existing `MPI_THREAD_MULTIPLE`
 startup guarantee. FFTW planner operations share the process-wide planner
 lock with other FFTW users.
 
 PMMM uses the common recursive bisection for its particle domains, but
-every cut lies on a coarse-mesh plane. The locality count is a power of two;
-depth `d` of the bisection halves the locality range and cuts axis `d mod 3`.
+every cut lies on a coarse-mesh plane. Integer fixed-point comparisons preserve
+these half-open planes even for non-dyadic mesh boundaries. The locality count
+is a power of two; depth `d` of the bisection halves the locality range and cuts axis `d mod 3`.
 Among the coarse planes that leave each child enough whole coarse cells for the
 cuts it still owes along that axis, the cut selects the plane whose particle
 count comes closest to the balanced target, not the plane nearest the exact
 balance coordinate. Ties prefer the plane nearest the middle of the parent.
-Because every stage mesh is a power of two at least as fine as the coarse mesh,
+Because every stage side is an integer multiple of the coarse side,
 no cell of any PMMM mesh ever has particles on two localities: each cell is
 owned, with all its particles, by exactly one locality. Balance is therefore
 only as fine as the coarse cells allow; a smaller coarse mesh (larger cells)
@@ -400,15 +406,15 @@ acceleration.
 Each hierarchical stage scales the mesh volume with its active particle fraction.
 With `N0 = gravity.meshSize`, `C = gravity.pmmmCoarseMeshSize`, and global
 owned particle counts `active` and `total`, the stage side length is the
-smallest power of two `N` with
+smallest divisor `N` of `N0` that is a multiple of `C`, with
 
 ```text
 C <= N <= N0  and  N^3 * total >= N0^3 * active
 ```
 
 so the mean number of active particles per cell stays near the full-step value
-while the side halves only when the active fraction drops below one eighth,
-one sixty-fourth, and so on. The count includes the entire stage-selected
+subject to the available aligned divisors. Power-of-two meshes retain the
+previous halving thresholds of one eighth, one sixty-fourth, and so on. The count includes the entire stage-selected
 source-and-sink range, including faster rungs, and excludes ghosts. Exact
 integer volume comparisons decide cube boundaries without floating-point
 ambiguity. An empty selection uses the coarse mesh. The base configuration
@@ -416,9 +422,8 @@ remains unchanged.
 All ranks use the same stage size for cell sorting, FFTs, ghost exchange,
 and near-field geometry. Plans and Green spectra are reused by stage mesh
 size, retaining at most eight meshes and twice the base mesh's global FFT
-buffer allocation; with power-of-two sides every smaller stage mesh together
-needs less than one seventh of the base workspace, so the byte cap is not
-reached by stage meshes alone. Transient moments and FFTW's internal plan
+buffer allocation. Least-recently-used meshes are evicted if either cap is
+reached; arbitrary sizes may have more compatible stage meshes than powers of two. Transient moments and FFTW's internal plan
 storage are separate from this buffer cap. Mesh switches occur only after the
 previous solve has completed. `PmmmDiagnostics` reports `meshSize`,
 `activeParticles`, and `totalParticles` for the most recent solve. Here
@@ -658,8 +663,8 @@ checkpoint identity even when two coarse meshes give the same current
 full-particle mesh, because their hierarchical stage meshes differ. Version
 four stored the retired maximum FFT prime factor and versions one through three
 used unrestricted lengths; those checkpoints restart under the requested coarse
-mesh when their saved base mesh is a power of two, which the current option
-validation requires.
+mesh when it divides their saved base mesh. Arbitrary positive saved base
+mesh sizes are accepted under the same indexing and allocation checks.
 PMMM extension version three appends the PMMM order and resolved opening angle
 to the version-two metadata, which added the near-method selection. Historical
 version-one and version-two extensions retain their legacy shared order
@@ -685,7 +690,7 @@ tree or particle fetches during the near walk. Repeated solves with each PP/FMM
 selection check owned counts, exact position bits, velocities, rungs, and saved
 field sentinels after ghost cleanup. The suite includes valid split cell ownership,
 empty localities, periodic seams, distinct coincident sources, exact cell-center containment near
-the fixed-point upper boundary, power-of-two meshes, and CPU/CUDA agreement when
+the fixed-point upper boundary, arbitrary mesh sides, and CPU/CUDA agreement when
 CUDA is requested. Streamed-stage tests compare signed kicks against an
 independent Ewald sum over only the active sources, require unchanged inactive
 sinks and no retained full-field result arrays, and exercise single-cell and
@@ -697,8 +702,13 @@ exactly one scheduled drift per active particle, current restarts, historical
 PP-extension acceptance or rejection, and incompatible restarts. Run it with
 both near methods for full near-method coverage. Global evolution checks cover
 non-dyadic intervals, all-particle stepping, restart continuity, and coupled SPH.
-A small CPU application
-regression can be selected explicitly:
+The arbitrary-side force matrix checks `1, 2, 3, 5, 6, 7, 11, 12` against
+an independent finite-expansion reference with both near methods. Source
+translation checks cover orders 3–9 and both fixed-point widths; distributed
+domain fixtures use full side 30, coarse sides 5 and 10, and side 15 after
+reload. Evolution and checkpoint regressions use a `30^3` full mesh.
+
+A small CPU application regression can be selected explicitly:
 
 ```sh
 ./build_pmmm/cosmictiger --run.test=pmmm \
