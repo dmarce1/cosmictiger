@@ -375,7 +375,7 @@ def main():
         return 0
 
     options = [str(executable), "--hpx:threads=2", "--hpx:bind=none",
-               "--run.timeIntegrator=traditional", "--gravity.meshSize=8",
+               "--run.timeIntegrator=hierarchical", "--gravity.meshSize=8",
                "--run.darkMatterParticleCount=512", "--run.gasParticleCount=512", "--hydro.enabled=false",
                "--gravity.cuda=false", "--analysis.views=false",
                "--lightcone.enabled=false", "--analysis.power=false",

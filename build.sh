@@ -110,9 +110,6 @@ fi
 buildMode=release
 enableGravity=ON
 expansionDegree=4-6
-enableTraditional=ON
-enableHierarchical=OFF
-enableGlobal=OFF
 positionType=fixed32
 enableCuda=ON
 enableSph=ON
@@ -225,34 +222,6 @@ chooseExpansionDegree() {
     done
 }
 
-chooseIntegrators() {
-    if [[ $useDialog == true ]]; then
-        local selectedIntegrators integrator
-        if selectedIntegrators=$(dialogChoice --title 'Integrator capabilities' --notags \
-            --separate-output --checklist \
-            'Space toggles integrators. Select at least one. SPH needs traditional or global integration.' \
-            14 76 3 \
-            traditional 'Traditional nested integration' "$enableTraditional" \
-            hierarchical 'Hierarchical integration' "$enableHierarchical" \
-            global 'Global adaptive integration' "$enableGlobal"); then
-            enableTraditional=OFF
-            enableHierarchical=OFF
-            enableGlobal=OFF
-            while IFS= read -r integrator; do
-                case "$integrator" in
-                    traditional) enableTraditional=ON ;;
-                    hierarchical) enableHierarchical=ON ;;
-                    global) enableGlobal=ON ;;
-                esac
-            done <<< "$selectedIntegrators"
-        fi
-        return
-    fi
-    chooseToggle 'Compile traditional nested integration' "$enableTraditional"; enableTraditional=$promptValue
-    chooseToggle 'Compile hierarchical integration' "$enableHierarchical"; enableHierarchical=$promptValue
-    chooseToggle 'Compile global adaptive integration' "$enableGlobal"; enableGlobal=$promptValue
-}
-
 choosePositionType() {
     if [[ $useDialog == true ]]; then
         if promptValue=$(dialogChoice --title 'Position storage' \
@@ -354,7 +323,6 @@ showMainMenu() {
     printf '  8) Additional dependency prefixes: %s\n' "${dependencyPrefixes:-system default}"
     printf '  9) Gravity (PMMM, FMM near field with PP fallback): %s\n' "$enableGravity"
     printf ' 10) Potential expansion degrees: %s\n' "$expansionDegree"
-    printf ' 11) Integrators: traditional=%s hierarchical=%s global=%s\n' "$enableTraditional" "$enableHierarchical" "$enableGlobal"
     printf ' 12) Build SPH support: %s\n' "$enableSph"
     printf ' 13) Position storage: %s\n' "$positionType"
     printf ' 14) Build equilibrium cooling (requires SPH): %s\n' "$enableChemistry"
@@ -380,7 +348,6 @@ chooseMainMenu() {
             8 "Additional dependency prefixes: ${dependencyPrefixes:-system default}" \
             9 "Gravity (PMMM, FMM near field with PP fallback): $enableGravity" \
             10 "Potential expansion degrees: $expansionDegree" \
-            11 "Integrators: traditional=$enableTraditional hierarchical=$enableHierarchical global=$enableGlobal" \
             12 "Build SPH support: $enableSph" \
             13 "Position storage: $positionType" \
             14 "Build equilibrium cooling (requires SPH): $enableChemistry" \
@@ -398,12 +365,6 @@ chooseMainMenu() {
 validateFeatures() {
     if [[ $enableGravity != ON && $enableSph != ON ]]; then
         showMessage 'Enable at least one physics component.'; return 1
-    fi
-    if [[ $enableTraditional != ON && $enableHierarchical != ON && $enableGlobal != ON ]]; then
-        showMessage 'Enable at least one integrator.'; return 1
-    fi
-    if [[ $enableSph == ON && $enableTraditional != ON && $enableGlobal != ON ]]; then
-        showMessage 'SPH requires traditional or global integration.'; return 1
     fi
     if [[ $enableStars == ON && $enableChemistry != ON ]]; then
         showMessage 'Stars require equilibrium cooling. Enable chemistry (option 14) or disable stars (option 15).'; return 1
@@ -433,7 +394,6 @@ while true; do
             'Enter semicolon-separated dependency prefixes.'; dependencyPrefixes=$promptValue ;;
         9) chooseGravityFeatures ;;
         10) chooseExpansionDegree ;;
-        11) chooseIntegrators ;;
         12) chooseToggle 'Build SPH support' "$enableSph"; enableSph=$promptValue ;;
         13) choosePositionType ;;
         14) chooseToggle 'Build equilibrium cooling (requires SPH)' "$enableChemistry"; enableChemistry=$promptValue ;;
@@ -500,9 +460,9 @@ configureCommand=(cmake -S "$rootDir" -B "$buildDir" -G 'Unix Makefiles'
     "-DCOSMICTIGER_ENABLE_ROCKSTAR=$enableRockstar"
     "-DCOSMICTIGER_ENABLE_GRAVITY=$enableGravity"
     "-DCOSMICTIGER_EXPANSION_DEGREE=$expansionDegree"
-    "-DCOSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL=$enableTraditional"
-    "-DCOSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL=$enableHierarchical"
-    "-DCOSMICTIGER_ENABLE_INTEGRATOR_GLOBAL=$enableGlobal"
+    -UCOSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL
+    -UCOSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
+    -UCOSMICTIGER_ENABLE_INTEGRATOR_GLOBAL
     "-DCOSMICTIGER_POSITION_TYPE=$positionType"
     "-DCOSMICTIGER_REQUIRE_APEX=$requireApex"
     "-DBUILD_TESTING=$testSuite"
@@ -554,7 +514,6 @@ runStage() {
 }
 
 printf '\nGravity (PMMM, FMM near field with PP fallback): %s; potential degrees=%s\n' "$enableGravity" "$expansionDegree"
-printf 'Integrators: traditional=%s hierarchical=%s global=%s\n' "$enableTraditional" "$enableHierarchical" "$enableGlobal"
 printf 'SPH support: %s\n' "$enableSph"
 printf 'Equilibrium cooling: %s (requires SPH)\n' "$enableChemistry"
 printf 'Stars: %s (requires chemistry and SPH)\n' "$enableStars"

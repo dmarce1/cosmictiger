@@ -108,9 +108,9 @@ FlopCount addMoments(int order, double* moments, double mass, Vector3<double> co
     FlopCount count = 0;
     fmmDispatch(order, [&](auto selectedOrder) {
         constexpr int kDegree = decltype(selectedOrder)::value - 2;
-        cosmictiger::gravity::spherical::detail::P2M<kDegree>::template add<double>(
+        cosmictiger::gravity::spherical::detail::P2M<kDegree, double>(
             moments, mass, offset[0], offset[1], offset[2]);
-        count = cosmictiger::gravity::spherical::detail::P2M<kDegree>::kConventionalFlops_;
+        count = cosmictiger::gravity::spherical::detail::kP2MConventionalFlops<kDegree>;
     });
     return count;
 }
@@ -135,17 +135,17 @@ FlopCount green(int order, double* coefficients, Vector3<double> const& boxOffse
     fmmDispatch(order, [&](auto selectedOrder) {
         constexpr int kDegree = decltype(selectedOrder)::value - 1;
         double trace = 0.0;
-        cosmictiger::gravity::spherical::EwaldGreen<kDegree>::template evaluate<double>(
+        cosmictiger::gravity::spherical::evaluateEwaldGreen<kDegree, double>(
             coefficients, trace, boxOffset[0], boxOffset[1], boxOffset[2]);
-        count = cosmictiger::gravity::spherical::EwaldGreen<kDegree>::kConventionalFlops_;
+        count = cosmictiger::gravity::spherical::kEwaldGreenConventionalFlops<kDegree>;
         if (!near) {
             std::array<double, (kDegree + 1) * (kDegree + 1)> primary;
-            cosmictiger::gravity::spherical::detail::Green<kDegree>::template evaluate<double>(
+            cosmictiger::gravity::spherical::detail::evaluateGreen<kDegree, double>(
                 primary, boxOffset[0], boxOffset[1], boxOffset[2]);
             for (size_t slot = 0; slot < primary.size(); ++slot) {
                 coefficients[slot] += primary[slot];
             }
-            count += cosmictiger::gravity::spherical::detail::Green<kDegree>::kConventionalFlops_ +
+            count += cosmictiger::gravity::spherical::detail::kGreenConventionalFlops<kDegree> +
                 primary.size();
         }
         double scale = 1.0;
@@ -172,9 +172,9 @@ FlopCount evaluate(int order, std::array<double, 4>& field, double const* coeffi
     FlopCount count = 0;
     fmmDispatch(order, [&](auto selectedOrder) {
         constexpr int kDegree = decltype(selectedOrder)::value - 1;
-        cosmictiger::gravity::spherical::EwaldL2P<kDegree>::template add<double>(
+        cosmictiger::gravity::spherical::ewaldL2P<kDegree, double>(
             field, coefficients, localTrace, cellOffset[0], cellOffset[1], cellOffset[2]);
-        count = cosmictiger::gravity::spherical::EwaldL2P<kDegree>::kConventionalFlops_;
+        count = cosmictiger::gravity::spherical::kEwaldL2PConventionalFlops<kDegree>;
     });
     for (int component = 1; component < 4; ++component) {
         field[component] /= cellWidth;

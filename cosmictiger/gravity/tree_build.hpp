@@ -28,6 +28,9 @@ struct TreeBuildRequest {
 struct TreeBuildPolicy {
     FmmParticleStore sourceStore = FmmParticleStore::Owned;
     bool boundedGeometry = false;
+    bool frozenGeometry = false;
+    int meshSize = 0;
+    uint64_t meshCellKey = 0;
     bool extraSubdivision = false;
     FlopCounts subdivisionFlops{};
     Pair<int, int> representedProcessRange;

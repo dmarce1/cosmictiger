@@ -58,18 +58,15 @@ def regular(degree):
 def emitDegree(degree):
     count = (degree + 1)**2
     polynomial, polynomial_cost, polynomial_fmas = regular(degree)
-    body = [f"template <> class EwaldGreen<{degree}> {{", "public:",
-            f"static constexpr int kDegree_ = {degree};", f"static constexpr int kCount_ = {count};",
-            f"static constexpr int kLatticeRadius_ = {RADIUS};",
-            "/// Assign regular solid harmonics using the supplied coordinates and squared radius.",
-            "template <typename Real>",
-            "CUDA_EXPORT static void regular(Real* output, Real x, Real y, Real z, Real radiusSquared) {"]
+    body = ["/// Assign regular solid harmonics using the supplied coordinates and squared radius.",
+            "template <int degree, typename Real>", f"requires (degree == {degree})",
+            "CUDA_EXPORT void ewaldRegular(Real* output, Real x, Real y, Real z, Real radiusSquared) {"]
     body += polynomial + ["}", "/// Assign periodic Ewald correction coefficients and trace using compensated lattice sums.",
-            "template <typename Real, typename Output>",
-            "CUDA_EXPORT static void evaluateWorking(Output& output, Real& greenTrace, Real x, Real y, Real z) {",
+            "template <int degree, typename Real, typename Output>", f"requires (degree == {degree})",
+            "CUDA_EXPORT void evaluateEwaldWorking(Output& output, Real& greenTrace, Real x, Real y, Real z) {",
             f"Real harmonics[{count}];", f"Real compensation[{count}];", f"Real imagePair[{count}];",
             "Real const radiusSquared = math::fma(x, x, math::fma(y, y, z * z));",
-            "regular(harmonics, x, y, z, radiusSquared);",
+            "ewaldRegular<degree>(harmonics, x, y, z, radiusSquared);",
             f"Real const argument = {scalar(4)} * radiusSquared;",
             "Real const exponential = detail::ewaldExp(-argument);"]
     central_cost = 4 + polynomial_cost
@@ -101,7 +98,7 @@ def emitDegree(degree):
              "Real const imageRadius = math::sqrt(imageSquared);",
              "Real const iR = math::broadcast<Real>(1) / imageRadius;",
              "Real const inverseSquared = iR * iR;",
-             "regular(harmonics, imageX, imageY, imageZ, imageSquared);",
+             "ewaldRegular<degree>(harmonics, imageX, imageY, imageZ, imageSquared);",
              f"Real const imageArgument = {scalar(4)} * imageSquared;",
              "Real const imageExp = detail::ewaldExp(-imageArgument);",
              f"Real screening = detail::ewaldErfc({scalar(2)} * imageRadius);",
@@ -127,7 +124,7 @@ def emitDegree(degree):
         body += [f"detail::ewaldAccumulate(output[{slot}], compensation[{slot}], imagePair[{slot}]);"]
     body += ["Real const waveX = math::broadcast<Real>(ix);", "Real const waveY = math::broadcast<Real>(iy);", "Real const waveZ = math::broadcast<Real>(iz);",
              "Real const waveSquared = math::broadcast<Real>(latticeSquared);",
-             "regular(harmonics, waveX, waveY, waveZ, waveSquared);",
+             "ewaldRegular<degree>(harmonics, waveX, waveY, waveZ, waveSquared);",
              f"Real const phase = {scalar(2*pi)} * math::fma(waveX, x, math::fma(waveY, y, waveZ * z));",
              "Real const cosine = detail::ewaldCos(phase);", "Real const sine = detail::ewaldSin(phase);",
              f"Real const wavePotential = {scalar(-2/pi)} * detail::ewaldExp({scalar(-pi*pi/4)} * waveSquared) / waveSquared;"]
@@ -147,13 +144,13 @@ def emitDegree(degree):
             body += [f"detail::ewaldAccumulate(output[{slot}], compensation[{slot}], {operand} * harmonics[{slot}]);"]
             wave_cost += 1 + (f != 1) + 4
     body += ["}", "}", "}", "}", "/// Evaluate the periodic correction with promoted working precision, then convert the result.",
-             "template <typename Real, typename Output>",
-             "CUDA_EXPORT static void evaluate(Output& output, Real& greenTrace, Real x, Real y, Real z) {",
+             "template <int degree, typename Real, typename Output>", f"requires (degree == {degree})",
+             "CUDA_EXPORT void evaluateEwaldGreen(Output& output, Real& greenTrace, Real x, Real y, Real z) {",
              "using Working = typename detail::EwaldWorkingType<Real>::Type;",
              f"Working temporary[{count}];", "Working trace;",
-             "evaluateWorking<Working>(temporary, trace, detail::ewaldConvert<Working>(x), detail::ewaldConvert<Working>(y), detail::ewaldConvert<Working>(z));",
+             "evaluateEwaldWorking<degree, Working>(temporary, trace, detail::ewaldConvert<Working>(x), detail::ewaldConvert<Working>(y), detail::ewaldConvert<Working>(z));",
              f"for (int i = 0; i < {count}; ++i) {{ output[i] = detail::ewaldConvert<Real>(temporary[i]); }}",
-             "greenTrace = detail::ewaldConvert<Real>(trace);", "}", "};"]
+             "greenTrace = detail::ewaldConvert<Real>(trace);", "}"]
     pairs = sum(x*x+y*y+z*z <= RADIUS*RADIUS and (x>0 or x==0 and (y>0 or y==0 and z>0)) for x in range(-RADIUS,RADIUS+1) for y in range(-RADIUS,RADIUS+1) for z in range(-RADIUS,RADIUS+1))
     central_cost += 1
     # Preserve the historical arithmetic weights for kernel selection/reporting.
@@ -169,8 +166,8 @@ def emitDegree(degree):
               "reciprocal_pair_conventional_flops":wave_conventional,
               "green_conventional_flops":central_conventional+pairs*(2*real_conventional+count*5+wave_conventional),
               "special_function_calls":{"exp":1+3*pairs,"erfc":2*pairs,"sin":pairs,"cos":pairs},"sqrt_calls":2*pairs}
-    body.insert(2, f"static constexpr int kFlops_ = {report['green_weighted_flops']};")
-    body.insert(3, f"static constexpr int kConventionalFlops_ = {report['green_conventional_flops']};")
+    body.insert(0, f"template <> inline constexpr int kEwaldGreenFlops<{degree}> = {report['green_weighted_flops']};")
+    body.insert(1, f"template <> inline constexpr int kEwaldGreenConventionalFlops<{degree}> = {report['green_conventional_flops']};")
     return body, report
 
 
@@ -199,7 +196,8 @@ def generate(minLocalDegree=2,maxLocalDegree=8):
     lines += ["/// Add a lattice contribution with Kahan compensation, updating sum and correction.",
               "template <typename Real>", "CUDA_EXPORT inline void ewaldAccumulate(Real& sum, Real& correction, Real value) {",
               "Real const adjusted = value - correction;", "Real const next = sum + adjusted;", "correction = (next - sum) - adjusted;", "sum = next;", "}",
-              "}", "template <int degree> class EwaldGreen;", "}"]
+              "}", "template <int degree> inline constexpr int kEwaldGreenFlops = 0;",
+              "template <int degree> inline constexpr int kEwaldGreenConventionalFlops = 0;", "}"]
     outputs = {'spherical/ewald_common.hpp': '\n'.join(lines) + '\n'}
     green = ['#pragma once', '#include <cosmictiger/gravity/kernels/spherical/ewald_common.hpp>',
              '', 'namespace cosmictiger::gravity::spherical {']
@@ -215,17 +213,17 @@ def generate(minLocalDegree=2,maxLocalDegree=8):
     l2p = ['#pragma once', '#include <cosmictiger/gravity/kernels/spherical/l2p.hpp>',
            '#include <cosmictiger/math/simd_math.hpp>',
            '', 'namespace cosmictiger::gravity::spherical {',
-           "template <int degree> class EwaldL2P {", "public:", "static constexpr int kFlops_ = detail::L2P<degree>::kFlops_ + 8;",
-              "static constexpr int kConventionalFlops_ = detail::L2P<degree>::kConventionalFlops_ + 14;",
+           "template <int degree> inline constexpr int kEwaldL2PFlops = detail::kL2PFlops<degree> + 8;",
+              "template <int degree> inline constexpr int kEwaldL2PConventionalFlops = detail::kL2PConventionalFlops<degree> + 14;",
               "/// Accumulate the local field including the isotropic trace term of the periodic correction.",
-              "template <typename Real, typename Field, typename Source>",
-              "CUDA_EXPORT static void add(Field& field, Source const& source, Real sourceTrace, Real x, Real y, Real z) {",
-              "detail::L2P<degree>::template add<Real>(field, source, x, y, z);",
+              "template <int degree, typename Real, typename Field, typename Source>",
+              "CUDA_EXPORT void ewaldL2P(Field& field, Source const& source, Real sourceTrace, Real x, Real y, Real z) {",
+              "detail::L2P<degree, Real>(field, source, x, y, z);",
               "Real const radiusSquared = math::fma(x, x, math::fma(y, y, z * z));",
               "field[0] = math::fma(-math::broadcast<Real>(0.5) * sourceTrace, radiusSquared, field[0]);",
               "field[1] = math::fma(sourceTrace, x, field[1]);",
               "field[2] = math::fma(sourceTrace, y, field[2]);",
-              "field[3] = math::fma(sourceTrace, z, field[3]);", "}", "};",
+              "field[3] = math::fma(sourceTrace, z, field[3]);", "}",
            '} // namespace cosmictiger::gravity::spherical']
     outputs['spherical/ewald_l2p.hpp'] = '\n'.join(l2p) + '\n'
     facade = ['#pragma once', '',

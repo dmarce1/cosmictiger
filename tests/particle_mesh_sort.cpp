@@ -260,14 +260,9 @@ void particleMeshSortTest() {
     auto options = originalOptions;
     // Exercise storage permutation only; mesh gravity coupled to SPH is deferred.
     options.gravity.enabled = false;
-    if constexpr (integration::kBuildHasTraditional) {
-        options.run.timeIntegrator = "traditional";
-        options.run.hierarchicalGravity = false;
-    } else if constexpr (integration::kBuildHasGlobal) {
-        options.run.timeIntegrator = "global";
-        options.run.hierarchicalGravity = false;
-    }
-    options.hydro.enabled = COSMICTIGER_WITH_SPH && !usesHierarchicalIntegration(options.run);
+    options.run.timeIntegrator = "hierarchical";
+    options.run.hierarchicalGravity = false;
+    options.hydro.enabled = COSMICTIGER_WITH_SPH;
     options.analysis.saveForce = true;
     options.analysis.tracers = true;
     options.analysis.groups = COSMICTIGER_ENABLE_ROCKSTAR != 0;

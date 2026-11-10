@@ -41,11 +41,8 @@ def application_options(executable, *, near=None, integrator=None, hydro=False):
                 return choice
         raise RuntimeError(f"no compiled {label} supports this regression")
     gravity = "pmmm" in compiled["far"]
-    # The hierarchical ladder needs gravity; it is also the only integrator that couples
-    # SPH to PMMM self-gravity. Gravity-free hydro runs prefer traditional or global.
-    eligible = [value for value in compiled["integrator"]
-                if value != "hierarchical" or gravity]
-    integrator = select(integrator, eligible, ("traditional", "global", "hierarchical"), "integrator")
+    # Midpoint SPH also runs without self-gravity under the sole scheme.
+    integrator = select(integrator, compiled["integrator"], ("hierarchical",), "integrator")
     result = {"run.timeIntegrator": integrator}
     if gravity:
         result["gravity.method.near"] = select(near, compiled["near"], ("fmm", "pp"), "near solver")

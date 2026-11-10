@@ -87,7 +87,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("executable", type=Path)
     parser.add_argument("workdir", type=Path)
-    parser.add_argument("--time-integrator", action="append", choices=("global", "traditional"))
+    parser.add_argument("--time-integrator", action="append", choices=("hierarchical",))
     parser.add_argument("--threads", type=int, choices=(1, 2), default=2)
     parser.add_argument("--cuda", action="store_true", help="use CUDA for gravity and SPH")
     parser.add_argument("--gravity-cuda", action="store_true")
@@ -102,13 +102,13 @@ def main():
     root = args.workdir.resolve()
     root.mkdir(parents=True, exist_ok=True)
     available = compiled_algorithms(str(executable))
-    integrators = args.time_integrator or [name for name in ("global", "traditional")
+    integrators = args.time_integrator or [name for name in ("hierarchical",)
                                           if name in available["integrator"]]
-    require(integrators, "global or traditional integration is required")
+    require(integrators, "hierarchical integration is required")
     common = {"hpx:threads": args.threads, "hpx:bind": "none", **cpu_backend_options(),
               "run.darkMatterParticleCount": 512, "run.gasParticleCount": 512, "scenario.cosmology.useGlass": "false",
               "initial.closePack": "false", "hydro.enabled": "true",
-              # SPH has no self-gravity coupling in the PMMM solver.
+              # Exercise gravity-free midpoint SPH.
               "gravity.enabled": "false", "chemistry.enabled": "false",
               "starFormation.enabled": "false", "analysis.groups": "false",
               "analysis.tracers": "false", "analysis.views": "false",

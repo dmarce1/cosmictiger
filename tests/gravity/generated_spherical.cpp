@@ -224,7 +224,7 @@ void testLocalEvaluation(spherical::Expansion<Real, degree + 1> const& local, Re
     context = "degree " + std::to_string(degree) + " local point evaluation";
     std::array<Real, 4> field;
     field.fill(math::broadcast<Real>(0.125));
-    spherical::detail::L2P<degree>::template add<Real>(field, local, x, y, z);
+    spherical::detail::L2P<degree, Real>(field, local, x, y, z);
     for (int laneIndex = 0; laneIndex < laneCount<Real>(); ++laneIndex) {
         compareField(field, translateLocal(localOracle[laneIndex], shifts[laneIndex], degree, 1),
             laneIndex, 0.125);
@@ -274,7 +274,7 @@ void testOrder() {
                 }
             }
         }
-        spherical::detail::P2M<degree - 1>::template add<Real>(source, mass, x, y, z);
+        spherical::detail::P2M<degree - 1, Real>(source, mass, x, y, z);
         context = "P2M degree " + std::to_string(degree);
         for (int laneIndex = 0; laneIndex < laneCount<Real>(); ++laneIndex) {
             compare(source, sourceOracle[laneIndex], laneIndex, 0, true);
@@ -284,7 +284,7 @@ void testOrder() {
             setLane(z, laneIndex, shifts[laneIndex][2] + 1.75);
         }
         spherical::Green<Real, degree + 1> green;
-        spherical::detail::Green<degree>::template evaluate<Real>(green, x, y, z);
+        spherical::detail::evaluateGreen<degree, Real>(green, x, y, z);
         context = "Green degree " + std::to_string(degree);
         for (int laneIndex = 0; laneIndex < laneCount<Real>(); ++laneIndex) {
             Point point = shifts[laneIndex];

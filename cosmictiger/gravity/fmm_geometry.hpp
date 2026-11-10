@@ -11,15 +11,25 @@
 struct FmmGeometry {
     int meshSize = 0;
     Array<int, kDimensions> sinkCell{};
+    bool frozenMembership = false;
+    uint64_t sourceCellKey = 0;
 
     /// Archive this record in the field order required by distributed transport.
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
-        archive & meshSize & sinkCell;
+        archive & meshSize & sinkCell & frozenMembership & sourceCellKey;
     }
 };
 
 namespace detail {
+
+/// Decode one coordinate of a cell identity without consulting its moving center.
+CUDA_EXPORT inline int fmmCellCoordinate(uint64_t key, int dim, int meshSize) {
+    for (int axis = kDimensions - 1; axis > dim; --axis) {
+        key /= meshSize;
+    }
+    return int(key % meshSize);
+}
 
 /// Accumulate precision-separated geometry work when counting and an output record are
 /// enabled.
@@ -33,11 +43,23 @@ CUDA_EXPORT inline void addFmmGeometryFlops(
     }
 }
 
+/// Unfold a periodic coordinate about the cell that owned it when the interval opened.
+CUDA_EXPORT inline int fmmCellWinding(
+    Position point, int cell, int meshSize, FlopCounts* counts = nullptr) {
+    addFmmGeometryFlops(counts, 0, 5);
+    double const offset = point.toDouble() - (double(cell) + .5) / meshSize;
+    return -int(nearbyint(offset));
+}
+
 /// Choose the source's periodic image relative to the sink cell, retaining the positive
 /// half-box tie convention.
-CUDA_EXPORT inline int fmmSourceImage(Position source, int dim, FmmGeometry const& geometry) {
+CUDA_EXPORT inline int fmmSourceImage(
+    Position source, int dim, FmmGeometry const& geometry, uint64_t sourceKey = ~uint64_t(0)) {
+    sourceKey = sourceKey == ~uint64_t(0) ? geometry.sourceCellKey : sourceKey;
     int sourceCell;
-    if constexpr (kPositionBits == 64) {
+    if (geometry.frozenMembership) {
+        sourceCell = fmmCellCoordinate(sourceKey, dim, geometry.meshSize);
+    } else if constexpr (kPositionBits == 64) {
         sourceCell = int(fixedMultiplyHigh(source.raw(), uint64_t(geometry.meshSize)));
     } else {
         sourceCell = int((uint64_t(source.raw()) * uint64_t(geometry.meshSize)) >> 32);
@@ -63,6 +85,14 @@ CUDA_EXPORT inline double fmmShiftedDifference(
     }
     addFmmGeometryFlops(counts, 0, 2);
     return unwrappedDoubleDistance(sink, source) - image;
+}
+
+/// Retain native fixed-point subtraction while unfolding both points in one frozen cell.
+CUDA_EXPORT inline double fmmCellDifference(
+    Position target, Position source, int cell, int meshSize, FlopCounts* counts = nullptr) {
+    int const image = fmmCellWinding(source, cell, meshSize, counts) -
+        fmmCellWinding(target, cell, meshSize, counts);
+    return fmmShiftedDifference(target, source, image, counts);
 }
 
 /// Subtract a particle from a possibly unwrapped fixed-range boundary with the selected
@@ -119,27 +149,42 @@ CUDA_EXPORT inline void countPeriodicBoxDistance(Fixed32Range const& box, FlopCo
 /// Return sink-minus-source displacement using the mesh-selected image, or ordinary
 /// minimum-image wrapping without a mesh.
 CUDA_EXPORT inline float fmmPositionDifference(Position sink, Position source, int dim,
-    FmmGeometry const& geometry, FlopCounts* counts = nullptr) {
+    FmmGeometry const& geometry, FlopCounts* counts = nullptr, uint64_t sourceKey = ~uint64_t(0)) {
     if (geometry.meshSize == 0) {
         detail::addFmmGeometryFlops(counts, 1, 0);
         return distance(sink, source);
     }
     detail::addFmmGeometryFlops(counts, 0, 1);    // Narrowing to the force precision.
-    return float(detail::fmmShiftedDifference(
-        sink, source, detail::fmmSourceImage(source, dim, geometry), counts));
+    sourceKey = sourceKey == ~uint64_t(0) ? geometry.sourceCellKey : sourceKey;
+    int image = detail::fmmSourceImage(source, dim, geometry, sourceKey);
+    if (geometry.frozenMembership) {
+        image +=
+            detail::fmmCellWinding(source,
+                detail::fmmCellCoordinate(sourceKey, dim, geometry.meshSize), geometry.meshSize) -
+            detail::fmmCellWinding(sink, geometry.sinkCell[dim], geometry.meshSize);
+        detail::addFmmGeometryFlops(counts, 0, 10);
+    }
+    return float(detail::fmmShiftedDifference(sink, source, image, counts));
 }
 
 /// Measure a source's distance to the sink box using the same image convention as the FMM
 /// interaction.
 CUDA_EXPORT inline float fmmSinkBoxDistanceSquared(Fixed32Range const& box,
-    Vector3<Position> const& source, FmmGeometry const& geometry, FlopCounts* counts = nullptr) {
+    Vector3<Position> const& source, FmmGeometry const& geometry, FlopCounts* counts = nullptr,
+    uint64_t sourceKey = ~uint64_t(0)) {
     if (geometry.meshSize == 0) {
         detail::countPeriodicBoxDistance(box, counts);
         return boxDistanceSquared(box, source);
     }
+    sourceKey = sourceKey == ~uint64_t(0) ? geometry.sourceCellKey : sourceKey;
     Array<int, kDimensions> image;
     for (int dim = 0; dim < kDimensions; ++dim) {
-        image[dim] = detail::fmmSourceImage(source[dim], dim, geometry);
+        image[dim] = detail::fmmSourceImage(source[dim], dim, geometry, sourceKey);
+        if (geometry.frozenMembership) {
+            image[dim] += detail::fmmCellWinding(source[dim],
+                detail::fmmCellCoordinate(sourceKey, dim, geometry.meshSize), geometry.meshSize);
+            detail::addFmmGeometryFlops(counts, 0, 5);
+        }
     }
     return detail::fmmBoxDistanceSquared(box, source, image, counts);
 }
@@ -148,14 +193,20 @@ CUDA_EXPORT inline float fmmSinkBoxDistanceSquared(Fixed32Range const& box,
 /// center.
 CUDA_EXPORT inline float fmmSourceBoxDistanceSquared(Fixed32Range const& box,
     Vector3<Position> const& sink, Vector3<Position> const& source, FmmGeometry const& geometry,
-    FlopCounts* counts = nullptr) {
+    FlopCounts* counts = nullptr, uint64_t sourceKey = ~uint64_t(0)) {
     if (geometry.meshSize == 0) {
         detail::countPeriodicBoxDistance(box, counts);
         return boxDistanceSquared(box, sink);
     }
+    sourceKey = sourceKey == ~uint64_t(0) ? geometry.sourceCellKey : sourceKey;
     Array<int, kDimensions> image;
     for (int dim = 0; dim < kDimensions; ++dim) {
-        image[dim] = -detail::fmmSourceImage(source[dim], dim, geometry);
+        image[dim] = -detail::fmmSourceImage(source[dim], dim, geometry, sourceKey);
+        if (geometry.frozenMembership) {
+            image[dim] +=
+                detail::fmmCellWinding(sink[dim], geometry.sinkCell[dim], geometry.meshSize);
+            detail::addFmmGeometryFlops(counts, 0, 5);
+        }
     }
     return detail::fmmBoxDistanceSquared(box, sink, image, counts);
 }
@@ -189,7 +240,8 @@ inline SimdFloat fmmPeriodicBoxDistanceSquared(
 /// Return sink-minus-source displacement using the mesh-selected image, or ordinary
 /// minimum-image wrapping without a mesh.
 inline SimdFloat fmmPositionDifference(SimdPosition const& sink, SimdPosition const& source,
-    int dim, FmmGeometry const& geometry, FlopCounts* counts = nullptr) {
+    int dim, FmmGeometry const& geometry, FlopCounts* counts = nullptr,
+    Array<uint64_t, kSimdFloatSize> const* sourceKeys = nullptr) {
     if (geometry.meshSize == 0) {
         detail::addFmmGeometryFlops(counts, kSimdFloatSize, 0);
         return simdCast<SimdFloat>(simdPositionDifference(sink, source)) *
@@ -199,15 +251,16 @@ inline SimdFloat fmmPositionDifference(SimdPosition const& sink, SimdPosition co
         Position a, b;
         a.setInteger(static_cast<PositionInteger>(sink[lane]));
         b.setInteger(static_cast<PositionInteger>(source[lane]));
-        return fmmPositionDifference(a, b, dim, geometry, counts);
+        return fmmPositionDifference(
+            a, b, dim, geometry, counts, sourceKeys == nullptr ? 0 : (*sourceKeys)[lane]);
     });
 }
 
 /// Measure a source's distance to the sink box using the same image convention as the FMM
 /// interaction.
 inline SimdFloat fmmSinkBoxDistanceSquared(Range<SimdDouble8> const& box,
-    Vector3<SimdPosition> const& source, FmmGeometry const& geometry,
-    FlopCounts* counts = nullptr) {
+    Vector3<SimdPosition> const& source, FmmGeometry const& geometry, FlopCounts* counts = nullptr,
+    Array<uint64_t, kSimdFloatSize> const* sourceKeys = nullptr) {
     if (geometry.meshSize == 0) {
         return fmmPeriodicBoxDistanceSquared(box, source, counts);
     }
@@ -220,7 +273,8 @@ inline SimdFloat fmmSinkBoxDistanceSquared(Range<SimdDouble8> const& box,
             point[dim].setInteger(static_cast<PositionInteger>(source[dim][lane]));
         }
         detail::addFmmGeometryFlops(counts, 0, 2 * kDimensions);
-        return fmmSinkBoxDistanceSquared(scalarBox, point, geometry, counts);
+        return fmmSinkBoxDistanceSquared(
+            scalarBox, point, geometry, counts, sourceKeys == nullptr ? 0 : (*sourceKeys)[lane]);
     });
 }
 
@@ -228,7 +282,8 @@ inline SimdFloat fmmSinkBoxDistanceSquared(Range<SimdDouble8> const& box,
 /// center.
 inline SimdFloat fmmSourceBoxDistanceSquared(Range<SimdDouble8> const& box,
     Vector3<SimdPosition> const& sink, Vector3<SimdPosition> const& source,
-    FmmGeometry const& geometry, FlopCounts* counts = nullptr) {
+    FmmGeometry const& geometry, FlopCounts* counts = nullptr,
+    Array<uint64_t, kSimdFloatSize> const* sourceKeys = nullptr) {
     if (geometry.meshSize == 0) {
         return fmmPeriodicBoxDistanceSquared(box, sink, counts);
     }
@@ -242,7 +297,8 @@ inline SimdFloat fmmSourceBoxDistanceSquared(Range<SimdDouble8> const& box,
             b[dim].setInteger(static_cast<PositionInteger>(source[dim][lane]));
         }
         detail::addFmmGeometryFlops(counts, 0, 2 * kDimensions);
-        return fmmSourceBoxDistanceSquared(scalarBox, a, b, geometry, counts);
+        return fmmSourceBoxDistanceSquared(
+            scalarBox, a, b, geometry, counts, sourceKeys == nullptr ? 0 : (*sourceKeys)[lane]);
     });
 }
 #endif

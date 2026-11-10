@@ -31,14 +31,14 @@ tracefree; the far-field mesh uses the spherical kernels.
 The C++ namespaces are `cosmictiger::gravity::cartesian` and
 `cosmictiger::gravity::spherical`. Each has distinct `Multipole`, `Expansion`,
 and `Green` types. Cartesian provides the destination-first tree operators;
-the generated spherical classes retained for PMMM are `P2M`, `Green`, and `L2P`,
-plus `EwaldGreen` and `EwaldL2P`. Field acceleration is minus the potential
+the generated spherical free functions used by PMMM are `P2M`, `evaluateGreen`, and `L2P`,
+plus `evaluateEwaldGreen` and `ewaldL2P`. Field acceleration is minus the potential
 gradient. There are no implicit conversions between representations. Cartesian
 callers include `cartesian_tracefree_operators.hpp` and qualify
 `cartesian` (or use ADL with its types).
 
 `Multipole<Real, order>` has source degree `order - 2`; `Expansion` and `Green`
-have degree `order - 1`. The generated implementation classes use degrees.
+have degree `order - 1`. The generated implementation functions take degrees.
 Types use PascalCase, functions and variables camelCase, and namespaces and
 filenames snake_case, with the standard FMM operator abbreviations retained.
 
@@ -166,3 +166,6 @@ accumulation and geometry; FMA costs 1 and sqrt costs 7.
 | 7 | 274 (axial) |
 | 8 | 369 (axial) |
 | 9 | 482 (axial) |
+
+The spherical P2M and Green functions template only the scalar and output types;
+L2P additionally deduces its source type from the input argument.

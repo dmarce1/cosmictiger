@@ -138,7 +138,7 @@ def main():
     root = args.workdir.resolve()
     root.mkdir(parents=True, exist_ok=True)
     available = compiled_algorithms(str(executable))
-    integrators = [name for name in ("traditional", "global", "hierarchical")
+    integrators = [name for name in ("hierarchical",)
                    if name in available["integrator"]]
     require(integrators, "an SPH-capable integrator is required")
     common = {"hpx:threads": 1, "hpx:bind": "none", **cpu_backend_options(),
@@ -181,8 +181,8 @@ def main():
 
     evidence = {}
     for integrator in integrators:
-        for name, options in (gravity_scenarios if integrator == "hierarchical" else
-                              scenarios).items():
+        cases = dict(scenarios, **gravity_scenarios) if "pmmm" in available["far"] else scenarios
+        for name, options in cases.items():
             iteration = options["run.maxIterations"]
             label = f"{integrator}_{name}"
             directory = prepareCase(root, f"{label}_1")
@@ -190,7 +190,7 @@ def main():
             require("SPH midpoint:" in output, f"{label}_1: no midpoint hydro event")
             require(GHOSTS.search(output) is None, f"{label}_1: one locality used ghosts")
             reference = states(directory, iteration, 1)
-            gravity = integrator == "hierarchical"
+            gravity = options.get("gravity.enabled") == "true"
             for ranks in gravity_ranks if gravity else args.ranks or [2, 3, 4]:
                 label = f"{integrator}_{name}_{ranks}"
                 directory = prepareCase(root, label)

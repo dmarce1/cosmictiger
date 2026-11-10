@@ -61,7 +61,7 @@ namespace detail {
         std::array<Real, moments.size()> countedMoments{};
         FlopCount const momentCount = pmmm::addMoments(order, moments.data(), 0.7, point);
         Real::reset();
-        spherical::detail::P2M<order - 2>::template add<Real>(
+        spherical::detail::P2M<order - 2, Real>(
             countedMoments, Real(0.7), Real(point[0]), Real(point[1]), Real(point[2]));
         EXPECT_EQ(momentCount, Real::count());
 
@@ -79,12 +79,12 @@ namespace detail {
                 std::array<Real, order * order> countedCoefficients{};
                 Real trace{};
                 Real::reset();
-                spherical::EwaldGreen<kDegree>::template evaluate<Real>(
+                spherical::evaluateEwaldGreen<kDegree, Real>(
                     countedCoefficients, trace, Real(sample[0]), Real(sample[1]), Real(sample[2]));
-                EXPECT_EQ(spherical::EwaldGreen<kDegree>::kConventionalFlops_, Real::count());
+                EXPECT_EQ(spherical::kEwaldGreenConventionalFlops<kDegree>, Real::count());
                 if (!near) {
                     std::array<Real, order * order> primary{};
-                    spherical::detail::Green<kDegree>::template evaluate<Real>(
+                    spherical::detail::evaluateGreen<kDegree, Real>(
                         primary, Real(sample[0]), Real(sample[1]), Real(sample[2]));
                     for (size_t slot = 0; slot < primary.size(); ++slot) {
                         countedCoefficients[slot] += primary[slot];
@@ -112,9 +112,9 @@ namespace detail {
             pmmm::evaluate(order, field, local.data(), 0.2, point, kCellWidth);
         std::array<Real, 4> countedField{};
         Real::reset();
-        spherical::EwaldL2P<kDegree>::template add<Real>(
+        spherical::ewaldL2P<kDegree, Real>(
             countedField, countedLocal, Real(0.2), Real(point[0]), Real(point[1]), Real(point[2]));
-        EXPECT_EQ(spherical::EwaldL2P<kDegree>::kConventionalFlops_, Real::count());
+        EXPECT_EQ(spherical::kEwaldL2PConventionalFlops<kDegree>, Real::count());
         for (int component = 1; component < 4; ++component) {
             countedField[component] = countedField[component] / Real(kCellWidth);
         }

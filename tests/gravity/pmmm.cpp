@@ -529,6 +529,16 @@ Vector<PmmmSample> readPmmmFixture() {
     return samples;
 }
 
+/// Move particles outside their frozen cells, including both directions through the seam.
+void moveFrozenPmmmFixture() {
+    for (ParticleInteger i = 0; i < particlesOwnedSize(); ++i) {
+        int const id = int(particlesVel(kXi, i)) - 1;
+        double const shift = id / 64 == 1 ? .09 : -.09;
+        particlesPos(kXi, i) = particlesPos(kXi, i).toDouble() + shift;
+        particlesPos(kYi, i) = particlesPos(kYi, i).toDouble() + .015;
+    }
+}
+
 Vector<PmmmSample> readPmmmKickFixture() {
     Vector<PmmmSample> samples(particlesSize());
     for (ParticleInteger i = 0; i < particlesSize(); ++i) {
@@ -1071,15 +1081,15 @@ std::array<double, 4> directPmmmExpansionReferenceOrder(
         }
         bool const near = cellDistance <= options.gravity.pmmmNearWidth;
         std::array<double, (kSourceDegree + 1) * (kSourceDegree + 1)> moments{};
-        spherical::detail::P2M<kSourceDegree>::template add<double>(
+        spherical::detail::P2M<kSourceDegree, double>(
             moments, samples[source].mass, sourceOffset[0], sourceOffset[1], sourceOffset[2]);
         std::array<double, (kLocalDegree + 1) * (kLocalDegree + 1)> green{};
         double greenTrace = 0.0;
-        spherical::EwaldGreen<kLocalDegree>::template evaluate<double>(
+        spherical::evaluateEwaldGreen<kLocalDegree, double>(
             green, greenTrace, displacement[0], displacement[1], displacement[2]);
         if (!near) {
             std::array<double, (kLocalDegree + 1) * (kLocalDegree + 1)> primary{};
-            spherical::detail::Green<kLocalDegree>::template evaluate<double>(
+            spherical::detail::evaluateGreen<kLocalDegree, double>(
                 primary, displacement[0], displacement[1], displacement[2]);
             for (size_t slot = 0; slot < green.size(); ++slot) {
                 green[slot] += primary[slot];
@@ -1098,7 +1108,7 @@ std::array<double, 4> directPmmmExpansionReferenceOrder(
             }
         }
     }
-    spherical::EwaldL2P<kLocalDegree>::template add<double>(
+    spherical::ewaldL2P<kLocalDegree, double>(
         field, local, localTrace, sinkOffset[0], sinkOffset[1], sinkOffset[2]);
     for (double& component : field) {
         component *= options.gravity.gm;
@@ -1240,6 +1250,7 @@ void comparePmmmSamples(
 }    // namespace detail
 
 HPX_PLAIN_ACTION(detail::initializePmmmFixture, InitializePmmmFixtureAction);
+HPX_PLAIN_ACTION(detail::moveFrozenPmmmFixture, MoveFrozenPmmmFixtureAction);
 HPX_PLAIN_ACTION(detail::readPmmmFixture, ReadPmmmFixtureAction);
 HPX_PLAIN_ACTION(detail::readPmmmKickFixture, ReadPmmmKickFixtureAction);
 HPX_PLAIN_ACTION(detail::installPmmmOverlapGate, InstallPmmmOverlapGateAction);
@@ -1404,6 +1415,76 @@ Vector<PmmmSample> gatherPmmmKickSamples() {
         return false;
     });
     return samples;
+}
+
+/// Compare rebuilt frozen-cell FMM trees with direct forces after cell and seam crossings.
+void checkPmmmFrozenFmm() {
+    auto const saved = getOptions();
+    auto options = saved;
+    options.hydro.enabled = false;
+    options.gravity.pmmmOuterInterval = true;
+    options.gravity.pmmmNearMethod = "fmm";
+    options.gravity.meshSize = 8;
+    options.gravity.pmmmCoarseMeshSize = 0;
+    options.gravity.pmmmNearWidth = 1;
+    options.gravity.openingAngle = .4;
+    options.compute.bucketSize = 8;
+    options.analysis.saveForce = true;
+    pmmmDestroy();
+    setOptions(options);
+    preparePmmmFixture(5);
+    distributePmmmFixture(5);
+    KickParameters parameters{};
+    parameters.htime = true;
+    parameters.ascending = parameters.descending = parameters.top = false;
+    parameters.firstCall = true;
+    parameters.minRung = 0;
+    parameters.a = parameters.t0 = parameters.maxDt = 1;
+    parameters.eta = 1;
+    parameters.gm = options.gravity.gm;
+    parameters.gravitySmoothingLength = options.gravity.smoothingLength;
+    parameters.saveForce = true;
+    parameters.doPhi = true;
+    parameters.frozenNear = parameters.refreshMembership = true;
+    particlesSortByRung(0);
+    pmmmKick(parameters);
+    auto const transforms = pmmmDiagnostics().transformCount;
+    parameters.refreshMembership = false;
+    for (int step = 0; step < 3; ++step) {
+        std::vector<hpx::future<void>> moves;
+        for (auto const& locality : hpxLocalities()) {
+            moves.push_back(hpx::async<MoveFrozenPmmmFixtureAction>(locality));
+        }
+        hpx::wait_all(moves);
+        for (auto& move : moves) {
+            move.get();
+        }
+        parameters.minRung = step == 1 ? 2 : 0;
+        particlesSortByRung(parameters.minRung);
+        options.gravity.pmmmNearMethod = "fmm";
+        setOptions(options);
+        pmmmKick(parameters);
+        auto const actual = gatherPmmmKickSamples();
+        auto const diagnostics = pmmmDiagnostics();
+        requirePmmm(diagnostics.transformCount == transforms,
+            "frozen FMM performed an inner mesh transform");
+        requirePmmm(saved.gravity.cuda || diagnostics.nearCpuAcceptedMultipoles > 0,
+            "frozen FMM never accepted a multipole interaction");
+        requirePmmm(diagnostics.activeParticles == (step == 1 ? 240U : 320U) &&
+                diagnostics.evaluatedParticles == diagnostics.activeParticles,
+            "frozen FMM did not select the rung's sources and sinks");
+        options.gravity.pmmmNearMethod = "pp";
+        setOptions(options);
+        particlesSortByRung(parameters.minRung);
+        pmmmKick(parameters);
+        double const error = pmmmFieldDifference(gatherPmmmKickSamples(), actual);
+        requirePmmm(error < 2.e-3,
+            "expanded frozen FMM differs from direct near forces: " + std::to_string(error));
+    }
+    particlesSortByRung(0);
+    pmmmDestroy();
+    setOptions(saved);
+    std::cout << "PMMM rebuilt frozen-cell FMM, seam crossings and rung selection passed\n";
 }
 
 void checkPmmmTraditionalKicks() {
@@ -2409,6 +2490,7 @@ void pmmmTest() {
     options.run.hierarchicalGravity =
         usesHierarchicalIntegration(options.run) && options.gravity.enabled;
     setOptions(options);
+    detail::checkPmmmFrozenFmm();
     if (options.run.test == "pmmmSources") {
         // Focus the changed source pipeline independently of the full-field
         // Ewald/finite-expansion suite, which remains in run.test=pmmm.

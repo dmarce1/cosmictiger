@@ -67,3 +67,46 @@ ParticleInteger fmmSourcePartition(FmmParticleStore store, FmmSourceView const& 
     }
     return upper;
 }
+
+/// Partition in the expanded frozen-cell frame, preserving every particle field.
+ParticleInteger fmmSourcePartitionFrame(FmmParticleStore store, FmmSourceView const& sources,
+    Pair<ParticleInteger> range, double split, int dimension) {
+    if (!sources.geometry.frozenMembership) {
+        return fmmSourcePartition(store, sources, range, Position(split), dimension);
+    }
+    FlopCounter<> flops;
+    auto coordinate = [&](ParticleInteger index) {
+        flops += 7;
+        Position const point = sources.positions[dimension][index];
+        return point.toDouble() +
+            detail::fmmCellWinding(
+                point, sources.geometry.sinkCell[dimension], sources.geometry.meshSize);
+    };
+    ParticleInteger lower = range.first;
+    ParticleInteger upper = range.second;
+    while (lower < upper) {
+        if (coordinate(lower) >= split) {
+            while (lower != upper) {
+                --upper;
+                if (coordinate(upper) < split) {
+                    if (store == FmmParticleStore::Owned) {
+                        particlesSwap(lower, upper);
+                    } else {
+                        for (int dim = 0; dim < kDimensions; ++dim) {
+                            std::swap(sources.positions[dim][lower], sources.positions[dim][upper]);
+                        }
+                        std::swap(sources.types[lower], sources.types[upper]);
+                        std::swap(sources.rungs[lower], sources.rungs[upper]);
+                        if (sources.masses != nullptr) {
+                            std::swap(sources.masses[lower], sources.masses[upper]);
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+        ++lower;
+    }
+    addCpuFlops(flops, FlopPrecision::Double);
+    return upper;
+}

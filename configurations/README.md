@@ -19,11 +19,10 @@ The parser defaults leave hydro, cooling and star formation disabled.
 
 CMake `COSMICTIGER_ENABLE_*` options select which capabilities are compiled.
 The gravity solver is PMMM; `gravity.method.near=fmm|pp` selects its FMM near
-field (default) or the direct particle-pair fallback, and
-`run.timeIntegrator=traditional|hierarchical|global` selects the integrator. A
-single eligible compiled integrator is automatic; multiple choices require CLI/INI
-selection. Restart can recover omitted selections from the checkpoint.
-The supplied configurations choose traditional integration.
+field (default) or the direct particle-pair fallback. The sole integration scheme
+uses hierarchical short gravity, outer long kicks, and midpoint SPH. The supplied
+configurations select `run.timeIntegrator=hierarchical`; this is also automatic.
+Restart recovers omitted degree and near-field selections from the checkpoint.
 
 `COSMICTIGER_EXPANSION_DEGREE=4-6` compiles potential degrees 4, 5, and 6 by default.
 `gravity.expansionDegree` chooses a compiled degree and defaults to the largest.
@@ -37,11 +36,9 @@ is the coarsest hierarchical
 stage mesh and the granularity of PMMM particle-domain cuts; PMMM runs need a
 power-of-two locality count.
 
-Traditional and global integration support SPH; `hydro.method` accepts only `sph`.
-Hierarchical integration requires a gravity-capable build and advances collisionless
-particles only; SPH runs reject it. Global integration advances all particles using the smallest
-raw allowable timestep across all particles and localities, without power-of-two
-rounding; final-time and scenario-stage boundaries can shorten that interval.
+`hydro.method` accepts only `sph`. The sole midpoint SPH scheme supports
+PMMM self-gravity with hierarchical short and outer long kicks, or gravity-free
+hydrodynamics.
 To run a collisionless cosmology, set
 `--hydro.enabled=false --chemistry.enabled=false --starFormation.enabled=false`.
 

@@ -159,6 +159,7 @@ void computeReadyCells() {
                 item.pos = treeGetNode(root.id)->pos;
                 item.l.zero();
                 item.geometry.meshSize = cache.meshSize;
+                item.geometry.frozenMembership = frozenNearRequest(state.request);
                 auto const center = coordinates(root.key);
                 for (int dim = 0; dim < kDimensions; ++dim) {
                     item.geometry.sinkCell[dim] = center[dim];
@@ -191,7 +192,22 @@ void computeReadyCells() {
             FlopCounts kickFlops;
             KickReturn result;
             size_t compact = 0;
+            if (frozenNearRequest(state.request)) {
+                for (; compact < fields.particleIndices.size(); ++compact) {
+                    std::array<double, 4> field{};
+                    if (state.request.doPotential) {
+                        field[0] = fields.potential[compact];
+                    }
+                    for (int axis = 0; axis < kDimensions; ++axis) {
+                        field[axis + 1] = fields.acceleration[axis][compact];
+                    }
+                    consumeField(fields.particleIndices[compact], field, result, flops, kickFlops);
+                }
+            }
             for (size_t sink : sinks) {
+                if (frozenNearRequest(state.request)) {
+                    break;
+                }
                 auto const& cell = state.cells[sink];
                 if (compact == fields.particleIndices.size() ||
                     fields.particleIndices[compact] >= cell.end) {
@@ -292,7 +308,8 @@ void startPipeline() {
                                     auto const& cell = state.cells[index];
                                     TreeCreateReturn completed;
                                     auto const root = treeCreateCell(cell, cache.meshSize,
-                                        FmmParticleStore::Owned, nullptr, &completed);
+                                        FmmParticleStore::Owned, nullptr, &completed,
+                                        frozenNearRequest(state.request));
                                     if (reuseOwnedRoots()) {
                                         packet.push_back(rootMoments(index, completed));
                                     } else {

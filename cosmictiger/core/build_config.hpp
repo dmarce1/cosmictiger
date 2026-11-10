@@ -40,7 +40,7 @@ inline constexpr bool kBuildHasGlobal = COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL != 
 inline constexpr bool kBuildUsesHierarchical = !kBuildHasTraditional && kBuildHasHierarchical;
 inline constexpr char const* kBuildTimeIntegrator =
     kBuildHasTraditional ? "traditional" : (kBuildHasHierarchical ? "hierarchical" : "global");
-static_assert(kBuildHasTraditional || kBuildHasHierarchical || kBuildHasGlobal,
-    "At least one time integrator must be enabled");
+static_assert(!kBuildHasTraditional && kBuildHasHierarchical && !kBuildHasGlobal,
+    "Hierarchical gravity with midpoint SPH is required");
 
 }    // namespace integration

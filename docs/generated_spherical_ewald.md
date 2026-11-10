@@ -20,7 +20,7 @@ Namespace `cosmictiger::gravity::spherical` uses slots
 hold the imaginary component at positive `|m|`. Complex negative orders obey
 `C(n,-m)=(-1)^m*conj(C(n,m))`.
 
-`EwaldGreen<degree>::evaluate<Real>(greens, greenTrace, x, y, z)`
+`evaluateEwaldGreen<degree, Real>(greens, greenTrace, x, y, z)`
 overwrites the harmonic coefficients of the **periodic correction** to negative
 Newtonian potential in a unit cubic box, with splitting parameter alpha=2.
 The displacement must be on the minimum-image branch, with each component in
@@ -76,7 +76,7 @@ generated spherical P2M produces only harmonic moments; PMMM does not
 translate spherical multipoles or locals in real space.
 
 The raw radial second moment is `sum(mass*|offset|^2)`; it contributes when
-source degree two is retained (local degree >=3). `EwaldGreen` returns the
+source degree two is retained (local degree >=3). `evaluateEwaldGreen` returns the
 trace factor `4*pi/3`. PMMM applies the radial-moment and source-dipole
 corrections after its Fourier contraction, and obtains the local trace from
 the total source mass. The positive trace variable represents the physical
@@ -85,7 +85,7 @@ encode. These corrections follow Nitadori's equations 38–42. This is one
 specific isotropic periodic trace; it is not the full hierarchy of traces
 needed for Plummer softening.
 
-`EwaldL2P<degree>::add<Real>(field, source, sourceTrace, x, y, z)`
+`ewaldL2P<degree, Real>(field, source, sourceTrace, x, y, z)`
 evaluates it at a point offset. Fields are `[potential, accelerationX,
 accelerationY, accelerationZ]`; acceleration is minus the potential gradient.
 The quadratic trace changes both potential and acceleration.

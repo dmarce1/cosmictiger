@@ -10,9 +10,6 @@ Enabled capabilities:
   Equilibrium cooling: @COSMICTIGER_WITH_CHEMISTRY@ (requires SPH)
   Stars: @COSMICTIGER_WITH_STARS@ (COSMICTIGER_ENABLE_STARS; requires chemistry and SPH)
   ROCKSTAR halo and lightcone analysis: @COSMICTIGER_WITH_ROCKSTAR@ (COSMICTIGER_ENABLE_ROCKSTAR; requires gravity)
-  Traditional integration: @COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL@
-  Hierarchical integration: @COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL@
-  Global integration: @COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL@
   Potential expansion degrees: @COSMICTIGER_EXPANSION_DEGREE@
   Particle positions: @COSMICTIGER_POSITION_TYPE@
 
@@ -22,3 +19,4 @@ potential degree with gravity.expansionDegree. SPH hydrodynamics uses hydro.meth
 Run cosmictiger --help for details.
 Star formation uses starFormation.enabled=true with hydro.enabled=true and
 chemistry.enabled=true; see docs/star_formation.md for model assumptions.
+  Integration: hierarchical gravity, split long/short kicks, midpoint SPH

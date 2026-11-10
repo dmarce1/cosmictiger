@@ -9,11 +9,10 @@ instantiation units.
 cmake -S . -B build/release_cpu -DCMAKE_BUILD_TYPE=Release \
   -DCOSMICTIGER_WITH_CUDA=OFF -DBUILD_TESTING=OFF \
   -DCOSMICTIGER_ENABLE_GRAVITY=ON \
-  -DCOSMICTIGER_ENABLE_INTEGRATOR_GLOBAL=ON \
   -DCOSMICTIGER_EXPANSION_DEGREE=4-6
 cmake --build build/release_cpu --target cosmictiger --parallel 3
 build/release_cpu/cosmictiger --gravity.meshSize=16 \
-  --gravity.expansionDegree=6 --run.timeIntegrator=global --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
+  --gravity.expansionDegree=6 --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
 ```
 
 ## Small matrix algorithms
@@ -34,9 +33,6 @@ direct formulas. See [matrix algorithms and measurements](docs/matrix.md).
 | `COSMICTIGER_ENABLE_SPH` | `ON` | Compile SPH and hydro problems. |
 | `COSMICTIGER_ENABLE_CHEMISTRY` | `ON` | Compile equilibrium cooling when SPH is also enabled. Inactive with SPH disabled. |
 | `COSMICTIGER_ENABLE_STARS` | `OFF` | Compile GADGET-4 multiphase star formation. Requires equilibrium cooling; inactive with SPH disabled. |
-| `COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL` | `ON` | Traditional nested individual block timesteps. |
-| `COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL` | `OFF` | Hierarchical Hamiltonian integration for collisionless gravity. |
-| `COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL` | `OFF` | All particles share the smallest raw allowable timestep, without power-of-two quantization. |
 | `COSMICTIGER_EXPANSION_DEGREE` | `4-6` | Inclusive potential-degree range, or one degree such as `6`; supported degrees are 2 through 8. |
 | `COSMICTIGER_POSITION_TYPE` | `fixed32` | `fixed32` or `fixed64` particle positions for the build. |
 | `COSMICTIGER_WITH_CUDA` | `ON` | Compile CUDA; requires a CUDA-enabled HPX installation. |
@@ -47,10 +43,9 @@ direct formulas. See [matrix algorithms and measurements](docs/matrix.md).
 | `COSMICTIGER_REQUIRE_APEX` | Build-dependent | ON for Debug, RelWithDebInfo, Profile; otherwise OFF. Requires an APEX-enabled HPX installation. |
 | `BUILD_TESTING` | `ON` | Compile and register tests supported by the enabled capabilities. |
 
-At least one physics component and one integrator must be enabled.
-SPH requires traditional or global integration; hierarchical integration is
-collisionless only, and SPH with self-gravity is not yet supported by the PMMM
-solver.
+At least one physics component must be enabled. Hierarchical gravity with
+mandatory long/short splitting and midpoint SPH is the sole integration scheme.
+Gas and dark matter can evolve together under PMMM self-gravity.
 To build SPH only, disable `COSMICTIGER_ENABLE_GRAVITY`.
 To build gravity only, disable `COSMICTIGER_ENABLE_SPH`.
 
@@ -78,10 +73,8 @@ was `ON`; after migration, change `STARS` to select either value.
 
 Runtime selection uses `gravity.method.near=fmm|pp` (the FMM near field or its
 direct particle-pair fallback) and
-`run.timeIntegrator=traditional|hierarchical|global`. A sole eligible integrator is
-automatic; multiple eligible integrators require an explicit CLI/INI choice. A saved
-checkpoint selection also resolves these choices on restart. Help and startup
-metadata distinguish compiled capabilities from the selected run.
+`run.timeIntegrator=hierarchical` is automatic. Other integrator values are
+rejected. The near-field and degree selections can be recovered on restart.
 
 `gravity.expansionDegree` defaults to the highest compiled degree. Potential
 degree d means source multipole degree d-1 and historical internal order d+1.
@@ -90,13 +83,6 @@ fields share the selected degree. Internal tensor and old checkpoint integers ke
 their historical order convention. PMMM formerly defaulted to old order 8
 (potential degree 7); request a range including 7 to retain that accuracy setting.
 SPH-only builds instantiate no gravity expansions.
-
-The global integrator reduces raw gravity/hydro limits over all particles and
-all localities before opening the next half-step. Cosmological and configured
-maximum-step limits also apply. Final-time and scenario-stage boundaries may
-shorten a step. Kicks, drifts, SPH and chemistry use explicit old/new intervals;
-checkpoints retain the actual pending interval independently of the integer rung
-clock. Traditional and hierarchical integration retain their individual timesteps.
 
 Gravity-only builds omit hydro problems/tests; SPH-only builds omit gravity
 problems/tests. Coupled tests require both capabilities, and backend-specific
@@ -191,3 +177,5 @@ paths, and tests. It builds `cosmictiger` in `build/<mode>_<cpu|cuda>`. Changing
 capabilities reconfigures that directory. Use separate directories for builds
 that need to remain available simultaneously. Local jobs are capped at half the
 available cores; concurrent work shares that budget.
+
+Gravity uses hierarchical short kicks with mandatory outer long kicks; SPH uses midpoint kicks. There is no integrator build selector.

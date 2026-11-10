@@ -140,11 +140,11 @@ def appendAvailabilityChecks(lines, report, minFmmOrder, maxFmmOrder):
         lines.append(f'static_assert(HasCartesianM2L<{order}> == {selected});')
         lines.append(f'static_assert(HasSourceConversion<{order}> == {selected});')
         lines.append(f'static_assert(HasLocalConversion<{order}> == {selected});')
-        for kernel in (f'spherical::detail::P2M<{order - 2}>',
-                       f'spherical::detail::Green<{degree}>',
-                       f'spherical::detail::L2P<{degree}>',
-                       f'spherical::EwaldGreen<{degree}>'):
-            lines.append(f'static_assert(CompleteKernel<cosmictiger::gravity::{kernel}> == {selected});')
+        for count in (f'spherical::detail::kP2MFlops<{order - 2}>',
+                      f'spherical::detail::kGreenFlops<{degree}>',
+                      f'spherical::detail::kL2PFlops<{degree}>',
+                      f'spherical::kEwaldGreenFlops<{degree}>'):
+            lines.append(f'static_assert((cosmictiger::gravity::{count} != 0) == {selected});')
 
 
 def appendCartesianChecks(lines, report, checks):
@@ -276,20 +276,20 @@ def buildChecks(report, minFmmOrder, maxFmmOrder):
                 continue
         name = {'P2m': 'P2M', 'L2p': 'L2P', 'Greens': 'Green'}[operation]
         parameters = str(degree)
-        method = 'evaluate' if operation == 'Greens' else 'add'
+        function = 'evaluateGreen' if operation == 'Greens' else name
         if operation == 'P2m':
             arguments = 'output, Real(0.7), Real(0.3), Real(-0.2), Real(0.4)'
         elif operation == 'Greens':
             arguments = 'output, Real(0.3), Real(-0.2), Real(0.4)'
         else:
             arguments = 'output, source, Real(0.3), Real(-0.2), Real(0.4)'
-        fullName = f'cosmictiger::gravity::{namespace}::detail::{name}<{parameters}>'
+        prefix = f'cosmictiger::gravity::{namespace}::detail::'
         label = f'{namespace}::{name}<{parameters}>'
         expected = kernel['weighted_flops']
-        lines.extend(['    {', f'        using Kernel = {fullName};',
-                      f'        static_assert(Kernel::kFlops_ == {expected});',
+        lines.extend(['    {',
+                      f'        static_assert({prefix}k{name}Flops<{degree}> == {expected});',
                       '        Real::operations = 0;',
-                      f'        Kernel::template {method}<Real>({arguments});',
+                      f'        {prefix}{function}<{degree}, Real>({arguments});',
                       f'        if (Real::operations != {expected}) {{',
                       f'            std::fprintf(stderr, "{label}: got %d, expected {expected}\\n", Real::operations);',
                       '            return 1;', '        }', '    }'])
@@ -303,16 +303,19 @@ def buildChecks(report, minFmmOrder, maxFmmOrder):
                 ('EwaldL2P', 'add',
                  'output, source, Real(0.23), Real(0.13), Real(-0.21), Real(0.31)',
                  None)):
-            fullName = f'cosmictiger::gravity::spherical::{name}<{degree}>'
-            lines.extend(['    {', f'        using Kernel = {fullName};',
+            prefix = 'cosmictiger::gravity::spherical::'
+            fullName = f'{prefix}{name}<{degree}>'
+            function = 'evaluateEwaldGreen' if name == 'EwaldGreen' else 'ewaldL2P'
+            count = f'{prefix}k{name}Flops<{degree}>'
+            lines.extend(['    {',
                           '        Real::operations = 0;', '        Real::squareRoots = 0;',
                           '        for (int i = 0; i < 4; ++i) { specialCalls[i] = 0; }',
-                          f'        Kernel::template {method}<Real>({arguments});',
-                          '        if (Real::operations != Kernel::kFlops_) {',
-                          f'            std::fprintf(stderr, "{name}<{degree}>: got %d, expected %d\\n", Real::operations, Kernel::kFlops_);',
+                          f'        {prefix}{function}<{degree}, Real>({arguments});',
+                          f'        if (Real::operations != {count}) {{',
+                          f'            std::fprintf(stderr, "{name}<{degree}>: got %d, expected %d\\n", Real::operations, {count});',
                           '            return 1;', '        }'])
             if expected is not None:
-                lines.append(f'        static_assert(Kernel::kFlops_ == {expected});')
+                lines.append(f'        static_assert({count} == {expected});')
             if name == 'EwaldGreen':
                 for i, function in enumerate(('exp', 'erfc', 'sin', 'cos')):
                     lines.append(f'        if (specialCalls[{i}] != {counts["special_function_calls"][function]}) {{ return 2; }}')

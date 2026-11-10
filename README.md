@@ -107,43 +107,33 @@ The legacy `glass.bin` exchange format remains Q0.32 in both modes; checkpoints
 retain the selected position precision.
 
 One CMake configuration builds one `cosmictiger` executable with the enabled
-physics and integrators:
+physics:
 
 ```sh
 cmake -S . -B build/release_cpu -DCMAKE_BUILD_TYPE=Release \
   -DCOSMICTIGER_WITH_CUDA=OFF -DBUILD_TESTING=OFF \
   -DCOSMICTIGER_ENABLE_GRAVITY=ON \
-  -DCOSMICTIGER_ENABLE_INTEGRATOR_GLOBAL=ON \
   -DCOSMICTIGER_EXPANSION_DEGREE=4-6
 cmake --build build/release_cpu --target cosmictiger --parallel 3
 build/release_cpu/cosmictiger --gravity.meshSize=16 \
-  --run.timeIntegrator=global --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
+  --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
 ```
 
-Fresh defaults enable PMMM gravity, SPH, equilibrium cooling, ROCKSTAR, traditional nested
-integration, and potential expansion degrees 4-6. Hierarchical integration and global
-integration can be enabled independently. A single eligible integrator is
-automatically selected; multiple eligible integrators require a CLI/INI selection.
+Fresh defaults enable PMMM gravity, SPH, equilibrium cooling, ROCKSTAR, and
+potential expansion degrees 4-6. The sole integration scheme uses hierarchical
+short gravity kicks, long kicks at outer-interval boundaries, and midpoint SPH.
 
 The gravity solver is PMMM: a periodic FFT far field with an FMM near field.
 `gravity.method.near=fmm|pp` selects the near field; `fmm` is the default and
-`pp`, the direct particle-pair evaluation, is its fallback (the outer-interval
-mode `gravity.pmmmOuterInterval` currently requires it). Select the degree with
-`gravity.expansionDegree` and the integrator with
-`run.timeIntegrator=traditional|hierarchical|global`.
+`pp`, the direct particle-pair evaluation, is its fallback. Long/short splitting
+is mandatory. `run.timeIntegrator=hierarchical` is automatic.
 The highest compiled degree is the runtime default. Potential degree d is old
 internal order d+1, so degrees 4-6 correspond to orders 5-7. The far and near
 fields share the degree. Old checkpoint order integers retain their original meaning.
 
-Traditional integration uses individual nested block timesteps. Hierarchical
-integration uses a Hamiltonian split and currently supports collisionless runs.
-It merges its lowest rung into the next by the GADGET-4 rule `run.rungMergeFraction`
-([hierarchical gravity](docs/hierarchical_gravity.md)).
-Global integration advances every particle with the minimum raw allowed timestep
-across all particles and ranks, without power-of-two rounding. It supports SPH
-and gravity runs, including explicit chemistry source intervals. SPH with
-self-gravity is not yet supported by the PMMM solver: gas runs set
-`gravity.enabled=false`.
+The hierarchical ladder supports gas and dark matter and merges its lowest rung
+by `run.rungMergeFraction` ([hierarchical gravity](docs/hierarchical_gravity.md)).
+SPH can also run with `gravity.enabled=false`.
 
 Set `COSMICTIGER_ENABLE_SPH=OFF` for gravity-only builds, or
 `COSMICTIGER_ENABLE_GRAVITY=OFF` for SPH-only builds.
@@ -300,16 +290,13 @@ for all SPH runs. It uses Monaghan artificial viscosity with the Morris & Monagh
 coefficient switch, limited by Rosswog et al. (2000) to `hydro.viscosityCoefficientMax`,
 and the Balsara shear limiter; equal `hydro.viscosityCoefficientMin` and
 `hydro.viscosityCoefficientMax` give constant coefficients. This shares the particle
-storage with PMMM gravity, which does not yet couple to gas. See
+storage with PMMM gravity, which couples to gas on the hierarchical ladder. See
 [the kernel, viscosity, and paper references](docs/monaghan_sph.md) for the equations,
 cosmological conversions, and deliberate implementation choices. SPH support is
 built by default; `-DCOSMICTIGER_ENABLE_SPH=OFF` excludes it. Enable gas
-explicitly with `--hydro.enabled=true` and `--gravity.enabled=false`. SPH supports
-traditional block timesteps and global adaptive timesteps; self-gravity for gas
-awaits PMMM/SPH coupling, and the gravity-only hierarchical integrator rejects
-SPH. Global and traditional SPH share the adaptive octree and force
-formulation. See the
-[SPH octree design](docs/sph_octree_plan.md).
+explicitly with `--hydro.enabled=true`. The midpoint SPH scheme supports
+self-gravity or `--gravity.enabled=false` and shares the adaptive octree and
+force formulation on CPU and CUDA. See the [SPH octree design](docs/sph_octree_plan.md).
 Select SIMD CPU SPH with `--hydro.cuda=false` or CUDA SPH with `--hydro.cuda=true`.
 Positive-duration hydro events use two-call explicit-midpoint RK2 by default,
 with no legacy one-call integration option. Each stage exchanges equal and
@@ -722,7 +709,7 @@ methods, potential expansion degrees
 enabled time integrators, and fixed32 or fixed64 position storage.
 Builds use `build/<mode>_<cuda|cpu>` (for example `build/release_cuda`), with live
 output and a `builder.*.log`. The default builds `cosmictiger` with PMMM gravity, SPH,
-equilibrium cooling, ROCKSTAR, traditional integration, potential degrees 4–6,
+equilibrium cooling, ROCKSTAR, hierarchical gravity with midpoint SPH, potential degrees 4–6,
 and fixed32 positions. Building and running the test suite is opt-in. Build concurrency
 defaults to the detected system thread count, with no upper cap. Use `./build.sh -j 4` to select a count,
 or `./build.sh -j` (also `-j max`) to select the detected thread count.

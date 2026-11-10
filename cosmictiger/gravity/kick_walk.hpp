@@ -245,7 +245,10 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
         selfBox.end[dim] *= RangeFixed::kToFloatFactor_;
     }
     for (int dim = 0; dim < kDimensions; dim++) {
-        ldx[dim] = unwrappedDoubleDistance(selfPtr->pos[dim], pos[dim]);
+        ldx[dim] = params.geometry.frozenMembership ?
+            detail::fmmCellDifference(selfPtr->pos[dim], pos[dim], params.geometry.sinkCell[dim],
+                params.geometry.meshSize, &geometryFlops) :
+            unwrappedDoubleDistance(selfPtr->pos[dim], pos[dim]);
     }
     cosmictiger::gravity::cartesian::Expansion<float, order> translated{};
     if (!params.doPhi) {
@@ -257,7 +260,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
     flops += cosmictiger::gravity::cartesian::detail::kL2LFlops<kLocalDegree> + 5;
     // Box scaling stays double; each local displacement scales in double and
     // narrows before the float L2L coordinate scaling. Two reciprocals are float.
-    doubleFlops += 6 + 6 * kSimdFloatSize;
+    doubleFlops += (params.geometry.frozenMembership ? 3 : 6) + 6 * kSimdFloatSize;
     float const inverseSmoothingLength = 1.0f / params.gravitySmoothingLength;
     ForceVectors forces;
     ParticleInteger const numberOfSelfParticles = selfPtr->numberOfParticles();
@@ -285,7 +288,9 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                 for (int i = ci; i < maxci; i++) {
                     otherPtrs[i - ci] = treeGetNode(checklist[i]);
                 }
+                Array<uint64_t, kSimdFloatSize> sourceKeys{};
                 for (int i = 0; i < maxi; i++) {
+                    sourceKeys[i] = otherPtrs[i]->meshCellKey;
                     for (int dim = 0; dim < kDimensions; dim++) {
                         simdSetLane(otherPos[dim], i, otherPtrs[i]->pos[dim].raw());
                     }
@@ -300,8 +305,8 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                     simdSetLane(otherLeaf, i, 0);
                 }
                 for (int dim = 0; dim < kDimensions; dim++) {
-                    dx[dim] = fmmPositionDifference(
-                        selfPos[dim], otherPos[dim], dim, params.geometry, &geometryFlops);
+                    dx[dim] = fmmPositionDifference(selfPos[dim], otherPos[dim], dim,
+                        params.geometry, &geometryFlops, &sourceKeys);
                 }
                 SimdFloat const r2 =
                     math::fma(dx[kXi], dx[kXi], math::fma(dx[kYi], dx[kYi], dx[kZi] * dx[kZi]));
@@ -329,9 +334,9 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                     }
                     acceptance = computeFmmAcceptance(r2, selfRadius, otherRadius,
                         fmmSinkBoxDistanceSquared(
-                            selfBox, otherPos, params.geometry, &geometryFlops),
-                        fmmSourceBoxDistanceSquared(
-                            otherBox, selfPos, otherPos, params.geometry, &geometryFlops),
+                            selfBox, otherPos, params.geometry, &geometryFlops, &sourceKeys),
+                        fmmSourceBoxDistanceSquared(otherBox, selfPos, otherPos, params.geometry,
+                            &geometryFlops, &sourceKeys),
                         smoothingLengthPack, thetainv);
                     flops += kSimdFloatSize * 19;         // Acceptance only.
                     doubleFlops += 6 * kSimdFloatSize;    // Source box scaling.
@@ -418,7 +423,11 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                 ParticleInteger const j = i - rng.first;
                 Vector3<float> dx;
                 for (ParticleInteger dim = 0; dim < kDimensions; dim++) {
-                    dx[dim] = unwrappedDoubleDistance(particlesPos(dim, i), selfPtr->pos[dim]);
+                    dx[dim] = params.geometry.frozenMembership ?
+                        detail::fmmCellDifference(particlesPos(dim, i), selfPtr->pos[dim],
+                            params.geometry.sinkCell[dim], params.geometry.meshSize,
+                            &geometryFlops) :
+                        unwrappedDoubleDistance(particlesPos(dim, i), selfPtr->pos[dim]);
                 }
                 cosmictiger::gravity::Field<float> l2{};
                 cosmictiger::gravity::cartesian::L2P(
@@ -431,7 +440,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                 forces.gz[j] += kScaleFactor2 * l2.accelerationZ();
                 // Three double displacements each narrow to float; the effective
                 // radius divides a widened float by a double and narrows back.
-                doubleFlops += 9;
+                doubleFlops += params.geometry.frozenMembership ? 6 : 9;
                 if (params.forceOnly) {
                     ALWAYS_ASSERT(cudaWorkspace != nullptr && cudaWorkspace->isBatch());
                     auto const output = cudaWorkspace->output();

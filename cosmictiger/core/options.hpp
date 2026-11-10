@@ -34,7 +34,7 @@ struct Run {
     // run.test=force: build the tree once at this opening angle and sweep only
     // the kick's angle upward from it; zero rebuilds the tree at every angle.
     double treeOpeningAngle{};
-    // Retain the historical boolean while the selector distinguishes all three modes.
+    // Retain the serialized fields; gravity uses the sole hierarchical ladder.
     bool hierarchicalGravity{integration::kBuildUsesHierarchical};
     std::string timeIntegrator{integration::kBuildTimeIntegrator};
 };
@@ -178,7 +178,7 @@ struct Gravity {
     // PMMM outer interval: the FFT far field is solved only at synchronized
     // outer boundaries, each particle's near-cube membership is frozen for the
     // interval, and the near field advances on the inner rungs (see docs/pmmm.md).
-    bool pmmmOuterInterval{};
+    bool pmmmOuterInterval{true};
     // Potential expansion degree + 1 of the far and near fields; template/storage
     // convention.
     int fmmOrder{gravity::kBuildFmmOrder};

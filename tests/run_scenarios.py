@@ -101,7 +101,7 @@ def main():
     base = args.workdir.resolve()
     base.mkdir(parents=True, exist_ok=True)
     command = [str(executable), "--hpx:threads=2", "--hpx:bind=none",
-               "--run.timeIntegrator=traditional", "--gravity.meshSize=8"]
+               "--run.timeIntegrator=hierarchical", "--gravity.meshSize=8"]
     expected_files = {stem + ".ini" for stem, *_ in SCENARIOS}
     expected_files.update(stem + ".ini" for stem in COSMOLOGY_PRESETS)
     actual_files = {path.name for path in (root / "configurations").glob("*.ini")

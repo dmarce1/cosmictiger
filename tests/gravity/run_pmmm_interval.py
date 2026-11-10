@@ -4,7 +4,7 @@
 
 """Check the PMMM outer interval: frozen near membership, one transform per boundary,
 the interval clock, restart from inside and from a boundary, identity rejection, and
-energy and momentum behaviour against the per-substep PMMM reference."""
+energy and momentum behaviour against the shorter-interval PMMM reference."""
 
 import argparse
 import math
@@ -157,8 +157,9 @@ def main():
     parser.add_argument("--ranks", type=int, default=2)
     parser.add_argument("--position-type", choices=("fixed32", "fixed64"), default="fixed32")
     parser.add_argument("--order", type=int, choices=range(3, 10), required=True)
-    parser.add_argument("--time-integrator", choices=("traditional", "hierarchical", "global"),
+    parser.add_argument("--time-integrator", choices=("hierarchical",),
                         required=True)
+    parser.add_argument("--near-method", choices=("pp", "fmm"), default="fmm")
     args = parser.parse_args()
     executable = args.executable.resolve()
     root = args.workdir.resolve()
@@ -166,7 +167,7 @@ def main():
     ranks = args.ranks if args.mpi_exec else 1
     mesh_size = 16
     common = {"hpx:threads": 2, "hpx:bind": "none",
-              "gravity.method.near": "pp",
+              "gravity.method.near": args.near_method,
               "gravity.meshSize": mesh_size, "gravity.pmmmNearWidth": 2,
               "gravity.pmmmOuterInterval": "true",
               "gravity.expansionDegree": args.order - 1,
@@ -199,27 +200,13 @@ def main():
                 command.append("--hpx:ini=hpx.parcel.tcp.enable=0")
         return runSimulation(command, directory, "run.log", expectSuccess=success)
 
-    label = f"pmmm_interval_{args.time_integrator}"
-    if args.time_integrator == "global":
-        rejected = prepareCase(root, label + "_rejected")
-        log = run(rejected, dict(common, **{"run.maxIterations": 0}), False)
-        require("gravity.pmmmOuterInterval supports run.timeIntegrator=traditional" in log,
-                "the global integrator was not rejected with the outer interval")
-        print(f"{label}: global integrator rejected at startup")
-        return 0
-    rejected = prepareCase(root, label + "_rejected_fmm")
-    log = run(rejected, dict(common, **{"gravity.method.near": "fmm", "run.maxIterations": 0}),
-              False)
-    require("gravity.pmmmOuterInterval currently supports gravity.method.near=pp" in log or
-            "gravity.method.near" in log,
-            "the fmm near field was not rejected with the outer interval")
-
+    label = f"pmmm_interval_{args.time_integrator}_{args.near_method}"
     coarse = common["run.endTime"] / common["run.numberOfSteps"]
     iterations = 400
     baseline = prepareCase(root, label + "_baseline")
     log = run(baseline, dict(common, **{"run.maxIterations": iterations}))
     for key, expected in (("run.timeIntegrator", args.time_integrator),
-                          ("gravity.method.near", "pp"),
+                          ("gravity.method.near", args.near_method),
                           ("gravity.pmmmOuterInterval", "T")):
         require(re.search(r"^" + re.escape(key) + r"\s*:\s*" + expected + r"\s*$",
                           log, re.MULTILINE), f"{label}: resolved options lack {key}={expected}")
@@ -283,21 +270,22 @@ def main():
     rejected = prepareCase(root, label + "_reject_mode", source)
     log = run(rejected, dict(common, **{"gravity.pmmmOuterInterval": "false",
                                       "checkpoint.readIndex": 2, "run.maxIterations": 0}), False)
-    require("Checkpoint physics, particle layout or integrator differs" in log,
+    require("long/short gravity splitting is mandatory" in log,
             f"{label}: switching the outer interval off was not rejected on restart")
-    # Energy and momentum against the per-substep PMMM reference over the same time.
+    # Compare to the same split scheme with a tighter coarse interval. Every
+    # comparison run retains mandatory splitting and its own frozen membership.
     reference = prepareCase(root, label + "_reference")
-    reference_log = run(reference, dict(common, **{"gravity.pmmmOuterInterval": "false",
+    reference_log = run(reference, dict(common, **{"run.numberOfSteps": 4,
                                                  "run.maxIterations": 1000}))
     frozen_energy = read_energy(baseline)
     reference_energy = read_energy(reference)
     require("reached the requested end time" in reference_log,
-            f"{label}: the per-substep reference did not reach the end time")
+            f"{label}: the shorter-interval reference did not reach the end time")
     frozen_error = abs(frozen_energy[-1][8])
     reference_error = abs(reference_energy[-1][8])
     frozen_momentum = max(abs(value) for value in frozen_energy[-1][2:5])
     reference_momentum = max(abs(value) for value in reference_energy[-1][2:5])
-    print(f"{label}: energy error {frozen_error:.3e} (per-substep reference {reference_error:.3e}), "
+    print(f"{label}: energy error {frozen_error:.3e} (shorter-interval reference {reference_error:.3e}), "
           f"momentum/sum|p| {frozen_momentum:.3e} (reference {reference_momentum:.3e}), "
           f"{transforms} transforms over {passes} passes against "
           f"{len(reference_energy)} reference rows")

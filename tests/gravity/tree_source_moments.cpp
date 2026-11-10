@@ -49,6 +49,51 @@ Options const& getOptions() {
 char* particlesTy = nullptr;
 
 namespace detail {
+/// Check rebuilt leaf and parent moments when a frozen cell spans the periodic seam.
+template <int order>
+void frozenCloud() {
+    namespace cartesian = cosmictiger::gravity::cartesian;
+    std::array<std::array<Position, 8>, kDimensions> positions;
+    std::array<float, 8> masses{.125f, .75f, 1.25f, .375f, 2.5f, .25f, .625f, 1.75f};
+    Vector3<Position> center, leftCenter, rightCenter;
+    FmmSourceView sources;
+    sources.store = FmmParticleStore::Ghost;
+    sources.count = masses.size();
+    sources.masses = masses.data();
+    sources.geometry.meshSize = 8;
+    sources.geometry.frozenMembership = true;
+    for (int axis = 0; axis < kDimensions; ++axis) {
+        center[axis] = .99;
+        leftCenter[axis] = .96;
+        rightCenter[axis] = .04;
+        sources.positions[axis] = positions[axis].data();
+        for (size_t i = 0; i < masses.size(); ++i) {
+            positions[axis][i] = -.09 + .025 * ((i + axis) % masses.size());
+        }
+    }
+    TreeBuildMoments left, right;
+    left.useDouble();
+    right.useDouble();
+    treeComputeMultipole<order>(left.precise(), {0, 4}, leftCenter, sources);
+    treeComputeMultipole<order>(right.precise(), {4, 8}, rightCenter, sources);
+    SourceMultipoleBuffer root;
+    treeComputeMultipole<order>(
+        root, left, right, leftCenter, rightCenter, center, sources.geometry);
+    cartesian::Multipole<double, order> expected{};
+    for (size_t i = 0; i < masses.size(); ++i) {
+        Vector3<double> offset;
+        for (int axis = 0; axis < kDimensions; ++axis) {
+            // Independent unfolding for this fixture's cell-zero frame.
+            double const point = positions[axis][i].toDouble();
+            offset[axis] = (point > .5 ? point - 1 : point) - (center[axis].toDouble() - 1);
+        }
+        cartesian::P2M(expected, double(masses[i]), fmmScaleDisplacement(offset));
+    }
+    for (int i = 0; i < expected.size(); ++i) {
+        check(root[i], expected[i], std::max(1., std::abs(expected[i])));
+    }
+}
+
 template <int order>
 void cloud(int meshSize, bool subDoubleCenters) {
     std::array<std::array<Position, 9>, 3> positions;
@@ -103,7 +148,7 @@ void cloud(int meshSize, bool subDoubleCenters) {
                 positions[axis][i].toDouble() * meshSize - (meshSize - .5);
             maximumOffset = std::max(maximumOffset, std::abs(offset[axis]));
         }
-        cosmictiger::gravity::spherical::detail::P2M<order - 2>::template add<double>(
+        cosmictiger::gravity::spherical::detail::P2M<order - 2, double>(
             expected, masses[i], offset[0], offset[1], offset[2]);
     }
     double rankScale = expected[0];
@@ -157,6 +202,7 @@ int main() {
             detail::selectedOrder = order;
             detail::transport();
             fmmDispatch(order, [](auto tag) {
+                detail::frozenCloud<decltype(tag)::value>();
                 for (int meshSize : {1, 2, 3, 4, 5, 7, 8, 12, 30, 32, 1024}) {
                     detail::cloud<decltype(tag)::value>(meshSize, false);
                 }

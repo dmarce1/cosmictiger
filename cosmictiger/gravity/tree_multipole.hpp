@@ -39,7 +39,8 @@ FlopCounts treeComputeMultipole(MultipoleBuffer& multi, Pair<ParticleInteger> pa
 template <int order>
 FlopCounts treeComputeMultipole(SourceMultipoleBuffer& multi, TreeBuildMoments const& left,
     TreeBuildMoments const& right, Vector3<Position> const& leftCenter,
-    Vector3<Position> const& rightCenter, Vector3<Position> const& center);
+    Vector3<Position> const& rightCenter, Vector3<Position> const& center,
+    FmmGeometry const& geometry = {});
 template <int order>
 FlopCounts treeComputeMultipole(SourceMultipoleBuffer& multi, Pair<ParticleInteger> particleRange,
     Vector3<Position> const& center, FmmSourceView const& sources);
@@ -213,20 +214,26 @@ FlopCounts treeComputeWideReductionMultipole(SourceMultipoleBuffer& multi,
 template <int order>
 FlopCounts treeComputeMultipole(SourceMultipoleBuffer& multi, TreeBuildMoments const& left,
     TreeBuildMoments const& right, Vector3<Position> const& leftCenter,
-    Vector3<Position> const& rightCenter, Vector3<Position> const& center) {
+    Vector3<Position> const& rightCenter, Vector3<Position> const& center,
+    FmmGeometry const& geometry) {
     namespace cartesian = cosmictiger::gravity::cartesian;
     constexpr int kCount = FmmOrder<order>::kMultipoleCoefficients_;
     cartesian::Multipole<SimdDouble, order> source{}, translated{};
     Vector3<SimdDouble> displacement{};
+    FlopCounts frameFlops{};
     for (int i = 0; i < kCount; ++i) {
         simdSetLane(source[i], kLeftChild, left[i]);
         simdSetLane(source[i], kRightChild, right[i]);
     }
     for (int dim = 0; dim < kDimensions; ++dim) {
-        simdSetLane(
-            displacement[dim], kLeftChild, unwrappedDoubleDistance(leftCenter[dim], center[dim]));
-        simdSetLane(
-            displacement[dim], kRightChild, unwrappedDoubleDistance(rightCenter[dim], center[dim]));
+        auto difference = [&](Position point) {
+            return geometry.frozenMembership ?
+                detail::fmmCellDifference(
+                    point, center[dim], geometry.sinkCell[dim], geometry.meshSize, &frameFlops) :
+                unwrappedDoubleDistance(point, center[dim]);
+        };
+        simdSetLane(displacement[dim], kLeftChild, difference(leftCenter[dim]));
+        simdSetLane(displacement[dim], kRightChild, difference(rightCenter[dim]));
     }
     cartesian::M2M(translated, source, fmmScaleDisplacement(displacement));
     for (int i = 0; i < kCount; ++i) {
@@ -235,6 +242,11 @@ FlopCounts treeComputeMultipole(SourceMultipoleBuffer& multi, TreeBuildMoments c
     FlopCounts counts{};
     counts.doublePrecision = 2 * cartesian::detail::kM2MFlops<order - 2> + 18 +
         (1 + int(!left.isDouble()) + int(!right.isDouble())) * kCount;
+    if constexpr (kCountFlops) {
+        if (geometry.frozenMembership) {
+            counts.doublePrecision += frameFlops.doublePrecision - 2 * kDimensions;
+        }
+    }
     return counts;
 }
 
@@ -246,6 +258,7 @@ FlopCounts treeComputeMultipole(SourceMultipoleBuffer& multi, Pair<ParticleInteg
     namespace cartesian = cosmictiger::gravity::cartesian;
     constexpr int kCount = FmmOrder<order>::kMultipoleCoefficients_;
     constexpr int kLanes = SimdDouble::size();
+    FlopCounts frameFlops{};
     for (int i = 0; i < kCount; ++i) {
         multi[i] = 0;
     }
@@ -257,7 +270,11 @@ FlopCounts treeComputeMultipole(SourceMultipoleBuffer& multi, Pair<ParticleInteg
             auto const i = begin + lane;
             for (int dim = 0; dim < kDimensions; ++dim) {
                 simdSetLane(displacement[dim], lane,
-                    unwrappedDoubleDistance(sources.positions[dim][i], center[dim]));
+                    sources.geometry.frozenMembership ?
+                        detail::fmmCellDifference(sources.positions[dim][i], center[dim],
+                            sources.geometry.sinkCell[dim], sources.geometry.meshSize,
+                            &frameFlops) :
+                        unwrappedDoubleDistance(sources.positions[dim][i], center[dim]));
             }
             simdSetLane(mass, lane, double(fmmSourceMass(sources, i)));
         }
@@ -271,6 +288,12 @@ FlopCounts treeComputeMultipole(SourceMultipoleBuffer& multi, Pair<ParticleInteg
     FlopCounts counts{};
     counts.doublePrecision = FlopCount(particleRange.second - particleRange.first) * 7 +
         packets * (kLanes * (cartesian::detail::kP2MFlops<order - 2> + 3) + kLanes * kCount);
+    if constexpr (kCountFlops) {
+        if (sources.geometry.frozenMembership) {
+            counts.doublePrecision += frameFlops.doublePrecision -
+                kDimensions * FlopCount(particleRange.second - particleRange.first);
+        }
+    }
     return counts;
 }
 

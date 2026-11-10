@@ -24,7 +24,7 @@ class BuildFeaturesTest(unittest.TestCase):
         self.configure()
 
     def configure(self, **changes):
-        self.features = {feature: feature in ("GRAVITY", "ROCKSTAR", "SPH", "CHEMISTRY", "INTEGRATOR_TRADITIONAL") for feature in FEATURES}
+        self.features = {feature: feature in ("GRAVITY", "ROCKSTAR", "SPH", "CHEMISTRY", "INTEGRATOR_HIERARCHICAL") for feature in FEATURES}
         self.features.update(changes)
         self.degrees = (4, 6)
         self.commands = []
@@ -206,8 +206,8 @@ class BuildFeaturesTest(unittest.TestCase):
         self.assertIn("one application", self.check())
         self.assertIn("potential degrees=4-6", self.check())
 
-    def testAllIntegrators(self):
-        self.configure(INTEGRATOR_HIERARCHICAL=True, INTEGRATOR_GLOBAL=True)
+    def testSoleIntegrator(self):
+        self.configure(INTEGRATOR_HIERARCHICAL=True, INTEGRATOR_GLOBAL=False, INTEGRATOR_TRADITIONAL=False)
         self.assertIn("Build features passed", self.check())
 
     def testGravityOnly(self):
@@ -513,9 +513,9 @@ class BuildConfigHeaderTest(unittest.TestCase):
                               text=True, capture_output=True)
 
     def definitions(self):
-        return {"COSMICTIGER_ENABLE_" + name: int(name == "INTEGRATOR_TRADITIONAL")
+        return {"COSMICTIGER_DIMENSION_COUNT": 3, **{"COSMICTIGER_ENABLE_" + name: int(name == "INTEGRATOR_HIERARCHICAL")
                 for name in ("SPH", "CHEMISTRY", "STARS", "STAR_FORMATION", "ROCKSTAR",
-                             "INTEGRATOR_TRADITIONAL", "INTEGRATOR_HIERARCHICAL", "INTEGRATOR_GLOBAL")}
+                             "INTEGRATOR_TRADITIONAL", "INTEGRATOR_HIERARCHICAL", "INTEGRATOR_GLOBAL")}}
 
     def testExplicitCapabilitiesCompile(self):
         result = self.compile(self.definitions())
@@ -523,7 +523,7 @@ class BuildConfigHeaderTest(unittest.TestCase):
 
     def testEveryMissingCapabilityFails(self):
         definitions = self.definitions()
-        for missing in definitions:
+        for missing in definitions.keys() - {"COSMICTIGER_DIMENSION_COUNT"}:
             with self.subTest(missing=missing):
                 result = self.compile({key: value for key, value in definitions.items() if key != missing})
                 self.assertNotEqual(result.returncode, 0)
@@ -533,7 +533,7 @@ class BuildConfigHeaderTest(unittest.TestCase):
         for values, diagnostic in (({"CHEMISTRY": 1}, "chemistry capability requires SPH"),
                 ({"STARS": 1, "STAR_FORMATION": 1}, "stars capability requires chemistry"),
                 ({"STARS": 1}, "must match"),
-                ({"INTEGRATOR_TRADITIONAL": 0}, "At least one time integrator")):
+                ({"INTEGRATOR_HIERARCHICAL": 0}, "Hierarchical gravity with midpoint SPH is required")):
             with self.subTest(values=values):
                 definitions = self.definitions() | {"COSMICTIGER_ENABLE_" + key: value for key, value in values.items()}
                 result = self.compile(definitions)
@@ -690,7 +690,7 @@ class FeatureConfigurationTest(unittest.TestCase):
         for gravity, rockstar, testing, cuda in product((False, True), repeat=4):
             with self.subTest(gravity=gravity, rockstar=rockstar, testing=testing, cuda=cuda), \
                     tempfile.TemporaryDirectory() as directory:
-                configuration = {feature: feature in ("SPH", "CHEMISTRY", "INTEGRATOR_TRADITIONAL")
+                configuration = {feature: feature in ("SPH", "CHEMISTRY", "INTEGRATOR_HIERARCHICAL")
                                  for feature in FEATURES}
                 configuration.update(GRAVITY=gravity, ROCKSTAR=rockstar)
                 script = Path(directory) / "sources.cmake"
@@ -753,10 +753,9 @@ class FeatureConfigurationTest(unittest.TestCase):
                 self.assertIn(key, result.stderr)
                 self.assertIn("-U", result.stderr)
 
-    def testNoIntegrator(self):
+    def testRetiredIntegratorCacheMigrates(self):
         result = self.configure({"COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL": "OFF"})
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("Enable at least one COSMICTIGER_ENABLE_INTEGRATOR", result.stderr)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def testGravityCapabilityCombinations(self):
         for gravity in (False, True):
@@ -770,7 +769,7 @@ class FeatureConfigurationTest(unittest.TestCase):
         source = Path(__file__).resolve().parents[1]
         for solver, testing, cuda in product((None, "GRAVITY"), (False, True), (False, True)):
             with self.subTest(solver=solver, testing=testing, cuda=cuda), tempfile.TemporaryDirectory() as directory:
-                configuration = {feature: feature in (solver, "ROCKSTAR", "SPH", "CHEMISTRY", "INTEGRATOR_TRADITIONAL")
+                configuration = {feature: feature in (solver, "ROCKSTAR", "SPH", "CHEMISTRY", "INTEGRATOR_HIERARCHICAL")
                                  for feature in FEATURES}
                 script = Path(directory) / "sources.cmake"
                 script.write_text(
@@ -804,7 +803,7 @@ class FeatureConfigurationTest(unittest.TestCase):
         self.assertIn("Enable at least one", result.stderr)
         self.assertIn("COSMICTIGER_ENABLE_GRAVITY", result.stderr)
 
-    def testGlobalSphOnly(self):
+    def testSoleIntegratorSphOnly(self):
         result = self.configure({"COSMICTIGER_ENABLE_GRAVITY": "OFF",
                                  "COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL": "OFF",
                                  "COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL": "ON"})

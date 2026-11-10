@@ -267,8 +267,7 @@ void scalarCases() {
     for (auto const& p : points) {
         std::array<Real, kCount> greens{};
         Real trace{};
-        EwaldGreen<degree>::template evaluate<Real>(
-            greens, trace, Real(p[0]), Real(p[1]), Real(p[2]));
+        evaluateEwaldGreen<degree, Real>(greens, trace, Real(p[0]), Real(p[1]), Real(p[2]));
         auto const exact =
             reference(degree, {double(Real(p[0])), double(Real(p[1])), double(Real(p[2]))});
         near(trace, 4 * kPi / 3, epsilon, "Green trace");
@@ -292,7 +291,7 @@ void scalarCases() {
     // The production evaluator applies the background trace at a point.
     std::array<Real, kCount> zero{};
     std::array<Real, 4> field{};
-    EwaldL2P<degree>::template add<Real>(field, zero, Real(2), Real(.1), Real(-.2), Real(.3));
+    ewaldL2P<degree, Real>(field, zero, Real(2), Real(.1), Real(-.2), Real(.3));
     near(field[0], -.14, epsilon, "background point potential");
     near(field[1], .2, epsilon, "background point x");
     near(field[2], -.4, epsilon, "background point y");
@@ -305,10 +304,10 @@ void countCase() {
     std::array<counted::Real, (degree + 1) * (degree + 1)> greens{};
     counted::Real trace{};
     counted::operations = 0;
-    EwaldGreen<degree>::template evaluate<counted::Real>(
+    evaluateEwaldGreen<degree, counted::Real>(
         greens, trace, counted::Real(.2), counted::Real(-.1), counted::Real(.3));
-    near(double(counted::operations), EwaldGreen<degree>::kFlops_, 0,
-        "Ewald emitted arithmetic count");
+    near(
+        double(counted::operations), kEwaldGreenFlops<degree>, 0, "Ewald emitted arithmetic count");
 }
 
 template <int degree, typename Scalar>
@@ -322,11 +321,11 @@ void simdCase() {
     Pack const z([&](auto lane) { return Scalar(positions[lane][2]); });
     std::array<Pack, (degree + 1) * (degree + 1)> output{};
     Pack trace;
-    EwaldGreen<degree>::template evaluate<Pack>(output, trace, x, y, z);
+    evaluateEwaldGreen<degree, Pack>(output, trace, x, y, z);
     for (int lane = 0; lane < 4; ++lane) {
         std::array<Scalar, (degree + 1) * (degree + 1)> expected{};
         Scalar scalarTrace{};
-        EwaldGreen<degree>::template evaluate<Scalar>(
+        evaluateEwaldGreen<degree, Scalar>(
             expected, scalarTrace, Scalar(x[lane]), Scalar(y[lane]), Scalar(z[lane]));
         for (int slot = 0; slot < (degree + 1) * (degree + 1); ++slot) {
             near(output[slot][lane], expected[slot],

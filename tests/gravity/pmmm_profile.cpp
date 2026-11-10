@@ -92,7 +92,7 @@ extern "C" void __wrap__Z8pmmmTestv() {
     options.initial.darkMatterMass = .75;
     options.initial.gasMass = .25;
     options.compute.bucketSize = 8;
-    options.run.hierarchicalGravity = false;
+    options.run.hierarchicalGravity = options.gravity.enabled;
     for (int mesh : {8, 16}) {
         pmmmDestroy();
         options.gravity.meshSize = mesh;

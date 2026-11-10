@@ -43,7 +43,9 @@ std::array<uint64_t, 2> particleCounts(bool rungSelected) {
 /// for a solve generation.
 void prepare(SolveRequest const& request) {
     initialize(request.meshSize);
-    initializeGreen();
+    if (!frozenNearRequest(request)) {
+        initializeGreen();
+    }
     prepareCollectively([&]() {
         state.request = request;
         bool const frozen = frozenNearRequest(request);
@@ -218,10 +220,6 @@ void solve(SolveRequest request) {
                 options.meshSize, options.pmmmCoarseMeshSize, options.pmmmNearWidth),
             request.activeParticles, request.totalParticles) :
         options.meshSize;
-    if (frozen && options.pmmmNearMethod != "pp") {
-        throw std::runtime_error(
-            "The PMMM outer interval supports only the pp near field on frozen membership");
-    }
     bool const farField = !frozen;
     bool const nearField = !request.farOnly;
     {

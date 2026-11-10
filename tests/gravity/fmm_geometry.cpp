@@ -365,3 +365,62 @@ TEST(FmmGeometry, DegenerateAndWideRangesChooseValidDimensions) {
     EXPECT_EQ(halves.first.end, box.end);
     EXPECT_EQ(halves.second.begin, box.begin);
 }
+
+TEST(FmmGeometry, FrozenMembershipUsesCellIdentitiesAfterCentersMove) {
+    for (int side : {1, 2, 3, 4, 17}) {
+        for (int trial = 0; trial < 64; ++trial) {
+            FmmGeometry geometry;
+            geometry.meshSize = side;
+            geometry.frozenMembership = true;
+            Vector3<Position> sink, source;
+            Vector3<double> expected;
+            Fixed32Range sinkBox, sourceBox;
+            double sinkDistance = 0;
+            double sourceDistance = 0;
+            uint64_t sourceKey = 0;
+            Array<int, kDimensions> sourceCell{};
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                geometry.sinkCell[dim] = (trial + 3 * dim) % side;
+                sourceCell[dim] = (trial * 7 + dim) % side;
+                sourceKey = sourceKey * side + sourceCell[dim];
+                double const a =
+                    (geometry.sinkCell[dim] + .5) / side + (.031 * ((trial + dim) % 17) - .248);
+                double const b =
+                    (sourceCell[dim] + .5) / side + (.029 * ((trial + 2 * dim) % 19) - .261);
+                sink[dim] = a;
+                source[dim] = b;
+                int delta = geometry.sinkCell[dim] - sourceCell[dim];
+                int nearest = (delta % side + side) % side;
+                if (nearest > side / 2) {
+                    nearest -= side;
+                }
+                expected[dim] = a - b - double(delta - nearest) / side;
+                sinkBox.begin[dim] = a - .017;
+                sinkBox.end[dim] = a + .017;
+                sourceBox.begin[dim] = b - .009;
+                sourceBox.end[dim] = b + .009;
+                sinkDistance += std::pow(std::max(0., std::abs(expected[dim]) - .017), 2);
+                sourceDistance += std::pow(std::max(0., std::abs(expected[dim]) - .009), 2);
+            }
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                EXPECT_NEAR(fmmPositionDifference(
+                                sink[dim], source[dim], dim, geometry, nullptr, sourceKey),
+                    expected[dim], 2.e-7);
+            }
+            EXPECT_NEAR(fmmSinkBoxDistanceSquared(sinkBox, source, geometry, nullptr, sourceKey),
+                sinkDistance, 2.e-6);
+            EXPECT_NEAR(
+                fmmSourceBoxDistanceSquared(sourceBox, sink, source, geometry, nullptr, sourceKey),
+                sourceDistance, 2.e-6);
+        }
+    }
+}
+
+TEST(FmmGeometry, FrozenFrameRetainsTinyNativeSeamSeparations) {
+    Position a, b;
+    a.raw() = 2;
+    b.raw() = std::numeric_limits<PositionInteger>::max();
+    double const expected = 3 * Position::kToFloatFactor_;
+    EXPECT_EQ(detail::fmmCellDifference(a, b, 0, 8), expected);
+    EXPECT_EQ(detail::fmmCellDifference(b, a, 0, 8), -expected);
+}

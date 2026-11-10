@@ -37,7 +37,8 @@ void treePrepareCellForestLocal(
 // are double and must be consumed before discarding it. The persistent arena is
 // float. Without an output, only a float root is kept for compatibility joins.
 TreeCellRoot treeCreateCell(ParticleMeshCell const& cell, int meshSize, FmmParticleStore store,
-    Range<double> const* sourceBox = nullptr, TreeCreateReturn* completedRoot = nullptr);
+    Range<double> const* sourceBox = nullptr, TreeCreateReturn* completedRoot = nullptr,
+    bool frozenMembership = false);
 // Compatibility wrapper for a complete forest. Cells are ordered by (ghost,
 // key), and ranges are disjoint within each store. Sink roots must be owned.
 Vector<TreeCellRoot> treeCreateCellForest(Vector<ParticleMeshCell> const& cells, int meshSize);

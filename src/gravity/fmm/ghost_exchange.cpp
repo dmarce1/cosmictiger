@@ -175,8 +175,8 @@ void receiveGhostCell(size_t index) {
             view.masses[i] = particle.mass;
         }
         TreeCreateReturn completed;
-        auto root =
-            treeCreateCell(cell, cache.meshSize, FmmParticleStore::Ghost, nullptr, &completed);
+        auto root = treeCreateCell(cell, cache.meshSize, FmmParticleStore::Ghost, nullptr,
+            &completed, frozenNearRequest(state.request));
         --state.pendingGhosts;
         pending = false;
         publishSource(index, root);

@@ -241,8 +241,7 @@ void sourceScalingCheck() {
         for (int i = 0; i < 4; ++i) {
             Point const u{.12 + .03 * i, -.21 + .04 * i, .18 - .05 * i};
             cartesian::P2M(cm, .7 + .3 * i, Point{κ * h * u[0], κ * h * u[1], κ * h * u[2]});
-            spherical::detail::P2M<kOrder - 2>::template add<double>(
-                direct, .7 + .3 * i, u[0], u[1], u[2]);
+            spherical::detail::P2M<kOrder - 2, double>(direct, .7 + .3 * i, u[0], u[1], u[2]);
         }
         conversion::sourceToSpherical(sm, cm);
         for (int n = 0; n <= kOrder - 2; ++n) {

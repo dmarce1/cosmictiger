@@ -65,7 +65,7 @@ void distributeMeshTimestepFixture() {
     auto const saved = getOptions();
     auto options = saved;
     options.gravity.enabled = false;
-    options.run.hierarchicalGravity = false;
+    options.run.hierarchicalGravity = options.gravity.enabled;
     setOptions(options);
     particlesSortByRung(0);
     domainsRebound();

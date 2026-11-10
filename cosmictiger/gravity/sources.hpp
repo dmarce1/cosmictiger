@@ -9,6 +9,7 @@
 
 #include <type_traits>
 
+#include <cosmictiger/gravity/fmm_geometry.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
 enum class FmmParticleStore { Owned, Ghost };
@@ -22,6 +23,7 @@ struct FmmSourceView {
     ParticleInteger count = 0;
     float* masses = nullptr;
     FmmParticleStore store = FmmParticleStore::Owned;
+    FmmGeometry geometry{};
 };
 
 static_assert(std::is_trivially_copyable_v<FmmSourceView>);
@@ -32,6 +34,8 @@ FmmSourceView fmmSourceView(FmmParticleStore store);
 void fmmRegisterSourceView(FmmParticleStore store, FmmSourceView view);
 ParticleInteger fmmSourcePartition(FmmParticleStore store, FmmSourceView const& sources,
     Pair<ParticleInteger> range, Position split, int dimension);
+ParticleInteger fmmSourcePartitionFrame(FmmParticleStore store, FmmSourceView const& sources,
+    Pair<ParticleInteger> range, double split, int dimension);
 
 /// Read an explicit source mass or derive it from owned storage/species, using unit masses
 /// in dark-matter-only runs.

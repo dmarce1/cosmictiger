@@ -243,7 +243,8 @@ def checkBuild(buildDirectory):
         return value not in {"", "0", "OFF", "NO", "FALSE", "N", "IGNORE", "NOTFOUND"} and not value.endswith("-NOTFOUND")
 
     sourceDirectory = Path(setting("CMAKE_HOME_DIRECTORY")).resolve()
-    configuration = {feature: enabled("COSMICTIGER_ENABLE_" + feature) for feature in FEATURES}
+    configuration = {feature: (feature == "INTEGRATOR_HIERARCHICAL" if feature.startswith("INTEGRATOR_") else\
+        enabled("COSMICTIGER_ENABLE_" + feature)) for feature in FEATURES}
     if enabled("COSMICTIGER_ENABLE_STAR_FORMATION") != configuration["STARS"]:
         raise ValueError("COSMICTIGER_ENABLE_STAR_FORMATION must match COSMICTIGER_ENABLE_STARS")
     degrees = degreeRange(setting("COSMICTIGER_EXPANSION_DEGREE"))
@@ -282,7 +283,8 @@ def checkBuild(buildDirectory):
                 name, _, value = argument[2:].partition("=")
                 definitions.setdefault(name, set()).add(value)
         definitionsByTarget.setdefault(target, []).append((source, definitions))
-        precisionTest = re.fullmatch(r"gravity_error_cuda_reference_(32|64)_test", target)
+        precisionTest = re.fullmatch(
+            r"(?:gravity_error_cuda_reference_|tree_source_moments_fixed)(32|64)_test", target)
         expectedBits = precisionTest[1] if precisionTest else str(bits)
         foundBits = definitions.get("COSMICTIGER_POSITION_BITS")
         if (precisionTest or foundBits is not None) and foundBits != {expectedBits}:

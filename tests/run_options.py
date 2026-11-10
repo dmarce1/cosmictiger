@@ -70,9 +70,8 @@ def main():
                     "kickSharedExpansion", "kickHandoffBlocks", "kickFineHandoffBlocks",
                     "kickListReserve")
 
-    # The hierarchical ladder needs gravity; these option cases run SPH without it.
-    hydro_rejected = args.time_integrator == "hierarchical"
-    hydro_error = "hierarchical requires gravity"
+    hydro_rejected = False
+    hydro_error = ""
 
     def run(name, options, success=True, pmmm_mesh=8, selectors=True):
         if selectors:
@@ -183,7 +182,7 @@ def main():
         raise RuntimeError(f"deprecated aliases remain in help: {sorted(set(deprecated_aliases) & option_names)}")
 
     sph_controls_available = not args.without_sph and not hydro_rejected
-    # SPH fixtures run without self-gravity: PMMM does not couple to SPH yet.
+    # These fixtures exercise gravity-free midpoint SPH.
     sph_enabled_options = ["--hydro.enabled=true", "--gravity.enabled=false"]
     sph_control_options = sph_enabled_options if sph_controls_available else []
 
@@ -201,7 +200,7 @@ def main():
         hydroMethod = "sph"
         startupPhysics = (["--run.scenario=hydroWave", "--hydro.enabled=true"]
                           if not gravity_compiled else ["--hydro.enabled=false"])
-        output = run("startup_options", [
+        startupOptions = [
             "--run.verbose=false", *startupPhysics,
             f"--hydro.method={hydroMethod}", "--run.darkMatterParticleCount=512", "--run.gasParticleCount=512",
             "--cosmology.sigma8=0", "--run.maxIterations=0", "--output.silo=false",
@@ -210,7 +209,22 @@ def main():
             "--units.boxLength=20", "--compute.sphBucketSize=0", "--cosmology.omegaLambda=auto",
             "--scenario.disc.centralSmoothingLength=0.02", "--hydro.minSmoothingLength=0.001",
             "--hydro.maxSmoothingLength=1000", "--starFormation.seed=18446744073709551615",
-            "--analysis.saveForce=true"])
+            "--analysis.saveForce=true"]
+        output = run("startup_options", startupOptions, selectors=False)
+        if not re.search(r"^run\.timeIntegrator\s*:\s*hierarchical\s*$", output, re.MULTILINE):
+            raise RuntimeError("the sole integration scheme was not selected automatically")
+        for mode in ("traditional", "global"):
+            rejected = run("startup_reject_" + mode,
+                           startupOptions + [f"--run.timeIntegrator={mode}"],
+                           success=False, selectors=False)
+            if "run.timeIntegrator must be hierarchical" not in rejected:
+                raise RuntimeError(f"retired integrator {mode} lacked a clear diagnostic")
+        if gravity_compiled:
+            rejected = run("startup_reject_unsplit",
+                           startupOptions + ["--gravity.pmmmOuterInterval=false"],
+                           success=False, selectors=False)
+            if "long/short gravity splitting is mandatory" not in rejected:
+                raise RuntimeError("unsplit gravity lacked a clear diagnostic")
         assertStartupOptions(output, hydroMethod)
         assertNumericSetting(output, "compute.sphBucketSize", 106)
         dimension = int(re.search(r"^build\.dimensionCount\s*:\s*(\d+)", output, re.MULTILINE)[1])
@@ -363,6 +377,9 @@ mapSize = 8
 
     for key, value in (("gravity.method.near", "unknown"),
                        ("run.timeIntegrator", "unknown"),
+                       ("run.timeIntegrator", "traditional"),
+                       ("run.timeIntegrator", "global"),
+                       ("gravity.pmmmOuterInterval", "false"),
                        ("gravity.expansionDegree", "1"),
                        ("gravity.expansionDegree", "9")):
         output = run("selection_invalid_" + key + "_" + value,

@@ -97,5 +97,7 @@ namespace detail {
     }
 }    // namespace detail
 template <int degree>
-class EwaldGreen;
+inline constexpr int kEwaldGreenFlops = 0;
+template <int degree>
+inline constexpr int kEwaldGreenConventionalFlops = 0;
 }    // namespace cosmictiger::gravity::spherical

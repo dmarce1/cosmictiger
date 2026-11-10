@@ -11,6 +11,7 @@
 #include <algorithm>
 
 #include <boost/align/aligned_allocator.hpp>
+
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/gravity/fmm_types.hpp>
@@ -37,16 +38,18 @@ using SimdAlignedVector = Vector<T,
 // the last vector with zero mass at the last source's center.
 template <int order>
 void gatherSourceMultipoles(Vector<TreeNode const*> const& treePtrs,
-    SimdAlignedVector<cosmictiger::gravity::cartesian::Multipole<SimdFloat, order>>&
-        mValue,
-    SimdAlignedVector<Vector3<SimdPosition>>& yValue) {
+    SimdAlignedVector<cosmictiger::gravity::cartesian::Multipole<SimdFloat, order>>& mValue,
+    SimdAlignedVector<Vector3<SimdPosition>>& yValue,
+    SimdAlignedVector<Array<uint64_t, kSimdFloatSize>>& keys) {
     constexpr int kMultipoleCoefficients = FmmOrder<order>::kMultipoleCoefficients_;
     int const numberOfSources = roundUp((int) treePtrs.size(), kSimdFloatSize) / kSimdFloatSize;
     mValue.resize(numberOfSources);
     yValue.resize(numberOfSources);
+    keys.resize(numberOfSources);
     for (int i = 0; i < treePtrs.size(); i++) {
         int const k = i / kSimdFloatSize;
         int const l = i % kSimdFloatSize;
+        keys[k][l] = treePtrs[i]->meshCellKey;
         auto const& source = fmmMultiPos<order>(treePtrs[i]->mpos);
         for (int j = 0; j < kMultipoleCoefficients; j++) {
             simdSetLane(mValue[k][j], l, source.multi[j]);
@@ -60,6 +63,7 @@ void gatherSourceMultipoles(Vector<TreeNode const*> const& treePtrs,
     for (int i = treePtrs.size(); i < numberOfSources * kSimdFloatSize; i++) {
         int const k = i / kSimdFloatSize;
         int const l = i % kSimdFloatSize;
+        keys[k][l] = keys[lastk][lastl];
         for (int j = 0; j < kMultipoleCoefficients; j++) {
             simdSetLane(mValue[k][j], l, 0.0);
         }
@@ -89,7 +93,8 @@ void cpuGravityCc(cosmictiger::gravity::cartesian::Expansion<float, order>& lVal
             cosmictiger::gravity::cartesian::Multipole<SimdFloat, order>>
             mValue;
         static thread_local detail::SimdAlignedVector<Vector3<SimdPosition>> yValue;
-        detail::gatherSourceMultipoles<order>(treePtrs, mValue, yValue);
+        detail::SimdAlignedVector<Array<uint64_t, kSimdFloatSize>> keys;
+        detail::gatherSourceMultipoles<order>(treePtrs, mValue, yValue, keys);
         Vector3<SimdPosition> position{};
         for (int dim = 0; dim < kDimensions; dim++) {
             position[dim] = math::broadcast<SimdPosition>(selfPtr->mpos->pos[dim].raw());
@@ -101,7 +106,7 @@ void cpuGravityCc(cosmictiger::gravity::cartesian::Expansion<float, order>& lVal
             Vector3<SimdFloat> dx{};
             for (int dim = 0; dim < kDimensions; dim++) {
                 dx[dim] = fmmPositionDifference(
-                    position[dim], yValue[j][dim], dim, geometry, &geometryFlops);
+                    position[dim], yValue[j][dim], dim, geometry, &geometryFlops, &keys[j]);
             }
             directFlops = cosmictiger::gravity::cartesian::M2L(
                 l0, mValue[j], fmmScaleDisplacement(dx), doPhi);
@@ -141,6 +146,7 @@ void cpuGravityCp(cosmictiger::gravity::cartesian::Expansion<float, order>& lVal
             Vector<Position> srcy;
             Vector<Position> srcz;
             Vector<float> masses;
+            Vector<uint64_t> sourceKeys(numberOfSources);
             Vector<char> types;
             srcx.resize(numberOfSources);
             srcy.resize(numberOfSources);
@@ -151,6 +157,8 @@ void cpuGravityCp(cosmictiger::gravity::cartesian::Expansion<float, order>& lVal
             for (int i = 0; i < maxi; i++) {
                 gravityReadSourcePositions(*treePtrs[i], srcx.data(), srcy.data(), srcz.data(),
                     types.data(), masses.data(), count);
+                std::fill_n(sourceKeys.data() + count, treePtrs[i]->numberOfParticles(),
+                    treePtrs[i]->meshCellKey);
                 count += treePtrs[i]->numberOfParticles();
             }
             for (int i = count; i < numberOfSources; i++) {
@@ -161,6 +169,7 @@ void cpuGravityCp(cosmictiger::gravity::cartesian::Expansion<float, order>& lVal
                 srcy[i] = srcy[count - 1];
                 srcz[i] = srcz[count - 1];
                 masses[i] = 0.0;
+                sourceKeys[i] = sourceKeys[count - 1];
             }
             Vector3<SimdPosition> position{};
             Vector3<SimdPosition> yValue{};
@@ -172,16 +181,18 @@ void cpuGravityCp(cosmictiger::gravity::cartesian::Expansion<float, order>& lVal
             int greenFlops = 0;
             for (int j = 0; j < numberOfSources; j += kSimdFloatSize) {
                 SimdFloat mass{};
+                Array<uint64_t, kSimdFloatSize> keys{};
                 for (int l = 0; l < kSimdFloatSize; l++) {
                     simdSetLane(yValue[kXi], l, srcx[j + l].raw());
                     simdSetLane(yValue[kYi], l, srcy[j + l].raw());
                     simdSetLane(yValue[kZi], l, srcz[j + l].raw());
                     simdSetLane(mass, l, masses[j + l]);
+                    keys[l] = sourceKeys[j + l];
                 }
                 Vector3<SimdFloat> dx{};
                 for (int dim = 0; dim < kDimensions; dim++) {
                     dx[dim] = fmmPositionDifference(
-                        position[dim], yValue[dim], dim, geometry, &geometryFlops);
+                        position[dim], yValue[dim], dim, geometry, &geometryFlops, &keys);
                 }
                 cosmictiger::gravity::cartesian::Expansion<SimdFloat, order> d;
                 d = math::broadcast<SimdFloat>(0);
@@ -221,7 +232,8 @@ void cpuGravityPc(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
             cosmictiger::gravity::cartesian::Multipole<SimdFloat, order>>
             mValue;
         static thread_local detail::SimdAlignedVector<Vector3<SimdPosition>> yValue;
-        detail::gatherSourceMultipoles<order>(treePtrs, mValue, yValue);
+        detail::SimdAlignedVector<Array<uint64_t, kSimdFloatSize>> keys;
+        detail::gatherSourceMultipoles<order>(treePtrs, mValue, yValue, keys);
         auto const range = selfPtr->particleRange;
         Vector3<SimdPosition> position{};
         int kernelFlops = 0;
@@ -237,7 +249,7 @@ void cpuGravityPc(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
                 Vector3<SimdFloat> dx{};
                 for (int dim = 0; dim < kDimensions; dim++) {
                     dx[dim] = fmmPositionDifference(
-                        position[dim], yValue[j][dim], dim, geometry, &geometryFlops);
+                        position[dim], yValue[j][dim], dim, geometry, &geometryFlops, &keys[j]);
                 }
                 kernelFlops = cosmictiger::gravity::cartesian::M2P(
                     lValue2, mValue[j], fmmScaleDisplacement(dx), doPhi);

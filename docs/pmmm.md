@@ -4,7 +4,7 @@ PMMM is CosmicTiger's gravity solver. `COSMICTIGER_ENABLE_GRAVITY` (default
 `ON`) compiles it in `./build.sh` or with CMake feature options; every
 configuration builds one `cosmictiger` executable containing the selected
 capabilities. The default configuration enables PMMM gravity and SPH, particle
-chemistry, the traditional integrator, and potential expansion degrees four
+chemistry, hierarchical gravity with midpoint SPH, and potential expansion degrees four
 through six. A gravity-only configuration is:
 
 ```sh
@@ -19,13 +19,11 @@ near field (`gravity.method.near=fmm`, the default) or its fallback, the direct
 particle-pair near field (`gravity.method.near=pp`). Both near fields are always
 compiled.
 
-Use `gravity.method.near=fmm|pp` and
-`run.timeIntegrator=traditional|hierarchical|global` to select the run. An
-integrator selector is required when more than one eligible integrator is
-compiled; a sole eligible integrator is selected automatically.
+Use `gravity.method.near=fmm|pp` to select the near field.
+The sole integration scheme is hierarchical short gravity with mandatory outer
+long kicks and midpoint SPH. `run.timeIntegrator=hierarchical` is automatic.
 `gravity.expansionDegree` selects a compiled potential degree and defaults to
-the largest enabled degree, six in the default range. Near-field, integrator and
-degree selections can differ between runs of one executable.
+the largest enabled degree, six in the default range.
 
 PMMM's forward, inverse, and cached Green-function FFTs run their parallel jobs
 on the existing HPX worker pool through FFTW's threading callback. They share
@@ -40,7 +38,7 @@ threads so waiting for the shared planner lock cannot block HPX workers.
 
 ```sh
 ./build_pmmm/cosmictiger --gravity.method.near=pp \
-  --gravity.expansionDegree=6 --run.timeIntegrator=traditional \
+  --gravity.expansionDegree=6 --run.timeIntegrator=hierarchical \
   --gravity.meshSize=32 --gravity.pmmmNearWidth=2 \
   --run.darkMatterParticleCount=32768 --run.gasParticleCount=32768 --hydro.enabled=false \
   --gravity.cuda=false --hpx:threads=12
@@ -56,7 +54,7 @@ meshSize = 32
 pmmmNearWidth = 2
 
 [run]
-timeIntegrator = traditional
+timeIntegrator = hierarchical
 
 [hydro]
 enabled = false
@@ -118,7 +116,7 @@ distribution. With the near FMM capability enabled:
 
 ```sh
 ./build_pmmm/cosmictiger --gravity.method.near=fmm \
-  --run.timeIntegrator=traditional --gravity.meshSize=32 --gravity.pmmmNearWidth=2 \
+  --run.timeIntegrator=hierarchical --gravity.meshSize=32 --gravity.pmmmNearWidth=2 \
   --gravity.expansionDegree=6 --compute.bucketSize=32 \
   --hydro.enabled=false --gravity.cuda=false
 ```
@@ -308,8 +306,7 @@ cells remain outstanding. `storedAccelerationParticles` and
 `storedPotentialParticles` expose retained solve-result arrays: both are zero
 for the ordinary streamed kick path.
 
-SPH couples to PMMM self-gravity on the hierarchical integrator only (next section);
-the traditional and global integrators run SPH without self-gravity. Set
+SPH couples to PMMM self-gravity on the hierarchical ladder (next section). Set
 `hydro.enabled=false` explicitly for gravity-only cosmological PMMM runs, whose scenario
 otherwise enables SPH when compiled.
 Particle chemistry additionally requires `COSMICTIGER_ENABLE_CHEMISTRY=ON`
@@ -365,73 +362,24 @@ among ranks. FFT padding, allocation imbalance, and plan storage add overhead.
 These estimates exclude particle arrays, source copies, cell forests and metadata,
 communication packets, output fields, and near-field CPU/CUDA workspaces.
 
-`COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL=ON` is the default;
-`COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL` and
-`COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL` default to `OFF`. These capabilities are
-independent. If several are eligible for the selected physics, choose one with
-`run.timeIntegrator`.
+The integration scheme is fixed: hierarchical short gravity, long kicks at outer
+boundaries, and midpoint SPH. Gravity-free SPH uses the same midpoint scheme.
 
-PMMM's `traditional` path uses individual block timesteps, as FMM does. Every
-substep rebuilds the mesh source field from all particles, including inactive
-particles. Only sinks whose rung is active receive a gravity kick or a new rung;
-inactive sinks retain their velocities and rungs. The gas acceleration is passed
-to SPH for its own hydrodynamic update. `pmmmKick` consumes each
-completed near-plus-far field directly; no common rung is imposed.
-
-The `global` path advances every particle on one continuous timestep: the
-collective minimum of the raw enabled gravity and SPH limits, capped by the
-configured maximum step, cosmological limit, and remaining time to the endpoint.
-It does not round that interval to a power of two, impose rung-growth limits, or
-apply the minimum-rung floor. The previous interval's closing half-kick uses its
-saved duration; the new opening half-kick uses the newly selected duration after
-the collective reduction. The path supports gravity-only, SPH-only, and coupled
-gravity/SPH evolution on CPU and CUDA. GADGET-4 cooling and star formation
-run once after the completed SPH interval: star conversion uses the saved
-previous star-formation rate, followed by cooling and the new rate. The source
-does not retry or shorten that completed interval. Checkpoints preserve the
-hydrodynamic closing half-kick and its exact interval; cooling has no pending
-half-step state. Final diagnostics close the final hydrodynamic interval and
-its cooling source without opening another interval. See
-[equilibrium cooling](primordial_chemistry.md) and [star formation](star_formation.md).
-
-Select `run.timeIntegrator=hierarchical` to use the hierarchical
-particle timestep ladder for dark matter. Every ladder stage selects one
+The hierarchical particle timestep ladder evolves gas and dark matter. Every ladder stage selects one
 particle range as both its sources and sinks. Moment deposition, remote cell
 packets, and near FMM all use that same selection; an inactive slow particle
 does not enter a fast stage's force. Ascending/descending signed kicks and
-per-rung drifts are retained. In all integrators, the gravity timestep criterion uses
+per-rung drifts are retained. The gravity timestep criterion uses
 the selected compact kernel's effective radius and the complete near-plus-far
 acceleration.
 
-Each hierarchical stage scales the mesh volume with its active particle fraction.
-With `N0 = gravity.meshSize`, `C = gravity.pmmmCoarseMeshSize`, and global
-owned particle counts `active` and `total`, the stage side length is the
-smallest divisor `N` of `N0` that is a multiple of `C`, with
-
-```text
-C <= N <= N0  and  N^3 * total >= N0^3 * active
-```
-
-so the mean number of active particles per cell stays near the full-step value
-subject to the available aligned divisors. Power-of-two meshes retain the
-previous halving thresholds of one eighth, one sixty-fourth, and so on. The count includes the entire stage-selected
-source-and-sink range, including faster rungs, and excludes ghosts. Exact
-integer volume comparisons decide cube boundaries without floating-point
-ambiguity. An empty selection uses the coarse mesh. The base configuration
-remains unchanged.
-All ranks use the same stage size for cell sorting, FFTs, ghost exchange,
-and near-field geometry. Plans and Green spectra are reused by stage mesh
-size, retaining at most eight meshes and twice the base mesh's global FFT
-buffer allocation. Least-recently-used meshes are evicted if either cap is
-reached; arbitrary sizes may have more compatible stage meshes than powers of two. Transient moments and FFTW's internal plan
-storage are separate from this buffer cap. Mesh switches occur only after the
-previous solve has completed. `PmmmDiagnostics` reports `meshSize`,
-`activeParticles`, and `totalParticles` for the most recent solve. Here
-`activeParticles` counts the selected sources (all particles for traditional
-stepping); `evaluatedParticles` counts the sinks whose near field and local
-expansion were actually evaluated. Traditional substep regressions check both
-counts, inactive-source force contributions, unchanged inactive velocities and
-rungs, and active sinks inside mixed tree leaves.
+Every outer and inner pass uses the configured full mesh, so frozen cell keys
+have one meaning throughout an interval. Inner passes rebuild only the selected
+source-and-sink cells, without depositing or transforming a mesh field.
+`gravity.pmmmCoarseMeshSize` determines particle-domain cut granularity.
+`PmmmDiagnostics` reports `meshSize`, `activeParticles`, `totalParticles`,
+and `evaluatedParticles`. Active particles are the selected sources and sinks;
+inactive particles retain their velocities and rungs during a finer stage.
 
 The hierarchical path calls `pmmmKick`: each completed cell's combined field is
 consumed immediately for the kick and rung decision, without retaining
@@ -488,8 +436,8 @@ wall time, including communication, staging, and scheduling overhead. See
 
 ## Outer interval with frozen near membership
 
-`gravity.pmmmOuterInterval = true` (PMMM with `gravity.method.near = pp`,
-`run.timeIntegrator = traditional` or `hierarchical`) integrates the far field
+`gravity.pmmmOuterInterval = true` (PMMM with `gravity.method.near = fmm|pp`,
+`run.timeIntegrator = hierarchical`) integrates the far field
 on a mandatory outer interval and the near field on the
 inner rung clock. One mesh transform runs per outer boundary; no inner pass
 deposits, transforms or evaluates a far expansion.
@@ -541,20 +489,6 @@ is the fresh total minus the old near force. A rung-zero particle (`δ_old =
 H_old`) closes with `(H_old/2) T_new` exactly, independent of the assignment
 change.
 
-The traditional step performs this as three solver calls:
-
-1. `frozenNearClose`: the old-membership pass, `Δp = (δ_old/2 - H_old/2) S_old`
-   for every particle (skipped at `tau = 0`);
-2. migration (with a rebound when the load imbalance exceeds its threshold),
-   then `pmmmOuterBoundary`: sort by position, deposit, transform and evaluate
-   the far field of every particle into `particlesLongAcceleration`, select the
-   next interval;
-3. `refreshMembership`: re-sort, store the new keys, near pass with the short
-   closing half-kick spanning `H_old/2` for every rung
-   (`closeShortOverInterval`), the long half-kicks `H_old/2` and `H_new/2` from
-   the stored far acceleration, rung selection from `S_new` at the softening
-   scale, and the `δ_new/2` opening.
-
 The hierarchical ladder needs no correction pass: its ascending levels close
 the fast subsets on the old membership, the top level migrates, runs the far
 solve, refreshes the membership and kicks every particle with `(H_old/2)(S_new +
@@ -587,10 +521,13 @@ membership and a boundary checkpoint still holds the membership awaiting its
 closing pass. `PmmmDiagnostics::transformCount` counts mesh transforms; the run
 summary prints intervals, transforms and force passes.
 
-Not implemented: `gravity.method.near = fmm` with the outer interval (the
-near-FMM cell trees assume particles inside their cells and infer periodic
-images from current positions) and the `global` integrator; both are rejected
-at startup.
+The local FMM rebuilds the selected rung's cell trees at every short timestep.
+Membership remains frozen, while each cell's bounds, centers, radii and moments
+follow its current particles. Bounds can extend beyond the original cell and
+across a periodic seam. Source and sink cell identities select periodic images;
+the moving tree centers do not change near-neighbor membership. CPU and CUDA
+walks use that same frame. No inner pass deposits moments on the mesh or runs an
+FFT. Both FMM and direct PP near fields use this outer-interval scheme.
 
 ## SPH with PMMM self-gravity
 
@@ -646,7 +583,7 @@ boundary plus the terminal pass and none inside, non-dyadic intervals selected
 by the far acceleration bound, the interval clock, inner rungs from the near
 force, frozen keys in every checkpoint, restart from inside an interval and
 from a boundary, rejection of a restart with the mode switched off, and energy
-and momentum against the per-substep PMMM run over the same time.
+and momentum against a split PMMM run with shorter outer intervals over the same time.
 
 Checkpoints identify PMMM separately from FMM and record its requested mesh size,
 coarse mesh size, expansion degree (in the historical internal order
@@ -672,9 +609,8 @@ convention; their saved FMM order must match the selected PMMM order. Version-on
 extensions identify the PP near method and require that capability and runtime
 selection. Version-three restarts also require the resolved opening angle
 to match. The checkpoint hierarchy flag must match: historical synchronous PMMM
-evolution checkpoints cannot resume under the hierarchical driver. Global
-evolution also records its exact previous interval and pending half-step phase;
-it cannot restart under a different integrator. Opening angle
+evolution checkpoints cannot resume under the hierarchical driver. Retired
+traditional/global selections are rejected. Opening angle
 is derived from the recorded near width; bucket size remains a mutable control
 rather than checkpoint identity.
 
@@ -700,8 +636,7 @@ and compares the resulting fields with the ungated solve.
 The evolution regression checks the selected near method, hierarchical clocks,
 exactly one scheduled drift per active particle, current restarts, historical
 PP-extension acceptance or rejection, and incompatible restarts. Run it with
-both near methods for full near-method coverage. Global evolution checks cover
-non-dyadic intervals, all-particle stepping, restart continuity, and coupled SPH.
+both near methods for full near-method coverage.
 The arbitrary-side force matrix checks `1, 2, 3, 5, 6, 7, 11, 12` against
 an independent finite-expansion reference with both near methods. Source
 translation checks cover orders 3–9 and both fixed-point widths; distributed
@@ -712,7 +647,7 @@ A small CPU application regression can be selected explicitly:
 
 ```sh
 ./build_pmmm/cosmictiger --run.test=pmmm \
-  --gravity.method.near=pp --run.timeIntegrator=traditional --gravity.meshSize=8 \
+  --gravity.method.near=pp --run.timeIntegrator=hierarchical --gravity.meshSize=8 \
   --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --hydro.enabled=false \
   --gravity.cuda=false --hpx:threads=2 --hpx:bind=none
 ```

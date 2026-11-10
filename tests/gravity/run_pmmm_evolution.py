@@ -102,8 +102,8 @@ def main():
     parser.add_argument("--sph-only", action="store_true",
                         help="run only mixed evolution and restart, without dark-matter cases")
     args = parser.parse_args()
-    if args.sph_only and (not args.with_sph or args.time_integrator == "hierarchical"):
-        parser.error("--sph-only requires --with-sph and --time-integrator=traditional")
+    if args.sph_only and not args.with_sph:
+        parser.error("--sph-only requires --with-sph")
     executable = args.executable.resolve()
     root = args.workdir.resolve()
     root.mkdir(parents=True, exist_ok=True)

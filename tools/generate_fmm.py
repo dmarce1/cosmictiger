@@ -678,7 +678,8 @@ def generate(minLocalDegree=2, maxLocalDegree=8, independentM2lRatios=False):
 
 def unnameUnusedGeneratedParameters(cpp):
     start=0
-    while (start := cpp.find('CUDA_EXPORT static void add(', start)) != -1:
+    while (match := re.search(r'CUDA_EXPORT (?:static )?void (?:add|P2M|L2P)\(', cpp[start:])) is not None:
+        start += match.start()
         opening=cpp.find('{',start)
         if opening<0: raise RuntimeError('Generated add function has no body')
         depth=1; closing=opening+1

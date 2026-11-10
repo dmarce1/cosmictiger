@@ -187,7 +187,7 @@ message(STATUS "cosmictiger ROCKSTAR = ${COSMICTIGER_WITH_ROCKSTAR} (requires gr
 message(STATUS "cosmictiger equilibrium cooling = ${COSMICTIGER_WITH_CHEMISTRY} (requires SPH)")
 message(STATUS "cosmictiger stars = ${COSMICTIGER_WITH_STARS} (COSMICTIGER_ENABLE_STARS; requires chemistry and SPH)")
 message(STATUS "cosmictiger position storage = ${COSMICTIGER_POSITION_TYPE}")
-message(STATUS "cosmictiger integrators: traditional=${COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL}, hierarchical=${COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL}, global=${COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL}")
+message(STATUS "cosmictiger integration: hierarchical short gravity, outer long kicks, midpoint SPH")
 message(STATUS "cosmictiger gravity = ${COSMICTIGER_WITH_GRAVITY} (PMMM: FMM near field with PP fallback)")
 if(COSMICTIGER_WITH_GRAVITY)
     message(STATUS "cosmictiger potential expansion degrees = ${COSMICTIGER_EXPANSION_DEGREE}")
@@ -615,8 +615,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             endforeach()
         endif()
     endif()
-    if(COSMICTIGER_PROFILE AND COSMICTIGER_WITH_SPH AND
-            (COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL OR COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL))
+    if(COSMICTIGER_PROFILE AND COSMICTIGER_WITH_SPH)
         set(cosmictiger_phase_profile_args)
         if(COSMICTIGER_WITH_GRAVITY)
             list(APPEND cosmictiger_phase_profile_args --gravity)
@@ -645,7 +644,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
     endif()
     add_test(NAME startup_options COMMAND ${Python3_EXECUTABLE}
         ${PROJECT_SOURCE_DIR}/tests/run_options.py $<TARGET_FILE:cosmictiger>
-        ${PROJECT_BINARY_DIR}/tests/startup_options --startup-options-only
+        ${PROJECT_BINARY_DIR}/tests/startup_options --startup-options-only --concurrent-cases=1
 
 --order ${cosmictiger_default_fmm_order}
         --time-integrator ${cosmictiger_default_integrator}
@@ -678,7 +677,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
     set(cosmictiger_test_integrator_args --run.timeIntegrator=${cosmictiger_default_integrator})
     # SPH with PMMM self-gravity runs only on the hierarchical ladder.
     set(cosmictiger_sph_gravity_integrator_args ${cosmictiger_test_integrator_args})
-    if(COSMICTIGER_WITH_GRAVITY AND COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL)
+    if(COSMICTIGER_WITH_GRAVITY)
         set(cosmictiger_sph_gravity_integrator_args --run.timeIntegrator=hierarchical)
     endif()
     # PMMM is the only gravity solver; its near field defaults to fmm.
@@ -686,7 +685,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
     if(COSMICTIGER_WITH_GRAVITY)
         set(cosmictiger_test_gravity_args --gravity.meshSize=8)
     endif()
-    # SPH test fixtures run without self-gravity: PMMM does not couple to SPH yet.
+    # These SPH fixtures exercise hydrodynamics without self-gravity.
     set(cosmictiger_test_hydro_args --hydro.enabled=true --gravity.enabled=false)
     add_library(cosmictiger_application_tests STATIC tests/application_test.cpp)
     target_include_directories(cosmictiger_application_tests PRIVATE ${PROJECT_SOURCE_DIR})
@@ -773,7 +772,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             if(NOT COSMICTIGER_PROFILE)
                 set(cosmictiger_profile_test_args --profile-disabled)
             endif()
-            if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
+            if(COSMICTIGER_WITH_SPH)
                 add_test(NAME apex_interrupt_simulation_hydro COMMAND ${Python3_EXECUTABLE}
                     ${PROJECT_SOURCE_DIR}/tests/run_interrupt_simulation.py
                     $<TARGET_FILE:cosmictiger> --scenario=hydroWave
@@ -847,7 +846,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
     add_executable(safe_io_test tests/safe_io.cpp)
     target_include_directories(safe_io_test PRIVATE ${PROJECT_SOURCE_DIR})
     cosmictiger_add_gtest(NAME safe_io TARGET safe_io_test PROPERTIES TIMEOUT 10)
-    if(COSMICTIGER_WITH_GRAVITY AND COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
+    if(COSMICTIGER_WITH_GRAVITY AND COSMICTIGER_WITH_SPH)
         add_test(NAME particle_count_application COMMAND ${Python3_EXECUTABLE}
             ${PROJECT_SOURCE_DIR}/tests/run_particle_counts.py $<TARGET_FILE:cosmictiger>
             ${PROJECT_BINARY_DIR}/tests/particle_count_application)
@@ -865,9 +864,9 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
     target_compile_options(rung_merge_test PRIVATE -ffast-math)
     cosmictiger_add_gtest(NAME rung_merge TARGET rung_merge_test PROPERTIES TIMEOUT 10)
     # The collisionless checks also exercise terminal hierarchy synchronization.
-    # The gas evolution fixture uses the traditional integrator with SPH.
+    # Gas evolution uses midpoint SPH with the shared gravity ladder.
     if(COSMICTIGER_WITH_GRAVITY)
-        if(COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL)
+        if(COSMICTIGER_WITH_GRAVITY)
             add_test(NAME rung_merge_application COMMAND ${Python3_EXECUTABLE}
                 ${PROJECT_SOURCE_DIR}/tests/run_rung_merge.py $<TARGET_FILE:cosmictiger>
                 ${PROJECT_BINARY_DIR}/tests/rung_merge_application)
@@ -933,16 +932,8 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             PROPERTIES TIMEOUT 120 PROCESSORS 1)
         # Coupled particle evolution shares the endpoint source contract.
         if(cosmictiger_entropy_sources_ready)
-            # SPH with PMMM self-gravity runs only on the hierarchical ladder; gas-only
-            # fixtures keep a block or global integrator, which need no gravity.
-            if(COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
-                set(source_timing_integrator traditional)
-            elseif(COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL)
-                set(source_timing_integrator global)
-            else()
-                set(source_timing_integrator hierarchical)
-            endif()
-            if(COSMICTIGER_WITH_GRAVITY AND COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL)
+            set(source_timing_integrator hierarchical)
+            if(COSMICTIGER_WITH_GRAVITY)
                 set(star_formation_test_integrator hierarchical)
             else()
                 set(star_formation_test_integrator ${source_timing_integrator})
@@ -1159,11 +1150,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
         endif()
     endif()
     if(COSMICTIGER_WITH_CHEMISTRY AND cosmictiger_entropy_sources_ready)
-        foreach(integrator IN ITEMS traditional hierarchical global)
-            string(TOUPPER "${integrator}" integrator_upper)
-            if(NOT COSMICTIGER_ENABLE_INTEGRATOR_${integrator_upper})
-                continue()
-            endif()
+        foreach(integrator IN ITEMS hierarchical)
             foreach(backend IN ITEMS cpu mpi cuda)
                 if((backend STREQUAL "mpi" AND NOT cosmictiger_mpi_tests) OR
                         (backend STREQUAL "cuda" AND NOT COSMICTIGER_WITH_CUDA))
@@ -1187,28 +1174,6 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                     PROCESSORS 2 SKIP_RETURN_CODE 77 LABELS "integration;chemistry;${backend}")
             endforeach()
         endforeach()
-    endif()
-    if(COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL)
-        set(global_integrator_args)
-        if(COSMICTIGER_WITH_LONG_LONG_PART_INT)
-            list(APPEND global_integrator_args --particle-integer-bytes=8)
-        endif()
-        if(NOT COSMICTIGER_WITH_SPH)
-            list(APPEND global_integrator_args --without-sph)
-        endif()
-        add_test(NAME global_integrator_cpu COMMAND ${Python3_EXECUTABLE}
-            ${PROJECT_SOURCE_DIR}/tests/run_global_integrator.py $<TARGET_FILE:cosmictiger>
-            ${PROJECT_BINARY_DIR}/tests/global_integrator_cpu ${global_integrator_args})
-        set_tests_properties(global_integrator_cpu PROPERTIES
-            TIMEOUT 1200 RUN_SERIAL TRUE PROCESSORS 2 LABELS "integration;global;cpu")
-        if(cosmictiger_mpi_tests)
-            add_test(NAME global_integrator_mpi COMMAND ${Python3_EXECUTABLE}
-                ${PROJECT_SOURCE_DIR}/tests/run_global_integrator.py $<TARGET_FILE:cosmictiger>
-                ${PROJECT_BINARY_DIR}/tests/global_integrator_mpi ${global_integrator_args}
-                ${cosmictiger_python_mpi_args})
-            set_tests_properties(global_integrator_mpi PROPERTIES
-                TIMEOUT 1200 RUN_SERIAL TRUE PROCESSORS 4 LABELS "integration;global;mpi")
-        endif()
     endif()
 
     if(COSMICTIGER_WITH_GRAVITY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -1509,8 +1474,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
         endif()
     endif()
 
-    if(COSMICTIGER_WITH_SPH AND COSMICTIGER_WITH_GRAVITY AND
-            COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
+    if(COSMICTIGER_WITH_SPH AND COSMICTIGER_WITH_GRAVITY)
         add_test(NAME scenarios COMMAND ${Python3_EXECUTABLE}
             ${PROJECT_SOURCE_DIR}/tests/run_scenarios.py $<TARGET_FILE:cosmictiger>
             ${PROJECT_BINARY_DIR}/tests/scenarios ${cosmictiger_chemistry_test_args})
@@ -1627,7 +1591,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             PROPERTIES TIMEOUT 20)
     endforeach()
 
-    if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
+    if(COSMICTIGER_WITH_SPH)
         set(units_output_workdir "${PROJECT_BINARY_DIR}/tests/units_output")
         file(MAKE_DIRECTORY "${units_output_workdir}")
         add_test(NAME units_output COMMAND cosmictiger --run.test=unitsOutput
@@ -1873,7 +1837,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             RUN_SERIAL TRUE LABELS "pmmm;cpu")
         # Gas and dark matter under PMMM gravity on the hierarchical ladder, the only
         # integrator that couples SPH to PMMM: four steps, gas gravity, restart.
-        if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL)
+        if(COSMICTIGER_WITH_SPH)
             add_test(NAME pmmm_evolution_sph_hierarchical_cpu COMMAND ${Python3_EXECUTABLE}
                 ${PROJECT_SOURCE_DIR}/tests/gravity/run_pmmm_evolution.py $<TARGET_FILE:cosmictiger>
                 ${PROJECT_BINARY_DIR}/tests/pmmm_evolution_sph_hierarchical_cpu
@@ -2002,7 +1966,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                 --position-type ${COSMICTIGER_POSITION_TYPE} ${pmmm_sph_args})
             set_tests_properties(pmmm_evolution_mpi PROPERTIES TIMEOUT 600 PROCESSORS 4
                 RUN_SERIAL TRUE LABELS "pmmm;mpi")
-            if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL)
+            if(COSMICTIGER_WITH_SPH)
                 add_test(NAME pmmm_evolution_sph_hierarchical_mpi COMMAND ${Python3_EXECUTABLE}
                     ${PROJECT_SOURCE_DIR}/tests/gravity/run_pmmm_evolution.py $<TARGET_FILE:cosmictiger>
                     ${PROJECT_BINARY_DIR}/tests/pmmm_evolution_sph_hierarchical_mpi
@@ -2394,7 +2358,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
 
     if(COSMICTIGER_WITH_GRAVITY)
         foreach(test_name IN ITEMS checkpoint_state_dm checkpoint_state_sph)
-            if((NOT COSMICTIGER_WITH_SPH OR NOT COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL) AND
+            if((NOT COSMICTIGER_WITH_SPH) AND
                     NOT test_name STREQUAL "checkpoint_state_dm")
                 continue()
             endif()
@@ -2429,8 +2393,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             set_tests_properties(sph_rebuild_fraction_application PROPERTIES
                 RUN_SERIAL TRUE TIMEOUT 600 PROCESSORS 2 LABELS "integration;sph;gravity;octree;options")
         endif()
-        if(COSMICTIGER_WITH_SPH AND (COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL OR
-                COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL))
+        if(COSMICTIGER_WITH_SPH)
             add_test(NAME sph_octree_application COMMAND ${Python3_EXECUTABLE}
                 ${PROJECT_SOURCE_DIR}/tests/run_sph_octree.py $<TARGET_FILE:cosmictiger>
                 ${PROJECT_BINARY_DIR}/tests/sph_octree_application)
@@ -2452,7 +2415,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                     RUN_SERIAL TRUE TIMEOUT 600 PROCESSORS 4 LABELS "integration;sph;gravity;octree;mpi")
             endif()
         endif()
-        if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
+        if(COSMICTIGER_WITH_SPH)
             set(sph_tree_workdir "${PROJECT_BINARY_DIR}/tests/sph_tree")
             file(MAKE_DIRECTORY "${sph_tree_workdir}")
             add_test(NAME sph_tree COMMAND cosmictiger --run.test=sphTree
@@ -2494,7 +2457,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             endif()
             # SPH coupled to PMMM self-gravity on the hierarchical ladder (M7): the
             # linear Jeans wave on 1 locality, and on 2 and 4 against it.
-            if(COSMICTIGER_WITH_GRAVITY AND COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL AND
+            if(COSMICTIGER_WITH_GRAVITY AND
                     COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                 set(jeans_wave_mpi_args)
                 set(jeans_wave_processors 8)
@@ -2516,8 +2479,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                     LABELS "integration;sph;gravity;hierarchical;checkpoint;mpi")
             endif()
             # Distributed SPH evolution on ghost leaves against one locality.
-            if(cosmictiger_mpi_tests AND (COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL OR
-                    COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL))
+            if(cosmictiger_mpi_tests)
                 add_test(NAME sph_ghosts_application_mpi COMMAND ${Python3_EXECUTABLE}
                     ${PROJECT_SOURCE_DIR}/tests/run_sph_ghosts.py $<TARGET_FILE:cosmictiger>
                     ${PROJECT_BINARY_DIR}/tests/sph_ghosts_application_mpi
@@ -2555,8 +2517,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             endif()
         endif()
         foreach(kernel_case IN ITEMS wendland_spline ferrers_wendland)
-            if(NOT COSMICTIGER_WITH_SPH OR NOT COSMICTIGER_WITH_CUDA OR
-                    NOT COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
+            if(NOT COSMICTIGER_WITH_SPH OR NOT COSMICTIGER_WITH_CUDA)
                 continue()
             endif()
             if(kernel_case STREQUAL "wendland_spline")
@@ -2627,7 +2588,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
         RUN_SERIAL TRUE TIMEOUT 20 WILL_FAIL TRUE)
     if(COSMICTIGER_WITH_GRAVITY)
         if(cosmictiger_mpi_tests)
-            if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
+            if(COSMICTIGER_WITH_SPH)
                 set(distributed_output_mpi_workdir "${PROJECT_BINARY_DIR}/tests/distributed_output_mpi")
                 file(MAKE_DIRECTORY "${distributed_output_mpi_workdir}")
                 add_test(NAME distributed_output_mpi COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2
@@ -2638,7 +2599,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                 set_tests_properties(distributed_output_mpi PROPERTIES
                     WORKING_DIRECTORY "${distributed_output_mpi_workdir}" RUN_SERIAL TRUE TIMEOUT 180 PROCESSORS 4)
             endif()
-            if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
+            if(COSMICTIGER_WITH_SPH)
                 set(units_mpi_workdir "${PROJECT_BINARY_DIR}/tests/units_output_mpi")
                 file(MAKE_DIRECTORY "${units_mpi_workdir}")
                 add_test(NAME units_output_mpi COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2
@@ -2665,7 +2626,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             endif()
         endif()
         foreach(smoke_mode IN ITEMS sod sph sph_analysis)
-            if(NOT COSMICTIGER_WITH_SPH OR NOT COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
+            if(NOT COSMICTIGER_WITH_SPH)
                 continue()
             endif()
             if(smoke_mode STREQUAL "sph_analysis" AND NOT COSMICTIGER_WITH_ROCKSTAR)
@@ -2680,7 +2641,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
         endforeach()
         # Variational SPH in Sod, blast and hydroWave, plus CFL refinement. These
         # ideal-gas cases must remain registered when equilibrium cooling is disabled.
-        if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
+        if(COSMICTIGER_WITH_SPH)
             foreach(backend IN ITEMS cpu mpi cuda cross_build)
                 if((backend STREQUAL "mpi" AND NOT cosmictiger_mpi_tests) OR
                         (backend STREQUAL "cuda" AND NOT COSMICTIGER_WITH_CUDA) OR
@@ -2712,7 +2673,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             if(NOT COSMICTIGER_WITH_CUDA AND NOT smoke_mode STREQUAL "dm_cpu")
                 continue()
             endif()
-            if((NOT COSMICTIGER_WITH_SPH OR NOT COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL) AND
+            if((NOT COSMICTIGER_WITH_SPH) AND
                     NOT smoke_mode MATCHES "^dm_")
                 continue()
             endif()
@@ -2729,7 +2690,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             ${PROJECT_BINARY_DIR}/tests/smoke_dm_min_rung --minimum-rung=10
                 --extra-option=--run.timeIntegrator=${cosmictiger_default_integrator})
         set_tests_properties(smoke_dm_min_rung PROPERTIES RUN_SERIAL TRUE TIMEOUT 500)
-        if(COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
+        if(COSMICTIGER_WITH_GRAVITY)
             add_test(NAME checkpoint_integrity COMMAND ${Python3_EXECUTABLE}
                 ${PROJECT_SOURCE_DIR}/tests/run_checkpoint.py
                 $<TARGET_FILE:cosmictiger>
@@ -2800,8 +2761,7 @@ if(BUILD_TESTING)
     set_tests_properties(cell_lattice PROPERTIES TIMEOUT 30 LABELS "scenarios;cpu")
 endif()
 
-if(BUILD_TESTING AND COSMICTIGER_WITH_SPH AND COSMICTIGER_DIMENSION_COUNT GREATER_EQUAL 2
-        AND COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
+if(BUILD_TESTING AND COSMICTIGER_WITH_SPH AND COSMICTIGER_DIMENSION_COUNT GREATER_EQUAL 2)
     add_test(NAME kelvin_helmholtz_packing_application COMMAND ${Python3_EXECUTABLE}
         ${PROJECT_SOURCE_DIR}/tests/run_kelvin_helmholtz_packings.py $<TARGET_FILE:cosmictiger>
         ${PROJECT_BINARY_DIR}/tests/kelvin_helmholtz_packings ${COSMICTIGER_DIMENSION_COUNT})

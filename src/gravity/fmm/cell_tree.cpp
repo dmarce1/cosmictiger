@@ -35,11 +35,12 @@ struct TreeCellBuild {
     int meshSize = 0;
     uint64_t cellKey = 0;
     FmmParticleStore sourceStore = FmmParticleStore::Owned;
+    bool frozenMembership = false;
     Vector<TreeId> roots;
     /// Archive this record in the field order required by distributed transport.
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
-        archive & meshSize & cellKey & sourceStore & roots;
+        archive & meshSize & cellKey & sourceStore & frozenMembership & roots;
     }
 };
 
@@ -119,6 +120,18 @@ Range<double> treeCellBox(uint64_t key, int meshSize) {
 // including odd meshes and fixed64 values whose toDouble() rounds to one.
 void treeClampCellCenter(
     Vector3<double>& center, Vector3<Position>& position, TreeCellBuild const& cellBuild) {
+    if (cellBuild.frozenMembership) {
+        // Only membership is frozen. Recenter each new subtree on its current,
+        // expanded bounds, retaining the original cell's periodic frame.
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            position[dim] = center[dim];
+            int const cell = fmmCellCoordinate(cellBuild.cellKey, dim, cellBuild.meshSize);
+            center[dim] =
+                position[dim].toDouble() + fmmCellWinding(position[dim], cell, cellBuild.meshSize);
+        }
+        addCpuFlops(kDimensions * (kPositionBits == 64 ? 11 : 8), FlopPrecision::Double);
+        return;
+    }
     FlopCounter<> flops;
     // Fixed64's host conversion splits the scaled value into two safe uint32
     // limbs: one scaling multiply plus two multiplies and a subtraction.
@@ -188,6 +201,9 @@ static TreeCreateReturn treeCreateCellImpl(TreeCreateParameters params, size_t k
     TreeBuildPolicy policy;
     policy.sourceStore = cellBuild.sourceStore;
     policy.boundedGeometry = true;
+    policy.frozenGeometry = cellBuild.frozenMembership;
+    policy.meshSize = cellBuild.meshSize;
+    policy.meshCellKey = cellBuild.cellKey;
     policy.representedProcessRange = cellBuild.roots.empty() ?
         processRange :
         Pair<int>(cellBuild.roots.front().proc, cellBuild.roots.back().proc + 1);
@@ -337,7 +353,7 @@ void treePrepareCellForestLocal(
 
 /// Build and register a root for one nonempty cell range in the selected source store.
 TreeCellRoot treeCreateCell(ParticleMeshCell const& cell, int meshSize, FmmParticleStore store,
-    Range<double> const* sourceBox, TreeCreateReturn* completedRoot) {
+    Range<double> const* sourceBox, TreeCreateReturn* completedRoot, bool frozenMembership) {
     uint64_t const cellCount = detail::particleMeshCellCount(meshSize);
     auto const sources = fmmSourceView(store);
     if (cell.key >= cellCount || cell.begin < 0 || cell.end <= cell.begin ||
@@ -362,9 +378,26 @@ TreeCellRoot treeCreateCell(ParticleMeshCell const& cell, int meshSize, FmmParti
     context.meshSize = meshSize;
     context.cellKey = cell.key;
     context.sourceStore = store;
+    context.frozenMembership = frozenMembership;
     auto const cellBox = detail::treeCellBox(cell.key, meshSize);
     auto box = cellBox;
-    if (sourceBox != nullptr) {
+    if (frozenMembership) {
+        // Re-tree the selected rung's particles at every short step. Extend the
+        // cell to its occupied bounds, including particles beyond a box seam.
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            box.begin[dim] = std::numeric_limits<double>::infinity();
+            box.end[dim] = -std::numeric_limits<double>::infinity();
+            int const coordinate = detail::fmmCellCoordinate(cell.key, dim, meshSize);
+            for (ParticleInteger i = cell.begin; i < cell.end; ++i) {
+                Position const point = sources.positions[dim][i];
+                double const value =
+                    point.toDouble() + detail::fmmCellWinding(point, coordinate, meshSize);
+                box.begin[dim] = std::min(box.begin[dim], value);
+                box.end[dim] = std::max(box.end[dim], value);
+            }
+        }
+        addCpuFlops(7 * kDimensions * FlopCount(cell.end - cell.begin), FlopPrecision::Double);
+    } else if (sourceBox != nullptr) {
         box = box.intersection(*sourceBox);
     } else if (store == FmmParticleStore::Owned) {
         box = box.intersection(hpxSize() == 1 ? unitBox<double>() : domainsRange(domainKey));

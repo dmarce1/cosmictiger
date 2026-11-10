@@ -44,10 +44,7 @@ def main():
     root.mkdir(parents=True, exist_ok=True)
     ranks = 2 if args.mpi_exec else 1
     available = compiled_algorithms(str(executable))
-    # SPH has no self-gravity coupling in the PMMM solver, so hierarchical
-    # integration (gravity only) is excluded.
-    integrators = args.time_integrator or [name for name in ("traditional", "global")
-                                          if name in available["integrator"]]
+    integrators = args.time_integrator or ["hierarchical"]
     require(integrators, "no supported integrator was compiled")
     require(all(name in available["integrator"] for name in integrators),
             "a requested integrator was not compiled")

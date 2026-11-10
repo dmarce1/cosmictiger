@@ -49,9 +49,9 @@ __device__ inline void cudaCopyExpansion(float* destination, float const* source
 /// reduce energy/momentum diagnostics.
 template <int order>
 __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKickData const& data,
-    cosmictiger::gravity::cartesian::Expansion<float, order> const& lValue2,
-    TreeNode const& self, CudaKickForceTile const& force, int sinkBegin, int sinkCount,
-    ParticleInteger outputOffset) {
+    cosmictiger::gravity::cartesian::Expansion<float, order> const& lValue2, TreeNode const& self,
+    CudaKickForceTile const& force, int sinkBegin, int sinkCount, ParticleInteger outputOffset,
+    FmmGeometry const& geometry) {
     int const& tid = threadIdx.x;
     auto& allPhi = data.pot;
     auto& allGx = data.gx;
@@ -82,6 +82,7 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
     FlopCounter<FlopCount> flops = 0;
     // Widen support radius, divide by the double kernel radius, then narrow.
     FlopCounter<FlopCount> doubleFlops = 3;
+    FlopCounts frameFlops{};
     for (int i = tid; i < sinkCount; i += kWarpSize) {
         cosmictiger::gravity::Field<float> l2{};
         Vector3<float> dx;
@@ -97,11 +98,20 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
             continue;
         }
         ASSERT(sinkIndex >= 0);
-        dx[kXi] = unwrappedDistance(sinkX[i], self.pos[kXi]);
-        dx[kYi] = unwrappedDistance(sinkY[i], self.pos[kYi]);
-        dx[kZi] = unwrappedDistance(sinkZ[i], self.pos[kZi]);
-        cosmictiger::gravity::cartesian::L2P(
-            l2, lValue2, fmmScaleDisplacement(dx), params.doPhi);
+        dx[kXi] = geometry.frozenMembership ?
+            detail::fmmCellDifference(
+                sinkX[i], self.pos[kXi], geometry.sinkCell[kXi], geometry.meshSize, &frameFlops) :
+            unwrappedDistance(sinkX[i], self.pos[kXi]);
+        dx[kYi] = geometry.frozenMembership ?
+            detail::fmmCellDifference(
+                sinkY[i], self.pos[kYi], geometry.sinkCell[kYi], geometry.meshSize, &frameFlops) :
+            unwrappedDistance(sinkY[i], self.pos[kYi]);
+        dx[kZi] = geometry.frozenMembership ?
+            detail::fmmCellDifference(
+                sinkZ[i], self.pos[kZi], geometry.sinkCell[kZi], geometry.meshSize, &frameFlops) :
+            unwrappedDistance(sinkZ[i], self.pos[kZi]);
+        doubleFlops += geometry.frozenMembership ? 3 : 0;
+        cosmictiger::gravity::cartesian::L2P(l2, lValue2, fmmScaleDisplacement(dx), params.doPhi);
         float gx = force.gx[i];
         float gy = force.gy[i];
         float gz = force.gz[i];
@@ -116,9 +126,8 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
             allGx[outputIndex] = gx;
             allGy[outputIndex] = gy;
             allGz[outputIndex] = gz;
-            flops += cosmictiger::gravity::cartesian::detail::kL2PFlops<fmmLocalDegree(
-                         order)> +
-                14;
+            flops += cosmictiger::gravity::cartesian::detail::kL2PFlops<fmmLocalDegree(order)> +
+                (geometry.frozenMembership ? 11 : 14);
             continue;
         }
         gz *= params.gm;
@@ -308,9 +317,8 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
         dkinTot += kin1 - kin0;
         // Displacement, L2P coordinate scaling and force accumulation/scaling.
         // Energy and momentum diagnostics, including their reductions, are excluded.
-        flops +=
-            cosmictiger::gravity::cartesian::detail::kL2PFlops<fmmLocalDegree(order)> +
-            18;
+        flops += cosmictiger::gravity::cartesian::detail::kL2PFlops<fmmLocalDegree(order)> +
+            (geometry.frozenMembership ? 15 : 18);
     }
     sharedReduceAdd(phiTot);
     sharedReduceAdd(xmomTot);
@@ -341,7 +349,7 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
         result.darkMatterZMomentumCorrection += darkMatterZMomentumCorrection;
         result.darkMatterMomentumNormCorrection += darkMatterMomentumNormCorrection;
     }
-    return {flops, doubleFlops, 0};
+    return {flops, FlopCount(doubleFlops) + frameFlops.doublePrecision, 0};
 }
 
 // Device twin of detail::kickOpenOrDefer in kick_walk.hpp: a rejected source
@@ -495,11 +503,15 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                 work.next(profile::DevicePhase::KickPrepare);
                 Vector3<float> dx;
                 for (int dim = 0; dim < kDimensions; dim++) {
-                    dx[dim] = unwrappedDistance(self.pos[dim], expansionPos[dim]);
+                    dx[dim] = geometry.frozenMembership ?
+                        detail::fmmCellDifference(self.pos[dim], expansionPos[dim],
+                            geometry.sinkCell[dim], geometry.meshSize, &geometryFlops) :
+                        unwrappedDistance(self.pos[dim], expansionPos[dim]);
                 }
                 // Displacement conversion and the three coordinate scalings
                 // in l2LCudaInto are both performed by every lane.
-                flops += 6;
+                flops += geometry.frozenMembership ? 3 : 6;
+                detail::addFmmGeometryFlops(&geometryFlops, 0, geometry.frozenMembership ? 3 : 0);
                 {
                     // Cooperative translation into the scratch expansion, then
                     // publish it as the active expansion at this node's center.
@@ -512,10 +524,10 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                     __syncwarp();
                     if (tid == 0) {
                         flops += globalParams.doPhi ?
-                            cosmictiger::gravity::cartesian::detail::kL2LWarpFlops<
-                                fmmLocalDegree(order)> :
-                            cosmictiger::gravity::cartesian::detail::
-                                kL2LWarpNoPotentialFlops<fmmLocalDegree(order)>;
+                            cosmictiger::gravity::cartesian::detail::kL2LWarpFlops<fmmLocalDegree(
+                                order)> :
+                            cosmictiger::gravity::cartesian::detail::kL2LWarpNoPotentialFlops<
+                                fmmLocalDegree(order)>;
                     }
                 }
                 ParticleInteger const numberOfSinks =
@@ -552,7 +564,8 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                                 if (other.numberOfParticles()) {
                                     for (int dim = 0; dim < kDimensions; dim++) {
                                         dx[dim] = fmmPositionDifference(self.pos[dim],
-                                            other.pos[dim], dim, geometry, &geometryFlops);    // 3
+                                            other.pos[dim], dim, geometry, &geometryFlops,
+                                            other.meshCellKey);    // 3
                                     }
                                     float const r2 = fmaf(dx[kXi], dx[kXi],
                                         fmaf(dx[kYi], dx[kYi], dx[kZi] * dx[kZi]));
@@ -565,10 +578,11 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                                     if (!acceptance.cellCell && (other.leaf || self.leaf)) {
                                         acceptance =
                                             computeFmmAcceptance(r2, self.radius, other.radius,
-                                                fmmSinkBoxDistanceSquared(
-                                                    self.box, other.pos, geometry, &geometryFlops),
+                                                fmmSinkBoxDistanceSquared(self.box, other.pos,
+                                                    geometry, &geometryFlops, other.meshCellKey),
                                                 fmmSourceBoxDistanceSquared(other.box, self.pos,
-                                                    other.pos, geometry, &geometryFlops),
+                                                    other.pos, geometry, &geometryFlops,
+                                                    other.meshCellKey),
                                                 smoothingLength, thetainv, &acceptanceFlops);
                                         flops += acceptanceFlops;    // Box arithmetic is counted by
                                                                      // precision at its source.
@@ -686,8 +700,9 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                             }
                             __syncwarp();
                             work.next(profile::DevicePhase::KickLeafKick);
-                            interactionFlops += doKick<order>(kr, globalParams, data, expansion,
-                                self, force, sinkBegin, sinkCount, params[index].outputOffset);
+                            interactionFlops +=
+                                doKick<order>(kr, globalParams, data, expansion, self, force,
+                                    sinkBegin, sinkCount, params[index].outputOffset, geometry);
                             // The next tile reinitializes the force planes.
                             __syncwarp();
                         }

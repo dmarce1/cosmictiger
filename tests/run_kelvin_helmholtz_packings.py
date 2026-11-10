@@ -25,7 +25,7 @@ def main():
     spacing = 0.5 / half_cells
     environment = dict(os.environ, OMP_NUM_THREADS='1', OPENBLAS_NUM_THREADS='1', CUDA_VISIBLE_DEVICES='')
     common = [str(args.executable.resolve()), '--hpx:threads=2', '--hpx:bind=none',
-              '--run.scenario=kelvinHelmholtz', '--run.timeIntegrator=traditional',
+              '--run.scenario=kelvinHelmholtz', '--run.timeIntegrator=hierarchical',
               '--run.darkMatterParticleCount=0', '--gravity.enabled=false',
               '--hydro.enabled=true', '--hydro.cuda=false', '--drift.cuda=false',
               '--chemistry.enabled=false', '--starFormation.enabled=false',
