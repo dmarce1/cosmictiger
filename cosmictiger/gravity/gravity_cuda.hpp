@@ -223,6 +223,20 @@ __device__ inline void cudaPpInversePowers(float const (&r2)[kPairs], float h2, 
     }
 }
 
+// The sink-minus-source separation of the PP loops. Without mesh images it is
+// the meshSize == 0 branch of fmmPositionDifference, and the caller counts its
+// one flop per axis with the pair flops, so the loops neither test the mesh
+// nor update a 64-bit counter for every axis.
+template <bool meshImages>
+__device__ inline float cudaPpDifference(
+    Position sink, Position source, int dim, FmmGeometry const& geometry, FlopCounts& mixedFlops) {
+    if constexpr (meshImages) {
+        return fmmPositionDifference(sink, source, dim, geometry, &mixedFlops);
+    } else {
+        return distance(sink, source);
+    }
+}
+
 // The staged sources accumulated onto the nSinks sinks held by one lane: four
 // sources per 16-byte shared load, every source applied to every sink, so the
 // scheduler sees 4 * nSinks independent chains instead of one. Each sink's
@@ -230,7 +244,7 @@ __device__ inline void cudaPpInversePowers(float const (&r2)[kPairs], float h2, 
 // to the one-sink loop's bit for bit. The potential accumulates whether or not
 // it is wanted, which keeps a per-pair select out of the loop; callers store
 // it only with doPhi.
-template <int nSinks, bool equalMass>
+template <int nSinks, bool equalMass, bool meshImages>
 __device__ inline void cudaPpSinkGroup(CudaStagedSources const& sources, int count,
     Position const (&sinkX)[nSinks], Position const (&sinkY)[nSinks],
     Position const (&sinkZ)[nSinks], float h2, float hinv, float h2inv, float h3inv, bool doPhi,
@@ -285,12 +299,12 @@ __device__ inline void cudaPpSinkGroup(CudaStagedSources const& sources, int cou
 #pragma unroll
             for (int s = 0; s < nSinks; s++) {
                 int const p = u * nSinks + s;
-                dx0[p] =
-                    fmmPositionDifference(sinkX[s], sourceX, kXi, geometry, &mixedFlops);    // 1
-                dx1[p] =
-                    fmmPositionDifference(sinkY[s], sourceY, kYi, geometry, &mixedFlops);    // 1
-                dx2[p] =
-                    fmmPositionDifference(sinkZ[s], sourceZ, kZi, geometry, &mixedFlops);    // 1
+                dx0[p] = cudaPpDifference<meshImages>(
+                    sinkX[s], sourceX, kXi, geometry, mixedFlops);    // 1
+                dx1[p] = cudaPpDifference<meshImages>(
+                    sinkY[s], sourceY, kYi, geometry, mixedFlops);    // 1
+                dx2[p] = cudaPpDifference<meshImages>(
+                    sinkZ[s], sourceZ, kZi, geometry, mixedFlops);             // 1
                 r2[p] = sqr(dx0[p], dx1[p], dx2[p]);                           // 5
             }
         }
@@ -328,9 +342,9 @@ __device__ inline void cudaPpSinkGroup(CudaStagedSources const& sources, int cou
         float r1inv[nSinks];
 #pragma unroll
         for (int s = 0; s < nSinks; s++) {
-            dx0[s] = fmmPositionDifference(sinkX[s], sourceX, kXi, geometry, &mixedFlops);
-            dx1[s] = fmmPositionDifference(sinkY[s], sourceY, kYi, geometry, &mixedFlops);
-            dx2[s] = fmmPositionDifference(sinkZ[s], sourceZ, kZi, geometry, &mixedFlops);
+            dx0[s] = cudaPpDifference<meshImages>(sinkX[s], sourceX, kXi, geometry, mixedFlops);
+            dx1[s] = cudaPpDifference<meshImages>(sinkY[s], sourceY, kYi, geometry, mixedFlops);
+            dx2[s] = cudaPpDifference<meshImages>(sinkZ[s], sourceZ, kZi, geometry, mixedFlops);
             r2[s] = sqr(dx0[s], dx1[s], dx2[s]);
         }
         cudaPpInversePowers<nSinks>(
@@ -531,21 +545,23 @@ __device__ FlopCounts cudaGravityPcDirect(CudaKickData const& data, CudaKickCont
     return {FlopCount(flops) + mixedFlops.singlePrecision, mixedFlops.doublePrecision, 0};
 }
 
-template <int order, bool equalMass>
-__device__ FlopCounts cudaGravityPpDirect(CudaKickData const& data, CudaKickControl<order>& control,
-    TreeNode const& self, int sinkBegin, int sinkCount, DeviceVector<int> const& partlist, float h,
-    bool doPhi, FmmGeometry const& geometry) {
+namespace detail {
+
+template <int order, bool equalMass, bool meshImages>
+__device__ FlopCounts cudaGravityPpDirectImpl(CudaKickData const& data,
+    CudaKickControl<order>& control, TreeNode const& self, int sinkBegin, int sinkCount,
+    DeviceVector<int> const& partlist, float h, bool doPhi, FmmGeometry const& geometry) {
     int const& tid = threadIdx.x;
     // The forces: the arena planes derived from the shared-memory symbol, or
     // the control block's global backing when the layout keeps none.
     bool const sharedForces = control.layout.forceOffset >= 0;
-    CudaKickForceTile const arenaForce = detail::cudaArenaForces<order>(control);
+    CudaKickForceTile const arenaForce = cudaArenaForces<order>(control);
     CudaKickForceTile const& backingForce = control.forces;
     ParticleInteger const sinkFirst = self.particleRange.first + sinkBegin;
     auto const* sinkX = data.x + sinkFirst;
     auto const* sinkY = data.y + sinkFirst;
     auto const* sinkZ = data.z + sinkFirst;
-    detail::CudaStagedSources const sources = detail::cudaStagedSources<order>(control);
+    CudaStagedSources const sources = cudaStagedSources<order>(control);
     auto const* treeNodes = data.treeNodes;
     float const h2 = sqr(h);
     float const hinv = 1.f / h;
@@ -555,14 +571,16 @@ __device__ FlopCounts cudaGravityPpDirect(CudaKickData const& data, CudaKickCont
     FlopCounts mixedFlops{};
     FlopCount close = 0;
     FlopCount pairs = 0;
-    constexpr FlopCount kPairFlops = equalMass ? 15 : 17;    // Geometry is counted separately.
+    // Mesh-image separations count their own geometry; the plain one is one
+    // flop per axis.
+    constexpr FlopCount kPairFlops = (equalMass ? 15 : 17) + (meshImages ? 0 : 3);
     FlopCount const forceAddFlops = 3 + int(doPhi);
     if (partlist.size()) {
         int i = 0;
         auto particleRange = treeNodes[partlist[0]].particleRange;
         auto const partsz = partlist.size();
         while (i < partsz) {
-            int const particleIndex = detail::cudaStageParticleSources<order, equalMass>(
+            int const particleIndex = cudaStageParticleSources<order, equalMass>(
                 data, control, partlist, i, particleRange);
             int kmid = (sinkCount / kWarpSize) * kWarpSize;
             if (sinkCount - kmid >= kWarpSize / 2) {
@@ -581,17 +599,16 @@ __device__ FlopCounts cudaGravityPpDirect(CudaKickData const& data, CudaKickCont
                 float fy[kPair] = {0.f, 0.f};
                 float fz[kPair] = {0.f, 0.f};
                 float pot[kPair] = {0.f, 0.f};
-                detail::cudaPpSinkGroup<kPair, equalMass>(sources, particleIndex, sx, sy, sz, h2,
-                    hinv, h2inv, h3inv, doPhi, fx, fy, fz, pot, close, flops, geometry, mixedFlops);
+                cudaPpSinkGroup<kPair, equalMass, meshImages>(sources, particleIndex, sx, sy, sz,
+                    h2, hinv, h2inv, h3inv, doPhi, fx, fy, fz, pot, close, flops, geometry,
+                    mixedFlops);
 #pragma unroll
                 for (int s = 0; s < kPair; s++) {
                     int const sink = k + s * kWarpSize;
                     if (sharedForces) {
-                        detail::cudaApplyPpForce(
-                            arenaForce, sink, fx[s], fy[s], fz[s], pot[s], doPhi);
+                        cudaApplyPpForce(arenaForce, sink, fx[s], fy[s], fz[s], pot[s], doPhi);
                     } else {
-                        detail::cudaApplyPpForce(
-                            backingForce, sink, fx[s], fy[s], fz[s], pot[s], doPhi);
+                        cudaApplyPpForce(backingForce, sink, fx[s], fy[s], fz[s], pot[s], doPhi);
                     }
                 }
                 pairs += FlopCount(kPair) * particleIndex;
@@ -605,12 +622,12 @@ __device__ FlopCounts cudaGravityPpDirect(CudaKickData const& data, CudaKickCont
                 float fy[1] = {0.f};
                 float fz[1] = {0.f};
                 float pot[1] = {0.f};
-                detail::cudaPpSinkGroup<1, equalMass>(sources, particleIndex, sx, sy, sz, h2, hinv,
-                    h2inv, h3inv, doPhi, fx, fy, fz, pot, close, flops, geometry, mixedFlops);
+                cudaPpSinkGroup<1, equalMass, meshImages>(sources, particleIndex, sx, sy, sz, h2,
+                    hinv, h2inv, h3inv, doPhi, fx, fy, fz, pot, close, flops, geometry, mixedFlops);
                 if (sharedForces) {
-                    detail::cudaApplyPpForce(arenaForce, k, fx[0], fy[0], fz[0], pot[0], doPhi);
+                    cudaApplyPpForce(arenaForce, k, fx[0], fy[0], fz[0], pot[0], doPhi);
                 } else {
-                    detail::cudaApplyPpForce(backingForce, k, fx[0], fy[0], fz[0], pot[0], doPhi);
+                    cudaApplyPpForce(backingForce, k, fx[0], fy[0], fz[0], pot[0], doPhi);
                 }
                 pairs += particleIndex;
                 flops += forceAddFlops;
@@ -626,16 +643,16 @@ __device__ FlopCounts cudaGravityPpDirect(CudaKickData const& data, CudaKickCont
                 Position const sy = sinkY[sink];
                 Position const sz = sinkZ[sink];
                 for (int j = tid; j < particleIndex; j += kWarpSize) {
-                    float const dx0 =
-                        fmmPositionDifference(sx, sources.x[j], kXi, geometry, &mixedFlops);    // 1
-                    float const dx1 =
-                        fmmPositionDifference(sy, sources.y[j], kYi, geometry, &mixedFlops);    // 1
-                    float const dx2 =
-                        fmmPositionDifference(sz, sources.z[j], kZi, geometry, &mixedFlops);    // 1
-                    float const r2[1] = {sqr(dx0, dx1, dx2)};                     // 5
+                    float const dx0 = cudaPpDifference<meshImages>(
+                        sx, sources.x[j], kXi, geometry, mixedFlops);    // 1
+                    float const dx1 = cudaPpDifference<meshImages>(
+                        sy, sources.y[j], kYi, geometry, mixedFlops);    // 1
+                    float const dx2 = cudaPpDifference<meshImages>(
+                        sz, sources.z[j], kZi, geometry, mixedFlops);    // 1
+                    float const r2[1] = {sqr(dx0, dx1, dx2)};            // 5
                     float r3inv[1];
                     float r1inv[1];
-                    detail::cudaPpInversePowers<1>(
+                    cudaPpInversePowers<1>(
                         r2, h2, hinv, h2inv, h3inv, doPhi, r3inv, r1inv, close, flops, mixedFlops);
                     if constexpr (!equalMass) {
                         r3inv[0] *= sources.mass[j];
@@ -656,9 +673,9 @@ __device__ FlopCounts cudaGravityPpDirect(CudaKickData const& data, CudaKickCont
                 flops += 5 * forceAddFlops;
                 if (tid == 0) {
                     if (sharedForces) {
-                        detail::cudaApplyPpForce(arenaForce, sink, fx, fy, fz, pot, doPhi);
+                        cudaApplyPpForce(arenaForce, sink, fx, fy, fz, pot, doPhi);
                     } else {
-                        detail::cudaApplyPpForce(backingForce, sink, fx, fy, fz, pot, doPhi);
+                        cudaApplyPpForce(backingForce, sink, fx, fy, fz, pot, doPhi);
                     }
                     flops += forceAddFlops;
                 }
@@ -684,4 +701,21 @@ __device__ FlopCounts cudaGravityPpDirect(CudaKickData const& data, CudaKickCont
 
     __syncwarp();
     return {FlopCount(flops) + mixedFlops.singlePrecision, mixedFlops.doublePrecision, 0};
+}
+
+}    // namespace detail
+
+// The mesh is tested once per call rather than for every axis of every pair,
+// where the test and its convergence barriers issued nearly as many
+// instructions as the separation itself.
+template <int order, bool equalMass>
+__device__ FlopCounts cudaGravityPpDirect(CudaKickData const& data, CudaKickControl<order>& control,
+    TreeNode const& self, int sinkBegin, int sinkCount, DeviceVector<int> const& partlist, float h,
+    bool doPhi, FmmGeometry const& geometry) {
+    if (geometry.meshSize == 0) {
+        return detail::cudaGravityPpDirectImpl<order, equalMass, false>(
+            data, control, self, sinkBegin, sinkCount, partlist, h, doPhi, geometry);
+    }
+    return detail::cudaGravityPpDirectImpl<order, equalMass, true>(
+        data, control, self, sinkBegin, sinkCount, partlist, h, doPhi, geometry);
 }
