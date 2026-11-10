@@ -19,6 +19,7 @@ __device__ __constant__ radial_kernel::KernelTable<double> deviceGravityKernel;
 __device__ __constant__ radial_kernel::KernelTable<float> deviceSphGravityKernel;
 }    // namespace detail
 
+/// Copy the selected gravity and hydrodynamic kernel tables into device constant memory.
 void uploadKernelSelections() {
     auto status = cudaMemcpyToSymbol(
         detail::deviceGravityKernel, &detail::gravityKernel, sizeof(detail::gravityKernel));

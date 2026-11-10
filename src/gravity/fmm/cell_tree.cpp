@@ -36,6 +36,7 @@ struct TreeCellBuild {
     uint64_t cellKey = 0;
     FmmParticleStore sourceStore = FmmParticleStore::Owned;
     Vector<TreeId> roots;
+    /// Archive this record in the field order required by distributed transport.
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
         archive & meshSize & cellKey & sourceStore & roots;
@@ -53,6 +54,8 @@ static TreeCreateReturn treeCreateCellImpl(TreeCreateParameters params, size_t k
 HPX_PLAIN_ACTION(treeCreateCellImpl, TreeCreateCellImplAction);
 HPX_PLAIN_ACTION(treeReadCellRoot, TreeReadCellRootAction);
 
+/// Dispatch cell-tree construction locally or remotely, spawning local work only above the
+/// size threshold.
 static hpx::future<TreeCreateReturn> treeCreateFork(TreeCreateParameters params, size_t key,
     Pair<int, int> const& processRange, Pair<ParticleInteger> const& particleRange,
     Range<double> const& box, int const depth, bool const localRoot, bool threadme,
@@ -85,6 +88,7 @@ static hpx::future<TreeCreateReturn> treeCreateFork(TreeCreateParameters params,
 
 namespace detail {
 
+/// Decode a validated linear cell key into mesh coordinates.
 Array<uint64_t, kDimensions> treeCellCoordinates(uint64_t key, int meshSize) {
     uint64_t const count = particleMeshCellCount(meshSize);
     if (key >= count) {
@@ -98,6 +102,7 @@ Array<uint64_t, kDimensions> treeCellCoordinates(uint64_t key, int meshSize) {
     return coordinate;
 }
 
+/// Convert a mesh-cell key to its normalized spatial bounds.
 Range<double> treeCellBox(uint64_t key, int meshSize) {
     auto const coordinate = treeCellCoordinates(key, meshSize);
     Range<double> box;
@@ -155,6 +160,8 @@ void treeClampCellCenter(
 
 }    // namespace detail
 
+/// Build a source-cell subtree or combine contributing roots using the cell-aware tree
+/// policy.
 static TreeCreateReturn treeCreateCellImpl(TreeCreateParameters params, size_t key,
     Pair<int, int> processRange, Pair<ParticleInteger> particleRange, Range<double> box, int depth,
     bool localRoot, detail::TreeCellBuild cellBuild) {
@@ -227,6 +234,7 @@ static TreeNode readCellNode(TreeId id) {
 HPX_PLAIN_ACTION(readCellNode, ReadCellNodeAction);
 static std::unordered_map<int64_t, std::unique_ptr<TreeNode>> remoteCellNodes;
 static MutexType remoteCellMutex;
+/// Fetch and cache a remote cell-tree node on first access during the current forest.
 static TreeNode const* readRemoteCellNode(TreeId id) {
     std::unique_lock<MutexType> lock(remoteCellMutex);
     int64_t const key = (int64_t(id.proc) << 32) | uint32_t(id.index);
@@ -238,11 +246,13 @@ static TreeNode const* readRemoteCellNode(TreeId id) {
     }
     return found->second.get();
 }
+/// Clear cached remote nodes and locally retained cell-root summaries.
 static void resetCellTreeState() {
     remoteCellNodes.clear();
     cellRootReturns.clear();
 }
 
+/// Retrieve a cell-root summary from its owner, rejecting roots outside the current forest.
 static TreeCreateReturn treeReadCellRoot(TreeId id) {
     if (id.proc != hpxRank()) {
         return hpx::async<TreeReadCellRootAction>(hpxLocalities()[id.proc], id).get();
@@ -257,6 +267,7 @@ static TreeCreateReturn treeReadCellRoot(TreeId id) {
 
 HPX_PLAIN_ACTION(treePrepareCellForest, TreePrepareCellForestAction);
 
+/// Count occupied local cells and prepare forest storage across the locality tree.
 void treePrepareCellForest() {
     Vector<hpx::future<void>> futures;
     for (auto const& child : hpxChildren()) {
@@ -286,6 +297,7 @@ void treePrepareCellForest() {
     }
 }
 
+/// Reset cell-tree state, install remote access, and reserve a checked node capacity.
 void treePrepareCellForestLocal(
     size_t sourceParticleCount, size_t sourceRootCount, size_t sinkNodeCount) {
     treeResetLocal();
@@ -323,6 +335,7 @@ void treePrepareCellForestLocal(
     treeAllocateNodesLocal(capacity);
 }
 
+/// Build and register a root for one nonempty cell range in the selected source store.
 TreeCellRoot treeCreateCell(ParticleMeshCell const& cell, int meshSize, FmmParticleStore store,
     Range<double> const* sourceBox, TreeCreateReturn* completedRoot) {
     uint64_t const cellCount = detail::particleMeshCellCount(meshSize);
@@ -393,6 +406,7 @@ TreeCellRoot treeCreateCell(ParticleMeshCell const& cell, int meshSize, FmmParti
     return root;
 }
 
+/// Build disjoint sorted cell trees while holding the particle-reordering lock.
 Vector<TreeCellRoot> treeCreateCellForest(Vector<ParticleMeshCell> const& cells, int meshSize) {
     std::unique_lock<SharedMutexType> particleLock(particlesSharedMutex());
     for (size_t i = 1; i < cells.size(); ++i) {
@@ -432,6 +446,8 @@ Vector<TreeCellRoot> treeCreateCellForest(Vector<ParticleMeshCell> const& cells,
     return result;
 }
 
+/// Validate contributing owners and combine their roots into one distributed mesh-cell
+/// tree.
 TreeId treeCombineCellRoots(uint64_t cellKey, int meshSize, Vector<TreeId> contributors) {
     auto const box = detail::treeCellBox(cellKey, meshSize);
     if (contributors.empty()) {

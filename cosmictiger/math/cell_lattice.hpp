@@ -21,6 +21,8 @@ public:
     using Position = std::array<double, 3>;
     using CellCounts = std::array<int, 3>;
 
+    /// Parse a nonempty set of center/face/edge/vertex site letters, accepting either
+    /// case and rejecting unknown sites.
     explicit CellLattice(std::string_view sites) {
         if (sites.empty()) {
             throw std::invalid_argument("A cell lattice must contain at least one of C, F, E, V");
@@ -36,6 +38,7 @@ public:
         }
     }
 
+    /// Return the selected site types in canonical CFEV order.
     std::string sites() const {
         std::string result;
         for (size_t index = 0; index < selected_.size(); ++index) {
@@ -46,11 +49,14 @@ public:
         return result;
     }
 
+    /// Check whether all selected site types exist in the requested one-, two-, or
+    /// three-dimensional lattice.
     bool appliesToDimension(int dimension) const {
         return dimension >= 1 && dimension <= 3 && (!selected_[1] || dimension == 3) &&
             (!selected_[2] || dimension >= 2);
     }
 
+    /// List selected lattice-site offsets at integer or half-cell coordinates.
     std::vector<Position> offsets(int dimension) const {
         auto const occupied = occupiedSites(dimension);
         std::vector<Position> result;
@@ -66,11 +72,14 @@ public:
         return result;
     }
 
+    /// Count the distinct occupied sites in a lattice cell of the requested dimension.
     size_t sitesPerCell(int dimension) const {
         auto const occupied = occupiedSites(dimension);
         return std::count(occupied.begin(), occupied.end(), true);
     }
 
+    /// Count occupied integer/half-cell planes along an axis, rejecting an invalid
+    /// axis.
     int planesPerCell(int dimension, int axis) const {
         if (axis < 0 || axis >= dimension) {
             throw std::invalid_argument("Cell lattice axis is outside its dimension");
@@ -162,6 +171,8 @@ public:
 private:
     std::array<bool, 4> selected_{};
 
+    /// Build the occupied half-cell site mask after validating dimensional
+    /// applicability.
     std::array<bool, 8> occupiedSites(int dimension) const {
         if (!appliesToDimension(dimension)) {
             throw std::invalid_argument("Cell lattice " + sites() + " is not applicable in " +

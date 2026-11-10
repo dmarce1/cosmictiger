@@ -17,10 +17,13 @@ template <class T>
 class CudaUnorderedMap {
     DeviceVector<DeviceVector<Pair<int, T>>> buckets_;
     int size_;
+    /// Initialize the logical entry count to zero.
     CUDA_EXPORT
     void initialize() {
         size_ = 0;
     }
+    /// Grow the bucket table when needed and redistribute entries by integer-key
+    /// modulus.
     CUDA_EXPORT
     void rehash() {
         int newMod = std::max(buckets_.size(), 8);
@@ -46,22 +49,28 @@ public:
         CudaUnorderedMap<T>* map_;
 
     public:
+        /// Access the key/value entry at the iterator's current bucket and offset.
         CUDA_EXPORT
         Pair<int, T>& operator*() {
             return map_->buckets_[bucket_][index_];
         }
+        /// Return a pointer to the iterator's current key/value entry.
         CUDA_EXPORT
         Pair<int, T>* operator->() {
             return map_->buckets_[bucket_].data() + index_;
         }
+        /// Compare bucket and offset positions; iterators must belong to the same
+        /// map.
         CUDA_EXPORT
         bool operator==(Iterator const& other) {
             return bucket_ == other.bucket_ && index_ == other.index_;
         }
+        /// Test whether bucket or offset positions differ within the same map.
         CUDA_EXPORT
         bool operator!=(Iterator const& other) {
             return bucket_ != other.bucket_ || index_ != other.index_;
         }
+        /// Advance to the next entry, skipping exhausted buckets.
         CUDA_EXPORT
         Iterator& operator++() {
             index_++;
@@ -71,6 +80,7 @@ public:
             }
             return *this;
         }
+        /// Advance to the next entry and return the iterator's previous position.
         CUDA_EXPORT
         Iterator operator++(int) {
             auto old = *this;
@@ -79,6 +89,7 @@ public:
         }
         friend class CudaUnorderedMap<T>;
     };
+    /// Find a key in its bucket, returning end() when it is absent.
     CUDA_EXPORT
     Iterator find(int key) {
         if (buckets_.size()) {
@@ -98,6 +109,7 @@ public:
             return end();
         }
     }
+    /// Return an iterator to the first entry, skipping empty buckets.
     CUDA_EXPORT
     Iterator begin() {
         Iterator i;
@@ -109,6 +121,7 @@ public:
         }
         return i;
     }
+    /// Return the sentinel iterator positioned after the bucket table.
     CUDA_EXPORT
     Iterator end() {
         Iterator i;
@@ -117,10 +130,12 @@ public:
         i.map_ = this;
         return i;
     }
+    /// Initialize an empty integer-key map.
     CUDA_EXPORT
     CudaUnorderedMap() {
         initialize();
     }
+    /// Remove all entries while retaining bucket storage for reuse.
     CUDA_EXPORT
     void clear() {
         for (int i = 0; i < buckets_.size(); i++) {
@@ -128,6 +143,8 @@ public:
         }
         size_ = 0;
     }
+    /// Append an entry on the host, growing buckets as needed; device insertion
+    /// triggers an assertion.
     CUDA_EXPORT
     Iterator insert(Pair<int, T>&& entry) {
 #ifdef __CUDA_ARCH__
@@ -146,6 +163,7 @@ public:
         return iter;
 #endif
     }
+    /// Remove the matching key by moving the bucket's last entry into its slot.
     CUDA_EXPORT
     void erase(int key) {
         if (buckets_.empty()) {
@@ -163,10 +181,12 @@ public:
             }
         }
     }
+    /// Return the number of stored key/value entries.
     CUDA_EXPORT
     int size() const {
         return size_;
     }
+    /// Access a key's value, inserting a new entry on the host when the key is absent.
     CUDA_EXPORT
     T& operator[](int key) {
         auto iter = find(key);

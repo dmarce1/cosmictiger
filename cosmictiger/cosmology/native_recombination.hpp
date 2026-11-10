@@ -6,6 +6,8 @@
 #include <cosmictiger/chemistry/recombination.hpp>
 #include <cosmictiger/cosmology/zero_order.hpp>
 
+/// Map the cosmological densities, helium fraction, Hubble parameter, and CMB temperature
+/// into the recombination model.
 inline primordial::RecombinationParameters recombinationParameters(
     CosmicParameters const& parameters) {
     primordial::RecombinationParameters recombination;

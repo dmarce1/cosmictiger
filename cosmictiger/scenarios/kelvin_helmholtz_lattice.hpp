@@ -13,6 +13,7 @@ struct KelvinHelmholtzPacking {
     cell_lattice::CellLattice high;
     cell_lattice::CellLattice low;
 
+    /// Return the canonical high-density/low-density lattice-packing name.
     std::string name() const {
         return high.sites() + "/" + low.sites();
     }

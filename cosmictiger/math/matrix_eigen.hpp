@@ -39,9 +39,13 @@ struct SymmetricEigenpairs {
 namespace detail {
 
     struct EigenNoCounter {
+        /// Discard operation increments when eigensolver arithmetic accounting is
+        /// disabled.
         CUDA_EXPORT constexpr void operator+=(int) {}
     };
 
+    /// Eliminate one symmetric off-diagonal entry and rotate the accumulated
+    /// eigenvectors, optionally using robust hypot evaluation.
     template <class T, int dimensions, class Counter>
     CUDA_EXPORT inline void jacobiRotate(SymmetricMatrix<T, dimensions>& matrix,
         Matrix<T, dimensions>& vectors, int first, int second, bool useHypot, Counter& operations) {

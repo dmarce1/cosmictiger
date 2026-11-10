@@ -28,6 +28,7 @@ static int parseLine(char* line) {
     return i;
 }
 
+/// Read this process's resident memory usage from procfs and return bytes.
 static size_t cpuMemUse() {    // Note: this value is in KB!
     FILE* file = fopen("/proc/self/status", "r");
     int result = -1;
@@ -46,6 +47,7 @@ static size_t cpuMemUse() {    // Note: this value is in KB!
 static bool stopDaemon = false;
 static bool daemonStopped = false;
 
+/// Return the maximum resident memory usage among the localities in the collective tree.
 size_t maxCpuMemUse() {
     Vector<hpx::future<size_t>> futs;
     for (auto& c : hpxChildren()) {
@@ -59,6 +61,7 @@ size_t maxCpuMemUse() {
     return maxUse;
 }
 
+/// Periodically sample distributed memory use and write each new high-water mark.
 static void memuseDaemon(std::string filename) {
     static size_t maxMemused = 0;
     Timer tm;
@@ -85,10 +88,12 @@ static void memuseDaemon(std::string filename) {
     daemonStopped = true;
 }
 
+/// Launch the asynchronous memory high-water-mark reporter.
 void startMemuseDaemon() {
     hpx::post(hpx::annotated_function(memuseDaemon, "core.memuseDaemon"), outputPath("maxmem.txt"));
 }
 
+/// Request that the memory reporter stop and yield until it acknowledges completion.
 void stopMemuseDaemon() {
     stopDaemon = true;
     while (!daemonStopped) {

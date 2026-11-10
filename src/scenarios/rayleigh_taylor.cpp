@@ -19,6 +19,8 @@
 
 namespace scenarios {
 
+/// Initialize mirrored light/heavy gas layers with hydrostatic pressure and interface
+/// perturbations.
 ScenarioPlan initializeRayleighTaylor() {
     auto opts = getOptions();
     // Each complete mirrored light/heavy layer group contains 96 n³ particles.

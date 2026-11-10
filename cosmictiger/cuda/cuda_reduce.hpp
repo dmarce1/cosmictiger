@@ -14,6 +14,8 @@
 
 #ifdef __CUDACC__
 
+/// Compute exclusive prefix offsets and the total across the warp; all participating lanes
+/// must call together.
 __device__ inline void computeIndices(int& index, int& total) {
     int const& tid = threadIdx.x;
     for (int p = 1; p < kWarpSize; p *= 2) {
@@ -31,6 +33,8 @@ __device__ inline void computeIndices(int& index, int& total) {
     }
 }
 
+/// Compute exclusive prefix offsets and totals for each array component across the full
+/// warp.
 template <int nValue>
 __device__ inline void computeIndicesArray(Array<int, nValue>& indices, Array<int, nValue>& total) {
     int const& tid = threadIdx.x;
@@ -51,6 +55,8 @@ __device__ inline void computeIndicesArray(Array<int, nValue>& indices, Array<in
     }
 }
 
+/// Replace each participating lane's value with the warp sum; all participating lanes must
+/// call together.
 template <class T>
 __device__ inline void sharedReduceAdd(T& number) {
     for (int p = warpSize / 2; p >= 1; p /= 2) {
@@ -58,6 +64,7 @@ __device__ inline void sharedReduceAdd(T& number) {
     }
 }
 
+/// Sum each array component across the full warp and return the totals in every lane.
 template <class Values>
 __device__ inline void sharedReduceAddArray(Values& number) {
     for (int p = warpSize / 2; p >= 1; p /= 2) {
@@ -67,6 +74,8 @@ __device__ inline void sharedReduceAddArray(Values& number) {
     }
 }
 
+/// Replace each participating lane's value with the block sum; all participating lanes must
+/// call together.
 template <class T, int blockSize>
 __device__ inline void sharedReduceAdd(T& number) {
     int p = kWarpSize;
@@ -94,6 +103,8 @@ __device__ inline void sharedReduceAdd(T& number) {
     __syncthreads();
 }
 
+/// Replace each participating lane's value with the block maximum; all participating lanes
+/// must call together.
 template <int blockSize>
 __device__ inline void sharedReduceMax(float& number) {
     int p = kWarpSize;
@@ -121,6 +132,8 @@ __device__ inline void sharedReduceMax(float& number) {
     __syncthreads();
 }
 
+/// Replace each participating lane's value with the block minimum; all participating lanes
+/// must call together.
 template <int blockSize>
 __device__ inline void sharedReduceMin(unsigned long long& number) {
     int p = kWarpSize;
@@ -148,6 +161,8 @@ __device__ inline void sharedReduceMin(unsigned long long& number) {
     __syncthreads();
 }
 
+/// Replace each participating lane's value with the block minimum; all participating lanes
+/// must call together.
 template <int blockSize>
 __device__ inline void sharedReduceMin(int& number) {
     int p = kWarpSize;
@@ -175,6 +190,8 @@ __device__ inline void sharedReduceMin(int& number) {
     __syncthreads();
 }
 
+/// Replace each participating lane's value with the block maximum; all participating lanes
+/// must call together.
 template <int blockSize>
 __device__ inline void sharedReduceMax(int& number) {
     int p = kWarpSize;
@@ -204,6 +221,8 @@ __device__ inline void sharedReduceMax(int& number) {
 
 #include <cosmictiger/core/safe_io.hpp>
 
+/// Compute exclusive prefix offsets and the total across the block; all participating lanes
+/// must call together.
 template <int blockSize>
 __device__ inline void computeIndices(int& index, int& total) {
     int m = kWarpSize;
@@ -228,24 +247,32 @@ __device__ inline void computeIndices(int& index, int& total) {
     __syncthreads();
 }
 
+/// Replace each participating lane's value with the warp minimum; all participating lanes
+/// must call together.
 __device__ inline void sharedReduceMin(int& number) {
     for (int p = warpSize / 2; p >= 1; p /= 2) {
         number = min(number, __shfl_xor_sync(0xffffffff, number, p));
     }
 }
 
+/// Replace each participating lane's value with the warp minimum; all participating lanes
+/// must call together.
 __device__ inline void sharedReduceMin(unsigned long long& number) {
     for (int p = warpSize / 2; p >= 1; p /= 2) {
         number = min(number, __shfl_xor_sync(0xffffffff, number, p));
     }
 }
 
+/// Replace each participating lane's value with the warp minimum; all participating lanes
+/// must call together.
 __device__ inline void sharedReduceMin(float& number) {
     for (int p = warpSize / 2; p >= 1; p /= 2) {
         number = fminf(number, __shfl_xor_sync(0xffffffff, number, p));
     }
 }
 
+/// Replace each participating lane's value with the warp maximum; all participating lanes
+/// must call together.
 __device__ inline void sharedReduceMax(int& number) {
     for (int p = warpSize / 2; p >= 1; p /= 2) {
         number = max(number, __shfl_xor_sync(0xffffffff, number, p));

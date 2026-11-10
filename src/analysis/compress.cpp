@@ -4,6 +4,8 @@
 #include <cosmictiger/analysis/compress.hpp>
 #include <cosmictiger/math/vector3.hpp>
 
+/// Estimate the ratio of uncompressed phase-space bytes to the current compressed
+/// representation.
 double CompressedParticles::compressionRatio() {
     size_t numberOfParticles = 0;
     size_t numberOfBytes = 36;
@@ -15,6 +17,7 @@ double CompressedParticles::compressionRatio() {
     return (double) (24 * numberOfParticles) / numberOfBytes;
 }
 
+/// Sum the number of particles stored across compressed blocks.
 int CompressedParticles::size() {
     int count = 0;
     for (int i = 0; i < blocks.size(); i++) {
@@ -23,6 +26,7 @@ int CompressedParticles::size() {
     return count;
 }
 
+/// Write one compressed block's size, centers, scales, and quantized coordinates.
 void CompressedBlock::write(FILE* fp) {
     unsigned char size = positions[kXi].size();
     fwrite(&size, sizeof(unsigned char), 1, fp);
@@ -38,6 +42,7 @@ void CompressedBlock::write(FILE* fp) {
     }
 }
 
+/// Read one compressed block and resize its quantized coordinate arrays.
 void CompressedBlock::read(FILE* fp) {
     unsigned char size;
     FREAD(&size, sizeof(unsigned char), 1, fp);
@@ -57,6 +62,7 @@ void CompressedBlock::read(FILE* fp) {
     }
 }
 
+/// Write the group-level compression metadata followed by all compressed blocks.
 void CompressedParticles::write(FILE* fp) {
     int size = blocks.size();
     fwrite(&groupId, sizeof(LightconeGroup), 1, fp);
@@ -70,6 +76,7 @@ void CompressedParticles::write(FILE* fp) {
     }
 }
 
+/// Read group-level compression metadata and all contained compressed blocks.
 void CompressedParticles::read(FILE* fp) {
     int size;
     FREAD(&groupId, sizeof(LightconeGroup), 1, fp);
@@ -84,6 +91,8 @@ void CompressedParticles::read(FILE* fp) {
     }
 }
 
+/// Quantize each leaf's centered position and velocity coordinates into compact 16-bit
+/// block records.
 Vector<CompressedBlock> compressedLeavesToBlocks(
     Vector<Pair<int>> const& leaves, Vector<Array<double, 2 * kDimensions>>& parts) {
     Vector<CompressedBlock> blocks;
@@ -148,6 +157,7 @@ Vector<CompressedBlock> compressedLeavesToBlocks(
     return blocks;
 }
 
+/// Partition phase-space records into spatial leaves of at most 64 particles.
 void compressedTreeCreate(Vector<Pair<int>>& leaves, Vector<Array<double, 2 * kDimensions>>& parts,
     Range<double, 2 * kDimensions> const& box, Pair<int> const& particleRange) {
     int const numberOfParticles = particleRange.second - particleRange.first;
@@ -189,6 +199,8 @@ void compressedTreeCreate(Vector<Pair<int>>& leaves, Vector<Array<double, 2 * kD
     }
 }
 
+/// Center and normalize phase-space data, form spatial blocks, and build the compressed
+/// group record.
 CompressedParticles compressParticles(
     Vector<LightconeEntry> const& inputParticles, LightconeGroup id) {
     if (inputParticles.empty()) {

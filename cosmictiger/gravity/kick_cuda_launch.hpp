@@ -37,6 +37,8 @@ namespace detail {
 // stream wait, so profiling does not add a synchronization point.
 class KickCudaProfileEvents {
 public:
+    /// Create optional timing events on the current device, cleaning up partial
+    /// allocation on failure.
     explicit KickCudaProfileEvents(bool enabled) {
         if (!enabled) {
             return;
@@ -56,6 +58,7 @@ public:
         }
     }
 
+    /// Release any profiling events owned by this launch helper.
     ~KickCudaProfileEvents() noexcept {
         release();
     }
@@ -63,12 +66,16 @@ public:
     KickCudaProfileEvents(KickCudaProfileEvents const&) = delete;
     KickCudaProfileEvents& operator=(KickCudaProfileEvents const&) = delete;
 
+    /// Enqueue a timing marker at the requested transfer/kernel boundary when profiling
+    /// is active.
     void record(int boundary, cudaStream_t stream) {
         if (device_ >= 0) {
             CUDA_CHECK(cudaEventRecord(events_[boundary], stream));
         }
     }
 
+    /// Convert completed event intervals into transfer/kernel work times and restore
+    /// the caller's active device.
     void collect() const {
         if (device_ < 0) {
             return;
@@ -88,6 +95,8 @@ public:
     }
 
 private:
+    /// Destroy owned events on their original device and restore the prior device
+    /// without throwing.
     void release() noexcept {
         if (device_ < 0) {
             return;
@@ -112,6 +121,8 @@ private:
 };
 #endif
 
+/// Allocate device-only launch storage and throw a descriptive exception on allocation
+/// failure.
 inline char* kickAllocateLaunchStorage(size_t bytes) {
     char* pointer = nullptr;
     auto const status = cudaMalloc(&pointer, bytes);
@@ -141,6 +152,8 @@ struct KickDeviceResources {
     int maximumWarpsPerMultiprocessor;
 };
 
+/// Query kernel register use and device shared-memory/block limits for the selected FMM
+/// order.
 template <int order>
 KickDeviceResources kickDeviceResources() {
     KickDeviceResources resources;
@@ -165,10 +178,12 @@ KickDeviceResources kickDeviceResources() {
     return resources;
 }
 
+/// Round an integer byte/count value upward to a multiple.
 inline int kickRoundUp(int value, int multiple) {
     return ((value + multiple - 1) / multiple) * multiple;
 }
 
+/// Round an integer byte/count value downward to a multiple.
 inline int kickRoundDown(int value, int multiple) {
     return (value / multiple) * multiple;
 }
@@ -305,6 +320,8 @@ bool kickBuildLayout(Gravity const& gravity, bool massPlane, int residency, int 
     }
 }
 
+/// Find a shared-memory tile layout that satisfies configured residency and CUDA's actual
+/// occupancy limits.
 template <int order>
 CudaKickArenaLayout kickSelectLayout() {
     auto const& gravity = getOptions().gravity;
@@ -365,12 +382,15 @@ CudaKickArenaLayout kickSelectLayout() {
 
 }    // namespace detail
 
+/// Lazily cache the selected CUDA arena layout for this FMM order.
 template <int order>
 CudaKickArenaLayout const& kickArenaLayoutImpl() {
     static CudaKickArenaLayout const layout = detail::kickSelectLayout<order>();
     return layout;
 }
 
+/// Prepare reusable launch buffers, execute a nonempty CUDA kick batch, await transfers,
+/// and return reduced results.
 template <int order>
 KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position* devY,
     Position* devZ, TreeNode* devTreeNodes, Vector<KickWorkitem> workitems,

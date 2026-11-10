@@ -5,6 +5,8 @@
 
 namespace pmmm::detail {
 
+/// Pack an owned source cell after its final permutation, preserving the solve's frozen
+/// rung membership.
 Vector<ParticleGhost> readGhostParticles(uint64_t generation, uint64_t key) {
     if (generation != state.request.generation) {
         throw std::runtime_error("PMMM ghost request belongs to another solve");
@@ -31,6 +33,8 @@ Vector<ParticleGhost> readGhostParticles(uint64_t generation, uint64_t key) {
     return result;
 }
 
+/// Enumerate periodically wrapped source-cell keys in the configured near-field
+/// neighborhood.
 std::vector<uint64_t> neighbors(uint64_t key) {
     std::vector<uint64_t> result;
     auto const center = coordinates(key);
@@ -49,6 +53,8 @@ std::vector<uint64_t> neighbors(uint64_t key) {
     return result;
 }
 
+/// Discover remote source ownership and counts, reserve ghost storage, and establish sink
+/// dependencies.
 void planGhosts() {
     // Every neighbor cell has exactly one owner, known from the particle-domain
     // tree. Ask each remote owner how many particles its cells hold so the ghost
@@ -144,6 +150,8 @@ void planGhosts() {
         state.request.applyKick && !state.request.parameters.htime ? particlesOwnedSize() : 0);
 }
 
+/// Fetch and install a remote source cell, build its tree, and publish readiness or
+/// failure.
 void receiveGhostCell(size_t index) {
     auto const view = fmmGhostView();
     auto const& source = state.sourceCells[index];

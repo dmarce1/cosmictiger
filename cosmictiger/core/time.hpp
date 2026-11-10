@@ -14,6 +14,8 @@
 using RungType = std::int8_t;
 using TimeType = std::uint64_t;
 
+/// Advance the unsigned simulation clock by one maxRung tick; rung zero leaves it
+/// unchanged.
 inline TimeType inc(TimeType t, RungType maxRung) {
     if (maxRung > 0) {
         t += (TimeType(1) << TimeType(64 - maxRung));
@@ -21,6 +23,7 @@ inline TimeType inc(TimeType t, RungType maxRung) {
     return t;
 }
 
+/// Find the coarsest rung synchronized at this clock value by counting trailing zero bits.
 inline RungType minRung(TimeType t) {
     RungType minRung = 64;
     while (((t & 1) == 0) && (minRung != 0)) {

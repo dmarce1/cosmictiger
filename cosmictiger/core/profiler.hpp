@@ -77,12 +77,17 @@ void profileOutput(std::string const& filename);
 // Rank filtering is the caller's responsibility for all work profiling APIs.
 void recordWork(WorkPhase phase, double seconds) noexcept;
 #else
+/// Provide the no-op counterpart when this profiling facility is disabled.
 inline void profileBegin(char const*) noexcept {}
+/// Provide the no-op counterpart when this profiling facility is disabled.
 inline void profileEnd() noexcept {}
+/// Return an empty report when profiling is disabled at compile time.
 inline std::string profileReport() {
     return {};
 }
+/// Provide the no-op counterpart when this profiling facility is disabled.
 inline void profileOutput(std::string const&) noexcept {}
+/// Provide the no-op counterpart when this profiling facility is disabled.
 inline void recordWork(WorkPhase, double) noexcept {}
 #endif
 
@@ -92,6 +97,7 @@ inline void recordWork(WorkPhase, double) noexcept {}
 // the caller's responsibility, as with recordWork.
 void recordDeviceBlocks(DeviceBlockRecord const* blocks, size_t count) noexcept;
 #else
+/// Provide the no-op counterpart when this profiling facility is disabled.
 inline void recordDeviceBlocks(DeviceBlockRecord const*, size_t) noexcept {}
 #endif
 
@@ -108,9 +114,12 @@ public:
     void next(WorkPhase phase) noexcept;
     void stop() noexcept;
 #else
+    /// Provide the no-op counterpart when this profiling facility is disabled.
     explicit ScopedWork(WorkPhase, bool = true) noexcept {}
     ~ScopedWork() = default;
+    /// Provide the no-op counterpart when this profiling facility is disabled.
     void next(WorkPhase) noexcept {}
+    /// Provide the no-op counterpart when this profiling facility is disabled.
     void stop() noexcept {}
 #endif
 
@@ -132,6 +141,7 @@ private:
 // being on rank zero alone does not make a parallel task safe to instrument.
 class ScopedPhase {
 public:
+    /// Begin a named profiling phase when this scope is enabled.
     explicit ScopedPhase(char const* name, bool enabled = true)
       : enabled_(enabled) {
         if (enabled_) {
@@ -139,6 +149,7 @@ public:
         }
     }
 
+    /// Close the profiling phase opened by this scope.
     ~ScopedPhase() {
         if (enabled_) {
             profileEnd();

@@ -118,6 +118,8 @@ inline VirialOverdensity virialOverdensity(
 
 enum class HaloDensityConvention { bryanNormanFlat, bryanNormanOpen, meanMatter };
 
+/// Choose the applicable Bryan–Norman convention or the mean-matter fallback; reject
+/// nonfinite cosmology.
 inline HaloDensityConvention haloDensityConvention(double omegaLambda, double omegaCurvature) {
     if (!detail::isFinite(omegaLambda) || !detail::isFinite(omegaCurvature)) {
         throw std::invalid_argument("Halo density cosmology must be finite");
@@ -131,6 +133,7 @@ inline HaloDensityConvention haloDensityConvention(double omegaLambda, double om
     return HaloDensityConvention::meanMatter;
 }
 
+/// Return the catalogue label for the selected virial-overdensity convention.
 inline char const* virialDensityLabel(HaloDensityConvention convention) {
     switch (convention) {
     case HaloDensityConvention::bryanNormanFlat:
@@ -143,6 +146,7 @@ inline char const* virialDensityLabel(HaloDensityConvention convention) {
     throw std::invalid_argument("Unknown halo density convention");
 }
 
+/// Name the mean-matter or critical-density reference used by this convention.
 inline char const* soDensityReferenceLabel(HaloDensityConvention convention) {
     return convention == HaloDensityConvention::meanMatter ? "mean_matter" : "critical";
 }
@@ -390,6 +394,8 @@ struct SymmetricEigenpairs {
     Matrix3 vectors{};
 };
 
+/// Solve the symmetric shape tensor and convert eigenvectors from columns to catalogue
+/// rows; reject solver failure.
 inline SymmetricEigenpairs symmetricEigenpairs(Matrix3 const& matrix) {
     math::Matrix<double, 3> tensor;
     for (int row = 0; row < 3; ++row) {

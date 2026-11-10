@@ -10,6 +10,8 @@
 
 namespace detail {
 
+/// Swap two trivially copyable records through byte storage, preserving all representation
+/// bits.
 template <class Value>
 void swapParticleBytes(Value& first, Value& second) {
     static_assert(std::is_trivially_copyable_v<Value>);
@@ -21,6 +23,8 @@ void swapParticleBytes(Value& first, Value& second) {
 
 }    // namespace detail
 
+/// Swap every enabled particle field and maintain linked species/catalogue state during
+/// reordering.
 void particlesSwap(ParticleInteger first, ParticleInteger second) {
     if (first == second) {
         return;

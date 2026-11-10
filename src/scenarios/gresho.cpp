@@ -10,6 +10,8 @@
 
 namespace scenarios {
 
+/// Initialize the periodic Gresho vortex lattice with its piecewise equilibrium pressure
+/// and azimuthal velocity.
 ScenarioPlan initializeGresho() {
     auto opts = getOptions();
     auto const layout =

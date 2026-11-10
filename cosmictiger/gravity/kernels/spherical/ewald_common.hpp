@@ -32,6 +32,7 @@ namespace detail {
         using Type = SimdVector<double, lanes>;
     };
 #endif
+    /// Convert an Ewald working value between scalar or corresponding SIMD precisions.
     template <typename Destination, typename Source>
     CUDA_EXPORT inline Destination ewaldConvert(Source const& value) {
         using namespace math;
@@ -45,6 +46,7 @@ namespace detail {
             });
         }
     }
+    /// Evaluate exp for a scalar or independently in each SIMD lane.
     template <typename Real>
     CUDA_EXPORT inline Real ewaldExp(Real const& value) {
         using namespace math;
@@ -54,6 +56,7 @@ namespace detail {
             return Real([&](auto lane) { return std::exp(value[lane]); });
         }
     }
+    /// Evaluate erfc for a scalar or independently in each SIMD lane.
     template <typename Real>
     CUDA_EXPORT inline Real ewaldErfc(Real const& value) {
         using namespace math;
@@ -63,6 +66,7 @@ namespace detail {
             return Real([&](auto lane) { return std::erfc(value[lane]); });
         }
     }
+    /// Evaluate cos for a scalar or independently in each SIMD lane.
     template <typename Real>
     CUDA_EXPORT inline Real ewaldCos(Real const& value) {
         using namespace math;
@@ -72,6 +76,7 @@ namespace detail {
             return Real([&](auto lane) { return std::cos(value[lane]); });
         }
     }
+    /// Evaluate sin for a scalar or independently in each SIMD lane.
     template <typename Real>
     CUDA_EXPORT inline Real ewaldSin(Real const& value) {
         using namespace math;
@@ -81,6 +86,7 @@ namespace detail {
             return Real([&](auto lane) { return std::sin(value[lane]); });
         }
     }
+    /// Add a lattice contribution with Kahan compensation, updating sum and correction.
     template <typename Real>
     CUDA_EXPORT inline void ewaldAccumulate(Real& sum, Real& correction, Real value) {
         using namespace math;

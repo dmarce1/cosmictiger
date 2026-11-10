@@ -9,6 +9,7 @@
 #include <cosmictiger/analysis/power_cuda.hpp>
 #include <cosmictiger/cosmology/fft.hpp>
 
+/// Atomically deposit mass-weighted folded particle clouds into a device mesh box.
 __global__ void accumulateDensityKernel(Position const* xValue, Position const* yValue,
     Position const* zValue, float* rho, float const* masses, int mfold, size_t numberOfParticles,
     int ndim, Range<int64_t> intbox) {

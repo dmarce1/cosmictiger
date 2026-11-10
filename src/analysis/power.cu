@@ -16,6 +16,7 @@
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
+/// Deposit folded particle density on CUDA and return the completed mesh-box contribution.
 Vector<float> accumulateDensityCuda(int m, int ndim, Range<int64_t> intbox) {
     constexpr int kBlockSize = 256;
     int numberOfBlocks;

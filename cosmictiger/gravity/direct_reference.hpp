@@ -22,12 +22,14 @@ class GravityReferenceSum {
 public:
     CUDA_EXPORT GravityReferenceSum() = default;
 
+    /// Accumulate a reference-force contribution with compensated summation.
     CUDA_EXPORT void add(double value) {
         double const adjusted = value - correction_;
         double const next = sum_ + adjusted;
         correction_ = (next - sum_) - adjusted;
         sum_ = next;
     }
+    /// Return the compensated accumulator's current sum.
     CUDA_EXPORT double value() const {
         return sum_;
     }
@@ -54,6 +56,8 @@ struct GravityReferenceTables {
 
 static_assert(std::is_trivially_copyable_v<GravityReferenceTables>);
 
+/// Lazily construct the real-space image and Fourier-wave tables used by the periodic
+/// direct reference.
 inline GravityReferenceTables const& gravityReferenceTables() {
     static auto const tables = [] {
         GravityReferenceTables result{};
@@ -191,6 +195,7 @@ CUDA_EXPORT inline Vector3<double> directGravityReference(Vector3<double> const&
     return result;
 }
 
+/// Evaluate softened direct acceleration with the shared periodic-reference tables.
 inline Vector3<double> directGravityReference(Vector3<double> const& displacement,
     radial_kernel::KernelTable<double> const& kernel, double smoothingLength,
     bool periodic = true) {

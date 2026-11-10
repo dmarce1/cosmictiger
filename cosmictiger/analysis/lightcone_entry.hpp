@@ -35,6 +35,8 @@ size_t lcAddParticles(
 
 // Positions encode the remaining light-travel conformal time, not emission time.
 #if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
+/// Sample the background at observer time minus lightcone radius, clamped to the initial
+/// epoch; reject invalid inputs.
 inline double lightconeEmissionScale(
     cosmology::SimulationBackgroundTable const& background, double tauMax, double radius) {
     if (!std::isfinite(radius) || radius < 0.0 || !std::isfinite(tauMax)) {

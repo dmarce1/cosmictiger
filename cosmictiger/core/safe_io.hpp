@@ -21,6 +21,7 @@ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
 #ifndef __CUDA_ARCH__
 namespace detail {
 
+/// Throw a runtime error containing the message and originating source location.
 [[noreturn]] inline void throwRuntimeError(char const* file, int line, std::string message) {
     if (!message.empty() && message.back() != '\n') {
         message += '\n';
@@ -36,6 +37,7 @@ namespace detail {
 #endif
 
 // CUDA device code cannot throw C++ exceptions; retain its diagnostic and trap.
+/// Report the message and source location; throw on the host or trap on the device.
 template <class... Args>
 [[noreturn]]
 #ifdef __CUDA_ARCH__
@@ -58,6 +60,7 @@ __device__
 #endif
 }
 
+/// Report the message and source location; throw on the host or trap on the device.
 [[noreturn]]
 #ifdef __CUDA_ARCH__
 __device__
@@ -75,6 +78,7 @@ __device__
 #define FREAD(a, b, c, d) safeFread(a, b, c, d, __LINE__, __FILE__)
 #define FWRITE(a, b, c, d) safeFwrite(a, b, c, d, __LINE__, __FILE__)
 
+/// Read exactly count binary elements, reporting a source-located error on a short read.
 static void safeFread(void* src, size_t size, size_t count, FILE* fp, int line, char const* file) {
     auto read = fread(src, size, count, fp);
     if (read != count) {
@@ -84,6 +88,7 @@ static void safeFread(void* src, size_t size, size_t count, FILE* fp, int line, 
     }
 }
 
+/// Write exactly count binary elements, reporting a source-located error on a short write.
 static void safeFwrite(
     void const* src, size_t size, size_t count, FILE* fp, int line, char const* file) {
     auto write = fwrite(src, size, count, fp);

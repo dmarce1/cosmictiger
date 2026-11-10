@@ -44,6 +44,7 @@ struct SphGhostInterest {
     Vector<Fixed32Range> innerBoxes;
     Vector<Fixed32Range> outerBoxes;
 
+    /// Report whether this interest packet contains any inner boxes.
     bool empty() const {
         return innerBoxes.empty();
     }
@@ -63,6 +64,7 @@ struct SphGhostInterest {
         return false;
     }
 
+    /// Archive this record in the field order required by distributed transport.
     template <class Archive>
     void serialize(Archive&& archive, unsigned) {
         archive & rank;
@@ -119,6 +121,7 @@ inline constexpr std::array<char const*, kGroupCount> kGroupNames = {"positions"
     "internal energies", "smoothing lengths", "rungs", "velocities", "densities",
     "rung candidates"};
 
+/// Test whether a field-group bit is present in the requested ghost mask.
 constexpr bool hasGroup(unsigned mask, int group) {
     return (mask >> group) & 1u;
 }
@@ -160,6 +163,7 @@ struct GhostGroupUpdate {
     Vector<std::uint32_t> slots;
     Vector<char> bytes;
 
+    /// Archive this record in the field order required by distributed transport.
     template <class Archive>
     void serialize(Archive&& archive, unsigned) {
         archive & group;
@@ -168,6 +172,7 @@ struct GhostGroupUpdate {
         archive & bytes;
     }
 
+    /// Return the byte count of field payloads and their changed-slot indices.
     std::int64_t payloadBytes() const {
         return std::int64_t(bytes.size()) + std::int64_t(slots.size()) * sizeof(std::uint32_t);
     }
@@ -179,6 +184,7 @@ struct GhostFieldsMessage {
     unsigned mask = 0;
     Vector<GhostGroupUpdate> updates;
 
+    /// Archive this record in the field order required by distributed transport.
     template <class Archive>
     void serialize(Archive&& archive, unsigned) {
         archive & owner;
@@ -202,10 +208,12 @@ static std::atomic<int> stagingDepth{0};
 // Refreshes count from 1 and blocks start at 0, so before the first refresh nothing reads.
 static std::atomic<std::int64_t> refreshGeneration{-1};
 
+/// Pack a remote rank and node index into one 64-bit ghost lookup key.
 std::uint64_t ghostKey(int rank, std::int64_t index) {
     return (std::uint64_t(std::uint32_t(rank)) << 32) | std::uint64_t(std::uint32_t(index));
 }
 
+/// Clear export plans, staged ghost blocks, and lookup indices under the ghost-store lock.
 void clearLocalGhosts() {
     std::lock_guard<MutexType> lock(storeMutex);
     exports.clear();
@@ -243,11 +251,13 @@ std::pair<GhostBlock const*, ParticleInteger> ghostSlot(
     return {&block, block.offsets[node]};
 }
 
+/// Interpret one staged ghost field group's byte storage as the requested element type.
 template <class T>
 T const* groupData(GhostBlock const& block, int group) {
     return reinterpret_cast<T const*>(block.fields[group].data());
 }
 
+/// Expand a box component by component to include another box.
 void growUnion(Fixed32Range& total, Fixed32Range const& box) {
     for (int dim = 0; dim < kDimensions; dim++) {
         total.begin[dim] = std::min(total.begin[dim], box.begin[dim]);
@@ -394,6 +404,8 @@ void receiveGhostLeaves(
     block.syncEpoch = epoch;
 }
 
+/// Install full or sparse field updates into the synchronized owner's block and publish
+/// field generations.
 void receiveGhostFields(GhostFieldsMessage message) {
     // Owners write disjoint blocks; the lock covers only the lookup. Blocks are erased only by
     // the first walk after a sync, never while a refresh runs.
@@ -464,6 +476,7 @@ std::exception_ptr drainGhostFutures(Vector<hpx::future<T>>& futures, std::excep
     return failure;
 }
 
+/// Drain all ghost-exchange futures and propagate the first failure afterward.
 template <class T>
 void joinGhostFutures(Vector<hpx::future<T>>& futures) {
     if (auto const failure = drainGhostFutures(futures, nullptr)) {
@@ -473,10 +486,12 @@ void joinGhostFutures(Vector<hpx::future<T>>& futures) {
 
 }    // namespace detail
 
+/// Report whether multiple localities require remote gas ghost exchange.
 bool sphGhostsActive() {
     return hpxSize() > 1;
 }
 
+/// Clear staged ghost state throughout the SPH collective topology.
 void sphGhostsClear() {
     Vector<hpx::future<void>> children;
     for (auto const& child : sphCollectiveChildren()) {
@@ -593,6 +608,8 @@ void sphGhostsExport(std::int64_t epoch, Vector<detail::SphGhostInterest> intere
     }
 }
 
+/// Start a new synchronization epoch and exchange interested remote leaf records from rank
+/// zero.
 void sphGhostsSync() {
     ALWAYS_ASSERT(hpxRank() == 0);
     static std::int64_t epoch = 0;
@@ -601,6 +618,8 @@ void sphGhostsSync() {
     sphGhostsExport(epoch, std::move(interests));
 }
 
+/// Discard stale ghost blocks and rebuild deterministic node/range lookup indices for the
+/// latest epoch.
 void sphGhostsFinalizeSync() {
     std::lock_guard<MutexType> lock(detail::storeMutex);
     if (detail::finalizedEpoch == detail::syncEpoch) {
@@ -742,6 +761,8 @@ void sphGhostsRefreshLocal(std::int64_t generation, unsigned fields) {
     }
 }
 
+/// Push requested current fields for a new generation, omitting rung candidates outside
+/// balancing.
 void sphGhostsRefresh(unsigned fields) {
     ALWAYS_ASSERT(hpxRank() == 0);
     if (!sphRungCandidatesActive()) {
@@ -752,14 +773,17 @@ void sphGhostsRefresh(unsigned fields) {
     sphGhostsRefreshLocal(++generation, fields);
 }
 
+/// Enter a scope in which remote gas reads may consume refreshed ghost fields.
 void sphGhostsBeginStaging() {
     detail::stagingDepth++;
 }
 
+/// Leave the current remote-gas staging scope.
 void sphGhostsEndStaging() {
     detail::stagingDepth--;
 }
 
+/// Reject a remote gas read made outside an active staging scope.
 void sphGhostsRequireStaging(ParticleGlobalRange const& range) {
     // Ghost fields are pushed for, and current during, the staging of a pass. No other code
     // may read remote gas: there is no fetch path to serve it.
@@ -769,6 +793,7 @@ void sphGhostsRequireStaging(ParticleGlobalRange const& range) {
     }
 }
 
+/// Find a staged remote leaf by TreeId, requiring synchronization to have been finalized.
 SphTreeNode const* sphGhostsFindNode(TreeId id) {
     if (detail::finalizedEpoch != detail::syncEpoch) {
         THROW_ERROR(
@@ -779,10 +804,12 @@ SphTreeNode const* sphGhostsFindNode(TreeId id) {
                                              &found->second.block->nodes[found->second.node];
 }
 
+/// Return the deterministically ordered list of staged remote leaf IDs.
 Vector<TreeId> const& sphGhostsLeafIds() {
     return detail::leafIds;
 }
 
+/// Copy staged remote positions into the caller's component arrays.
 void sphGhostsReadPositions(
     ParticleGlobalRange range, Position* x, Position* y, Position* z, ParticleInteger offset) {
     if (range.range.first == range.range.second) {
@@ -798,6 +825,7 @@ void sphGhostsReadPositions(
     }
 }
 
+/// Copy the requested staged thermal and support-length fields into caller buffers.
 void sphGhostsReadInternalEnergyAndSmoothingLength(ParticleGlobalRange range, float* internalEnergy,
     float* smoothingLength, ParticleInteger offset) {
     if (range.range.first == range.range.second) {
@@ -817,6 +845,7 @@ void sphGhostsReadInternalEnergyAndSmoothingLength(ParticleGlobalRange range, fl
     }
 }
 
+/// Copy staged remote gas rung values into the caller's buffer.
 void sphGhostsReadRungs(ParticleGlobalRange range, char* rungs, ParticleInteger offset) {
     if (range.range.first == range.range.second) {
         return;
@@ -827,6 +856,7 @@ void sphGhostsReadRungs(ParticleGlobalRange range, char* rungs, ParticleInteger 
     std::copy(values + source, values + source + count, rungs + offset);
 }
 
+/// Copy staged remote velocity components into the caller's arrays.
 void sphGhostsReadVelocities(
     ParticleGlobalRange range, float* vx, float* vy, float* vz, ParticleInteger offset) {
     if (range.range.first == range.range.second) {
@@ -842,6 +872,7 @@ void sphGhostsReadVelocities(
     }
 }
 
+/// Copy requested staged density, viscosity, and grad-h fields into caller buffers.
 void sphGhostsReadDensity(ParticleGlobalRange range, float* density, ParticleInteger offset,
     float* balsaraFactor, float* bulkViscosityCoefficient, float* gradHCorrection) {
     if (range.range.first == range.range.second) {
@@ -867,6 +898,7 @@ void sphGhostsReadDensity(ParticleGlobalRange range, float* density, ParticleInt
     }
 }
 
+/// Copy staged remote candidate-rung values for the current balance pass.
 void sphGhostsReadRungCandidates(ParticleGlobalRange range, char* rungs, ParticleInteger offset) {
     if (range.range.first == range.range.second) {
         return;
@@ -877,6 +909,8 @@ void sphGhostsReadRungCandidates(ParticleGlobalRange range, char* rungs, Particl
     std::copy(values + source, values + source + count, rungs + offset);
 }
 
+/// Merge ghost counts and byte totals, retaining maximum synchronization and refresh
+/// generations.
 SphGhostStatistics& SphGhostStatistics::operator+=(SphGhostStatistics const& other) {
     leaves += other.leaves;
     particles += other.particles;
@@ -893,6 +927,7 @@ SphGhostStatistics& SphGhostStatistics::operator+=(SphGhostStatistics const& oth
     return *this;
 }
 
+/// Snapshot local ghost occupancy and reduce exchange statistics across the SPH topology.
 SphGhostStatistics sphGhostsStatistics() {
     Vector<hpx::future<SphGhostStatistics>> children;
     for (auto const& child : sphCollectiveChildren()) {
@@ -925,6 +960,7 @@ SphGhostStatistics sphGhostsStatistics() {
     return result;
 }
 
+/// Clear accumulated ghost-exchange counters throughout the SPH topology.
 void sphGhostsResetStatistics() {
     Vector<hpx::future<void>> children;
     for (auto const& child : sphCollectiveChildren()) {

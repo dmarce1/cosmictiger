@@ -28,6 +28,8 @@ namespace scenarios {
 
 namespace detail {
 
+    /// Solve initial density on rank zero, then set gas energies to the requested
+    /// uniform pressure.
     void initializeKelvinHelmholtzThermodynamics(float P) {
         // All scenario particles are still on rank zero. The tree may sort gas
         // records, but does not migrate them; assign energies only after this pass.
@@ -80,6 +82,8 @@ namespace detail {
 
 }    // namespace detail
 
+/// Build the selected layered packing, impose shear and seeded perturbations, and
+/// initialize pressure equilibrium.
 ScenarioPlan initializeKelvinHelmholtz() {
     auto opts = getOptions();
     auto const packing =

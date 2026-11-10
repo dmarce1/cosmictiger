@@ -23,6 +23,8 @@ struct GroupTreeNode {
     bool localRoot;
     bool active;
     bool lastActive;
+    /// Archive `active`, `lastActive`, `box`, `children`, `particleRange`,
+    /// `processRange` and the remaining fields in transport order.
     template <class A>
     void serialize(A&& arc, unsigned) {
         arc & active;
@@ -33,6 +35,8 @@ struct GroupTreeNode {
         arc & processRange;
         arc & localRoot;
     }
+    /// Combine this node's local particle interval with its owning process for remote
+    /// access.
     inline ParticleGlobalRange globalParticleRange() const {
         ParticleGlobalRange r;
         r.proc = processRange.first;
@@ -44,6 +48,7 @@ struct GroupTreeNode {
 struct GroupTreeReturn {
     TreeId id;
     GroupRange box;
+    /// Archive `id`, `box` in transport order.
     template <class A>
     void serialize(A&& arc, unsigned) {
         arc & id;

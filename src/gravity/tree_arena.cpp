@@ -74,6 +74,7 @@ static std::atomic<uint64_t> remoteTreeFetchCount{0};
 static Vector<short> leafSizes;
 static SpinlockType leafSizesMutex;
 
+/// Return the allocated node-arena size.
 long long treeNodesSize() {
     return nodesSize;
 }
@@ -82,19 +83,23 @@ static_assert(offsetof(FmmMultiPos<kFmmMinOrder>, multi) == sizeof(MultipolePosi
         offsetof(FmmMultiPos<kFmmMaxOrder>, multi) == sizeof(MultipolePosition),
     "Positioned multipole coefficients must directly follow the position");
 
+/// Locate a node's variable-stride multipole record in the coefficient arena.
 static MultipolePosition* treeMultipoleRecord(size_t index) {
     return reinterpret_cast<MultipolePosition*>(multis + index * multipoleStride);
 }
 
+/// Locate the packed coefficients immediately after a multipole position record.
 static float* treeMultipoleCoefficients(MultipolePosition* record) {
     return reinterpret_cast<float*>(reinterpret_cast<char*>(record) + sizeof(MultipolePosition));
 }
 
+/// Locate the packed coefficients immediately after a multipole position record.
 static float const* treeMultipoleCoefficients(MultipolePosition const* record) {
     return reinterpret_cast<float const*>(
         reinterpret_cast<char const*>(record) + sizeof(MultipolePosition));
 }
 
+/// Copy the active-order coefficients and zero transport padding in the destination record.
 static void treeWriteMultipole(MultipolePosition* record, MultipoleBuffer const& multipole) {
     int const count = fmmMultipoleCoefficientCount(fmmOrder());
     int const slots = int((multipoleStride - sizeof(MultipolePosition)) / sizeof(float));
@@ -109,6 +114,8 @@ static void treeWriteMultipole(MultipolePosition* record, MultipoleBuffer const&
     }
 }
 
+/// Cache a remote position/multipole record, sharing a singleton record for an entirely
+/// zero source.
 MultipolePosition* treeAddMultipole(
     Vector3<Position> const& pos, MultipoleBuffer const& multipole) {
     bool empty = true;
@@ -144,6 +151,7 @@ MultipolePosition* treeAddMultipole(
     return ptr;
 }
 
+/// Copy the active-order packed coefficients into a multipole buffer.
 void treeReadMultipole(MultipolePosition const* record, MultipoleBuffer& multipole) {
     int const count = fmmMultipoleCoefficientCount(fmmOrder());
     float const* coefficients = treeMultipoleCoefficients(record);
@@ -152,6 +160,7 @@ void treeReadMultipole(MultipolePosition const* record, MultipoleBuffer& multipo
     }
 }
 
+/// Reserve the next allocator block from the shared node arena, failing on exhaustion.
 void TreeAllocator::reset() {
     int const treeAllocLineSize = getOptions().compute.treeAllocLineSize;
     next_ = (nextId += treeAllocLineSize);
@@ -161,6 +170,7 @@ void TreeAllocator::reset() {
     }
 }
 
+/// Register a thread-local block allocator for coordinated arena resets.
 TreeAllocator::TreeAllocator() {
     ready_ = false;
     while (allocatorMtx++ != 0) {
@@ -170,6 +180,7 @@ TreeAllocator::TreeAllocator() {
     allocatorMtx--;
 }
 
+/// Return the next node index, reserving another block when the current one is exhausted.
 int TreeAllocator::allocate() {
     if (next_ == last_) {
         reset();
@@ -178,6 +189,7 @@ int TreeAllocator::allocate() {
     return next_++;
 }
 
+/// Unregister this allocator from the shared reset list.
 TreeAllocator::~TreeAllocator() {
     while (allocatorMtx++ != 0) {
         allocatorMtx--;
@@ -192,6 +204,7 @@ TreeAllocator::~TreeAllocator() {
     allocatorMtx--;
 }
 
+/// Initialize tree-building controls from the opening angle and minimum active rung.
 TreeCreateParameters::TreeCreateParameters(int minimumRung, double openingAngle) {
     theta = openingAngle;
     minRung = minimumRung;
@@ -201,6 +214,7 @@ TreeCreateParameters::TreeCreateParameters(int minimumRung, double openingAngle)
     parallelParticleThreshold = 0;
 }
 
+/// Store a remote node copy in the arena and mark its slot populated.
 size_t treeAddRemote(TreeNode const& remote) {
     int const treeAllocLineSize = getOptions().compute.treeAllocLineSize;
     if (nextId + treeAllocLineSize >= nodesSize) {
@@ -213,6 +227,7 @@ size_t treeAddRemote(TreeNode const& remote) {
     return index;
 }
 
+/// Expose the contiguous node arena for CPU or CUDA tree traversal.
 TreeNode* treeData() {
     return nodes;
 }
@@ -220,6 +235,7 @@ TreeNode* treeData() {
 static bool setGpu = false;
 static bool setCpu = false;
 
+/// Remove GPU read-mostly advice before host mutation of the node arena.
 void tree2Cpu() {
     if (!setCpu) {
 #ifdef USE_CUDA
@@ -234,6 +250,7 @@ void tree2Cpu() {
     }
 }
 
+/// Apply GPU read-mostly advice to the node arena after checking the selected backend.
 void tree2Gpu() {
 #ifdef USE_CUDA
     if (!getOptions().gravity.cuda) {
@@ -251,6 +268,7 @@ void tree2Gpu() {
 #endif
 }
 
+/// Estimate node capacity from source count and bucket size with overflow protection.
 size_t treeNodeCapacity(size_t sourceParticleCount) {
     size_t const multiplier = kTreeNodeAllocationSize;
     if (sourceParticleCount > std::numeric_limits<size_t>::max() / multiplier) {
@@ -259,6 +277,7 @@ size_t treeNodeCapacity(size_t sourceParticleCount) {
     return multiplier * sourceParticleCount / getOptions().compute.bucketSize;
 }
 
+/// Allocate or reuse node and multipole arenas and reset registered allocator blocks.
 void treeAllocateNodesLocal(size_t capacity) {
     int const treeAllocLineSize = getOptions().compute.treeAllocLineSize;
     auto const multiply = [](size_t first, size_t second) {
@@ -310,6 +329,7 @@ void treeAllocateNodesLocal(size_t capacity) {
     tree2Cpu();
 }
 
+/// Return the next shared node index including the allocator block reservation offset.
 long long treeNodesNextIndex() {
     int const treeAllocLineSize = getOptions().compute.treeAllocLineSize;
     return nextId + treeAllocLineSize;
@@ -320,17 +340,20 @@ static TreeNode const* (*remoteReader)(TreeId) = nullptr;
 static void (*remoteReset)() = nullptr;
 }    // namespace detail
 
+/// Install solver-specific callbacks for remote node reads and cache resets.
 void treeRegisterRemoteAccess(TreeNode const* (*reader)(TreeId), void (*reset)()) {
     detail::remoteReader = reader;
     detail::remoteReset = reset;
 }
 
+/// Invoke the active solver's local remote-cache reset callback.
 void treeResetLocal() {
     if (detail::remoteReset != nullptr) {
         detail::remoteReset();
     }
 }
 
+/// Allocate a local node slot using this thread's arena block.
 int treeAllocateNode() {
     if (!allocator.ready_) {
         allocator.reset();
@@ -339,6 +362,7 @@ int treeAllocateNode() {
     return allocator.allocate();
 }
 
+/// Store a node and its multipole coefficients and mark the arena slot populated.
 void treeStoreNode(int index, TreeNode node, MultipoleBuffer const& multipole) {
     if (size_t(index) >= nodesSize) {
         THROW_ERROR("%s\n", "Tree arena full");
@@ -352,6 +376,7 @@ void treeStoreNode(int index, TreeNode node, MultipoleBuffer const& multipole) {
 
 HPX_PLAIN_ACTION(treeReset, TreeResetAction);
 
+/// Reset solver-specific tree caches across the locality tree.
 void treeReset() {
     Vector<hpx::future<void>> futs;
     auto const children = hpxChildren();
@@ -364,6 +389,7 @@ void treeReset() {
 Vector<double> treeGetLeafSizes();
 HPX_PLAIN_ACTION(treeGetLeafSizes, TreeGetLeafSizesAction);
 
+/// Collect each locality's mean recorded leaf size.
 Vector<double> treeGetLeafSizes() {
     Vector<hpx::future<Vector<double>>> futs;
     for (auto& c : hpxChildren()) {
@@ -385,6 +411,7 @@ Vector<double> treeGetLeafSizes() {
     return avgs;
 }
 
+/// Average the per-locality mean leaf sizes.
 int treeAvgLeafSize() {
     auto sizes = treeGetLeafSizes();
     double avg = 0.0;
@@ -397,6 +424,8 @@ int treeAvgLeafSize() {
 
 HPX_PLAIN_ACTION(treeDestroy, TreeDestroyAction);
 
+/// Invoke tree-cache cleanup across the locality tree; this implementation retains arena
+/// allocations.
 void treeDestroy(bool freeTree) {
     Vector<hpx::future<void>> futs;
     auto const children = hpxChildren();
@@ -407,6 +436,7 @@ void treeDestroy(bool freeTree) {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
+/// Return a local node or obtain a remote node through the registered solver adapter.
 TreeNode const* treeGetNode(TreeId id) {
     if (id.proc == hpxRank()) {
         ASSERT(id.index >= 0);
@@ -424,20 +454,24 @@ TreeNode const* treeGetNode(TreeId id) {
     }
 }
 
+/// Require local ownership and return the corresponding node pointer.
 TreeNode const* treeLocalNode(TreeId id) {
     ALWAYS_ASSERT(id.proc == hpxRank());
     return treeGetNode(id);
 }
 
+/// Report whether a valid arena slot has been filled with a node.
 bool treeNodeIsPopulated(int index) {
     ALWAYS_ASSERT(index >= 0 && size_t(index) < nodesSize);
     return populatedNodes[index] != 0;
 }
 
+/// Read the process-local count of remote tree-node fetches.
 uint64_t treeRemoteFetchCount() {
     return remoteTreeFetchCount.load(std::memory_order_relaxed);
 }
 
+/// Increment the process-local remote tree-fetch counter.
 void treeRecordRemoteFetch() {
     remoteTreeFetchCount.fetch_add(1, std::memory_order_relaxed);
 }

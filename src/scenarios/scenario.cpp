@@ -26,6 +26,8 @@ namespace scenarios {
 #if COSMICTIGER_WITH_SPH
 namespace detail {
 
+    /// Sample local gas diagnostics with weights representing the full local
+    /// population.
     std::vector<DiagnosticSample> localDiagnosticSamples(size_t maximum) {
         size_t const count = sphParticlesSize();
         size_t const samples = std::min(count, maximum);
@@ -55,6 +57,7 @@ namespace detail {
 HPX_PLAIN_ACTION(scenarios::detail::localDiagnosticSamples, LocalDiagnosticSamplesAction);
 
 namespace scenarios {
+/// Gather weighted diagnostic samples from all localities.
 std::vector<DiagnosticSample> diagnosticSamples(size_t maximumPerLocality) {
     std::vector<hpx::future<std::vector<DiagnosticSample>>> futures;
     for (auto const& locality : hpxLocalities()) {
@@ -69,6 +72,8 @@ std::vector<DiagnosticSample> diagnosticSamples(size_t maximumPerLocality) {
 }
 #endif
 
+/// Look up a scenario available in this build and report supported choices when the name is
+/// unavailable.
 ScenarioDefinition const& definition(std::string const& name) {
     static std::vector<ScenarioDefinition> const definitions{
 #if COSMICTIGER_WITH_GRAVITY

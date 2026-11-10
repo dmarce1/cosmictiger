@@ -12,6 +12,8 @@
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/simulation_units.hpp>
 
+/// Traverse nearby tree leaves and update nearest-neighbor distances in position or phase
+/// space.
 void rockstarAssignLinkLen(DeviceVector<RockstarTree> const& trees,
     DeviceVector<RockstarParticle>& parts, int selfId, Vector<int> checklist, float linkingLength,
     bool phase) {
@@ -71,6 +73,7 @@ void rockstarAssignLinkLen(DeviceVector<RockstarTree> const& trees,
     }
 }
 
+/// Build per-leaf neighbor lists in the selected spatial or phase-space metric.
 void rockstarFindNeighbors(DeviceVector<int>& leaves, DeviceVector<RockstarTree>& trees, int selfId,
     Vector<int> checklist, float linkingLength, bool phase = true) {
     static thread_local Vector<int> nextlist;
@@ -114,6 +117,7 @@ void rockstarFindNeighbors(DeviceVector<int>& leaves, DeviceVector<RockstarTree>
     }
 }
 
+/// Partition phase-space particles along one selected coordinate.
 int rockstarParticlesSort(
     DeviceVector<RockstarParticle>& parts, int begin, int end, float xmid, int xdim) {
     int lo = begin;
@@ -133,6 +137,7 @@ int rockstarParticlesSort(
     return hi;
 }
 
+/// Build a phase-space tree with tight leaf bounds and active-particle counts.
 int rockstarFormTree(DeviceVector<RockstarParticle>& parts, DeviceVector<RockstarTree>& trees,
     Range<float, 2 * kDimensions>& rng, int particleBegin, int particleEnd) {
     Array<int, kChildCount> children;
@@ -199,6 +204,7 @@ int rockstarFormTree(DeviceVector<RockstarParticle>& parts, DeviceVector<Rocksta
     return trees.size() - 1;
 }
 
+/// Build a phase-space tree with tight leaf bounds and active-particle counts.
 int rockstarFormTree(DeviceVector<RockstarTree>& trees, DeviceVector<RockstarParticle>& parts) {
     Range<float, 2 * kDimensions> rng;
     for (int dim = 0; dim < 2 * kDimensions; dim++) {
@@ -287,6 +293,8 @@ float rockstarFindLinkLen(DeviceVector<RockstarTree>& trees, DeviceVector<Rockst
     return maximumLinkingLength;
 }
 
+/// Initialize nearest-neighbor distances and evaluate spatial linking scales on the
+/// selected backend.
 void rockstarFindAllLinkLens(
     DeviceVector<RockstarTree>& trees, DeviceVector<RockstarParticle>& parts, int treeRoot) {
     for (auto& p : parts) {
@@ -309,6 +317,8 @@ void rockstarFindAllLinkLens(
     }
 }
 
+/// Propagate subgroup labels through the active phase-space neighbor graph and count
+/// unfinished leaves.
 size_t rockstarFindSubgroups(DeviceVector<RockstarTree>& trees,
     DeviceVector<RockstarParticle>& parts, int selfId, Vector<int> checklist, float linkingLength,
     int& nextId) {
@@ -423,6 +433,8 @@ size_t rockstarFindSubgroups(DeviceVector<RockstarTree>& trees,
     }
 }
 
+/// Initialize subgroup connectivity and iterate CPU or CUDA label propagation until
+/// convergence.
 void rockstarFindSubgroups(DeviceVector<RockstarTree>& trees, DeviceVector<RockstarParticle>& parts,
     float linkingLength, int& nextId, bool gpu) {
     Timer tm;
@@ -464,11 +476,13 @@ void rockstarFindSubgroups(DeviceVector<RockstarTree>& trees, DeviceVector<Rocks
 
 struct Number {
     int n;
+    /// Initialize a subgroup membership counter to zero.
     Number() {
         n = 0;
     }
 };
 
+/// Count labelled subgroup members and remove labels below the minimum group size.
 std::unordered_map<int, Number> rockstarSubgroupCounts(DeviceVector<RockstarParticle>& parts) {
     std::unordered_map<int, Number> table;
     for (int i = 0; i < parts.size(); i++) {
@@ -498,6 +512,8 @@ struct RockstarSeed {
     Array<float, 2 * kDimensions> x;
 };
 
+/// Recursively normalize phase space, identify subgroup seeds, assign particles, and
+/// finalize the outermost hierarchy.
 Vector<Subgroup> rockstarSeeds(DeviceVector<RockstarParticle> parts, int& nextId, float rfac,
     float vfac, float scale, bool gpu, int depth = 0) {
     Vector<Subgroup> subgroups;
@@ -733,6 +749,8 @@ Vector<Subgroup> rockstarSeeds(DeviceVector<RockstarParticle> parts, int& nextId
     return subgroups;
 }
 
+/// Convert a periodic FoF particle group into phase-space records and find its halo
+/// hierarchy.
 Vector<Subgroup> rockstarFindSubgroups(Vector<ParticleData> const& parts, float scale) {
     if (parts.size() < kRockstarMinGroup) {
         return {};
@@ -756,6 +774,7 @@ Vector<Subgroup> rockstarFindSubgroups(Vector<ParticleData> const& parts, float 
         std::move(particles), nextId, 1.0f, 1.0f, scale, getOptions().analysis.groupsCuda);
 }
 
+/// Find halos in lightcone particles and encode records at each halo's observation scale.
 Vector<RockstarRecord> rockstarFindSubgroups(Vector<LightconeEntry> const& input, double tauMax) {
     Vector<RockstarRecord> records;
     if (input.size() < kRockstarMinGroup) {

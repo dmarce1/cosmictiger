@@ -44,6 +44,8 @@ static ParticleInteger capacity = 0;
 static ParticleInteger size = 0;
 
 HPX_PLAIN_ACTION(sphParticlesPrepareThermodynamics, SphParticlesPrepareThermodynamicsAction);
+/// Publish the thermal scale and optionally convert initial gas energy to persistent
+/// entropy across localities.
 void sphParticlesPrepareThermodynamics(double scaleFactor, bool initializeEntropy) {
     ALWAYS_ASSERT(scaleFactor > 0.0);
     Vector<hpx::future<void>> children;
@@ -67,6 +69,8 @@ void sphParticlesPrepareThermodynamics(double scaleFactor, bool initializeEntrop
 
 namespace detail {
 
+/// Visit persistent gas arrays in checkpoint order, optionally including viscosity and
+/// chemistry state.
 template <typename Visitor>
 void visitSphCheckpointArrays(
     Visitor&& visit, bool includeChemistry = true, bool includeViscosity = true) {
@@ -87,6 +91,7 @@ void visitSphCheckpointArrays(
 
 }    // namespace detail
 
+/// Swap gas fields together and invalidate retained tree geometry when indices change.
 void sphParticlesSwap(ParticleInteger i, ParticleInteger j) {
     if (i != j) {
         sphTreeInvalidate();
@@ -99,6 +104,7 @@ void sphParticlesSwap(ParticleInteger i, ParticleInteger j) {
         [i, j](auto* values, size_t) { std::swap(values[i], values[j]); });
 }
 
+/// Partition a gas range along one position coordinate and return the split index.
 ParticleInteger sphParticlesSort(
     Pair<ParticleInteger> particleRange, Position splitPosition, int splitDimension) {
     ParticleInteger begin = particleRange.first;
@@ -120,10 +126,12 @@ ParticleInteger sphParticlesSort(
     return upper;
 }
 
+/// Return the local gas-particle count.
 ParticleInteger sphParticlesSize() {
     return size;
 }
 
+/// Grow one managed gas array while preserving its current elements.
 template <typename T>
 void sphParticlesArrayResize(T*& ptr, ParticleInteger newCapacity) {
     T* newPtr = static_cast<T*>(allocateManagedMemory(sizeof(T) * newCapacity));
@@ -135,6 +143,8 @@ void sphParticlesArrayResize(T*& ptr, ParticleInteger newCapacity) {
     ptr = newPtr;
 }
 
+/// Resize enabled gas arrays, invalidate stale geometry, and optionally create
+/// corresponding base particles.
 void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticles) {
     if (particleCount != size) {
         sphTreeInvalidate();
@@ -189,6 +199,8 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
     }
 }
 
+/// Remove a gas record by moving the last record into its slot and repairing the
+/// base-particle link.
 void sphParticlesRemove(ParticleInteger index) {
     ALWAYS_ASSERT(index >= 0 && index < sphParticlesSize());
     ParticleInteger const last = sphParticlesSize() - 1;
@@ -199,6 +211,8 @@ void sphParticlesRemove(ParticleInteger index) {
     sphParticlesResize(last, false);
 }
 
+/// Invalidate the gas tree and release all local gas arrays and thermodynamic
+/// initialization state.
 void sphParticlesFree() {
     sphTreeInvalidate();
     sphParticlesEntropyInitialized = false;
@@ -219,6 +233,7 @@ void sphParticlesFree() {
     capacity = 0;
 }
 
+/// Rebuild base-particle catalogue indices after gas storage has been reordered.
 void sphParticlesResolveWithParticles() {
     int const numberOfThreads = hpxHardwareConcurrency();
     std::vector<hpx::future<void>> futures;
@@ -258,6 +273,8 @@ void sphParticlesGlobalReadPositions(
     }
 }
 
+/// Gather local thermal/support values or read the corresponding staged remote ghost
+/// fields.
 void sphParticlesGlobalReadInternalEnergyAndSmoothingLength(ParticleGlobalRange range,
     float* internalEnergy, float* smoothingLength, ParticleInteger offset) {
     if (range.range.first == range.range.second) {
@@ -280,6 +297,7 @@ void sphParticlesGlobalReadInternalEnergyAndSmoothingLength(ParticleGlobalRange 
     }
 }
 
+/// Gather local gas rungs or require and read staged remote rung data.
 void sphParticlesGlobalReadRungs(ParticleGlobalRange range, char* rungs, ParticleInteger offset) {
     if (range.range.first == range.range.second) {
         return;
@@ -294,6 +312,7 @@ void sphParticlesGlobalReadRungs(ParticleGlobalRange range, char* rungs, Particl
     }
 }
 
+/// Gather local gas velocities or require and read staged remote velocity data.
 void sphParticlesGlobalReadVelocities(
     ParticleGlobalRange range, float* vx, float* vy, float* vz, ParticleInteger offset) {
     if (range.range.first == range.range.second) {
@@ -312,6 +331,7 @@ void sphParticlesGlobalReadVelocities(
     }
 }
 
+/// Gather requested density and viscosity/grad-h fields from local gas or staged ghosts.
 void sphParticlesGlobalReadDensity(ParticleGlobalRange range, float* rho, ParticleInteger offset,
     float* balsaraFactor, float* bulkViscosityCoefficient, float* gradHCorrection) {
     if (range.range.first == range.range.second) {
@@ -347,6 +367,8 @@ namespace detail {
 // Gas payloads below this version carried retired viscosity-model state.
 constexpr uint32_t kSphCheckpointBaseVersion = 140000U;
 
+/// Encode the current persistent gas layout and optional physics state into its checkpoint
+/// version.
 uint32_t sphCheckpointVersion() {
     // Identify the scalar-viscosity payload and its optional model state.
     auto const& options = getOptions();
@@ -368,6 +390,8 @@ uint32_t sphCheckpointVersion() {
 
 }    // namespace detail
 
+/// Validate and restore persistent gas state, leaving derived tree and force data to be
+/// rebuilt.
 void sphParticlesLoad(FILE* fp) {
     sphTreeInvalidate();
     uint32_t header[7];
@@ -426,6 +450,7 @@ void sphParticlesLoad(FILE* fp) {
     }
 }
 
+/// Write the versioned persistent gas arrays and thermal context to the checkpoint stream.
 void sphParticlesSave(FILE* fp) {
     uint32_t header[7] = {0x43545350U, detail::sphCheckpointVersion(), sizeof(ParticleInteger),
         sizeof(float), 0U, kSpatialDimensions, sizeof(float)};
@@ -453,6 +478,8 @@ void sphParticlesSave(FILE* fp) {
     }
 }
 
+/// Exercise packed gas flags and checkpoint round trips while restoring the original
+/// particle state.
 void sphCheckpointTest() {
     // Every valid combination roundtrips and each setter preserves the other fields.
     for (int encoded = 0; encoded < 256; ++encoded) {
@@ -607,6 +634,8 @@ void sphCheckpointTest() {
 
 HPX_PLAIN_ACTION(sphParticlesResetConverged, SphParticlesResetConvergedAction);
 
+/// Clear convergence flags and invalidate density-derived grad-h corrections across
+/// localities.
 void sphParticlesResetConverged() {
     int const numberOfThreads = hpxHardwareConcurrency();
     std::vector<hpx::future<void>> futures;
@@ -636,6 +665,7 @@ void sphParticlesResetConverged() {
 HPX_PLAIN_ACTION(
     sphParticlesSetBulkViscosityCoefficients, SphParticlesSetBulkViscosityCoefficientsAction);
 
+/// Assign the supplied stored bulk-viscosity coefficient to every gas particle.
 void sphParticlesSetBulkViscosityCoefficients(float bulkViscosityCoefficient) {
     std::vector<hpx::future<void>> futures;
     for (auto& c : sphCollectiveChildren()) {
@@ -650,6 +680,7 @@ void sphParticlesSetBulkViscosityCoefficients(float bulkViscosityCoefficient) {
 
 HPX_PLAIN_ACTION(sphParticlesResetSemiactive, SphParticlesResetSemiactiveAction);
 
+/// Clear all semiactive gas flags across workers and localities.
 void sphParticlesResetSemiactive() {
     int const numberOfThreads = hpxHardwareConcurrency();
     std::vector<hpx::future<void>> futures;

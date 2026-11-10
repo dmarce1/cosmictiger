@@ -24,6 +24,8 @@ namespace cosmology {
 
 namespace detail {
 
+    /// Spawn the configured Python renderer with filename arguments and require
+    /// successful completion.
     void renderBackgroundPlot(std::string const& dataPath, std::string const& imagePath) {
         // Pass filenames as argv entries, never as shell or Python source text.
         char* const arguments[] = {const_cast<char*>(kPlotPython), const_cast<char*>("-c"),
@@ -49,6 +51,7 @@ namespace detail {
 
 }    // namespace detail
 
+/// Write background samples and render their plot, retaining the data if rendering fails.
 void writeBackgroundPlot(double finalConformalTime) {
     auto const background = simulationBackground(finalConformalTime);
     auto const dataPath = outputPath("cosmology.txt");

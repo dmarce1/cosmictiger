@@ -21,6 +21,8 @@
 #include <cosmictiger/cuda/cuda_memory.hpp>
 
 struct ThreadIndex {
+    /// Compare the CUDA thread index with tid; the serial host path always elects its
+    /// caller.
     CUDA_EXPORT
     inline bool operator==(int const tid) const {
 #ifdef __CUDA_ARCH__
@@ -29,6 +31,7 @@ struct ThreadIndex {
         return true;
 #endif
     }
+    /// Return the CUDA thread index, or zero for serial host execution.
     CUDA_EXPORT
     inline operator int() const {
 #ifdef __CUDA_ARCH__
@@ -40,6 +43,7 @@ struct ThreadIndex {
 };
 
 struct BlockSize {
+    /// Return the CUDA block width, or one for serial host execution.
     CUDA_EXPORT
     inline operator int() const {
 #ifdef __CUDA_ARCH__
@@ -65,6 +69,8 @@ class DeviceVector {
     int capacity_;
     bool pooled_;    // ptr_ came from the pool and is released by destroy()
 
+    /// Default-construct the specified element interval; device construction is
+    /// block-cooperative and limited to trivial owners.
     CUDA_EXPORT
     inline void construct(int a, int b) {
 #ifdef __CUDA_ARCH__
@@ -86,6 +92,8 @@ class DeviceVector {
 #endif
     }
 
+    /// Return an aliased element's index, or -1 when its address lies outside this
+    /// vector's storage.
     CUDA_EXPORT
     inline int elementIndex(T const& item) const {
         // Compare addresses without ordering or subtracting unrelated pointers.
@@ -93,6 +101,8 @@ class DeviceVector {
         return offset < sizeof(T) * size_t(size_) ? int(offset / sizeof(T)) : -1;
     }
 
+    /// Destroy the specified element interval; nontrivial destruction is supported on
+    /// the host only.
     CUDA_EXPORT
     inline void destruct(int a, int b) {
         ThreadIndex tid;
@@ -110,6 +120,8 @@ class DeviceVector {
         syncthreads();
     }
 
+    /// Initialize an empty owning vector, with lane zero publishing state to the CUDA
+    /// block.
     CUDA_EXPORT
     inline void initialize() {
 #ifdef __CUDA_ARCH__
@@ -126,6 +138,7 @@ class DeviceVector {
         }
         syncthreads();
     }
+    /// Release pooled storage through lane zero and synchronize the CUDA block.
     CUDA_EXPORT
     inline void destroy() {
         ThreadIndex tid;
@@ -158,10 +171,13 @@ class DeviceVector {
     }
 
 public:
+    /// Return the number of elements the current allocation can hold.
     CUDA_EXPORT
     inline int capacity() const {
         return capacity_;
     }
+    /// Exchange storage ownership, capacity, and logical size collectively across the
+    /// block.
     CUDA_EXPORT
     inline void swap(DeviceVector& other) {
         syncthreads();
@@ -182,35 +198,44 @@ public:
         }
         syncthreads();
     }
+    /// Return a pointer to the first stored element.
     CUDA_EXPORT
     inline T* begin() {
         return ptr_;
     }
+    /// Return the one-past-end pointer for the stored elements.
     CUDA_EXPORT
     inline T* end() {
         return ptr_ + size_;
     }
+    /// Return a pointer to the first stored element.
     CUDA_EXPORT
     inline T const* begin() const {
         return ptr_;
     }
+    /// Return the one-past-end pointer for the stored elements.
     CUDA_EXPORT
     inline T const* end() const {
         return ptr_ + size_;
     }
+    /// Test whether the logical element count is zero.
     CUDA_EXPORT
     inline bool empty() const {
         return size_ == 0;
     }
+    /// Initialize an empty device-accessible owning vector.
     CUDA_EXPORT
     inline DeviceVector() {
         initialize();
     }
+    /// Copy the source vector into newly owned storage.
     CUDA_EXPORT
     inline DeviceVector(DeviceVector const& other)
       : DeviceVector() {
         *this = other;
     }
+    /// Replace the contents with a copy, using byte copies for trivial elements and
+    /// host construction for other types.
     CUDA_EXPORT
     inline DeviceVector& operator=(DeviceVector const& other) {
         if (this == &other) {
@@ -230,6 +255,8 @@ public:
         }
         return *this;
     }
+    /// Release current elements/storage and take ownership of the source vector's
+    /// storage.
     CUDA_EXPORT
     inline DeviceVector& operator=(DeviceVector&& other) {
         if (this == &other) {
@@ -241,11 +268,13 @@ public:
         swap(other);
         return *this;
     }
+    /// Initialize an empty vector and take ownership of the source vector's storage.
     CUDA_EXPORT
     inline DeviceVector(DeviceVector&& other) {
         initialize();
         swap(other);
     }
+    /// Initialize owned storage and default-construct the requested number of elements.
     CUDA_EXPORT
     inline DeviceVector(int initialSize)
       : DeviceVector() {
@@ -258,15 +287,18 @@ public:
         initialize();
         attach(storage, storageCapacity);
     }
+    /// Destroy live elements and release owned pooled storage.
     CUDA_EXPORT
     inline ~DeviceVector() {
         destruct(0, size_);
         destroy();
     }
+    /// Expose the contiguous element storage without copying.
     CUDA_EXPORT
     inline T* data() {
         return ptr_;
     }
+    /// Expose the contiguous element storage without copying.
     CUDA_EXPORT
     inline T const* data() const {
         return ptr_;
@@ -366,6 +398,8 @@ public:
             grow(newCapacity);
         }
     }
+    /// Grow storage or destroy excess elements, then publish the new size collectively
+    /// across the block.
     CUDA_EXPORT
     inline void resize(int newSize) {
         ALWAYS_ASSERT(newSize >= 0);
@@ -382,14 +416,18 @@ public:
         }
         syncthreads();
     }
+    /// Access the last element; the container must be nonempty.
     CUDA_EXPORT
     inline T& back() {
         return ptr_[size_ - 1];
     }
+    /// Access the last element; the container must be nonempty.
     CUDA_EXPORT
     inline T const& back() const {
         return ptr_[size_ - 1];
     }
+    /// Destroy the last element and decrement the size collectively; the vector must be
+    /// nonempty.
     CUDA_EXPORT
     inline void popBack() {
         syncthreads();
@@ -401,6 +439,8 @@ public:
         }
         syncthreads();
     }
+    /// Append an element collectively, preserving a source reference that aliases
+    /// storage invalidated by growth.
     CUDA_EXPORT
     inline void pushBack(T const& item) {
         ThreadIndex tid;
@@ -413,6 +453,8 @@ public:
         }
         syncthreads();
     }
+    /// Append an element collectively, preserving a source reference that aliases
+    /// storage invalidated by growth.
     CUDA_EXPORT
     inline void pushBack(T&& item) {
         ThreadIndex tid;
@@ -424,10 +466,12 @@ public:
         }
         syncthreads();
     }
+    /// Return the logical number of stored elements.
     CUDA_EXPORT
     inline int size() const {
         return size_;
     }
+    /// Access the indexed element; the index must lie within the logical bounds.
     CUDA_EXPORT
     inline T& operator[](int i) {
 #ifdef CHECK_BOUNDS
@@ -444,6 +488,7 @@ public:
 #endif
         return ptr_[i];
     }
+    /// Access the indexed element; the index must lie within the logical bounds.
     CUDA_EXPORT
     inline T const& operator[](int i) const {
 #ifdef CHECK_BOUNDS
@@ -460,6 +505,7 @@ public:
 #endif
         return ptr_[i];
     }
+    /// Archive `size` in transport order.
     template <class A>
     void serialize(A&& arc, unsigned) {
         int size = size_;

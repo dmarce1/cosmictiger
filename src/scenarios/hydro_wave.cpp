@@ -19,6 +19,8 @@
 
 namespace scenarios {
 
+/// Initialize a periodic gas wave on the configured lattice and return its fixed evolution
+/// schedule.
 ScenarioPlan initializeHydroWave() {
     double rho = 1.0;
     double p0 = 0.845154255;

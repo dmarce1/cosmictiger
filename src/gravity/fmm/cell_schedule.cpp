@@ -69,6 +69,7 @@ void descendFar(TreeId id,
     }
 }
 
+/// Latch the first pipeline exception under the queue lock and wake waiting workers.
 void recordFailure(std::exception_ptr failure) {
     {
         std::lock_guard<MutexType> lock(state.queueMutex);
@@ -79,6 +80,8 @@ void recordFailure(std::exception_ptr failure) {
     state.queueChanged.notify_all();
 }
 
+/// Fulfill a source-cell promise once and enqueue sinks whose source dependencies are now
+/// complete.
 void publishSource(size_t index, TreeCellRoot root) {
     auto const& source = state.sourceCells[index];
     if (!source->published.exchange(true)) {
@@ -95,6 +98,7 @@ void publishSource(size_t index, TreeCellRoot root) {
     }
 }
 
+/// Complete an unpublished source promise exceptionally and record the pipeline failure.
 void failSource(size_t index, std::exception_ptr failure) {
     auto const& source = state.sourceCells[index];
     if (!source->published.exchange(true)) {
@@ -103,6 +107,8 @@ void failSource(size_t index, std::exception_ptr failure) {
     recordFailure(std::move(failure));
 }
 
+/// Clear source-cell planning, ghost membership, tasks, and saved rung state for the
+/// completed solve.
 void clearGhosts() {
     fmmGhostClear();
     state.sourceCells.clear();
@@ -113,6 +119,8 @@ void clearGhosts() {
     state.stageRungs.clear();
 }
 
+/// Consume dependency-ready sink batches, execute their near-field work, and publish
+/// completion or failure.
 void computeReadyCells() {
     size_t const targetParticles = getOptions().gravity.pmmmBatchParticles;
     for (;;) {
@@ -256,6 +264,8 @@ void computeReadyCells() {
     }
 }
 
+/// Launch owned-cell construction, remote ghost retrieval, and ready-sink workers for the
+/// solve.
 void startPipeline() {
     state.treeFetchStart = treeRemoteFetchCount();
     state.particleFetchStart = particlesRemoteFetchCount();
@@ -328,6 +338,8 @@ void startPipeline() {
     }
 }
 
+/// Join all pipeline work, propagate the first failure, and update remote-fetch
+/// diagnostics.
 void finishPipeline() {
     for (auto& task : state.ownedTasks) {
         try {
@@ -360,6 +372,7 @@ void finishPipeline() {
     ++state.diagnostics.solveCount;
 }
 
+/// Fail unresolved source and far-field promises so waiting pipeline tasks can terminate.
 void abortPipeline() {
     auto failure = std::make_exception_ptr(
         std::runtime_error("PMMM solve was cancelled after a phase failure"));

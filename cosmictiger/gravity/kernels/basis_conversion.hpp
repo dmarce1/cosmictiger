@@ -34,6 +34,7 @@ template <>
 inline constexpr int kSourceToSphericalFlops<3> = 2;
 template <>
 inline constexpr int kSourceToSphericalConventionalFlops<3> = 2;
+/// Assign the equivalent coefficients in the destination basis without changing spatial scale.
 template <class Real>
 CUDA_EXPORT void sourceToSpherical(
     spherical::Multipole<Real, 3>& target, cartesian::Multipole<Real, 3> const& source) {
@@ -50,6 +51,7 @@ template <>
 inline constexpr int kLocalToCartesianFlops<3> = 5;
 template <>
 inline constexpr int kLocalToCartesianConventionalFlops<3> = 5;
+/// Assign the equivalent coefficients in the destination basis without changing spatial scale.
 template <class Real>
 CUDA_EXPORT void localToCartesian(
     cartesian::Expansion<Real, 3>& target, spherical::Expansion<Real, 3> const& source) {
@@ -78,6 +80,7 @@ template <>
 inline constexpr int kSourceToSphericalFlops<4> = 9;
 template <>
 inline constexpr int kSourceToSphericalConventionalFlops<4> = 9;
+/// Assign the equivalent coefficients in the destination basis without changing spatial scale.
 template <class Real>
 CUDA_EXPORT void sourceToSpherical(
     spherical::Multipole<Real, 4>& target, cartesian::Multipole<Real, 4> const& source) {
@@ -106,6 +109,7 @@ template <>
 inline constexpr int kLocalToCartesianFlops<4> = 19;
 template <>
 inline constexpr int kLocalToCartesianConventionalFlops<4> = 20;
+/// Assign the equivalent coefficients in the destination basis without changing spatial scale.
 template <class Real>
 CUDA_EXPORT void localToCartesian(
     cartesian::Expansion<Real, 4>& target, spherical::Expansion<Real, 4> const& source) {
@@ -156,6 +160,7 @@ template <>
 inline constexpr int kSourceToSphericalFlops<5> = 23;
 template <>
 inline constexpr int kSourceToSphericalConventionalFlops<5> = 24;
+/// Assign the equivalent coefficients in the destination basis without changing spatial scale.
 template <class Real>
 CUDA_EXPORT void sourceToSpherical(
     spherical::Multipole<Real, 5>& target, cartesian::Multipole<Real, 5> const& source) {
@@ -206,6 +211,7 @@ template <>
 inline constexpr int kLocalToCartesianFlops<5> = 41;
 template <>
 inline constexpr int kLocalToCartesianConventionalFlops<5> = 47;
+/// Assign the equivalent coefficients in the destination basis without changing spatial scale.
 template <class Real>
 CUDA_EXPORT void localToCartesian(
     cartesian::Expansion<Real, 5>& target, spherical::Expansion<Real, 5> const& source) {
@@ -287,6 +293,7 @@ template <>
 inline constexpr int kSourceToSphericalFlops<6> = 44;
 template <>
 inline constexpr int kSourceToSphericalConventionalFlops<6> = 48;
+/// Assign the equivalent coefficients in the destination basis without changing spatial scale.
 template <class Real>
 CUDA_EXPORT void sourceToSpherical(
     spherical::Multipole<Real, 6>& target, cartesian::Multipole<Real, 6> const& source) {
@@ -367,6 +374,7 @@ template <>
 inline constexpr int kLocalToCartesianFlops<6> = 74;
 template <>
 inline constexpr int kLocalToCartesianConventionalFlops<6> = 91;
+/// Assign the equivalent coefficients in the destination basis without changing spatial scale.
 template <class Real>
 CUDA_EXPORT void localToCartesian(
     cartesian::Expansion<Real, 6>& target, spherical::Expansion<Real, 6> const& source) {
@@ -492,6 +500,7 @@ template <>
 inline constexpr int kSourceToSphericalFlops<7> = 76;
 template <>
 inline constexpr int kSourceToSphericalConventionalFlops<7> = 90;
+/// Assign the equivalent coefficients in the destination basis without changing spatial scale.
 template <class Real>
 CUDA_EXPORT void sourceToSpherical(
     spherical::Multipole<Real, 7>& target, cartesian::Multipole<Real, 7> const& source) {
@@ -615,6 +624,7 @@ template <>
 inline constexpr int kLocalToCartesianFlops<7> = 121;
 template <>
 inline constexpr int kLocalToCartesianConventionalFlops<7> = 156;
+/// Assign the equivalent coefficients in the destination basis without changing spatial scale.
 template <class Real>
 CUDA_EXPORT void localToCartesian(
     cartesian::Expansion<Real, 7>& target, spherical::Expansion<Real, 7> const& source) {
@@ -800,6 +810,7 @@ template <>
 inline constexpr int kSourceToSphericalFlops<8> = 121;
 template <>
 inline constexpr int kSourceToSphericalConventionalFlops<8> = 152;
+/// Assign the equivalent coefficients in the destination basis without changing spatial scale.
 template <class Real>
 CUDA_EXPORT void sourceToSpherical(
     spherical::Multipole<Real, 8>& target, cartesian::Multipole<Real, 8> const& source) {
@@ -981,6 +992,7 @@ template <>
 inline constexpr int kLocalToCartesianFlops<8> = 184;
 template <>
 inline constexpr int kLocalToCartesianConventionalFlops<8> = 246;
+/// Assign the equivalent coefficients in the destination basis without changing spatial scale.
 template <class Real>
 CUDA_EXPORT void localToCartesian(
     cartesian::Expansion<Real, 8>& target, spherical::Expansion<Real, 8> const& source) {
@@ -1244,6 +1256,7 @@ template <>
 inline constexpr int kSourceToSphericalFlops<9> = 181;
 template <>
 inline constexpr int kSourceToSphericalConventionalFlops<9> = 238;
+/// Assign the equivalent coefficients in the destination basis without changing spatial scale.
 template <class Real>
 CUDA_EXPORT void sourceToSpherical(
     spherical::Multipole<Real, 9>& target, cartesian::Multipole<Real, 9> const& source) {
@@ -1500,6 +1513,7 @@ template <>
 inline constexpr int kLocalToCartesianFlops<9> = 262;
 template <>
 inline constexpr int kLocalToCartesianConventionalFlops<9> = 365;
+/// Assign the equivalent coefficients in the destination basis without changing spatial scale.
 template <class Real>
 CUDA_EXPORT void localToCartesian(
     cartesian::Expansion<Real, 9>& target, spherical::Expansion<Real, 9> const& source) {

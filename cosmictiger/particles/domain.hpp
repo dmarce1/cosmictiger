@@ -35,6 +35,7 @@ struct DomainT {
     Range<double> box;
     double midx;
     int rank;
+    /// Archive `box`, `midx`, `rank` in transport order.
     template <class A>
     void serialize(A&& arc, unsigned) {
         arc & box;

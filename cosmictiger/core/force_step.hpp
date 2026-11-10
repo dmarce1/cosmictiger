@@ -28,6 +28,7 @@ struct ForceStepResult {
     double darkMatterZMomentumCorrection;
     double darkMatterMomentumNormCorrection;
 
+    /// Initialize neutral sums and timestep extrema for merging force-step results.
     CUDA_EXPORT
     ForceStepResult() {
         maxRung = 0;
@@ -42,6 +43,7 @@ struct ForceStepResult {
         darkMatterZMomentumCorrection = 0.0;
         darkMatterMomentumNormCorrection = 0.0;
     }
+    /// Merge energy/momentum sums and retain the strictest timestep and largest rung.
     CUDA_EXPORT
     ForceStepResult& operator+=(ForceStepResult const& other) {
         if (other.maxRung > maxRung) {
@@ -65,6 +67,8 @@ struct ForceStepResult {
 
         return *this;
     }
+    /// Archive `maxRung`, `minimumTimestep`, `pot`, `kin`, `xmom`, `ymom` and the
+    /// remaining fields in transport order.
     template <class A>
     void serialize(A&& arc, unsigned) {
         arc & maxRung;

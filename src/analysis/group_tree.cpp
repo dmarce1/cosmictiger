@@ -64,10 +64,12 @@ static std::atomic<int> allocatorMtx(0);
 struct LastCacheEntryT {
     TreeId line;
     GroupTreeNode const* ptr;
+    /// Clear the remembered line identity and pointer for this thread-local cache hint.
     void reset() {
         line.proc = line.index = -1;
         ptr = nullptr;
     }
+    /// Initialize and register a thread-local last-node-cache hint.
     LastCacheEntryT() {
         line.proc = line.index = -1;
         ptr = nullptr;
@@ -77,6 +79,7 @@ struct LastCacheEntryT {
         lastCacheEntries.insert(this);
         lastCacheEntryMtx--;
     }
+    /// Remove this thread-local cache hint from the shared reset registry.
     ~LastCacheEntryT() {
         while (lastCacheEntryMtx++ != 0) {
             lastCacheEntryMtx--;
@@ -88,12 +91,14 @@ struct LastCacheEntryT {
 
 static thread_local LastCacheEntryT lastCacheEntry;
 
+/// Invalidate all registered last-node-cache hints.
 static void resetLastCacheEntries() {
     for (auto i = lastCacheEntries.begin(); i != lastCacheEntries.end(); i++) {
         (*i)->reset();
     }
 }
 
+/// Dispatch group-tree construction remotely or with bounded local asynchronous branching.
 hpx::future<GroupTreeReturn> groupTreeCreateFork(size_t key, Pair<int, int> processRange,
     Pair<ParticleInteger> particleRange, GroupRange box, int depth, bool localRoot, bool threadme) {
     static std::atomic<int> numberOfThreads(0);
@@ -132,6 +137,7 @@ hpx::future<GroupTreeReturn> groupTreeCreateFork(size_t key, Pair<int, int> proc
     return rc;
 }
 
+/// Build the distributed spatial group tree and return its root and particle bounds.
 GroupTreeReturn groupTreeCreate(size_t key, Pair<int, int> processRange,
     Pair<ParticleInteger> particleRange, GroupRange box, int depth, bool localRoot) {
     int const treeCacheLineSize = getOptions().compute.treeCacheLineSize;
@@ -241,10 +247,12 @@ GroupTreeReturn groupTreeCreate(size_t key, Pair<int, int> processRange,
     return rc;
 }
 
+/// Set the active flag on a local group-tree node.
 void groupTreeSetActive(TreeId id, bool b) {
     nodes[id.index].active = b;
 }
 
+/// Reserve the next group-tree allocator block and fail if the node arena is exhausted.
 void GroupTreeAllocator::reset() {
     int const treeCacheLineSize = getOptions().compute.treeCacheLineSize;
     next_ = (nextId += treeCacheLineSize);
@@ -254,6 +262,7 @@ void GroupTreeAllocator::reset() {
     }
 }
 
+/// Register a thread-local node-block allocator for group-tree construction.
 GroupTreeAllocator::GroupTreeAllocator() {
     ready_ = false;
     while (allocatorMtx++ != 0) {
@@ -263,6 +272,7 @@ GroupTreeAllocator::GroupTreeAllocator() {
     allocatorMtx--;
 }
 
+/// Return the next node index, reserving another allocation block when necessary.
 int GroupTreeAllocator::allocate() {
     if (next_ == last_) {
         reset();
@@ -270,6 +280,7 @@ int GroupTreeAllocator::allocate() {
     return next_++;
 }
 
+/// Unregister this allocator from the shared reset list.
 GroupTreeAllocator::~GroupTreeAllocator() {
     while (allocatorMtx++ != 0) {
         allocatorMtx--;
@@ -284,6 +295,8 @@ GroupTreeAllocator::~GroupTreeAllocator() {
     allocatorMtx--;
 }
 
+/// Release group-tree nodes and remote caches and invalidate thread-local hints across
+/// localities.
 void groupTreeDestroy() {
     Vector<hpx::future<void>> futs;
     auto const children = hpxChildren();
@@ -296,6 +309,7 @@ void groupTreeDestroy() {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
+/// Return a local group-tree node or retrieve it through the remote node cache.
 GroupTreeNode const* groupTreeGetNode(TreeId id) {
     GroupTreeNode const* ptr;
     if (id.proc == hpxRank()) {
@@ -307,6 +321,7 @@ GroupTreeNode const* groupTreeGetNode(TreeId id) {
     return ptr;
 }
 
+/// Read a shared remote node cache line, refreshing activity flags for the current epoch.
 static GroupTreeNode const* groupTreeCacheRead(TreeId id) {
     int const lineSize = getOptions().compute.treeCacheLineSize;
     TreeId lineId;
@@ -371,6 +386,7 @@ static GroupTreeNode const* groupTreeCacheRead(TreeId id) {
     return ptr + id.index - lineId.index;
 }
 
+/// Pack a bounded local node cache line for remote retrieval.
 static Vector<GroupTreeNode> groupTreeFetchCacheLine(int index) {
     int const lineSize = getOptions().compute.treeCacheLineSize;
     Vector<GroupTreeNode> line;
@@ -384,6 +400,7 @@ static Vector<GroupTreeNode> groupTreeFetchCacheLine(int index) {
     return std::move(line);
 }
 
+/// Pack only the previous-pass activity flags for a cached node line.
 static Vector<unsigned> groupTreeRefreshCacheLine(int index) {
     int const lineSize = getOptions().compute.treeCacheLineSize;
     Vector<unsigned> line;
@@ -397,6 +414,7 @@ static Vector<unsigned> groupTreeRefreshCacheLine(int index) {
     return std::move(line);
 }
 
+/// Snapshot node activity and advance remote-cache epochs across the locality tree.
 void groupTreeIncCacheEpoch() {
     ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
     Vector<hpx::future<void>> futs;

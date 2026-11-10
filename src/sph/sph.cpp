@@ -43,12 +43,14 @@
 
 
 struct SphTreeIdHash {
+    /// Hash a tree-node identity by combining its node index and owning locality.
     inline size_t operator()(TreeId id) const {
         int const i = id.index;
         return i * hpxSize() + id.proc;
     }
 };
 
+/// Test periodic box intersection while recording geometric arithmetic cost.
 inline bool rangeIntersect(
     Fixed32Range const& a, Fixed32Range const& b, FlopCounter<>* flops = nullptr) {
     return a.periodicIntersects(b, flops);
@@ -77,6 +79,7 @@ struct SphRunWorkspace {
     std::unordered_map<TreeId, int, SphTreeIdHash> treeMap;
     std::unordered_map<int, Pair<int>> neighborRanges;
     MutexType mutex;
+    /// Apply a copier to every staged source and tree-array binding in SphRunData.
     template <class Copy>
     void copySources(SphRunData& runData, Copy&& copy) {
         copy(runData.sourceIds, hostSourceIds);
@@ -111,11 +114,13 @@ struct SphRunWorkspace {
         stage();
         return compute(useCuda);
     }
+    /// Retain the parameters defining this staged SPH pass.
     SphRunWorkspace(SphRunParameters p) {
         params = p;
     }
 };
 
+/// Dispatch a local target-side neighbor walk with bounded asynchronous branching.
 hpx::future<SphTreeNeighborReturn> sphTreeNeighborFork(SphTreeNeighborParameters params,
     TreeId self, Vector<TreeId> checklist, int level, bool threadme) {
     static std::atomic<int> numberOfThreads(0);
@@ -162,6 +167,7 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighborFork(SphTreeNeighborParameters
 }
 HPX_PLAIN_ACTION(sphRun, SphRunAction);
 
+/// Check whether every gas particle in a node's range has converged.
 bool isConverged(SphTreeNode const* self) {
     bool converged = true;
     for (int i = self->particleRange.first; i < self->particleRange.second; i++) {
@@ -173,6 +179,7 @@ bool isConverged(SphTreeNode const* self) {
     return converged;
 }
 
+/// Test whether any stored neighbor node contains active gas particles.
 static bool hasActiveNeighbors(SphTreeNode const* self) {
     bool rc = false;
     for (int i = self->neighborRange.first; i < self->neighborRange.second; i++) {
@@ -187,6 +194,7 @@ static bool hasActiveNeighbors(SphTreeNode const* self) {
 
 void sphClearNeighborState();
 HPX_PLAIN_ACTION(sphClearNeighborState, SphClearNeighborStateAction);
+/// Clear neighbor IDs and invalidate leaf neighbor ranges throughout the SPH topology.
 void sphClearNeighborState() {
     Vector<hpx::future<void>> futures;
     for (auto const& child : sphCollectiveChildren()) {
@@ -251,6 +259,8 @@ SphTreeNeighborReturn sphTreeNeighborLocalWalks(SphTreeNeighborParameters params
     return result;
 }
 
+/// Refresh support bounds or construct neighbor lists by traversing local targets and
+/// staged source leaves.
 hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
     SphTreeNeighborParameters params, TreeId self, Vector<TreeId> checklist, int level) {
     SphTreeNeighborReturn kr;
@@ -448,9 +458,13 @@ class SphRunFutureDrain {
     Vector<Future>& futures_;
 
 public:
+    /// Retain the future list whose outstanding tasks must finish before staging
+    /// storage can be destroyed.
     explicit SphRunFutureDrain(Vector<Future>& futures)
       : futures_(futures) {}
 
+    /// Wait for every still-valid task so captured workspace references cannot outlive
+    /// their storage.
     ~SphRunFutureDrain() {
         for (auto& future : futures_) {
             if (future.valid()) {
@@ -513,6 +527,8 @@ static std::shared_ptr<SphRunWorkspace> collectSphRunWork(SphRunParameters const
     return workspacePtr;
 }
 
+/// Validate the active rung range, apply the configured CFL factor, and constrain backend
+/// selection.
 static SphRunParameters prepareSphRunParameters(SphRunParameters params, bool& cuda) {
     ALWAYS_ASSERT(params.minimumRung >= 0 && params.maximumRung < kMaxRung &&
         params.minimumRung <= params.maximumRung);
@@ -534,6 +550,7 @@ static std::shared_ptr<SphRunWorkspace> stagedSphRun;
 struct SphOwnedPairUpdate {
     ParticleInteger index;
     SphPairUpdate update;
+    /// Archive this record in the field order required by distributed transport.
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
         archive & index & update;
@@ -552,12 +569,14 @@ static Vector<SphPairBaseline> pairBaselines;
 static float* stageEntropyRates = nullptr;
 }    // namespace detail
 
+/// Expose the event-local entropy-rate array used by midpoint source staging.
 float* sphStageEntropyRates() {
     return detail::stageEntropyRates;
 }
 
 void sphPrepareStageRates(bool initialize);
 HPX_PLAIN_ACTION(sphPrepareStageRates, SphPrepareStageRatesAction);
+/// Allocate when requested and zero entropy-rate scratch arrays across localities.
 void sphPrepareStageRates(bool initialize) {
     Vector<hpx::future<void>> children;
     for (auto const& child : sphCollectiveChildren()) {
@@ -578,6 +597,7 @@ void sphPrepareStageRates(bool initialize) {
     }
 }
 
+/// Append remotely delivered pair increments to the synchronized pending-update queue.
 void sphReceivePairUpdates(Vector<SphOwnedPairUpdate> updates) {
     std::lock_guard<MutexType> lock(detail::pairUpdateMutex);
     detail::pendingPairUpdates.insert(
@@ -589,6 +609,8 @@ HPX_PLAIN_ACTION(sphCommitPairUpdates, SphCommitPairUpdatesAction);
 void sphFinishPairStages(bool restore);
 HPX_PLAIN_ACTION(sphFinishPairStages, SphFinishPairStagesAction);
 
+/// Optionally restore pair baselines, then release pending increments and midpoint staging
+/// storage.
 void sphFinishPairStages(bool restore) {
     Vector<hpx::future<void>> children;
     for (auto const& child : sphCollectiveChildren()) {
@@ -671,6 +693,8 @@ void sphCommitPairUpdates(int stage) {
     }
 }
 
+/// Send nonzero pair increments to the owners of their source particles and join all
+/// deliveries.
 void SphRunWorkspace::deliverPairUpdates() {
     if (hostPairUpdates.empty()) {
         return;
@@ -709,6 +733,7 @@ SphRunReturn sphRunCompute(bool cuda);
 HPX_PLAIN_ACTION(sphRunStage, SphRunStageAction);
 HPX_PLAIN_ACTION(sphRunCompute, SphRunComputeAction);
 
+/// Build and retain a complete source snapshot for the selected SPH pass across localities.
 void sphRunStage(SphRunParameters params, bool cuda) {
     params = detail::prepareSphRunParameters(params, cuda);
     Vector<hpx::future<void>> children;
@@ -721,9 +746,12 @@ void sphRunStage(SphRunParameters params, bool cuda) {
     if (!workspacePtr->hostTargetNodeIndices.empty()) {
         // Every remote source must come from a ghost leaf while staging.
         struct StagingScope {
+            /// Enter the ghost-read scope while assembling the source snapshot.
             StagingScope() {
                 sphGhostsBeginStaging();
             }
+            /// Leave the ghost-read scope after source staging finishes or
+            /// throws.
             ~StagingScope() {
                 sphGhostsEndStaging();
             }
@@ -736,6 +764,8 @@ void sphRunStage(SphRunParameters params, bool cuda) {
     }
 }
 
+/// Consume staged work on the selected backend, deliver pair increments, and reduce pass
+/// diagnostics.
 SphRunReturn sphRunCompute(bool cuda) {
     if (getOptions().hydro.cuda == false) {
         cuda = false;
@@ -763,6 +793,8 @@ namespace detail {
 unsigned sphRunGhostFields(SphRunParameters const& params);
 }    // namespace detail
 
+/// Refresh required thermodynamic/ghost state, stage sources, execute the pass, and reduce
+/// results.
 SphRunReturn sphRun(SphRunParameters params, bool cuda) {
     // Initial density publication is provided by the CPU smoothing solver.
     cuda = cuda && !params.initializeDensity;
@@ -801,6 +833,8 @@ SphRunReturn sphRun(SphRunParameters params, bool cuda) {
     return rc;
 }
 
+/// Evaluate explicit-midpoint pair forces from a common baseline and restore staged state
+/// on failure.
 SphRunReturn sphMidpointForces(SphRunParameters params, bool cuda) {
     params.runType = kSphRunHydro;
     params.phase = 1;
@@ -855,6 +889,7 @@ SphRunReturn sphMidpointForces(SphRunParameters params, bool cuda) {
     }
 }
 
+/// Register a target leaf and its neighbor nodes in the synchronized staging workspace.
 void SphRunWorkspace::addWork(TreeId selfId) {
     auto const* self = sphTreeGetNode(selfId);
     std::unique_lock<MutexType> lock(mutex);
@@ -922,6 +957,7 @@ unsigned sphRunGhostFields(SphRunParameters const& params) {
 
 }    // namespace detail
 
+/// Pack all required local and ghost source fields into a complete immutable pass snapshot.
 void SphRunWorkspace::stage() {
     size_t particleStorageSize = 0;
     for (auto const& node : hostTrees) {
@@ -1026,6 +1062,8 @@ void SphRunWorkspace::stage() {
     }
 }
 
+/// Bind staged source arrays and live sink outputs into the kernel's nonowning run-data
+/// view.
 SphRunData SphRunWorkspace::data() {
     SphRunData runData{};
 
@@ -1067,6 +1105,8 @@ SphRunData SphRunWorkspace::data() {
     return runData;
 }
 
+/// Execute staged target nodes on CPU workers or CUDA and retrieve pair updates before
+/// returning.
 SphRunReturn SphRunWorkspace::compute(bool useCuda) {
     SphRunData runData = data();
     for (int i = 0; i < hostTargetNodeIndices.size(); i++) {

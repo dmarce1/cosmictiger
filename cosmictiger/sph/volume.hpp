@@ -95,6 +95,7 @@ struct SupportSums {
     Real weightedMoment;    // sum_j xⱼ qᵢⱼ w'(qᵢⱼ) = -h^(D+1) dyᵢ/dh - D h^D yᵢ
 };
 
+/// Initialize all scalar/SIMD support sums to zero.
 template <typename Real>
 CUDA_EXPORT inline SupportSums<Real> emptySupportSums() {
     Real const zero = math::broadcast<Real>(0);
@@ -305,6 +306,8 @@ struct GradHCorrection {
     Real weightedSupportCorrection;    // ζᵢ in units of x; zero when the support is held
 };
 
+/// Return free-support grad-h factors, or neutral corrections for a constrained smoothing
+/// length.
 template <typename Real>
 CUDA_EXPORT inline GradHCorrection<Real> gradHCorrection(
     SupportSums<Real> const& sums, SupportConstraint constraint) {
@@ -331,6 +334,7 @@ CUDA_EXPORT inline bool isUsable(GradHCorrection<float> const& correction) {
         isFiniteValue(correction.weightedSupportCorrection) && correction.supportJacobian > 0.0f;
 }
 
+/// Require usable grad-h data and a support Jacobian above the conditioning threshold.
 CUDA_EXPORT inline bool isWellConditioned(GradHCorrection<float> const& correction) {
     return isUsable(correction) && correction.supportJacobian >= kMinimumWellConditionedOmega;
 }

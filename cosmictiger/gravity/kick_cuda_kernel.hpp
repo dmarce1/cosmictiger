@@ -35,6 +35,7 @@
 
 namespace detail {
 
+/// Copy local-expansion coefficients cooperatively across one CUDA warp.
 template <int order>
 __device__ inline void cudaCopyExpansion(float* destination, float const* source) {
     for (int i = threadIdx.x; i < FmmOrder<order>::kLocalCoefficients_; i += kWarpSize) {
@@ -44,6 +45,8 @@ __device__ inline void cudaCopyExpansion(float* destination, float const* source
 
 }    // namespace detail
 
+/// Combine local and direct fields for a sink tile, update particle kick/rung state, and
+/// reduce energy/momentum diagnostics.
 template <int order>
 __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKickData const& data,
     cosmictiger::gravity::cartesian::Expansion<float, order> const& lValue2,

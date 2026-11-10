@@ -17,6 +17,8 @@
 constexpr int kLightconeBlockSize = 32;
 static_assert(kLightconeBlockSize == kWarpSize);
 
+/// Propagate lightcone group labels through leaf neighbor graphs and count changed leaves
+/// on the GPU.
 __global__ void cudaLightconeKernel(LightconeParticleMapType* particleMapPtr,
     LightconeTreeMapType* treeMapPtr, int* rcPtr, LightconeTreeId const* leaves, int n,
     int* indexPtr, LightconeGroup* nextIdPtr, double linkingLength, int hpxSize, int hpxRank) {
@@ -155,6 +157,8 @@ __global__ void cudaLightconeKernel(LightconeParticleMapType* particleMapPtr,
     }
 }
 
+/// Launch a lightcone connectivity pass, wait for completion, and return updated counters
+/// and group IDs.
 size_t cudaLightcone(DeviceVector<LightconeTreeId> const& leaves,
     LightconeParticleMapType* particleMapPtr, LightconeTreeMapType* treeMapPtr,
     LightconeGroup* nextIdValue, double linkingLength, int rank, int ranks, int maximumBlocks) {

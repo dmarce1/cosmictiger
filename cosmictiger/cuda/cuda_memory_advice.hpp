@@ -11,6 +11,7 @@
 #if CUDART_VERSION >= 13000
 namespace detail {
 
+/// Convert a host/device ordinal into the CUDA 13 memory-location representation.
 inline cudaMemLocation cudaMemoryLocation(int device) {
     // CUDA 13 represents host memory by its location type, not device ordinal -1.
     if (device == cudaCpuDeviceId) {
@@ -22,6 +23,8 @@ inline cudaMemLocation cudaMemoryLocation(int device) {
 }    // namespace detail
 #endif
 
+/// Apply managed-memory advice using the signature supported by the configured CUDA
+/// runtime.
 inline cudaError_t cudaAdviseMemory(
     void const* pointer, size_t bytes, cudaMemoryAdvise advice, int device) {
 #if CUDART_VERSION >= 13000
@@ -31,6 +34,8 @@ inline cudaError_t cudaAdviseMemory(
 #endif
 }
 
+/// Enqueue managed-memory migration on the supplied stream with CUDA-version-compatible
+/// arguments.
 inline cudaError_t cudaPrefetchMemoryAsync(
     void const* pointer, size_t bytes, int device, cudaStream_t stream) {
 #if CUDART_VERSION >= 13000

@@ -26,6 +26,7 @@ namespace pmmm::detail {
 
 constexpr int kNearBlockSize = 128;
 
+/// Evaluate each sink's selected source range on the GPU and write its direct near field.
 __global__ void nearKernel(PmmmNearParticle const* sinks, size_t sinkCount,
     PmmmNearParticle const* sources, PmmmNearSourceRange const* sourceRanges, double cellWidth,
     double inverseSmoothingLength, double inverseSmoothingLengthCubed, bool doPotential,
@@ -48,6 +49,8 @@ __global__ void nearKernel(PmmmNearParticle const* sinks, size_t sinkCount,
 struct DeviceDeleter {
     int device;
 
+    /// Free a near-field allocation on its owning GPU and restore the caller's selected
+    /// device.
     void operator()(void* pointer) const noexcept {
         int previousDevice = device;
         bool const restoreDevice = ::cudaGetDevice(&previousDevice) == cudaSuccess;
@@ -59,6 +62,7 @@ struct DeviceDeleter {
     }
 };
 
+/// Allocate a checked-size near-field device buffer with device-aware ownership.
 template <class Value>
 std::unique_ptr<Value, DeviceDeleter> allocateNearBuffer(size_t count, int device) {
     if (count > std::numeric_limits<size_t>::max() / sizeof(Value)) {
@@ -78,9 +82,13 @@ struct NearDeviceBuffer {
     std::unique_ptr<Value, DeviceDeleter> data;
     size_t capacity = 0;
 
+    /// Initialize an empty device buffer with its owning device recorded by the
+    /// deleter.
     explicit NearDeviceBuffer(int device)
       : data(nullptr, DeviceDeleter{device}) {}
 
+    /// Grow the device buffer geometrically when the requested element count exceeds
+    /// capacity.
     void reserve(size_t count, int device) {
         if (count <= capacity) {
             return;
@@ -103,6 +111,8 @@ struct NearWorkspace {
     // Declared last so failed submissions drain before any device buffer dies.
     CudaStream stream;
 
+    /// Construct the device-specific stream and buffers for a reusable near-field
+    /// batch.
     explicit NearWorkspace(int selectedDevice)
       : device(selectedDevice)
       , sinks(selectedDevice)
@@ -111,6 +121,7 @@ struct NearWorkspace {
       , fields(selectedDevice)
       , stream(selectedDevice) {}
 
+    /// Reserve sink, source, range, and field buffers for the next near-field batch.
     void reserve(size_t sinkCount, size_t sourceCount) {
         sinks.reserve(sinkCount, device);
         sources.reserve(sourceCount, device);
@@ -124,6 +135,8 @@ struct NearWorkspacePool {
     std::unordered_map<int, std::vector<std::unique_ptr<NearWorkspace>>> available;
 };
 
+/// Return the workspace pool whose CUDA resources are released explicitly before runtime
+/// shutdown.
 NearWorkspacePool& nearWorkspacePool() {
     // Explicit quiescent teardown owns the CUDA resources. Do not destroy CUDA
     // objects from process-static destructors after the runtime has shut down.
@@ -131,6 +144,7 @@ NearWorkspacePool& nearWorkspacePool() {
     return *pool;
 }
 
+/// Lease an available workspace for the selected device or construct a new one.
 std::unique_ptr<NearWorkspace> acquireNearWorkspace(int device) {
     auto& pool = nearWorkspacePool();
     {
@@ -145,12 +159,14 @@ std::unique_ptr<NearWorkspace> acquireNearWorkspace(int device) {
     return std::make_unique<NearWorkspace>(device);
 }
 
+/// Return a successfully completed workspace to its device's reusable pool.
 void releaseNearWorkspace(std::unique_ptr<NearWorkspace> workspace) {
     auto& pool = nearWorkspacePool();
     std::lock_guard<std::mutex> lock(pool.mutex);
     pool.available[workspace->device].push_back(std::move(workspace));
 }
 
+/// Detach and destroy idle workspaces outside the pool lock at a quiescent point.
 void clearPmmmNearCudaWorkspaces() {
     auto& pool = nearWorkspacePool();
     decltype(pool.available) available;
@@ -161,6 +177,8 @@ void clearPmmmNearCudaWorkspaces() {
     // Destruction, device switching, and frees all run outside the pool lock.
 }
 
+/// Lease buffers, transfer the batch, evaluate near forces, and return the workspace after
+/// stream completion.
 void pmmmNearFieldCuda(std::vector<PmmmNearParticle> const& sinks,
     std::vector<PmmmNearParticle> const& sources,
     std::vector<PmmmNearSourceRange> const& sourceRanges, double cellWidth, double smoothingLength,

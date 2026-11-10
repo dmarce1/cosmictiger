@@ -20,6 +20,8 @@ namespace linear_power {
 
 namespace detail {
 
+    /// Inspect exponent bits to reject infinities and NaNs without fast-math-sensitive
+    /// comparisons.
     inline bool isFinite(double value) {
         return (std::bit_cast<std::uint64_t>(value) & UINT64_C(0x7ff0000000000000)) !=
             UINT64_C(0x7ff0000000000000);
@@ -37,6 +39,8 @@ class LogarithmicTable {
 public:
     LogarithmicTable() = default;
 
+    /// Validate ordered positive wavenumbers and store interpolation coordinates in log
+    /// k, optionally also taking log values.
     LogarithmicTable(std::vector<double> const& wavenumbers, std::vector<double> values,
         bool logarithmicValues = false)
       : values_(std::move(values))
@@ -57,18 +61,23 @@ public:
         }
     }
 
+    /// Test whether the spectrum contains any interpolation samples.
     bool empty() const {
         return values_.empty();
     }
 
+    /// Return the smallest tabulated wavenumber; the table must be nonempty.
     double minimumWavenumber() const {
         return std::exp(logWavenumbers_.front());
     }
 
+    /// Return the largest tabulated wavenumber; the table must be nonempty.
     double maximumWavenumber() const {
         return std::exp(logWavenumbers_.back());
     }
 
+    /// Interpolate with up to four log-k samples; permit boundary roundoff but reject
+    /// extrapolation outside the table.
     double operator()(double wavenumber) const {
         if (empty() || !detail::isFinite(wavenumber) || !(wavenumber > 0.0)) {
             throw std::invalid_argument("Invalid spectrum wavenumber or empty spectrum");
@@ -103,6 +112,8 @@ public:
     }
 };
 
+/// Evaluate the spherical top-hat Fourier window, using its small-argument series to avoid
+/// cancellation.
 inline double topHatWindow(double argument) {
     double const squared = argument * argument;
     if (std::abs(argument) < 0.05) {
@@ -114,6 +125,8 @@ inline double topHatWindow(double argument) {
     return 3.0 * (std::sin(argument) - argument * std::cos(argument)) / (argument * squared);
 }
 
+/// Integrate the tabulated power times the squared top-hat window over log k to obtain the
+/// variance at radius.
 inline double sigmaSquared(LogarithmicTable const& power, double radius) {
     if (!detail::isFinite(radius) || !(radius > 0.0) || power.empty()) {
         throw std::invalid_argument("Invalid sigma radius or empty power spectrum");
@@ -134,6 +147,7 @@ inline double sigmaSquared(LogarithmicTable const& power, double radius) {
     return integral * step / (6.0 * pi * pi);
 }
 
+/// Return the power-amplitude multiplier required to match sigma8 at radius 8/h in Mpc.
 inline double normalization(LogarithmicTable const& power, double sigma8, double hubble) {
     if (!detail::isFinite(sigma8) || !(sigma8 > 0.0) || !detail::isFinite(hubble) ||
         !(hubble > 0.0)) {
@@ -146,6 +160,7 @@ inline double normalization(LogarithmicTable const& power, double sigma8, double
     return sigma8 * sigma8 / variance;
 }
 
+/// Mass-weight the cold-dark-matter and baryon density transfers by the baryon fraction.
 inline double matterTransfer(double deltaCdm, double deltaBaryon, double baryonFraction) {
     return (1.0 - baryonFraction) * deltaCdm + baryonFraction * deltaBaryon;
 }

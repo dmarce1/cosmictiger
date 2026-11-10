@@ -60,12 +60,16 @@ namespace detail {
         double density = 0.0;     // Σ cos(k x), the particle number density mode
         double count = 0.0;
 
+        /// Archive this record in the field order required by distributed
+        /// transport.
         template <class Archive>
         void serialize(Archive& archive, unsigned) {
             archive & velocity & density & count;
         }
     };
 
+    /// Accumulate local Fourier projections of gas density and velocity for the
+    /// Jeans-wave diagnostic.
     JeansModes localJeansModes() {
         JeansModes modes;
         double const k = kJeansWavenumber;
@@ -95,6 +99,8 @@ namespace detail {
         return 8.0 * std::numbers::pi * gm * kJeansDensity / sqr(kJeansWavenumber);
     }
 
+    /// Reduce Fourier modes and compare the measured Jeans-wave frequency and amplitude
+    /// with the reference.
     void finishJeansWave(double time) {
         JeansModes modes;
         std::vector<hpx::future<JeansModes>> futures;
@@ -137,6 +143,8 @@ namespace detail {
 
 }    // namespace detail
 
+/// Initialize the sinusoidal Jeans mode with consistent density, velocity, and thermal
+/// support.
 ScenarioPlan initializeJeansWave() {
     auto opts = getOptions();
     ParticleInteger const side = particle_count::roundLattice(opts.run.gasParticleCount).side;

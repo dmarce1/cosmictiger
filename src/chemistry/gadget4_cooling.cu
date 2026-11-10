@@ -12,6 +12,7 @@
 
 namespace gadget4 {
 namespace detail {
+    /// Advance independent gas cooling states using a grid-stride device loop.
     __global__ void coolingBatchKernel(
         Input const* inputs, Result* results, size_t count, Parameters parameters) {
         size_t const stride = size_t(blockDim.x) * gridDim.x;
@@ -25,6 +26,8 @@ namespace detail {
     }
 }    // namespace detail
 
+/// Return a cached rate-table allocation for the current device, reporting allocation or
+/// transfer failures.
 RateRow const* deviceRateTable(std::string* error, Status* resultStatus) {
     if (error != nullptr) {
         error->clear();
@@ -85,6 +88,8 @@ RateRow const* deviceRateTable(std::string* error, Status* resultStatus) {
     return table;
 }
 
+/// Transfer a cooling batch to the device, execute it, retrieve results, and release
+/// temporary buffers.
 bool integrateBatchCuda(Input const* inputs, Result* results, size_t count,
     Parameters const& parameters, std::string* error) {
     if (error != nullptr) {

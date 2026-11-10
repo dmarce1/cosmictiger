@@ -25,6 +25,7 @@ inline constexpr int kL2LFlops = 0;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 3) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 3)
 // FMM order 3.
+/// Accumulate translated local coefficients, applying the target-to-source scale ratio.
 template <class Real>
 CUDA_EXPORT void L2L(Expansion<Real, 3>& targetL, Expansion<Real, 3> const& L,
     Vector3<Real> const& distance, Real scaleRatio) {
@@ -80,6 +81,7 @@ inline constexpr int kL2LFlops<2> = 64;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 4) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 4)
 // FMM order 4.
+/// Accumulate translated local coefficients, applying the target-to-source scale ratio.
 template <class Real>
 CUDA_EXPORT void L2L(Expansion<Real, 4>& targetL, Expansion<Real, 4> const& L,
     Vector3<Real> const& distance, Real scaleRatio) {
@@ -197,6 +199,7 @@ inline constexpr int kL2LFlops<3> = 169;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 5) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 5)
 // FMM order 5.
+/// Accumulate translated local coefficients, applying the target-to-source scale ratio.
 template <class Real>
 CUDA_EXPORT void L2L(Expansion<Real, 5>& targetL, Expansion<Real, 5> const& L,
     Vector3<Real> const& distance, Real scaleRatio) {
@@ -428,6 +431,7 @@ inline constexpr int kL2LFlops<4> = 369;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 6) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 6)
 // FMM order 6.
+/// Accumulate translated local coefficients, applying the target-to-source scale ratio.
 template <class Real>
 CUDA_EXPORT void L2L(Expansion<Real, 6>& targetL, Expansion<Real, 6> const& L,
     Vector3<Real> const& distance, Real scaleRatio) {
@@ -845,6 +849,7 @@ inline constexpr int kL2LFlops<5> = 706;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 7) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 7)
 // FMM order 7.
+/// Accumulate translated local coefficients, applying the target-to-source scale ratio.
 template <class Real>
 CUDA_EXPORT void L2L(Expansion<Real, 7>& targetL, Expansion<Real, 7> const& L,
     Vector3<Real> const& distance, Real scaleRatio) {
@@ -1559,6 +1564,7 @@ inline constexpr int kL2LFlops<6> = 1242;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 8) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 8)
 // FMM order 8.
+/// Accumulate translated local coefficients, applying the target-to-source scale ratio.
 template <class Real>
 CUDA_EXPORT void L2L(Expansion<Real, 8>& targetL, Expansion<Real, 8> const& L,
     Vector3<Real> const& distance, Real scaleRatio) {
@@ -2714,6 +2720,7 @@ inline constexpr int kL2LFlops<7> = 2043;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 9) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 9)
 // FMM order 9.
+/// Accumulate translated local coefficients, applying the target-to-source scale ratio.
 template <class Real>
 CUDA_EXPORT void L2L(Expansion<Real, 9>& targetL, Expansion<Real, 9> const& L,
     Vector3<Real> const& distance, Real scaleRatio) {

@@ -64,6 +64,7 @@ HPX_PLAIN_ACTION(shiftRead, ShiftReadAction);
 HPX_PLAIN_ACTION(update, UpdateAction);
 HPX_PLAIN_ACTION(finishForceReal, FinishForceRealAction);
 
+/// Write the current real or complex transform mesh as a Silo diagnostic.
 void fft3d2silo(bool real) {
     if (real) {
         DBfile* db =
@@ -124,6 +125,8 @@ void fft3d2silo(bool real) {
     }
 }
 
+/// Execute the distributed real-to-complex transform with the required axis
+/// redistributions.
 void fft3dExecute() {
     fft3dPhase1();
 
@@ -139,6 +142,7 @@ void fft3dExecute() {
     update();
 }
 
+/// Execute the distributed inverse transform and restore normalized real-space samples.
 void fft3dInvExecute() {
     transpose(0, 2);
 
@@ -153,6 +157,8 @@ void fft3dInvExecute() {
     fft3dPhase3();
 }
 
+/// Construct conjugate-symmetric values for the zero-frequency plane before a real inverse
+/// transform.
 void fft3dForceReal() {
     Vector<hpx::future<void>> futs;
     for (auto c : hpxChildren()) {
@@ -191,18 +197,22 @@ void fft3dForceReal() {
     }
 }
 
+/// Return this locality's canonical complex-grid box.
 Range<int64_t> fft3dComplexRange() {
     return cmplxMybox[kZi];
 }
 
+/// Return this locality's real-grid box.
 Range<int64_t> fft3dRealRange() {
     return realMybox;
 }
 
+/// Expose this locality's current complex transform storage.
 Vector<ComplexFloat>& fft3dComplexVector() {
     return yValue;
 }
 
+/// Install the staged conjugate-symmetric zero-frequency plane on every locality.
 void finishForceReal() {
     Vector<hpx::future<void>> futs;
     for (auto c : hpxChildren()) {
@@ -223,6 +233,8 @@ void finishForceReal() {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
+/// Gather a possibly periodic real-space box from its owning localities into contiguous
+/// storage.
 Vector<float> fft3dReadReal(Range<int64_t> const& thisBox) {
     Vector<hpx::future<void>> futs;
     Vector<float> data(thisBox.volume());
@@ -282,6 +294,8 @@ Vector<float> fft3dReadReal(Range<int64_t> const& thisBox) {
     return std::move(data);
 }
 
+/// Gather a possibly periodic complex-grid box from its owning localities into contiguous
+/// storage.
 Vector<ComplexFloat> fft3dReadComplex(Range<int64_t> const& thisBox) {
     Vector<hpx::future<void>> futs;
     Vector<ComplexFloat> data(thisBox.volume());
@@ -342,6 +356,7 @@ Vector<ComplexFloat> fft3dReadComplex(Range<int64_t> const& thisBox) {
     return std::move(data);
 }
 
+/// Add a real-space box to its owning grid cells with row-level synchronization.
 void fft3dAccumulateReal(Range<int64_t> const& thisBox, Vector<float> const& data) {
     Vector<hpx::future<void>> futs;
     if (realMybox.contains(thisBox)) {
@@ -403,6 +418,8 @@ void fft3dAccumulateReal(Range<int64_t> const& thisBox, Vector<float> const& dat
     hpx::wait_all(futs.begin(), futs.end());
 }
 
+/// Add complex-grid contributions to their owning localities with row-level
+/// synchronization.
 void fft3dAccumulateComplex(Range<int64_t> const& thisBox, Vector<ComplexFloat> const& data) {
     Vector<hpx::future<void>> futs;
     auto const& box = cmplxMybox[kZi];
@@ -460,6 +477,7 @@ void fft3dAccumulateComplex(Range<int64_t> const& thisBox, Vector<ComplexFloat> 
     hpx::wait_all(futs.begin(), futs.end());
 }
 
+/// Reinitialize distributed grid decompositions, real storage, and accumulation locks.
 void fft3dInit(int64_t gridSize, float initConst) {
     fft3dDestroy();
     Vector<hpx::future<void>> futs;
@@ -494,6 +512,7 @@ void fft3dInit(int64_t gridSize, float initConst) {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
+/// Release distributed transform buffers throughout the locality tree.
 void fft3dDestroy() {
     Vector<hpx::future<void>> futs;
     for (auto c : hpxChildren()) {
@@ -507,6 +526,8 @@ void fft3dDestroy() {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
+/// Promote the redistributed complex buffer to the active transform storage on each
+/// locality.
 static void update() {
     Vector<hpx::future<void>> futs;
     for (auto c : hpxChildren()) {
@@ -516,6 +537,7 @@ static void update() {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
+/// Perform local real-to-complex line transforms for the first distributed FFT stage.
 static void fft3dPhase1() {
     Vector<hpx::future<void>> futs;
     for (auto c : hpxChildren()) {
@@ -554,6 +576,8 @@ static void fft3dPhase1() {
     rValue = decltype(rValue)();
 }
 
+/// Perform complex line transforms along the selected axis, applying inverse normalization
+/// when requested.
 static void fft3dPhase2(int dim, bool inv) {
     Vector<hpx::future<void>> futs;
     for (auto c : hpxChildren()) {
@@ -599,6 +623,7 @@ static void fft3dPhase2(int dim, bool inv) {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
+/// Perform the final complex-to-real line transforms and release complex work storage.
 static void fft3dPhase3() {
     Vector<hpx::future<void>> futs;
     for (auto c : hpxChildren()) {
@@ -646,6 +671,7 @@ static void fft3dPhase3() {
     yValue = decltype(yValue)();
 }
 
+/// Recursively partition a mesh box among a contiguous range of locality ranks.
 static void findBoxes(Range<int64_t> box, Vector<Range<int64_t>>& boxes, int begin, int end) {
     if (end - begin == 1) {
         boxes[begin] = box;
@@ -662,6 +688,7 @@ static void findBoxes(Range<int64_t> box, Vector<Range<int64_t>>& boxes, int beg
     }
 }
 
+/// Redistribute complex-grid values while exchanging two coordinate axes.
 static void transpose(int dim1, int dim2) {
     Vector<hpx::future<void>> futs;
     for (auto c : hpxChildren()) {
@@ -703,6 +730,7 @@ static void transpose(int dim1, int dim2) {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
+/// Pack a locally owned complex-grid box in transposed coordinate order.
 static Vector<ComplexFloat> transposeRead(Range<int64_t> const& thisBox, int dim1, int dim2) {
     Vector<ComplexFloat> data(thisBox.volume());
     ASSERT(cmplxMybox[dim2].contains(thisBox));
@@ -720,6 +748,8 @@ static Vector<ComplexFloat> transposeRead(Range<int64_t> const& thisBox, int dim
     return std::move(data);
 }
 
+/// Redistribute complex-grid values under the cyclic axis permutation needed by the
+/// transform schedule.
 static void shift(bool inv) {
     Vector<hpx::future<void>> futs;
     for (auto c : hpxChildren()) {
@@ -762,6 +792,7 @@ static void shift(bool inv) {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
+/// Pack a locally owned complex-grid box under the requested cyclic axis permutation.
 static Vector<ComplexFloat> shiftRead(Range<int64_t> const& thisBox, bool inv) {
     Vector<ComplexFloat> data(thisBox.volume());
     auto tbox = inv ? thisBox.shiftDown() : thisBox.shiftUp();
@@ -778,6 +809,7 @@ static Vector<ComplexFloat> shiftRead(Range<int64_t> const& thisBox, bool inv) {
     return std::move(data);
 }
 
+/// Recursively split a transfer box until each piece is below the parcel-size limit.
 static void splitBox(Range<int64_t> box, Vector<Range<int64_t>>& realBoxes) {
     if (box.volume() < kMaxBoxSize) {
         realBoxes.push_back(box);

@@ -15,6 +15,7 @@ struct TreeCellRoot {
     uint64_t key;
     TreeId id;
     bool ghost = false;
+    /// Archive this record in the field order required by distributed transport.
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
         archive & key & id & ghost;

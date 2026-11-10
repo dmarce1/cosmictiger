@@ -28,6 +28,8 @@
 HPX_PLAIN_ACTION(particleMeshPrepareKick, ParticleMeshPrepareKickAction);
 HPX_PLAIN_ACTION(particleMeshFinishKick, ParticleMeshFinishKickAction);
 
+/// Prepare distributed mesh kick state and timestep/rung decisions using the stored
+/// long-range field.
 KickReturn particleMeshPrepareKick(double scale, double baseTimestep, double maximumTimestep,
     bool firstCall, int minimumRung, double previousTimestep) {
     std::vector<hpx::future<KickReturn>> futures;
@@ -144,6 +146,8 @@ KickReturn particleMeshPrepareKick(double scale, double baseTimestep, double max
     return result;
 }
 
+/// Apply the closing mesh half-kick to the selected rung and return its kinetic-energy
+/// change.
 double particleMeshFinishKick(double baseTimestep, int rung, double explicitTimestep) {
     ALWAYS_ASSERT(rung >= 0 && rung < kMaxRung);
     std::vector<hpx::future<double>> futures;
@@ -202,6 +206,7 @@ double particleMeshFinishKick(double baseTimestep, int rung, double explicitTime
     return kinetic;
 }
 
+/// Apply a global closing mesh half-kick over the validated explicit timestep.
 double particleMeshFinishGlobalKick(double timestep) {
     ALWAYS_ASSERT(std::isfinite(timestep) && timestep > 0.0);
     return particleMeshFinishKick(0.0, 0, timestep);

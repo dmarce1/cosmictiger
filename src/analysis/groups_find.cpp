@@ -17,12 +17,14 @@
 
 HPX_PLAIN_ACTION(groupsFind, GroupsFindAction);
 
+/// Atomically lower a particle's group label when the proposed label is smaller.
 void atomicMin(std::atomic<GroupInteger>& minValue, GroupInteger value) {
     GroupInteger prevValue = minValue;
     while (prevValue > value && !minValue.compare_exchange_strong(prevValue, value)) {
     }
 }
 
+/// Dispatch a group-linking walk remotely or with bounded local parallelism.
 hpx::future<size_t> groupsFindFork(
     TreeId self, Vector<TreeId> checklist, double linkingLength, bool threadme) {
     static std::atomic<int> numberOfThreads(0);
@@ -75,6 +77,7 @@ struct LeafWorkspace {
 static thread_local std::stack<LeafWorkspace> leafWorkspaces;
 static thread_local std::stack<Vector<TreeId>> lists;
 
+/// Lease a reusable tree-ID work list from the thread-local pool.
 static Vector<TreeId> getList() {
     if (lists.empty()) {
         lists.push(Vector<TreeId>());
@@ -84,10 +87,12 @@ static Vector<TreeId> getList() {
     return std::move(list);
 }
 
+/// Return a tree-ID work list to the thread-local reuse pool.
 static void cleanupList(Vector<TreeId>&& list) {
     lists.push(std::move(list));
 }
 
+/// Lease temporary leaf-linking storage from the thread-local pool.
 static LeafWorkspace getLeafWorkspace() {
     if (leafWorkspaces.empty()) {
         leafWorkspaces.push(LeafWorkspace());
@@ -97,10 +102,13 @@ static LeafWorkspace getLeafWorkspace() {
     return std::move(list);
 }
 
+/// Return leaf-linking scratch storage to the thread-local pool.
 static void cleanupLeafWorkspace(LeafWorkspace&& list) {
     leafWorkspaces.push(std::move(list));
 }
 
+/// Traverse intersecting active nodes, propagate friends-of-friends labels, and count
+/// remaining active work.
 hpx::future<size_t> groupsFind(TreeId self, Vector<TreeId> checklist, double linkingLength) {
     GroupTreeNode const* selfPtr = groupTreeGetNode(self);
     bool threadLeft = true;

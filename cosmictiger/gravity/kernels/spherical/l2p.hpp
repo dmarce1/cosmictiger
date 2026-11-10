@@ -30,6 +30,7 @@ class L2P<2> {
 public:
     static constexpr int kFlops_ = 45;
     static constexpr int kConventionalFlops_ = 69;
+    /// Accumulate the local expansion potential and negative gradient at the supplied point.
     template <typename Real, typename Output, typename Source = Output>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
         using namespace math;
@@ -96,6 +97,7 @@ class L2P<3> {
 public:
     static constexpr int kFlops_ = 89;
     static constexpr int kConventionalFlops_ = 127;
+    /// Accumulate the local expansion potential and negative gradient at the supplied point.
     template <typename Real, typename Output, typename Source = Output>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
         using namespace math;
@@ -202,6 +204,7 @@ class L2P<4> {
 public:
     static constexpr int kFlops_ = 136;
     static constexpr int kConventionalFlops_ = 206;
+    /// Accumulate the local expansion potential and negative gradient at the supplied point.
     template <typename Real, typename Output, typename Source = Output>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
         using namespace math;
@@ -355,6 +358,7 @@ class L2P<5> {
 public:
     static constexpr int kFlops_ = 198;
     static constexpr int kConventionalFlops_ = 313;
+    /// Accumulate the local expansion potential and negative gradient at the supplied point.
     template <typename Real, typename Output, typename Source = Output>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
         using namespace math;
@@ -570,6 +574,7 @@ class L2P<6> {
 public:
     static constexpr int kFlops_ = 274;
     static constexpr int kConventionalFlops_ = 447;
+    /// Accumulate the local expansion potential and negative gradient at the supplied point.
     template <typename Real, typename Output, typename Source = Output>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
         using namespace math;
@@ -861,6 +866,7 @@ class L2P<7> {
 public:
     static constexpr int kFlops_ = 369;
     static constexpr int kConventionalFlops_ = 617;
+    /// Accumulate the local expansion potential and negative gradient at the supplied point.
     template <typename Real, typename Output, typename Source = Output>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
         using namespace math;
@@ -1247,6 +1253,7 @@ class L2P<8> {
 public:
     static constexpr int kFlops_ = 482;
     static constexpr int kConventionalFlops_ = 822;
+    /// Accumulate the local expansion potential and negative gradient at the supplied point.
     template <typename Real, typename Output, typename Source = Output>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
         using namespace math;

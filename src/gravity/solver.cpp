@@ -16,12 +16,14 @@ uint64_t nextGeneration = 0;
 KickReturn globalKickResult;
 std::function<void(PmmmCellEvent, uint64_t)> cellObserver;
 
+/// Invoke the optional cell-event observer for solver diagnostics or tests.
 void observe(PmmmCellEvent event, uint64_t key) {
     if (cellObserver) {
         cellObserver(event, key);
     }
 }
 
+/// Select and validate the owned particle range participating in the requested rung solve.
 Pair<ParticleInteger> selectedRange(bool rungSelected) {
     ParticleInteger const owned = particlesOwnedSize();
     auto const range = rungSelected ? particlesCurrentRange() : Pair<ParticleInteger>(0, owned);
@@ -31,11 +33,14 @@ Pair<ParticleInteger> selectedRange(bool rungSelected) {
     return {range.first, std::min(range.second, owned)};
 }
 
+/// Return selected and total owned-particle counts for distributed solve planning.
 std::array<uint64_t, 2> particleCounts(bool rungSelected) {
     auto const range = selectedRange(rungSelected);
     return {uint64_t(range.second - range.first), uint64_t(particlesOwnedSize())};
 }
 
+/// Prepare mesh caches, particle membership, source storage, dependencies, and diagnostics
+/// for a solve generation.
 void prepare(SolveRequest const& request) {
     initialize(request.meshSize);
     initializeGreen();
@@ -130,14 +135,18 @@ void prepare(SolveRequest const& request) {
     });
 }
 
+/// Return this locality's current mesh-solver diagnostics.
 PmmmDiagnostics diagnostics() {
     return state.diagnostics;
 }
 
+/// Return this locality's accumulated mesh kick diagnostics.
 KickReturn kickResult() {
     return state.kickResult;
 }
 
+/// Dispatch a solver phase to every locality and join submissions before propagating
+/// failure.
 template <class Action, class... Arguments>
 void allLocalities(Arguments... arguments) {
     if constexpr (std::is_same_v<Action, PmmmPrepareAction> ||
@@ -167,6 +176,8 @@ void allLocalities(Arguments... arguments) {
     }
 }
 
+/// Serialize mesh solves and coordinate preparation, deposition, transforms, near work,
+/// cleanup, and reductions.
 void solve(SolveRequest request) {
     std::unique_lock<MutexType> lock(solveMutex);
     bool const coordinator = hpxRank() == 0;
@@ -345,12 +356,15 @@ HPX_REGISTER_ACTION(PmmmParticleCountsAction, PmmmParticleCountsAction);
 HPX_REGISTER_ACTION(PmmmDiagnosticsAction, PmmmDiagnosticsAction);
 HPX_REGISTER_ACTION(PmmmKickResultAction, PmmmKickResultAction);
 
+/// Compute and retain particle accelerations and optional potentials without applying a
+/// kick.
 void pmmmSolve(bool doPotential) {
     pmmm::detail::SolveRequest request;
     request.doPotential = doPotential;
     pmmm::detail::solve(std::move(request));
 }
 
+/// Run the mesh solver in kick mode and return globally reduced kick diagnostics.
 KickReturn pmmmKick(KickParameters const& parameters) {
     pmmm::detail::SolveRequest request;
     request.doPotential = parameters.doPhi;
@@ -360,24 +374,30 @@ KickReturn pmmmKick(KickParameters const& parameters) {
     return pmmm::detail::globalKickResult;
 }
 
+/// Serialize and perform mesh-solver teardown on every locality.
 void pmmmDestroy() {
     using namespace pmmm::detail;
     std::unique_lock<MutexType> lock(solveMutex);
     allLocalities<PmmmDestroyAction>();
 }
 
+/// Return the globally reduced diagnostics from the latest mesh solve.
 PmmmDiagnostics pmmmDiagnostics() {
     return pmmm::detail::globalDiagnostics;
 }
 
+/// Return a retained local acceleration with bounds checking.
 Vector3<float> const& pmmmAcceleration(ParticleInteger index) {
     return pmmm::detail::state.acceleration.at(index);
 }
 
+/// Return a retained potential with bounds checking, or zero when potential storage was not
+/// requested.
 float pmmmPotential(ParticleInteger index) {
     return pmmm::detail::state.potential.empty() ? 0.0f : pmmm::detail::state.potential.at(index);
 }
 
+/// Install or clear the process-local cell-event observer.
 void pmmmSetCellObserver(std::function<void(PmmmCellEvent, uint64_t)> observer) {
     pmmm::detail::cellObserver = std::move(observer);
 }

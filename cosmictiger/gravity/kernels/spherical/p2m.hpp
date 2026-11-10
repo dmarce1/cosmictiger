@@ -29,6 +29,7 @@ class P2M<1> {
 public:
     static constexpr int kFlops_ = 9;
     static constexpr int kConventionalFlops_ = 9;
+    /// Accumulate mass-weighted regular solid harmonics into the source multipole.
     template <typename Real, typename Output, typename Source = Output>
     CUDA_EXPORT static void add(Output& output, Real mass, Real x, Real y, Real z) {
         using namespace math;
@@ -57,6 +58,7 @@ class P2M<2> {
 public:
     static constexpr int kFlops_ = 28;
     static constexpr int kConventionalFlops_ = 38;
+    /// Accumulate mass-weighted regular solid harmonics into the source multipole.
     template <typename Real, typename Output, typename Source = Output>
     CUDA_EXPORT static void add(Output& output, Real mass, Real x, Real y, Real z) {
         using namespace math;
@@ -110,6 +112,7 @@ class P2M<3> {
 public:
     static constexpr int kFlops_ = 55;
     static constexpr int kConventionalFlops_ = 75;
+    /// Accumulate mass-weighted regular solid harmonics into the source multipole.
     template <typename Real, typename Output, typename Source = Output>
     CUDA_EXPORT static void add(Output& output, Real mass, Real x, Real y, Real z) {
         using namespace math;
@@ -197,6 +200,7 @@ class P2M<4> {
 public:
     static constexpr int kFlops_ = 90;
     static constexpr int kConventionalFlops_ = 124;
+    /// Accumulate mass-weighted regular solid harmonics into the source multipole.
     template <typename Real, typename Output, typename Source = Output>
     CUDA_EXPORT static void add(Output& output, Real mass, Real x, Real y, Real z) {
         using namespace math;
@@ -328,6 +332,7 @@ class P2M<5> {
 public:
     static constexpr int kFlops_ = 132;
     static constexpr int kConventionalFlops_ = 184;
+    /// Accumulate mass-weighted regular solid harmonics into the source multipole.
     template <typename Real, typename Output, typename Source = Output>
     CUDA_EXPORT static void add(Output& output, Real mass, Real x, Real y, Real z) {
         using namespace math;
@@ -512,6 +517,7 @@ class P2M<6> {
 public:
     static constexpr int kFlops_ = 183;
     static constexpr int kConventionalFlops_ = 257;
+    /// Accumulate mass-weighted regular solid harmonics into the source multipole.
     template <typename Real, typename Output, typename Source = Output>
     CUDA_EXPORT static void add(Output& output, Real mass, Real x, Real y, Real z) {
         using namespace math;
@@ -760,6 +766,7 @@ class P2M<7> {
 public:
     static constexpr int kFlops_ = 241;
     static constexpr int kConventionalFlops_ = 341;
+    /// Accumulate mass-weighted regular solid harmonics into the source multipole.
     template <typename Real, typename Output, typename Source = Output>
     CUDA_EXPORT static void add(Output& output, Real mass, Real x, Real y, Real z) {
         using namespace math;

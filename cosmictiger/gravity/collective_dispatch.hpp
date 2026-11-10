@@ -16,6 +16,8 @@ namespace pm::detail {
 void prepareCollectiveDispatch();
 [[noreturn]] void abortCollectiveDispatch() noexcept;
 
+/// Launch every collective participant and observe failures promptly; abort distributed
+/// execution if a failure could strand peers in MPI.
 template <class Launch>
 void dispatchCollectively(size_t count, Launch launch) {
     if (count == 1) {

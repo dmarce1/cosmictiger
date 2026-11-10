@@ -28,6 +28,8 @@ CUDA_EXPORT inline double gravitySofteningEffectiveRadius(double h_G) {
     return h_G / selectedGravityKernel().smoothingLengthPerEffectiveRadius;
 }
 
+/// Evaluate the softening-radius conversion in double precision and round the result to
+/// float.
 CUDA_EXPORT inline float gravitySofteningEffectiveRadius(float h_G) {
     return float(gravitySofteningEffectiveRadius(double(h_G)));
 }

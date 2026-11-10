@@ -22,10 +22,13 @@ using detail::ghostArena;
 using detail::ghostCapacity;
 using detail::ghostSources;
 
+/// Return the current nonowning view of near-field ghost particle storage.
 FmmSourceView fmmGhostView() {
     return ghostSources;
 }
 
+/// Grow the aligned ghost arena when necessary and publish its source view with the
+/// requested count.
 void fmmGhostReserve(ParticleInteger count) {
     static bool const registered = [] {
         particlesRegisterReleaseHook(fmmGhostFree);
@@ -75,11 +78,13 @@ void fmmGhostReserve(ParticleInteger count) {
     fmmRegisterSourceView(FmmParticleStore::Ghost, ghostSources);
 }
 
+/// Set the active ghost count to zero while retaining allocated storage for reuse.
 void fmmGhostClear() {
     ghostSources.count = 0;
     fmmRegisterSourceView(FmmParticleStore::Ghost, ghostSources);
 }
 
+/// Release the ghost arena and publish an empty ghost source view.
 void fmmGhostFree() {
     freeManagedMemory(ghostArena);
     ghostArena = nullptr;

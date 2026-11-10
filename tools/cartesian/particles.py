@@ -20,7 +20,13 @@ def finish(A,g,outputs,signature,name,order,extra=None):
     live=g.live(root for root,sign in signed)
     plan=A.EmissionPlan(g,signed)
     stats=plan.statistics(live,range(len(signed)))
-    code=[signature]
+    descriptions = {
+        'P2M': 'Accumulate the point mass into raw trace-free moments at the supplied displacement.',
+        'P2L': 'Accumulate Newtonian local coefficients from a point mass at the supplied displacement.',
+        'M2P': 'Accumulate potential and acceleration from all retained multipole ranks.',
+        'L2P': 'Accumulate the local potential and negative gradient, scaling acceleration by inverseScale.',
+    }
+    code=['/// ' + descriptions[name], signature]
     code+=g.emitConstants(live)
     code+=plan.emit(live)
     for output,target in enumerate(outputs):

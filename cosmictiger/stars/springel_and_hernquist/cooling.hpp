@@ -11,6 +11,8 @@ inline constexpr double kBoltzmann = gadget4::kBoltzmann;
 inline constexpr double kProtonMass = gadget4::kProtonMass;
 inline constexpr double kHydrogenMassFraction = 0.76;
 inline constexpr double kSecondsPerYear = 3.15576e7;
+/// Set cold, supernova, and warm reference energies from the model's temperature and
+/// molecular-weight conventions.
 CUDA_EXPORT inline Parameters defaultParameters() {
     Parameters result;
     double const neutralWeight = 4.0 / (1.0 + 3.0 * kHydrogenMassFraction);
@@ -22,6 +24,8 @@ CUDA_EXPORT inline Parameters defaultParameters() {
     result.warmEnergy = result.supernovaEnergy * 1.0e-4;
     return result;
 }
+/// Calibrate the multiphase model from the zero-redshift cooling time at a supplied
+/// density; return false if calibration fails.
 CUDA_EXPORT inline bool makeModel(Parameters const& parameters, gadget4::Parameters cooling,
     double calibrationDensity, Model& result) {
     if (!(calibrationDensity > 0.0) || !detail::finite(calibrationDensity) ||
@@ -39,6 +43,8 @@ CUDA_EXPORT inline bool makeModel(Parameters const& parameters, gadget4::Paramet
     }
     return calibrate(parameters, energy / time / calibrationDensity, result);
 }
+/// Compute the hot-phase cooling time and multiphase equilibrium, updating electron
+/// abundance on success.
 CUDA_EXPORT inline bool evaluateEquilibrium(Model const& model, gadget4::Parameters const& cooling,
     double density, double& electrons, Equilibrium& result) {
     double candidateElectrons = electrons;

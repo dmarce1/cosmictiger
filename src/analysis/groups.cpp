@@ -57,6 +57,8 @@ HPX_PLAIN_ACTION(groupsInstallBaryons, GroupsInstallBaryonsAction);
 constexpr int kGroupTableSize = 1024;
 
 struct GroupHashHi {
+    /// Return the high portion of a group ID after removing its wave and hash-bin
+    /// components.
     size_t operator()(GroupInteger grp) const {
         return grp / (kGroupTableSize * kGroupWaves);
     }
@@ -77,11 +79,13 @@ static std::unordered_set<GroupInteger> existingGroups;
 static Vector<GroupInteger> localExistingGroups;
 static std::atomic<size_t> groupCandidates;
 
+/// Append final particle-to-halo assignments under the assignment queue lock.
 void groupsQueueAssignments(Vector<Pair<ParticleInteger, GroupInteger>> assignments) {
     std::lock_guard<SpinlockType> lock(assignmentMutex);
     pendingAssignments.insert(pendingAssignments.end(), assignments.begin(), assignments.end());
 }
 
+/// Install and broadcast prior halo-host relationships and clear pending assignments.
 void groupsInstallHistory(Vector<Pair<GroupInteger>> entries) {
     Vector<hpx::future<void>> futures;
     for (auto const& child : hpxChildren()) {
@@ -98,6 +102,8 @@ void groupsInstallHistory(Vector<Pair<GroupInteger>> entries) {
     }
 }
 
+/// Load the latest completed earlier halo-host sidecars and publish validated temporal
+/// history.
 void groupsPrepareHistory(int number) {
     profile::ScopedPhase profilePhase("groups.history");
     // ROCKSTAR Sec. III.4: prior halo/core membership supplies temporal hosts.
@@ -169,6 +175,8 @@ void groupsPrepareHistory(int number) {
     groupsInstallHistory(std::move(entries));
 }
 
+/// Remove labels for discarded candidates and apply queued final halo assignments after all
+/// reductions finish.
 void groupsCull() {
     Vector<hpx::future<void>> futs1;
     Vector<hpx::future<void>> futs2;
@@ -233,6 +241,7 @@ void groupsCull() {
     pendingAssignments.clear();
 }
 
+/// Filter a supplied list to group IDs retained by this locality's catalogue.
 Vector<GroupInteger> groupsExist(Vector<GroupInteger> grps) {
     int i = 0;
     while (i < grps.size()) {
@@ -246,6 +255,8 @@ Vector<GroupInteger> groupsExist(Vector<GroupInteger> grps) {
     return std::move(grps);
 }
 
+/// Write distributed group catalogues and host-history sidecars, publishing completion only
+/// after successful writes.
 std::pair<size_t, size_t> groupsSave(int number, double scale, double time) {
     if (hpxRank() == 0) {
         std::cout << "Writing group database\n" << std::flush;
@@ -383,6 +394,8 @@ std::pair<size_t, size_t> groupsSave(int number, double scale, double time) {
 
 constexpr int kGroupsReduceOversubscribe = 2;
 
+/// Find and finalize halos within collected FoF candidates and queue their final particle
+/// assignments.
 void groupsReduce(double scaleFactor) {
     Vector<hpx::future<void>> futures;
     for (auto const& child : hpxChildren()) {
@@ -479,6 +492,7 @@ void groupsReduce(double scaleFactor) {
     groupData = decltype(groupData)();
 }
 
+/// Gather halo apertures while preserving each owner's contiguous record order.
 Vector<HaloAperture> groupsGatherApertures() {
     Vector<hpx::future<Vector<HaloAperture>>> futures;
     for (auto const& child : hpxChildren()) {
@@ -494,6 +508,7 @@ Vector<HaloAperture> groupsGatherApertures() {
     return apertures;
 }
 
+/// Sum gas and star masses within each supplied periodic halo aperture across localities.
 Vector<Pair<double>> groupsSumBaryons(Vector<HaloAperture> apertures) {
     Vector<hpx::future<Vector<Pair<double>>>> futures;
     for (auto const& child : hpxChildren()) {
@@ -595,6 +610,8 @@ Vector<Pair<double>> groupsSumBaryons(Vector<HaloAperture> apertures) {
     return masses;
 }
 
+/// Install aperture gas/star masses in catalogue records and group entries using their
+/// respective mass units.
 void groupsInstallBaryons(Vector<Pair<double>> masses) {
     ALWAYS_ASSERT(masses.size() == haloApertures.size());
     ALWAYS_ASSERT(rockstarRecords.size() == haloApertures.size());
@@ -610,6 +627,8 @@ void groupsInstallBaryons(Vector<Pair<double>> masses) {
     }
 }
 
+/// Gather halo apertures, measure inclusive baryon masses, and return results to catalogue
+/// owners.
 void groupsMeasureBaryons() {
     // SOAP-style aperture masses (Mondal et al. 2025, MNRAS 543, 1339): every
     // gas and star particle within rvir counts, bound or not, while the FOF,
@@ -642,6 +661,7 @@ void groupsMeasureBaryons() {
     }
 }
 
+/// Merge incoming candidate particle lists into their synchronized group hash bins.
 void groupsTransmitParticles(Vector<std::pair<GroupInteger, Vector<ParticleData>>> entries) {
     Vector<hpx::future<void>> futs;
     int const numberOfThreads = hpxHardwareConcurrency();
@@ -664,6 +684,8 @@ void groupsTransmitParticles(Vector<std::pair<GroupInteger, Vector<ParticleData>
     }
 }
 
+/// Collect one wave of labelled dark-matter particles and send each group to its processing
+/// owner.
 void groupsAddParticles(int wave, double scale) {
     Vector<hpx::future<void>> futs;
     for (auto const& c : hpxChildren()) {
@@ -736,30 +758,37 @@ void groupsAddParticles(int wave, double scale) {
 
 namespace detail {
 
+/// Expose this locality's finalized group-entry records.
 Vector<GroupEntry> const& groupsLocalEntries() {
     return groups;
 }
 
+/// Expose this locality's finalized ROCKSTAR catalogue records.
 Vector<RockstarRecord> const& groupsLocalRecords() {
     return rockstarRecords;
 }
 
+/// Expose the local apertures corresponding to finalized halo records.
 Vector<HaloAperture> const& groupsLocalApertures() {
     return haloApertures;
 }
 
+/// Expose queued particle-to-halo assignments awaiting catalogue culling.
 Vector<Pair<ParticleInteger, GroupInteger>> const& groupsPendingAssignments() {
     return pendingAssignments;
 }
 
+/// Expose the previous-output halo-to-host lookup used for temporal matching.
 std::unordered_map<GroupInteger, GroupInteger> const& groupsPreviousHaloHosts() {
     return previousHaloHosts;
 }
 
+/// Clear the process-local temporal halo-host lookup.
 void groupsResetHistory() {
     previousHaloHosts.clear();
 }
 
+/// Visit every collected FoF candidate with its group identity and particle list.
 void groupsForEachCandidate(
     std::function<void(GroupInteger, Vector<ParticleData> const&)> const& visit) {
     for (auto const& bin : groupData) {

@@ -127,10 +127,14 @@ struct Analysis {
     bool savePotential{};
 };
 
+/// Test whether either the combined-force or acceleration-only output requests stored
+/// accelerations.
 inline bool saveParticleAcceleration(Analysis const& analysis) {
     return analysis.saveForce || analysis.saveAcceleration;
 }
 
+/// Test whether either the combined-force or potential-only output requests stored
+/// potentials.
 inline bool saveParticlePotential(Analysis const& analysis) {
     return analysis.saveForce || analysis.savePotential;
 }
@@ -197,10 +201,12 @@ inline bool usesOuterInterval(Gravity const& gravityOptions) {
     return gravityOptions.pmmmOuterInterval;
 }
 
+/// Test whether the selected time integrator is hierarchical.
 inline bool usesHierarchicalIntegration(Run const& run) {
     return run.timeIntegrator == "hierarchical";
 }
 
+/// Test whether the selected time integrator is global.
 inline bool usesGlobalIntegration(Run const& run) {
     return run.timeIntegrator == "global";
 }
@@ -335,6 +341,10 @@ struct Options {
     Chemistry chemistry;
     StarFormation starFormation;
 
+    /// Archive `run.hierarchicalGravity`, `run.timeIntegrator`, `hydro.enabled`,
+    /// `gravity.enabled`, `compute.sphBucketSize`,
+    /// `hydro.vonNeumannRichtmyerCoefficient` and the remaining fields in transport
+    /// order.
     template <typename Archive>
     void serialize(Archive&& arc, unsigned) {
         // Preserve the historical scalar wire order independently of grouping.

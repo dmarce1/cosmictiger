@@ -33,6 +33,8 @@ namespace detail {
     constexpr float kDuration = 0.09f;
     static SodInitT initialState{};
 
+    /// Compare sampled shock-tube states with the exact Sod solution and write
+    /// profile/error diagnostics.
     static void finishSod(double time) {
         constexpr int kN = 1000;
         FILE* fp = fopen(outputPath("sod.txt").c_str(), "wt");
@@ -71,6 +73,8 @@ namespace detail {
 
 }    // namespace detail
 
+/// Initialize periodic left/right Sod states with equal-mass lattice sampling and a fixed
+/// output schedule.
 ScenarioPlan initializeSod() {
     ParticleInteger totalNumberOfParticles = getOptions().run.gasParticleCount;
     double rho0 = 0.125;

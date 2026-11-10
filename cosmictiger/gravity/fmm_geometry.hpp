@@ -12,6 +12,7 @@ struct FmmGeometry {
     int meshSize = 0;
     Array<int, kDimensions> sinkCell{};
 
+    /// Archive this record in the field order required by distributed transport.
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
         archive & meshSize & sinkCell;
@@ -20,6 +21,8 @@ struct FmmGeometry {
 
 namespace detail {
 
+/// Accumulate precision-separated geometry work when counting and an output record are
+/// enabled.
 CUDA_EXPORT inline void addFmmGeometryFlops(
     FlopCounts* counts, FlopCount single, FlopCount doublePrecision) {
     if constexpr (kCountFlops) {
@@ -30,6 +33,8 @@ CUDA_EXPORT inline void addFmmGeometryFlops(
     }
 }
 
+/// Choose the source's periodic image relative to the sink cell, retaining the positive
+/// half-box tie convention.
 CUDA_EXPORT inline int fmmSourceImage(Position source, int dim, FmmGeometry const& geometry) {
     int sourceCell;
     if constexpr (kPositionBits == 64) {
@@ -60,6 +65,8 @@ CUDA_EXPORT inline double fmmShiftedDifference(
     return unwrappedDoubleDistance(sink, source) - image;
 }
 
+/// Subtract a particle from a possibly unwrapped fixed-range boundary with the selected
+/// periodic image offset.
 CUDA_EXPORT inline double fmmBoundaryDifference(
     RangeFixed boundary, Position point, int image, FlopCounts* counts = nullptr) {
     double const bound = boundary.toDouble();
@@ -74,6 +81,8 @@ CUDA_EXPORT inline double fmmBoundaryDifference(
     return fmmShiftedDifference(fraction, point, image - whole, counts);
 }
 
+/// Compute point-to-box distance for explicit image offsets and accumulate geometry
+/// operation counts.
 CUDA_EXPORT inline float fmmBoxDistanceSquared(Fixed32Range const& box,
     Vector3<Position> const& point, Array<int, kDimensions> const& image,
     FlopCounts* counts = nullptr) {
@@ -88,6 +97,8 @@ CUDA_EXPORT inline float fmmBoxDistanceSquared(Fixed32Range const& box,
     return result;
 }
 
+/// Account for the conversions and arithmetic used by periodic fixed-box distance
+/// evaluation.
 CUDA_EXPORT inline void countPeriodicBoxDistance(Fixed32Range const& box, FlopCounts* counts) {
     if constexpr (kCountFlops) {
         if (counts != nullptr) {
@@ -105,6 +116,8 @@ CUDA_EXPORT inline void countPeriodicBoxDistance(Fixed32Range const& box, FlopCo
 
 }    // namespace detail
 
+/// Return sink-minus-source displacement using the mesh-selected image, or ordinary
+/// minimum-image wrapping without a mesh.
 CUDA_EXPORT inline float fmmPositionDifference(Position sink, Position source, int dim,
     FmmGeometry const& geometry, FlopCounts* counts = nullptr) {
     if (geometry.meshSize == 0) {
@@ -116,6 +129,8 @@ CUDA_EXPORT inline float fmmPositionDifference(Position sink, Position source, i
         sink, source, detail::fmmSourceImage(source, dim, geometry), counts));
 }
 
+/// Measure a source's distance to the sink box using the same image convention as the FMM
+/// interaction.
 CUDA_EXPORT inline float fmmSinkBoxDistanceSquared(Fixed32Range const& box,
     Vector3<Position> const& source, FmmGeometry const& geometry, FlopCounts* counts = nullptr) {
     if (geometry.meshSize == 0) {
@@ -129,6 +144,8 @@ CUDA_EXPORT inline float fmmSinkBoxDistanceSquared(Fixed32Range const& box,
     return detail::fmmBoxDistanceSquared(box, source, image, counts);
 }
 
+/// Measure a sink's distance to the source box using the image selected from the source
+/// center.
 CUDA_EXPORT inline float fmmSourceBoxDistanceSquared(Fixed32Range const& box,
     Vector3<Position> const& sink, Vector3<Position> const& source, FmmGeometry const& geometry,
     FlopCounts* counts = nullptr) {
@@ -144,6 +161,8 @@ CUDA_EXPORT inline float fmmSourceBoxDistanceSquared(Fixed32Range const& box,
 }
 
 #ifndef __CUDACC__
+/// Evaluate periodic box distances lane by lane when fixed64 precision requires it, with
+/// matching work accounting.
 inline SimdFloat fmmPeriodicBoxDistanceSquared(
     Range<SimdDouble8> const& box, Vector3<SimdPosition> const& point, FlopCounts* counts) {
     if constexpr (kPositionBits == 64) {
@@ -167,6 +186,8 @@ inline SimdFloat fmmPeriodicBoxDistanceSquared(
     }
 }
 
+/// Return sink-minus-source displacement using the mesh-selected image, or ordinary
+/// minimum-image wrapping without a mesh.
 inline SimdFloat fmmPositionDifference(SimdPosition const& sink, SimdPosition const& source,
     int dim, FmmGeometry const& geometry, FlopCounts* counts = nullptr) {
     if (geometry.meshSize == 0) {
@@ -182,6 +203,8 @@ inline SimdFloat fmmPositionDifference(SimdPosition const& sink, SimdPosition co
     });
 }
 
+/// Measure a source's distance to the sink box using the same image convention as the FMM
+/// interaction.
 inline SimdFloat fmmSinkBoxDistanceSquared(Range<SimdDouble8> const& box,
     Vector3<SimdPosition> const& source, FmmGeometry const& geometry,
     FlopCounts* counts = nullptr) {
@@ -201,6 +224,8 @@ inline SimdFloat fmmSinkBoxDistanceSquared(Range<SimdDouble8> const& box,
     });
 }
 
+/// Measure a sink's distance to the source box using the image selected from the source
+/// center.
 inline SimdFloat fmmSourceBoxDistanceSquared(Range<SimdDouble8> const& box,
     Vector3<SimdPosition> const& sink, Vector3<SimdPosition> const& source,
     FmmGeometry const& geometry, FlopCounts* counts = nullptr) {

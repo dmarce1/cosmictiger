@@ -35,6 +35,7 @@ struct GravityErrorSample {
     size_t slot;
     Vector3<Position> position;
 
+    /// Archive this record in the field order required by distributed transport.
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
         archive & slot & position;
@@ -45,6 +46,7 @@ struct GravityErrorCapture {
     size_t slot;
     Vector3<float> acceleration;
 
+    /// Archive this record in the field order required by distributed transport.
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
         archive & slot & acceleration;
@@ -54,10 +56,13 @@ struct GravityErrorCapture {
 using GravityErrorAcceleration = Vector3<double>;
 Vector<GravityErrorAcceleration> gravityErrorReference;
 
+/// Return the local source-particle count for distributed sample selection.
 size_t gravityErrorLocalCount() {
     return particlesSize();
 }
 
+/// Mark locally owned members of the evenly spaced global sample and return their
+/// positions.
 Vector<GravityErrorSample> gravityErrorSelect(
     size_t globalOffset, size_t totalCount, size_t sampleCount) {
     particlesGravitySamplesBegin(sampleCount);
@@ -78,6 +83,8 @@ Vector<GravityErrorSample> gravityErrorSelect(
     return samples;
 }
 
+/// Compute this locality's direct periodic reference contribution at the sampled sink
+/// positions.
 Vector<GravityErrorAcceleration> gravityErrorDirect(Vector<GravityErrorSample> const& samples) {
     Vector<GravityErrorAcceleration> result(samples.size());
     if (samples.empty() || particlesSize() == 0) {
@@ -151,6 +158,8 @@ Vector<GravityErrorAcceleration> gravityErrorDirect(Vector<GravityErrorSample> c
     return result;
 }
 
+/// Gather captured solver accelerations for sampled particles and clear their sampling
+/// markers.
 Vector<GravityErrorCapture> gravityErrorCollect() {
     Vector<GravityErrorCapture> result;
     for (ParticleInteger index = 0; index < particlesSize(); ++index) {
@@ -171,6 +180,8 @@ HPX_PLAIN_ACTION(detail::gravityErrorSelect, GravityErrorSelectAction);
 HPX_PLAIN_ACTION(detail::gravityErrorDirect, GravityErrorDirectAction);
 HPX_PLAIN_ACTION(detail::gravityErrorCollect, GravityErrorCollectAction);
 
+/// Choose distributed sample particles and compute their direct reference accelerations
+/// before the solve.
 void gravityErrorBegin() {
     if (getOptions().gravity.errorInterval <= 0) {
         return;
@@ -228,6 +239,8 @@ void gravityErrorBegin() {
     }
 }
 
+/// Compare captured accelerations with the pending reference, write error statistics, and
+/// clear the sample.
 void gravityErrorFinish(int coarseStep, double time, double scaleFactor) {
     size_t const sampleCount = detail::gravityErrorReference.size();
     if (sampleCount == 0) {

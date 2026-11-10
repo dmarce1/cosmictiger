@@ -15,6 +15,8 @@ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
 #include <cosmictiger/core/safe_io.hpp>
 #include <cosmictiger/core/stack_trace.hpp>
 
+/// On failure, print and save the condition, source location, rank, and stack trace, then
+/// abort.
 void cosmictigerAssert(char const* condStr, bool cond, char const* filename, int line) {
     if (!cond) {
         std::cerr << "\nCondition \"" << condStr << "\" failed in " << filename << " on line "

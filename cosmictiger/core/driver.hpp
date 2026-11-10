@@ -30,6 +30,8 @@ inline int driverOutputStep(double time, double coarseInterval) {
     return int(std::floor(phase + tolerance));
 }
 
+/// Choose the final output index, accounting for a terminal step that coincides with
+/// regular output.
 inline int driverFinalOutputStep(double time, double coarseInterval) {
     int const coarseStep = driverOutputStep(time, coarseInterval);
     double const tolerance =
@@ -67,6 +69,8 @@ struct DriverParameters {
     double outerInterval{};
     double outerStart{};
     uint64_t outerIndex{};
+    /// Archive `bucketSize`, `maxRung`, `adot`, `minrung0`, `step`, `a` and the
+    /// remaining fields in transport order.
     template <typename A>
     void serialize(A&& arc, unsigned) {
         arc & bucketSize;

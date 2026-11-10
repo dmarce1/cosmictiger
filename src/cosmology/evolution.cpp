@@ -9,6 +9,8 @@
 
 namespace cosmology {
 
+/// Use an explicit run duration or derive the conformal interval to a valid later scale
+/// factor.
 double configuredDuration(double initialScale) {
     auto const& options = getOptions();
     if (options.run.endTime > 0.0) {

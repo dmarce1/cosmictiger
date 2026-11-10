@@ -82,6 +82,8 @@ void writeProfile() {
 
 }    // namespace detail
 
+/// Initialize distributed application state, resolve options, run the selected workload,
+/// and finalize HPX.
 int hpx_main(int argc, char* argv[]) {
     std::atomic<int> i;
     if (!i.is_lock_free()) {
@@ -235,6 +237,7 @@ int hpx_main(int argc, char* argv[]) {
 
 namespace detail {
 
+/// Return a diagnostic name for an MPI threading-support constant.
 char const* mpiThreadSupportName(int threadSupport) {
     switch (threadSupport) {
     case MPI_THREAD_SINGLE:
@@ -250,6 +253,8 @@ char const* mpiThreadSupportName(int threadSupport) {
     }
 }
 
+/// Initialize MPI when needed and collectively require MPI_THREAD_MULTIPLE before HPX
+/// startup.
 void initializeMpi(int& argc, char**& argv, bool& ownsMpi) {
     // MPI and HPX use hwloc for topology discovery. Its OpenGL component can
     // block connecting to an X server even for --help; display discovery is
@@ -292,6 +297,7 @@ void initializeMpi(int& argc, char**& argv, bool& ownsMpi) {
 }
 
 #if COSMICTIGER_WITH_GRAVITY
+/// Initialize single-precision FFTW threading and require success on every MPI rank.
 void initializeFftw() {
     // Initialize before HPX starts: cosmology may create serial plans before
     // PMMM initializes FFTW MPI. Thread support must precede both kinds of use.
@@ -353,6 +359,8 @@ void validatePositionType(int argc, char* argv[]) {
 
 }    // namespace detail
 
+/// Configure diagnostics, profiling, MPI, and HPX, then clean up owned runtime resources on
+/// exit.
 int main(int argc, char* argv[]) {
     StackTraceHandler stackTraceHandler;
     profile::InterruptReportHandler interruptReportHandler;

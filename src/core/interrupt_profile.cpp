@@ -31,6 +31,7 @@ namespace detail {
     std::atomic<bool> shutdownRequested{false};
     static_assert(decltype(shutdownRequested)::is_always_lock_free);
 
+    /// Read this process's clean-shutdown request flag without invoking the runtime.
     bool localInterruptRequested() noexcept {
         return shutdownRequested.load(std::memory_order_relaxed);
     }
@@ -51,6 +52,7 @@ namespace detail {
     static_assert(decltype(signalGate)::is_always_lock_free);
     static_assert(decltype(notificationDescriptor)::is_always_lock_free);
 
+    /// Write this process ID to the configured readiness pipe and close the descriptor.
     void notifyLauncher() {
         char const* setting = std::getenv("COSMICTIGER_INTERRUPT_READY_FD");
         if (setting == nullptr) {
@@ -82,6 +84,7 @@ namespace detail {
         }
     }
 
+    /// Restore the default SIGINT action and terminate with interrupt semantics.
     [[noreturn]] void terminateWithInterrupt() noexcept {
         struct sigaction action{};
         action.sa_handler = SIG_DFL;
@@ -139,6 +142,8 @@ struct InterruptReportHandler::State {
     bool installed = false;
     bool installedUser = false;
 
+    /// Acquire process-wide signal-handler ownership and install the interrupt
+    /// notification pipe.
     State() {
         bool expected = false;
         if (!detail::interruptOwner.compare_exchange_strong(expected, true)) {
@@ -176,6 +181,8 @@ struct InterruptReportHandler::State {
         }
     }
 
+    /// Wait for the notification byte and report that clean shutdown has been
+    /// requested.
     void report() noexcept {
         char notification = 0;
         ssize_t count;
@@ -189,6 +196,8 @@ struct InterruptReportHandler::State {
         }
     }
 
+    /// Drain active signal handlers, stop the reporter, and restore previously
+    /// installed handlers.
     void stop() noexcept {
         // Close admission, then drain every handler that could have retained the
         // descriptor before joining/closing it. A late handler sees a closed gate.
@@ -230,6 +239,7 @@ struct InterruptReportHandler::State {
         detail::interruptOwner.store(false);
     }
 
+    /// Release the interrupt handler, reporter thread, and pipe resources.
     ~State() {
         stop();
     }
@@ -241,16 +251,19 @@ struct InterruptReportHandler::State {};
 InterruptReportHandler::InterruptReportHandler() = default;
 InterruptReportHandler::~InterruptReportHandler() = default;
 
+/// Install interrupt reporting once for this handler instance.
 void InterruptReportHandler::install() {
     if (!state_) {
         state_ = std::make_unique<State>();
     }
 }
 
+/// Return the diagnostic text for a requested clean shutdown.
 char const* Interrupted::what() const noexcept {
     return "Clean shutdown requested by interrupt";
 }
 
+/// Collect shutdown requests from all localities and latch any remote request locally.
 bool interruptRequested() {
     if (detail::localInterruptRequested()) {
         return true;
@@ -277,6 +290,7 @@ bool interruptRequested() {
     return requested;
 }
 
+/// Throw Interrupted when any locality has requested clean shutdown.
 void checkForInterrupt() {
     if (interruptRequested()) {
         throw Interrupted{};

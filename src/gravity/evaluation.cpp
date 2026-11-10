@@ -6,6 +6,8 @@
 
 namespace pmmm::detail {
 
+/// Scale and validate the combined particle field, then apply its kick or store diagnostic
+/// field values.
 void consumeField(ParticleInteger index, std::array<double, 4> const& field, KickReturn& result,
     FlopCount& doubleFlops, FlopCounts& kickFlops) {
     Vector3<float> acceleration;

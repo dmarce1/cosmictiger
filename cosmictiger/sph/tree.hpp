@@ -79,6 +79,8 @@ struct SphTreeNode {
     size_t nodeCount;
     size_t activeNodes;
     Pair<int, int> neighborRange;
+    /// Initialize an empty leaf with invalid children, zero bounds, and no active
+    /// particles or neighbors.
     SphTreeNode()
       : processRange(0, 0)
       , particleRange(0, 0)
@@ -102,21 +104,27 @@ struct SphTreeNode {
             driftBox.begin[dim] = driftBox.end[dim] = 0.0;
         }
     }
+    /// Return the size of this node's gas-particle interval.
     inline ParticleInteger numberOfParticles() const {
         return particleRange.second - particleRange.first;
     }
+    /// Combine the node's particle interval with its owning locality.
     inline ParticleGlobalRange globalParticleRange() const {
         ParticleGlobalRange r;
         r.proc = processRange.first;
         r.range = particleRange;
         return r;
     }
+    /// Test whether this node's process interval contains exactly one locality.
     inline bool isLocal() const {
         return processRange.second - processRange.first == 1;
     }
+    /// Test whether the node is wholly owned by the current locality.
     inline bool isLocalHere() const {
         return isLocal() && processRange.first == hpxRank();
     }
+    /// Archive `archivedConverged`, `neighborRange`, `box`, `sinkParticleRange`,
+    /// `innerBox`, `outerBox` and the remaining fields in transport order.
     template <typename A>
     void serialize(A&& arc, unsigned) {
         // Preserve the archive's bool/int fields; bit-fields cannot bind to references.
@@ -170,6 +178,7 @@ struct SphTreeCreateReturn {
     // Fresh tight bounds can occupy less than the full partition (ratio < 1).
     double maxVolumeRatio = 0.0;
     double minVolumeRatio = 0.0;
+    /// Archive this record in the field order required by distributed transport.
     template <typename A>
     void serialize(A&& a, unsigned) {
         a & activeLeafNodes;
@@ -194,6 +203,7 @@ struct SphTreeCreateParameters {
     float smoothingLengthMultiplier;    // Support multiplier, normally kSphSupportSearchMultiplier.
     SphTreeCreateParameters() = default;
     SphTreeCreateParameters(int minimumRung, float smoothingLengthMultiplier);
+    /// Archive `minimumRung`, `smoothingLengthMultiplier` in transport order.
     template <typename A>
     void serialize(A&& arc, unsigned) {
         arc & minimumRung;

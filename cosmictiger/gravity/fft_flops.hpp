@@ -26,6 +26,7 @@ inline FlopCount fftPlanFlops(fftwf_plan plan) {
     return static_cast<FlopCount>(total);
 }
 
+/// Add a weighted complex source–kernel product to the real and imaginary accumulators.
 template <class Real>
 inline void accumulateFourierTerm(Real& real, Real& imaginary, Real weight, Real sourceReal,
     Real sourceImaginary, Real kernelReal, Real kernelImaginary) {

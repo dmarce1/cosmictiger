@@ -15,6 +15,7 @@ class CudaKernelError {
     Error error_{};
 
 public:
+    /// Reset the recorded-error flag and payload before launching a kernel.
     void clear() {
         reported_ = 0;
         error_ = {};
@@ -32,6 +33,8 @@ public:
 
     __host__ __device__
 #endif
+        /// Test whether an error has been recorded, using an atomic read on the
+        /// device.
         bool pending() const {
 #ifdef __CUDA_ARCH__
         return atomicAdd(const_cast<int*>(&reported_), 0) != 0;
@@ -40,6 +43,8 @@ public:
 #endif
     }
 
+    /// Invoke the supplied host error handler with the recorded payload when a kernel
+    /// reported failure.
     template <class Handler>
     void throwIfFailed(Handler&& handler) const {
         if (reported_ != 0) {

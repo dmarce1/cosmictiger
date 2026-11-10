@@ -19,12 +19,15 @@ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
 template <class T, class HASH>
 class UnorderedSetTs {
     struct HashLo {
+        /// Select the set partition from the low part of the member hash.
         size_t operator()(T const& member) const {
             HASH hash;
             return hash(member) % kUnorderedSetSize;
         }
     };
     struct HashHi {
+        /// Hash a member within its selected partition using the remaining hash
+        /// bits.
         size_t operator()(T const& member) const {
             HASH hash;
             return hash(member) / kUnorderedSetSize;
@@ -34,10 +37,13 @@ class UnorderedSetTs {
     Vector<std::shared_ptr<SpinlockType>> mutexes_;
 
 public:
+    /// Allocate the set partitions and their locking handles.
     UnorderedSetTs() {
         sets_.resize(kUnorderedSetSize);
         mutexes_.resize(kUnorderedSetSize, std::make_shared<SpinlockType>());
     }
+    /// Insert a member while holding its partition lock; duplicate members remain
+    /// unique.
     void insert(T const& member) {
         std::cout << "Inserting\n" << std::flush;
         HashLo hashlo;
@@ -45,6 +51,8 @@ public:
         std::lock_guard<SpinlockType> lock(*mutexes_[setIndex]);
         sets_[setIndex].insert(member);
     }
+    /// Collect all members into a vector; callers must prevent concurrent mutation
+    /// during traversal.
     Vector<T> toVector() const {
         Vector<T> members;
         int size = 0;

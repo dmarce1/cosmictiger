@@ -6,6 +6,8 @@
 #include <cosmictiger/cosmology/evolution.hpp>
 #include "actions.hpp"
 
+/// Solve the far field at an outer boundary and select the next interval from force and
+/// expansion limits.
 PmBoundaryResult pmmmOuterBoundary(double scale, double scaleDerivative, double time,
     double coarseInterval, double endTime) {
     auto const& options = getOptions();

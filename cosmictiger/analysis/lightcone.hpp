@@ -34,6 +34,7 @@ struct LightconeTreeId {
     int pix;
     int index;
 
+    /// Test whether the sky pixel or node index differs.
     CUDA_EXPORT
     bool operator!=(LightconeTreeId const& other) const {
         return pix != other.pix || index != other.index;
@@ -54,10 +55,12 @@ struct LightconeTreeNode {
 using LightconeVelocityReal = __half;
 constexpr double kLcVelrealRange = 100.0;
 
+/// Encode velocity as a half-precision value scaled by 10000/vmax; vmax must be nonzero.
 inline LightconeVelocityReal float2velreal(float velocity, float vmax) {
     return __double2half(velocity / vmax * 10000.0);
 }
 
+/// Decode the half-precision velocity using the block's velocity scale vmax.
 inline float velreal2float(LightconeVelocityReal i, float vmax) {
     return __half2float(i) / 10000.0 * vmax;
 }
@@ -70,6 +73,7 @@ struct LightconeParticle {
     Vector3<LightconeReal> pos;
     Vector3<float> vel;
     LightconeGroup group;
+    /// Archive `pos`, `vel`, `group` in transport order.
     template <class A>
     void serialize(A&& arc, unsigned) {
         arc & pos;

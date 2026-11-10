@@ -16,6 +16,7 @@
 namespace float16_storage {
 namespace detail {
 
+    /// Read the IEEE binary32 representation without a numerical conversion.
     CUDA_EXPORT inline uint32_t floatBits(float value) {
 #ifdef __CUDA_ARCH__
         return __float_as_uint(value);
@@ -24,6 +25,7 @@ namespace detail {
 #endif
     }
 
+    /// Construct a float from its IEEE binary32 representation.
     CUDA_EXPORT inline float fromFloatBits(uint32_t bits) {
 #ifdef __CUDA_ARCH__
         return __uint_as_float(bits);
@@ -69,6 +71,8 @@ namespace detail {
         return uint16_t(sign | rounded);
     }
 
+    /// Expand a binary16 encoding to float, preserving signed zero, subnormals,
+    /// infinities, and NaN payload bits.
     CUDA_EXPORT inline float decode(uint16_t bits) {
         uint32_t const sign = uint32_t(bits & 0x8000U) << 16;
         uint32_t const exponent = (bits >> 10) & 0x1fU;
@@ -100,19 +104,24 @@ struct Float16Storage {
     uint16_t bits = 0;
 
     CUDA_EXPORT Float16Storage() = default;
+    /// Encode a float into the storage format using the configured finite-saturation
+    /// policy.
     CUDA_EXPORT Float16Storage(float value)
       : bits(float16_storage::detail::encode(value, true)) {}
 
+    /// Wrap an existing binary16 encoding without converting its value.
     CUDA_EXPORT static Float16Storage fromBits(uint16_t rawBits) {
         Float16Storage result;
         result.bits = rawBits;
         return result;
     }
 
+    /// Decode the stored binary16 value to float.
     CUDA_EXPORT operator float() const {
         return float16_storage::detail::decode(bits);
     }
 
+    /// Replace the stored binary16 encoding with the converted float value.
     CUDA_EXPORT Float16Storage& operator=(float value) {
         bits = float16_storage::detail::encode(value, true);
         return *this;

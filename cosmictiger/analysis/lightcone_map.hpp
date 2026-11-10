@@ -12,6 +12,7 @@
 class LightconeMap {
     std::map<int, double> pixels_;
 
+    /// Write the requested map values and throw if the binary write is incomplete.
     template <class T>
     static void write(FILE* file, T const* values, size_t count) {
         if (std::fwrite(values, sizeof(T), count, file) != count) {
@@ -19,6 +20,7 @@ class LightconeMap {
         }
     }
 
+    /// Read the requested checkpoint values and throw if the binary read is incomplete.
     template <class T>
     static void read(FILE* file, T* values, size_t count) {
         if (std::fread(values, sizeof(T), count, file) != count) {
@@ -27,10 +29,13 @@ class LightconeMap {
     }
 
 public:
+    /// Remove all accumulated pixel weights.
     void clear() {
         pixels_.clear();
     }
 
+    /// Accumulate a pixel weight after checking that the index belongs to the HEALPix
+    /// grid.
     void add(int pixel, double weight, int nside) {
         if (pixel < 0 || size_t(pixel) >= 12 * size_t(nside) * size_t(nside)) {
             throw std::out_of_range("Lightcone map pixel is outside its HEALPix grid");
@@ -38,6 +43,8 @@ public:
         pixels_[pixel] += weight;
     }
 
+    /// Write the occupied pixel interval as dense float blocks, filling unoccupied
+    /// pixels with zero.
     void writeMap(FILE* file, int nside) const {
         int const minimum = pixels_.empty() ? 0 : pixels_.begin()->first;
         int const maximum = pixels_.empty() ? -1 : pixels_.rbegin()->first;
@@ -58,6 +65,7 @@ public:
         }
     }
 
+    /// Checkpoint the resolution and sparse double-precision pixel weights.
     void save(FILE* file, int nside) const {
         write(file, &nside, 1);
         size_t const count = pixels_.size();
@@ -68,6 +76,8 @@ public:
         }
     }
 
+    /// Validate and read a sparse checkpoint, replacing the current map only after
+    /// restoration succeeds.
     void load(FILE* file, int nside) {
         int savedNside;
         size_t count;

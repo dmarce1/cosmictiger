@@ -31,6 +31,8 @@ namespace detail {
 
     constexpr double kDuration = 5e-3;
 
+    /// Compare sampled gas density with the Sedov reference and write profile/error
+    /// diagnostics.
     static void finishBlast(double endTime) {
         FILE* fp = fopen(outputPath("blast.txt").c_str(), "wt");
         double l1 = 0.0, l2 = 0.0, lmax = 0.0;
@@ -68,6 +70,8 @@ namespace detail {
 
 }    // namespace detail
 
+/// Initialize a uniform gas lattice with a normalized localized thermal blast and its
+/// output schedule.
 ScenarioPlan initializeBlast() {
     double rho0 = 1.0;
     auto opts = getOptions();

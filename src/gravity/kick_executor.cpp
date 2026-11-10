@@ -13,6 +13,8 @@
 #include <cosmictiger/gravity/kick.hpp>
 
 #ifdef USE_CUDA
+/// Serialize reusable CUDA launch packets with completion tickets and release the next
+/// ticket after stream cleanup.
 KickReturn kickRunCudaLaunch(std::function<KickReturn()> const& launch) {
 #if COSMICTIGER_PROFILE
     bool const profileEnabled = hpxRank() == 0;

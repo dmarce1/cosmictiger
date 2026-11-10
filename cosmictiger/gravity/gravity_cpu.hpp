@@ -70,6 +70,8 @@ void gatherSourceMultipoles(Vector<TreeNode const*> const& treePtrs,
 }
 }    // namespace detail
 
+/// Accumulate accepted source-cell multipoles into the sink local expansion using SIMD M2L
+/// and record work counts.
 template <int order>
 void cpuGravityCc(cosmictiger::gravity::cartesian::Expansion<float, order>& lValue,
     Vector<TreeId> const& list, TreeId self, bool doPhi, FmmGeometry const& geometry) {
@@ -115,6 +117,8 @@ void cpuGravityCc(cosmictiger::gravity::cartesian::Expansion<float, order>& lVal
     addCpuFlops(geometryFlops);
 }
 
+/// Gather source-leaf particles and accumulate their contributions into the sink cell's
+/// local expansion.
 template <int order>
 void cpuGravityCp(cosmictiger::gravity::cartesian::Expansion<float, order>& lValue,
     Vector<TreeId> const& list, TreeId self, bool doPhi, FmmGeometry const& geometry) {
@@ -199,6 +203,8 @@ void cpuGravityCp(cosmictiger::gravity::cartesian::Expansion<float, order>& lVal
     addCpuFlops(geometryFlops);
 }
 
+/// Evaluate accepted source multipoles at sink particles, adding potential/acceleration and
+/// recording geometry/kernel work.
 template <int order>
 void cpuGravityPc(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const& list,
     FmmGeometry const& geometry) {

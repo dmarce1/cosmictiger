@@ -55,6 +55,7 @@ inline std::vector<int> sphCpuNeighbors(SphRunData const& data, SphTreeNode cons
     return neighbors;
 }
 
+/// Gather a SIMD packet from indexed neighbors, filling lanes beyond the list with padding.
 inline SimdFloat sphCpuLoad(
     float const* values, std::vector<int> const& neighbors, size_t first, float padding) {
     return SimdFloat([&](auto lane) {
@@ -63,6 +64,7 @@ inline SimdFloat sphCpuLoad(
     });
 }
 
+/// Build the SIMD mask selecting neighbors that exist in this packet.
 inline SimdFloat::mask_type sphCpuValidLanes(std::vector<int> const& neighbors, size_t first) {
     return SimdFloat([&](auto lane) {
         return first + size_t(lane) < neighbors.size() ? 1.0f : 0.0f;

@@ -101,6 +101,7 @@ static int lcNextFileNumber();
 
 HPX_PLAIN_ACTION(lcNextFileNumber, LcNextFileNumberAction);
 
+/// Allocate a globally unique lightcone output file number through rank zero.
 static int lcNextFileNumber() {
     if (hpxRank() == 0) {
         return nextFileNumber++;
@@ -198,18 +199,23 @@ size_t lcAddParticleEntries(EntryLists const& entries) {
 
 }    // namespace detail
 
+/// Append lightcone crossing entries through the shared ingestion path.
 size_t lcAddParticles(DeviceVector<DeviceVector<LightconeEntry>> const& entries, double, double) {
     return detail::lcAddParticleEntries(entries);
 }
 
+/// Append lightcone crossing entries through the shared ingestion path.
 size_t lcAddParticles(std::vector<std::vector<LightconeEntry>> const& entries, double, double) {
     return detail::lcAddParticleEntries(entries);
 }
 
+/// Return the current HEALPix decomposition resolution.
 int lcNside() {
     return nsideValue;
 }
 
+/// Write buffered particles, group counters, epoch, and the accumulated HEALPix map to a
+/// checkpoint.
 void lcSave(FILE* fp) {
     size_t const sz = particleBuffer.size();
     size_t const mapExtension = std::numeric_limits<size_t>::max();
@@ -221,6 +227,8 @@ void lcSave(FILE* fp) {
     epochMap.save(fp, getOptions().lightcone.mapSize);
 }
 
+/// Restore lightcone buffers and epoch state, handling legacy checkpoints without an
+/// accumulated map.
 void lcLoad(FILE* fp) {
     size_t sz;
     FREAD(&sz, sizeof(size_t), 1, fp);
@@ -239,6 +247,8 @@ void lcLoad(FILE* fp) {
     }
 }
 
+/// Reduce the largest buffered count; rank zero decides whether it exceeds the flush
+/// threshold.
 size_t lcTimeToFlush(double tau, double requestedTauMax) {
     Vector<hpx::future<size_t>> futs;
     for (auto const& c : hpxChildren()) {
@@ -266,6 +276,8 @@ size_t lcTimeToFlush(double tau, double requestedTauMax) {
     }
 }
 
+/// Finalize buffered lightcone groups, write compressed/catalogue output and the epoch map,
+/// then advance the epoch.
 void lcParts2groups(double a, double linkingLength, int ti) {
     Vector<hpx::future<void>> futs;
     for (auto const& c : hpxChildren()) {
@@ -361,6 +373,7 @@ void lcParts2groups(double a, double linkingLength, int ti) {
     epoch++;
 }
 
+/// Decode the owner rank from a valid lightcone group ID, returning -1 for sentinel labels.
 static int rankFromGroupId(long long id) {
     if (id != kLightconeNoGroup && id != kLightconeEdgeGroup) {
         return (id - 1) % hpxSize();
@@ -369,6 +382,7 @@ static int rankFromGroupId(long long id) {
     }
 }
 
+/// Append incoming particles to their pixel-local arrays under per-pixel locks.
 static void lcSendParticles(Vector<LightconeParticle> parts) {
     Timer tm;
     auto& particleMap = *particleMapPtr;
@@ -386,6 +400,8 @@ static void lcSendParticles(Vector<LightconeParticle> parts) {
     }
 }
 
+/// Reserve buffer space under an exclusive lock and copy an incoming particle parcel in
+/// read-locked chunks.
 static void lcSendBufferParticles(Vector<LightconeParticle> parts) {
     int start, stop;
     std::unique_lock<SharedMutexType> ulock(sharedMutex);
@@ -403,6 +419,7 @@ static void lcSendBufferParticles(Vector<LightconeParticle> parts) {
     }
 }
 
+/// Redistribute buffered particles to their HEALPix owners and release the old buffer.
 void lcBuffer2homes() {
     Vector<hpx::future<void>> futs1;
     Vector<hpx::future<void>> futs2;
@@ -438,6 +455,7 @@ void lcBuffer2homes() {
     hpx::wait_all(futs1.begin(), futs1.end());
 }
 
+/// Send grouped particles from pixel owners to the ranks encoded in their group IDs.
 void lcGroups2homes() {
     auto& particleMap = *particleMapPtr;
     Vector<hpx::future<void>> futs;
@@ -479,6 +497,8 @@ void lcGroups2homes() {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
+/// Partition one pixel's particles by a spatial coordinate while keeping phase-space fields
+/// aligned.
 static int lcParticlesSort(int pix, Pair<int> rng, double xm, int xdim) {
     int begin = rng.first;
     int end = rng.second;
@@ -506,6 +526,7 @@ static int lcParticlesSort(int pix, Pair<int> rng, double xm, int xdim) {
     return hi;
 }
 
+/// Build a spatial tree for one pixel's particle range and register its sink leaves.
 std::pair<int, Range<double>> lcTreeCreate(int pix, Range<double> box, Pair<int> particleRange) {
     constexpr int kBucketSize = kGroupBucketSize;
     LightconeTreeNode thisNode;
@@ -576,6 +597,7 @@ std::pair<int, Range<double>> lcTreeCreate(int pix, Range<double> box, Pair<int>
     return rc;
 }
 
+/// Build linking-length neighbor lists by traversing trees from nearby pixels.
 void lcFindNeighborsLocal(
     LightconeTreeId selfId, Vector<LightconeTreeId> checklist, double linkingLength) {
     static thread_local Vector<LightconeTreeId> nextlist;
@@ -619,6 +641,7 @@ void lcFindNeighborsLocal(
     }
 }
 
+/// Construct neighbor lists for owned pixels using their adjacent HEALPix pixel trees.
 size_t lcFindNeighbors() {
     auto& treeMap = *treeMapPtr;
     Vector<hpx::future<void>> futs;
@@ -649,6 +672,8 @@ size_t lcFindNeighbors() {
     return rc;
 }
 
+/// Run one distributed CPU or CUDA label-propagation pass and return its changed-leaf
+/// count.
 size_t lcFindGroups() {
     auto& treeMap = *treeMapPtr;
     Vector<hpx::future<size_t>> futs;
@@ -679,11 +704,13 @@ size_t lcFindGroups() {
     return rc;
 }
 
+/// Return the full particle arrays for a requested pixel.
 static LightconeParticles lcGetParticles1(int pix) {
     auto& particleMap = *particleMapPtr;
     return particleMap[pix];
 }
 
+/// Pack current particle group labels and node activity flags for a boundary pixel.
 static Pair<Vector<long long>, Vector<char>> lcGetParticles2(int pix) {
     auto& particleMap = *particleMapPtr;
     auto& treeMap = *treeMapPtr;
@@ -699,6 +726,8 @@ static Pair<Vector<long long>, Vector<char>> lcGetParticles2(int pix) {
     return rc;
 }
 
+/// Map an observer-centered direction to the current HEALPix pixel, or the sole pixel at
+/// zero resolution.
 static int vec2pix(double x, double y, double z) {
     if (nsideValue == 0) {
         return 0;
@@ -711,6 +740,7 @@ static int vec2pix(double x, double y, double z) {
     }
 }
 
+/// Find the rank whose integer pixel interval contains the requested pixel.
 static int pix2rank(int pix) {
     int n = (size_t) pix * hpxSize() / npixValue;
     while (pix < (size_t) n * npixValue / hpxSize()) {
@@ -722,6 +752,7 @@ static int pix2rank(int pix) {
     return n;
 }
 
+/// Fetch complete particle arrays for boundary pixels from their owners.
 void lcParticleBoundaries1() {
     auto& particleMap = *particleMapPtr;
     auto& treeMap = *treeMapPtr;
@@ -746,6 +777,7 @@ void lcParticleBoundaries1() {
     }
 }
 
+/// Refresh boundary-pixel group labels and tree activity between connectivity passes.
 void lcParticleBoundaries2() {
     auto& particleMap = *particleMapPtr;
     auto& treeMap = *treeMapPtr;
@@ -802,6 +834,7 @@ void lcParticleBoundaries2() {
     }
 }
 
+/// Build trees for owned and current boundary pixels and order leaves deterministically.
 void lcFormTrees(double tau, double linkingLength) {
     auto& particleMap = *particleMapPtr;
     auto& treeMap = *treeMapPtr;
@@ -873,6 +906,7 @@ void lcFormTrees(double tau, double linkingLength) {
     });
 }
 
+/// Return valid adjacent HEALPix pixels at the current decomposition resolution.
 static Vector<int> pixNeighbors(int pix) {
     Vector<int> neighbors;
     if (nsideValue != 0) {
@@ -888,6 +922,8 @@ static Vector<int> pixNeighbors(int pix) {
     return neighbors;
 }
 
+/// Choose a power-of-two pixel resolution constrained by available workers and the current
+/// shell/linking scale.
 static int computeNside(double tau) {
     double nside = std::sqrt(8.0 * hpxHardwareConcurrency() * hpxSize() / 12.0);
     // lcInit is repeated immediately before a flush, so this is the shell
@@ -903,12 +939,16 @@ static int computeNside(double tau) {
     return result / 2;
 }
 
+/// Choose the lightcone decomposition at rank zero and propagate the current observation
+/// interval.
 void lcInit(double tau, double requestedTauMax) {
     ALWAYS_ASSERT(hpxRank() == 0);
     tauMax = requestedTauMax;
     lcInitDecomposition(tau, requestedTauMax, computeNside(tau));
 }
 
+/// Initialize per-locality pixel storage, boundary ownership, and the immutable background
+/// trajectory.
 static void lcInitDecomposition(double tau, double requestedTauMax, int nside) {
     // Construct once on every locality, including after restart; repeated flushes
     // retain the same immutable dense trajectory.
@@ -967,6 +1007,8 @@ static void lcInitDecomposition(double tau, double requestedTauMax, int nside) {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
+/// Retain the disabled legacy single-particle crossing hook; currently return zero without
+/// adding a record.
 int lcAddParticle(double x0, double y0, double z0, double x1, double y1, double z1, float vx,
     float vy, float vz, float t0, float t1, Vector<LightconeParticle>& thisParticleBuffer) {
     int rc = 0;
@@ -1024,6 +1066,8 @@ int lcAddParticle(double x0, double y0, double z0, double x1, double y1, double 
     return rc;
 }
 
+/// Append already assembled lightcone particles to the shared buffer in synchronized
+/// chunks.
 void lcAddParticles(Vector<LightconeParticle>&& theseParticles) {
     std::unique_lock<SharedMutexType> ulock(sharedMutex);
     int const start = particleBuffer.size();
@@ -1040,6 +1084,8 @@ void lcAddParticles(Vector<LightconeParticle>&& theseParticles) {
     }
 }
 
+/// Write subgroup particle positions, velocities, group IDs, and host IDs to a Silo
+/// diagnostic.
 void lcSiloOut(char const* filename, Vector<Subgroup> const& subgroups) {
     Vector<float> x, y, z, vx, vy, vz;
     Vector<int> id;

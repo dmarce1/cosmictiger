@@ -232,7 +232,10 @@ def emit(operator, order, algebra):
     live = g.live(root for root, _ in result.values())
     plan = algebra.EmissionPlan(g, signed)
     statistics = plan.statistics(live, range(len(signed)))
-    lines = [f'template <class Real> CUDA_EXPORT void {operator}(',
+    description = ('Accumulate translated source moments, applying the source-to-target scale ratio.'
+                   if operator == 'M2M' else
+                   'Accumulate translated local coefficients, applying the target-to-source scale ratio.')
+    lines = ['/// ' + description, f'template <class Real> CUDA_EXPORT void {operator}(',
              f'    {data_type}<Real, {fmm_order}>& {destination},',
              f'    {data_type}<Real, {fmm_order}> const& {source},',
              '    Vector3<Real> const& distance, Real scaleRatio) {',

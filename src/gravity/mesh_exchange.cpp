@@ -8,15 +8,18 @@
 
 namespace pmmm::detail {
 
+/// Wrap a signed mesh coordinate into the current mesh's nonnegative index range.
 int periodicIndex(int index) {
     int const n = cache.meshSize;
     return (index % n + n) % n;
 }
 
+/// Convert an unsigned periodic coordinate to its signed minimum-image representative.
 int signedIndex(int index) {
     return index > cache.meshSize / 2 ? index - cache.meshSize : index;
 }
 
+/// Decode a linear mesh key into three cell coordinates.
 std::array<int, 3> coordinates(uint64_t key) {
     uint64_t const n = cache.meshSize;
     return {int(key / (n * n)), int(key / n % n), int(key % n)};
@@ -34,6 +37,8 @@ int cellOwner(uint64_t key) {
     return domainsFindRank(center);
 }
 
+/// Pack a near-field particle with cell-centered mesh offsets, mass, and stable owner/index
+/// identity.
 PmmmNearParticle particle(ParticleInteger index, std::array<int, 3> const& cell, FlopCount& flops) {
     PmmmNearParticle result{};
     for (int axis = 0; axis < kDimensions; ++axis) {
@@ -72,6 +77,8 @@ PmmmNearParticle particle(ParticleInteger index, std::array<int, 3> const& cell,
     return result;
 }
 
+/// Add received cell moments and radial trace to local FFT-slab storage under the
+/// accumulation lock.
 void accumulate(std::vector<CellData> const& cells) {
     std::unique_lock<MutexType> lock(state.accumulationMutex);
     for (auto const& cell : cells) {
@@ -88,6 +95,7 @@ void accumulate(std::vector<CellData> const& cells) {
     addCpuFlops(FlopCount(cells.size()) * (cache.sourceCount + 1), FlopPrecision::Double);
 }
 
+/// Find a locally owned cell for the current solve generation, rejecting stale requests.
 static ParticleMeshCell const* ownedCell(uint64_t generation, uint64_t key) {
     if (generation != state.request.generation) {
         throw std::runtime_error("PMMM cell request belongs to another solve");
@@ -109,6 +117,7 @@ std::vector<ParticleInteger> readCellCounts(
     return counts;
 }
 
+/// Pack near-field particle records for requested nonempty cells owned by this locality.
 std::vector<CellParticles> readCellParticles(
     uint64_t generation, std::vector<uint64_t> const& keys) {
     std::vector<CellParticles> result;
@@ -132,6 +141,8 @@ std::vector<CellParticles> readCellParticles(
     return result;
 }
 
+/// Wait for the far transform and return normalized cell coefficients with background
+/// corrections.
 std::vector<double> readExpansion(uint64_t key) {
     state.farReady.get();
     int const n = cache.meshSize;
@@ -154,6 +165,7 @@ std::vector<double> readExpansion(uint64_t key) {
     return coefficients;
 }
 
+/// Group cell moments by FFT-slab owner and complete all remote deposition requests.
 void depositCells(std::vector<CellData> cells) {
     std::unordered_map<int, std::vector<CellData>> packets;
     for (auto& cell : cells) {
@@ -182,6 +194,8 @@ void depositCells(std::vector<CellData> cells) {
     }
 }
 
+/// Convert an unrounded tree-root multipole to mesh-cell moments and record the source rung
+/// snapshot.
 CellData rootMoments(size_t cellIndex, TreeCreateReturn const& root) {
     auto const& range = state.cells[cellIndex];
     if (!root.multi.isDouble()) {
@@ -219,6 +233,7 @@ CellData rootMoments(size_t cellIndex, TreeCreateReturn const& root) {
     return cell;
 }
 
+/// Deposit all owned-cell source moments, reusing prepared roots when the solve permits it.
 void deposit() {
     if (reuseOwnedRoots()) {
         // These futures contain no near consumers and can complete before FFT.
@@ -268,6 +283,8 @@ void deposit() {
         });
 }
 
+/// Fetch the requested cell's far-field coefficients from its FFT owner and validate their
+/// count.
 std::vector<double> localExpansion(uint64_t key) {
     auto const owner = cache.slabOwner[key / (uint64_t(cache.meshSize) * cache.meshSize)];
     auto coefficients = cache.owners[owner] == hpx::find_here() ?

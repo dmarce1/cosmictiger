@@ -24,6 +24,7 @@ inline constexpr int kP2MFlops = 0;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 3) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 3)
 // FMM order 3.
+/// Accumulate the point mass into raw trace-free moments at the supplied displacement.
 template <class Real>
 CUDA_EXPORT void P2M(Multipole<Real, 3>& M, Real mass, Vector3<Real> const& distance) {
     using namespace math;
@@ -45,6 +46,7 @@ inline constexpr int kP2MFlops<1> = 7;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 4) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 4)
 // FMM order 4.
+/// Accumulate the point mass into raw trace-free moments at the supplied displacement.
 template <class Real>
 CUDA_EXPORT void P2M(Multipole<Real, 4>& M, Real mass, Vector3<Real> const& distance) {
     using namespace math;
@@ -85,6 +87,7 @@ inline constexpr int kP2MFlops<2> = 31;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 5) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 5)
 // FMM order 5.
+/// Accumulate the point mass into raw trace-free moments at the supplied displacement.
 template <class Real>
 CUDA_EXPORT void P2M(Multipole<Real, 5>& M, Real mass, Vector3<Real> const& distance) {
     using namespace math;
@@ -167,6 +170,7 @@ inline constexpr int kP2MFlops<3> = 84;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 6) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 6)
 // FMM order 6.
+/// Accumulate the point mass into raw trace-free moments at the supplied displacement.
 template <class Real>
 CUDA_EXPORT void P2M(Multipole<Real, 6>& M, Real mass, Vector3<Real> const& distance) {
     using namespace math;
@@ -342,6 +346,7 @@ inline constexpr int kP2MFlops<4> = 198;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 7) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 7)
 // FMM order 7.
+/// Accumulate the point mass into raw trace-free moments at the supplied displacement.
 template <class Real>
 CUDA_EXPORT void P2M(Multipole<Real, 7>& M, Real mass, Vector3<Real> const& distance) {
     using namespace math;
@@ -670,6 +675,7 @@ inline constexpr int kP2MFlops<5> = 388;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 8) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 8)
 // FMM order 8.
+/// Accumulate the point mass into raw trace-free moments at the supplied displacement.
 template <class Real>
 CUDA_EXPORT void P2M(Multipole<Real, 8>& M, Real mass, Vector3<Real> const& distance) {
     using namespace math;
@@ -1270,6 +1276,7 @@ inline constexpr int kP2MFlops<6> = 714;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 9) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 9)
 // FMM order 9.
+/// Accumulate the point mass into raw trace-free moments at the supplied displacement.
 template <class Real>
 CUDA_EXPORT void P2M(Multipole<Real, 9>& M, Real mass, Vector3<Real> const& distance) {
     using namespace math;

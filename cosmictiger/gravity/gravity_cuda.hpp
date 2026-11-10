@@ -108,6 +108,8 @@ struct CudaStagedSources {
     float const* mass;    // nullptr without a mass plane
 };
 
+/// View the shared-memory source position planes and optional mass plane selected by the
+/// launch layout.
 template <int order>
 __device__ inline CudaStagedSources cudaStagedSources(CudaKickControl<order> const& control) {
     extern __shared__ __align__(16) char shmemPtr[];
@@ -123,6 +125,7 @@ __device__ inline CudaStagedSources cudaStagedSources(CudaKickControl<order> con
     return sources;
 }
 
+/// Construct a particle position directly from raw fixed-point bits.
 __device__ inline Position cudaFixedFromRaw(PositionInteger bits) {
     Position value;
     value.raw() = bits;
@@ -365,6 +368,8 @@ __device__ inline void cudaPpSinkGroup(CudaStagedSources const& sources, int cou
 
 }    // namespace detail
 
+/// Cooperatively accumulate cell-cell M2L contributions into the sink expansion and return
+/// precision-separated work counts.
 template <int order>
 __device__ FlopCounts cudaGravityCcDirect(CudaKickData const& data,
     cosmictiger::gravity::cartesian::Expansion<float, order>& lacc, TreeNode const& self,
@@ -406,6 +411,8 @@ __device__ FlopCounts cudaGravityCcDirect(CudaKickData const& data,
     return {FlopCount(flops) + mixedFlops.singlePrecision, mixedFlops.doublePrecision, 0};
 }
 
+/// Stage source particles and cooperatively accumulate their P2L contributions into the
+/// sink expansion.
 template <int order, bool equalMass>
 __device__ FlopCounts cudaGravityCpDirect(CudaKickData const& data, CudaKickControl<order>& control,
     cosmictiger::gravity::cartesian::Expansion<float, order>& lacc, TreeNode const& self,
@@ -470,6 +477,7 @@ __device__ FlopCounts cudaGravityCpDirect(CudaKickData const& data, CudaKickCont
     return {FlopCount(flops) + mixedFlops.singlePrecision, mixedFlops.doublePrecision, 0};
 }
 
+/// Stage source multipoles and accumulate their fields into a sink-particle force tile.
 template <int order>
 __device__ FlopCounts cudaGravityPcDirect(CudaKickData const& data, CudaKickControl<order>& control,
     TreeNode const& self, int sinkBegin, int sinkCount, DeviceVector<int> const& multlist,
@@ -547,6 +555,8 @@ __device__ FlopCounts cudaGravityPcDirect(CudaKickData const& data, CudaKickCont
 
 namespace detail {
 
+/// Evaluate softened particle pairs in staged tiles, accumulating sink forces and optional
+/// interaction counters.
 template <int order, bool equalMass, bool meshImages>
 __device__ FlopCounts cudaGravityPpDirectImpl(CudaKickData const& data,
     CudaKickControl<order>& control, TreeNode const& self, int sinkBegin, int sinkCount,

@@ -367,6 +367,12 @@ def emitFunction(className,parameters,g,outputs,arguments,additive=True,operatio
     declaration = f'template <> class {className}<{parameters}> {{\npublic:\n'
     declaration += f'    static constexpr int kFlops_ = {flops};\n'
     declaration += f'    static constexpr int kConventionalFlops_ = {conventional};\n'
+    descriptions = {
+        'P2M': 'Accumulate mass-weighted regular solid harmonics into the source multipole.',
+        'Green': 'Assign singular solid harmonics for the supplied displacement.',
+        'L2P': 'Accumulate the local expansion potential and negative gradient at the supplied point.',
+    }
+    declaration += '    /// ' + descriptions[className] + '\n'
     declaration += '    template <typename Real, typename Output, typename Source = Output>\n'
     declaration += f'    CUDA_EXPORT static void {method}(Output &output, {arguments}) {{\n'
     declaration += '\n'.join(lines)+'\n'

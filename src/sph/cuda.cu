@@ -11,6 +11,8 @@
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/sph/cuda.hpp>
 
+/// Execute the selected staged SPH device pass and collect reductions before releasing
+/// managed scratch storage.
 SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, CudaStream& stream) {
     SphRunReturn result;
     SphReduction* reduction;

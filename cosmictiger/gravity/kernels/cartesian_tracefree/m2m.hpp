@@ -25,6 +25,7 @@ inline constexpr int kM2MFlops = 0;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 3) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 3)
 // FMM order 3.
+/// Accumulate translated source moments, applying the source-to-target scale ratio.
 template <class Real>
 CUDA_EXPORT void M2M(Multipole<Real, 3>& targetM, Multipole<Real, 3> const& M,
     Vector3<Real> const& distance, Real scaleRatio) {
@@ -52,6 +53,7 @@ inline constexpr int kM2MFlops<1> = 13;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 4) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 4)
 // FMM order 4.
+/// Accumulate translated source moments, applying the source-to-target scale ratio.
 template <class Real>
 CUDA_EXPORT void M2M(Multipole<Real, 4>& targetM, Multipole<Real, 4> const& M,
     Vector3<Real> const& distance, Real scaleRatio) {
@@ -117,6 +119,7 @@ inline constexpr int kM2MFlops<2> = 62;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 5) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 5)
 // FMM order 5.
+/// Accumulate translated source moments, applying the source-to-target scale ratio.
 template <class Real>
 CUDA_EXPORT void M2M(Multipole<Real, 5>& targetM, Multipole<Real, 5> const& M,
     Vector3<Real> const& distance, Real scaleRatio) {
@@ -274,6 +277,7 @@ inline constexpr int kM2MFlops<3> = 188;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 6) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 6)
 // FMM order 6.
+/// Accumulate translated source moments, applying the source-to-target scale ratio.
 template <class Real>
 CUDA_EXPORT void M2M(Multipole<Real, 6>& targetM, Multipole<Real, 6> const& M,
     Vector3<Real> const& distance, Real scaleRatio) {
@@ -608,6 +612,7 @@ inline constexpr int kM2MFlops<4> = 439;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 7) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 7)
 // FMM order 7.
+/// Accumulate translated source moments, applying the source-to-target scale ratio.
 template <class Real>
 CUDA_EXPORT void M2M(Multipole<Real, 7>& targetM, Multipole<Real, 7> const& M,
     Vector3<Real> const& distance, Real scaleRatio) {
@@ -1258,6 +1263,7 @@ inline constexpr int kM2MFlops<5> = 877;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 8) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 8)
 // FMM order 8.
+/// Accumulate translated source moments, applying the source-to-target scale ratio.
 template <class Real>
 CUDA_EXPORT void M2M(Multipole<Real, 8>& targetM, Multipole<Real, 8> const& M,
     Vector3<Real> const& distance, Real scaleRatio) {
@@ -2391,6 +2397,7 @@ inline constexpr int kM2MFlops<6> = 1562;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 9) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 9)
 // FMM order 9.
+/// Accumulate translated source moments, applying the source-to-target scale ratio.
 template <class Real>
 CUDA_EXPORT void M2M(Multipole<Real, 9>& targetM, Multipole<Real, 9> const& M,
     Vector3<Real> const& distance, Real scaleRatio) {

@@ -93,6 +93,7 @@ bool usedGpu;
 struct Timing {
     double numberOfParticles;
     double time;
+    /// Initialize the accumulated particle count and elapsed time to zero.
     Timing() {
         numberOfParticles = time = 0.0;
     }
@@ -100,6 +101,7 @@ struct Timing {
 
 Vector<Timing> timings;
 
+/// Write measured throughput by bucket size and optionally clear the accumulated samples.
 static void flushTimings(bool reset) {
     auto const theta = getOptions().gravity.openingAngle;
     char* fname;
@@ -118,6 +120,7 @@ static void flushTimings(bool reset) {
 }
 
 #if COSMICTIGER_ENABLE_ROCKSTAR
+/// Run the halo-group tree, linking, catalogue, baryon measurement, and cleanup stages.
 void doGroups(int number, double scale, double years) {
     groupsPrepareHistory(number);
 
@@ -258,6 +261,8 @@ bool prepareSphDomainEvent(int minimumRung) {
     return rebuild;
 }
 
+/// Create the SPH support tree for the requested active rung and report its geometry
+/// statistics.
 SphTreeCreateReturn sphStep1(int minrung, bool verbose) {
     profile::ScopedPhase profilePhase("hydro.tree.create");
     verbose = true;
@@ -288,6 +293,7 @@ SphTreeCreateReturn sphStep1(int minrung, bool verbose) {
     return treeResult;
 }
 
+/// Test whether no particles occupy rungs coarser than the requested boundary.
 static bool sphCommonBoundary(int minimumRung) {
     auto const counts = particlesRungCounts();
     for (int rung = 0; rung < minimumRung; ++rung) {
@@ -298,6 +304,8 @@ static bool sphCommonBoundary(int minimumRung) {
     return true;
 }
 
+/// Refresh all gas supports, balance neighbor rung proposals, and commit the resulting
+/// rungs.
 static int sphBalanceBoundaryRungs(double scale) {
     profile::ScopedPhase phase("hydro.rungs.balance");
     if (sphMidpointTargetCount(-1) == 0) {
@@ -314,6 +322,7 @@ static int sphBalanceBoundaryRungs(double scale) {
     return maximumRung;
 }
 
+/// Evaluate one midpoint hydro event from staged sources and commit its paired increments.
 static SphRunReturn sphMidpointEvaluate(int minrung, int maximumHydroRung, double scale, double tau,
     double t0, double adot, double hydroTimestep, double maximumGlobalTimestep,
     double viscosityTimestep = 0.0) {
@@ -531,6 +540,7 @@ static SphRunReturn sphMidpointEvaluate(int minrung, int maximumHydroRung, doubl
     return result;
 }
 
+/// Run an exact-rung midpoint event, or initialize timestep bounds for a zero interval.
 SphRunReturn sphMidpointStep(int rung, double time, double timestep, double baseTimestep,
     double scale, double scaleDerivative, EnergiesT& energies, bool global,
     double maximumTimestep) {
@@ -560,6 +570,7 @@ SphRunReturn sphMidpointStep(int rung, double time, double timestep, double base
     }
 }
 
+/// Close endpoint source physics and viscosity relaxation for the selected hydro interval.
 SphRunReturn sphCompleteSources(int minimumClosingRung, double time, double baseTimestep,
     double scale, double scaleDerivative, EnergiesT& energies, double explicitTimestep,
     double maximumGlobalTimestep) {
@@ -653,6 +664,7 @@ void pmmmBoundaryMigrate(bool initial) {
     domainTime += timer.read();
 }
 
+/// Construct gravity kick parameters and timestep bounds for a frozen-near mesh interval.
 KickParameters pmmmIntervalParameters(
     int minRung, double scale, double scaleDerivative, double baseTimestep, bool firstCall) {
     double maximumTimestep = std::ldexp(baseTimestep, -getOptions().run.minRung);
@@ -753,6 +765,8 @@ ForceStepResult pmmmIntervalStep(int minRung, double scale, double scaleDerivati
 }    // namespace detail
 #endif
 
+/// Coordinate gravity, hydrodynamics, and optional reference-error sampling for the active
+/// force step.
 ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative, double time,
     double baseTimestep, double theta, bool firstCall, bool fullEvaluation, EnergiesT& energies,
     int gravityErrorStep, bool closingOnly, double previousTimestep, double maximumGlobalTimestep,
@@ -938,6 +952,8 @@ void driftRungEverywhere(
     double scale, double dt, double tau0, double tau1, double tauMax, int rung, double drag);
 HPX_PLAIN_ACTION(driftRungEverywhere, DriftRungEverywhereAction);
 
+/// Drift the requested rung across the locality tree, draining remote work before
+/// propagating errors.
 void driftRungEverywhere(
     double scale, double dt, double tau0, double tau1, double tauMax, int rung, double drag) {
     Vector<hpx::future<void>> futures;
@@ -957,6 +973,8 @@ void driftRungEverywhere(
     }
 }
 
+/// Advance the recursive rung kick/drift schedule and accumulate its force and timing
+/// results.
 ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, double adot,
     double tau, double t0, double theta, EnergiesT* energies, int minrung0, bool doPhi,
     hpx::future<void>* lcFut, bool nocrop, double drag, int gravityErrorStep, bool closingOnly,
@@ -1295,6 +1313,7 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
 #endif
 
 #if COSMICTIGER_WITH_GRAVITY
+/// Measure folded density spectra and write the filtered power and shot-noise diagnostics.
 double doPowerSpectrum(int num, double a, double adot) {
     auto const softFilter = [](double kh) {
         if (kh > 0.01) {
@@ -1366,6 +1385,7 @@ double doPowerSpectrum(int num, double a, double adot) {
     return maxpow;
 }
 
+/// Write scheduled output times, scale factors, and redshifts from the background history.
 void outputTimeFile(DriverParameters const& parameters) {
     double const a0 = 1.0 / (1.0 + getOptions().cosmology.startRedshift);
     auto const background = cosmology::simulationBackground(parameters.tauMax);
@@ -1392,6 +1412,8 @@ void outputTimeFile(DriverParameters const& parameters) {
     fclose(fp);
 }
 
+/// Append normalized momentum and cosmological energy diagnostics, creating the column
+/// header once.
 static void outputEnergy(double coarseTime, double scale, EnergiesT const& energies,
     double referenceEnergy, double glassError) {
     double const error = cosmology::normalizedEnergyError(scale, energies.kin, energies.pot,
@@ -1416,6 +1438,8 @@ static void outputEnergy(double coarseTime, double scale, EnergiesT const& energ
 
 #endif
 
+/// Advance the simulation or checkpoint state through its configured integration and output
+/// schedule.
 void driver() {
     profile::checkForInterrupt();
     bool const global = usesGlobalIntegration(getOptions().run);

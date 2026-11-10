@@ -67,6 +67,7 @@ static_assert(std::is_standard_layout_v<ParticleVector<Position>>);
 struct GroupParticle {
     ParticleVector<Position> position;
     GroupInteger groupNumber;
+    /// Archive `position`, `groupNumber` in transport order.
     template <class A>
     void serialize(A&& arc, unsigned) {
         arc & position;
@@ -78,6 +79,7 @@ struct OutputParticle {
     ParticleVector<Position> position;
     ParticleVector<float> velocity;
     char rung;
+    /// Archive this record in the field order required by distributed transport.
     template <class A>
     void serialize(A&& a, unsigned) {
         a & position;
@@ -106,6 +108,8 @@ snapshot. This can be different from npart if one is dealing with a multi-file s
     long long ntrees;
     long long totNtrees;
 
+    /// Archive `npart`, `npartTotal`, `mass`, `time`, `redshift`, `boxSize` and the
+    /// remaining fields in transport order.
     template <class A>
     void serialize(A&& arc, unsigned) {
         for (int i = 0; i < kParticleHeaderTypeCount; i++) {
@@ -146,6 +150,7 @@ struct Particle {
     char type;
     ParticleInteger gravitySample = -1;
     StarFormationState starFormation;
+    /// Archive this record in the field order required by distributed transport.
     template <class A>
     void serialize(A&& a, unsigned) {
         auto const& options = getOptions();
@@ -194,6 +199,7 @@ struct ParticleSample {
     // Gravitational potential from the last kick; zero unless the analysis options save
     // particle potentials.
     float potential;
+    /// Archive this record in the field order required by distributed transport.
     template <class A>
     void serialize(A&& a, unsigned) {
         for (int dim = 0; dim < kSpatialDimensions; dim++) {
@@ -248,6 +254,7 @@ PARTICLES_EXTERN size_t particlesGlobalOffset;
 struct ParticleGlobalRange {
     int proc;
     Pair<ParticleInteger> range;
+    /// Archive this record in the field order required by distributed transport.
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
         archive & proc & range;
@@ -280,6 +287,8 @@ ParticleInteger particlesPartitionDarkMatter(Pair<ParticleInteger> rng);
 void particlesGlobalReadPos(
     ParticleGlobalRange, Position* x, Position* y, Position* z, char* type, ParticleInteger offset);
 void particlesGlobalReadMasses(ParticleGlobalRange range, float* masses, ParticleInteger offset);
+/// Read remote/local positions through the general accessor without requesting source
+/// masses.
 inline void particlesGlobalReadPos(
     ParticleGlobalRange range, Position* x, Position* y, Position* z, ParticleInteger offset) {
     particlesGlobalReadPos(range, x, y, z, nullptr, offset);
@@ -329,6 +338,8 @@ void particlesSortByRung(int minrung);
 double particlesActivePct();
 Pair<ParticleInteger, ParticleInteger> particlesCurrentRange();
 
+/// Access the species flag, or a shared dark-matter sentinel when hydrodynamics is
+/// disabled.
 inline char& particlesType(ParticleInteger index) {
     static bool const sph = getOptions().hydro.enabled;
     if (getOptions().hydro.enabled) {
@@ -340,6 +351,8 @@ inline char& particlesType(ParticleInteger index) {
     }
 }
 
+/// Return the configured species mass, using unit mass in the dark-matter-only
+/// representation.
 inline float particlesMass(ParticleInteger index) {
     if (!getOptions().hydro.enabled) {
         return 1.0f;
@@ -353,17 +366,22 @@ inline float particlesMass(ParticleInteger index) {
     }
 }
 
+/// Access the stored gravitational potential for the particle.
 inline float& particlesPot(ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
     return particlesP[index];
 }
 
+/// Access one active fixed-point position component after checking particle and dimension
+/// bounds.
 inline Position& particlesPos(int dim, ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
     ALWAYS_ASSERT(dim >= 0 && dim < kSpatialDimensions);
     return particlesX[dim][index];
 }
 
+/// Access one active stored velocity component after checking particle and dimension
+/// bounds.
 inline float& particlesVel(int dim, ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
     ALWAYS_ASSERT(dim >= 0 && dim < kSpatialDimensions);
@@ -375,64 +393,79 @@ inline float& particlesVel(int dim, ParticleInteger index) {
 inline Position particlesPositionValue(int dim, ParticleInteger index) {
     return dim < kSpatialDimensions ? particlesPos(dim, index) : Position(0.5);
 }
+/// Return a velocity component, or zero for an inactive spatial dimension.
 inline float particlesVelocityValue(int dim, ParticleInteger index) {
     return dim < kSpatialDimensions ? particlesVel(dim, index) : 0.0f;
 }
+/// Expose a position-component array at an offset, or null for an inactive dimension.
 inline Position* particlesPositionData(int dim, ParticleInteger offset = 0) {
     return dim < kSpatialDimensions ? particlesX[dim] + offset : nullptr;
 }
 
+/// Expose the contiguous stored particle-velocity vectors.
 inline ParticleVector<float>* particlesVelData() {
     return particlesV;
 }
 
+/// Access the particle's timestep rung.
 inline char& particlesRung(ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
     return particlesR[index];
 }
 
+/// Access a stored long-range acceleration component; the optional array must be allocated.
 inline float& particlesLongAcceleration(int dim, ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
     return particlesLongAccelerations[dim][index];
 }
 
+/// Access a stored diagnostic gravity-acceleration component; its optional array must be
+/// allocated.
 inline float& particlesGravityAcceleration(int dim, ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
     return particlesGravityAccelerations[dim][index];
 }
 
+/// Access the particle's retained PMMM cell identifier.
 inline uint64_t& particlesFrozenCell(ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
     return particlesFrozenCells[index];
 }
 
+/// Form the initial globally unique group label from locality offset and particle index.
 inline GroupInteger particlesGroupInit(ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
     return particlesGlobalOffset + index;
 }
 
+/// Access the atomic current group label; group storage must be enabled.
 inline std::atomic<GroupInteger>& particlesGroup(ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
     ASSERT(particlesGrp);
     return particlesGrp[index];
 }
 
+/// Access the saved group-history label; group storage must be enabled.
 inline GroupInteger& particlesLastgroup(ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
     ASSERT(particlesLgrp);
     return particlesLgrp[index];
 }
 
+/// Access the particle's tracer-selection flag.
 inline char& particlesTracer(ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
     return particlesTr[index];
 }
 
+/// Access the gravity-error sample slot, with negative slots denoting unsampled particles.
 inline ParticleInteger& particlesGravitySample(ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
     return particlesGravitySampleIndices[index];
 }
 
+/// Save acceleration only when diagnostic storage exists and the particle has a sample
+/// slot.
 inline void particlesCaptureGravitySample(ParticleInteger index, float gx, float gy, float gz) {
     if (particlesGravitySampleAccelerations != nullptr) {
         ParticleInteger const slot = particlesGravitySample(index);
@@ -448,11 +481,14 @@ inline void particlesCaptureGravitySample(ParticleInteger index, float gx, float
     }
 }
 
+/// Access the particle's associated gas/catalogue index.
 inline ParticleInteger& particlesCatIndex(ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
     return particlesSph[index];
 }
 
+/// Gather the particle's enabled fields from structure-of-arrays storage into a transport
+/// record.
 inline Particle particlesGetParticle(ParticleInteger index) {
     static bool doGroups = getOptions().analysis.groups;
     static bool doTracers = getOptions().analysis.tracers;
@@ -490,6 +526,8 @@ inline Particle particlesGetParticle(ParticleInteger index) {
     return p;
 }
 
+/// Scatter a transport record into the particle arrays, including enabled analysis, gas,
+/// star, and PMMM fields.
 inline void particlesSetParticle(Particle p, ParticleInteger index) {
     static bool doGroups = getOptions().analysis.groups;
     static bool doTracers = getOptions().analysis.tracers;
@@ -525,6 +563,7 @@ inline void particlesSetParticle(Particle p, ParticleInteger index) {
     }
 }
 
+/// Test whether the particle is of the gas/SPH species.
 inline bool particlesIsSph(int index) {
     return particlesType(index) == kSphType;
 }
@@ -540,6 +579,7 @@ struct EnergiesT {
     double cosmic;
     double zmom;
     double nmom;
+    /// Initialize energy and momentum reduction fields to zero.
     EnergiesT() {
         therm = heating = 0.0;
         pot = kin = 0.f;
@@ -547,6 +587,8 @@ struct EnergiesT {
         cosmic = 0.0;
         tckin = 0.0;
     }
+    /// Accumulate thermal, gravitational, kinetic, cosmological, and momentum
+    /// diagnostics.
     EnergiesT& operator+=(EnergiesT const& other) {
         therm += other.therm;
         heating += other.heating;
@@ -560,6 +602,8 @@ struct EnergiesT {
         tckin += other.tckin;
         return *this;
     }
+    /// Archive `xmom`, `ymom`, `cosmic`, `zmom`, `nmom`, `pot` and the remaining fields
+    /// in transport order.
     template <class A>
     void serialize(A&& arc, unsigned) {
         arc & xmom;

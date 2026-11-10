@@ -77,6 +77,8 @@ namespace detail {
 struct KickListCarver {
     char* base;    // nullptr: measure only
     int offset;
+    /// Reserve an aligned typed region in the kick-list slab, advancing its offset even
+    /// during size-only layout calculation.
     template <class T>
     CUDA_EXPORT inline T* take(int count) {
         offset = ((offset + kKickListRegionAlignment - 1) / kKickListRegionAlignment) *

@@ -176,6 +176,7 @@ static void relaxSphereSurfaceShell(SphereSurfaceShell shell) {
 
 }    // namespace detail
 
+/// Relax each spherical particle shell concurrently with the CPU surface solver.
 void solveSphereSurfaceProblemCpu(Vector<Array<Vector<float>, kDimensions>>& positions) {
     std::vector<hpx::future<void>> futs;
     futs.reserve(positions.size());
@@ -197,6 +198,8 @@ void solveSphereSurfaceProblemCpu(Vector<Array<Vector<float>, kDimensions>>& pos
     }
 }
 
+/// Dispatch spherical-shell relaxation to the configured CPU or CUDA initialization
+/// backend.
 void solveSphereSurfaceProblem(Vector<Array<Vector<float>, kDimensions>>& positions) {
 #ifdef USE_CUDA
     if (getOptions().initial.cuda) {

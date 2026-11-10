@@ -17,6 +17,7 @@
 
 namespace profile {
 
+/// Configure file-based APEX reports before startup and register HPX shutdown finalization.
 void configureRuntimeProfiling() {
 #if defined(HPX_HAVE_APEX)
     // APEX reads its options lazily during initialization. Set defaults before

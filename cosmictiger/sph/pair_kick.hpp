@@ -16,6 +16,7 @@ struct SphPairSourceId {
     int rank;
     ParticleInteger index;
 
+    /// Archive this record in the field order required by distributed transport.
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
         archive & rank;
@@ -30,6 +31,7 @@ class SphCompensatedSum {
     using Bits = unsigned long long;
     alignas(8) Bits bits_ = 0;
 
+    /// Read a float's binary representation without numerical conversion.
     CUDA_EXPORT static uint32_t floatBits(float value) {
 #ifdef __CUDA_ARCH__
         return __float_as_uint(value);
@@ -37,6 +39,7 @@ class SphCompensatedSum {
         return std::bit_cast<uint32_t>(value);
 #endif
     }
+    /// Reconstruct a float from its stored binary representation.
     CUDA_EXPORT static float fromBits(uint32_t bits) {
 #ifdef __CUDA_ARCH__
         return __uint_as_float(bits);
@@ -50,9 +53,11 @@ public:
     CUDA_EXPORT operator float() const {
         return fromBits(uint32_t(bits_));
     }
+    /// Return the low-order correction term packed with the compensated float sum.
     CUDA_EXPORT float correction() const {
         return fromBits(uint32_t(bits_ >> 32));
     }
+    /// Test whether both the main sum and its compensation are exactly zero.
     CUDA_EXPORT bool isZero() const {
         return float(*this) == 0.0f && correction() == 0.0f;
     }
@@ -112,6 +117,7 @@ public:
         return operations + add(-other.correction());
     }
 
+    /// Archive this record in the field order required by distributed transport.
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
         archive & bits_;
@@ -125,6 +131,7 @@ struct SphPairUpdate {
     SphCompensatedSum velocity[kSpatialDimensions] = {};
     SphCompensatedSum entropy;
 
+    /// Archive this record in the field order required by distributed transport.
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
         archive & velocity;
@@ -132,6 +139,8 @@ struct SphPairUpdate {
     }
 };
 
+/// Assign each pair to the finer rung, breaking equal-rung ties by locality and then
+/// particle index.
 CUDA_EXPORT inline bool sphOwnsPairKick(SphPairSourceId const& target,
     SphPairSourceId const& neighbor, int targetRung, int neighborRung) {
     if (targetRung != neighborRung) {

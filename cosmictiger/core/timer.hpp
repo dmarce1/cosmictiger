@@ -15,21 +15,26 @@ class Timer {
     double time_;
 
 public:
+    /// Initialize a stopwatch with zero accumulated elapsed time.
     inline Timer() {
         time_ = 0.0;
     }
+    /// Add the interval since the last start to the accumulated elapsed time.
     inline void stop() {
         std::chrono::time_point<std::chrono::high_resolution_clock> stopTime =
             std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> dur = stopTime - startTime_;
         time_ += dur.count();
     }
+    /// Record the starting timestamp of the next measured interval.
     inline void start() {
         startTime_ = std::chrono::high_resolution_clock::now();
     }
+    /// Clear accumulated elapsed time.
     inline void reset() {
         time_ = 0.0;
     }
+    /// Return the accumulated elapsed time in seconds.
     inline double read() {
         return time_;
     }

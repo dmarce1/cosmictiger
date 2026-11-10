@@ -24,6 +24,8 @@ inline double expansionTimestep(double scale, double adot, double acceleration,
     return denominator > 0.0 ? std::min(2.0 * fraction / denominator, 1.0e30) : 1.0e30;
 }
 
+/// Test whether time has reached the final epoch within a scale-aware floating-point
+/// tolerance.
 inline bool endTimeReached(double time, double finalTime) {
     double const tolerance = 32.0 * std::numeric_limits<double>::epsilon() *
         std::max(std::abs(time), std::abs(finalTime));

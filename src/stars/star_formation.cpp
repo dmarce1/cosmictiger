@@ -32,6 +32,8 @@ using Output = star_formation_backend::Output;
 using Parameters = star_formation_backend::Parameters;
 using Operation = star_formation_backend::Operation;
 
+/// Construct the effective star-formation model and physical/overdensity thresholds from
+/// resolved options.
 Model model() {
     auto const& options = getOptions();
     auto const& settings = options.starFormation;
@@ -64,6 +66,8 @@ Model model() {
         settings.criticalOverDensity * options.cosmology.omegaB * criticalDensity;
     return result;
 }
+/// Combine the star-formation model, cooling tables, unit scales, and random seed for a
+/// backend call.
 Parameters parameters(double scaleFactor) {
     auto const& options = getOptions();
     auto const scales = units::scalesFromOptions(options);
@@ -78,6 +82,8 @@ Parameters parameters(double scaleFactor) {
     result.seed = options.starFormation.seed;
     return result;
 }
+/// Pack one gas particle's identity, thermodynamics, rung, and velocity into a backend
+/// input record.
 Input input(ParticleInteger gas) {
     auto const particle = sphParticlesParticleIndex(gas);
     Input result;
@@ -92,6 +98,7 @@ Input input(ParticleInteger gas) {
     }
     return result;
 }
+/// Pack backend input records for every local gas particle.
 std::vector<Input> inputs() {
     std::vector<Input> result(sphParticlesSize());
     for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
@@ -99,6 +106,8 @@ std::vector<Input> inputs() {
     }
     return result;
 }
+/// Execute the selected backend operation and require all returned particle statuses to
+/// succeed.
 std::vector<Output> run(
     Operation operation, std::vector<Input> const& inputs, Parameters const& parameters) {
     std::vector<Output> outputs(inputs.size());
@@ -143,6 +152,8 @@ struct Pending {
 };
 std::vector<Pending> pending;
 
+/// Validate backend outputs and prepare entropy, identity, and conversion updates without
+/// committing live state.
 StarFormationUpdate stage(std::vector<ParticleInteger> const& gasIndices,
     std::vector<Input> const& inputs, std::vector<Output> const& outputs, double scaleFactor) {
     if (!sphParticlesEntropyInitialized || sphParticlesThermalScaleFactor != scaleFactor) {
@@ -187,21 +198,28 @@ StarFormationUpdate stage(std::vector<ParticleInteger> const& gasIndices,
 }
 }    // namespace detail
 
+/// Derive deterministic random bits from particle identity, event, stream, and the
+/// configured seed.
 uint64_t starFormationRandomBits(uint64_t identity, uint64_t event, uint64_t stream) {
     return star_formation_backend::detail::mix(
         star_formation_backend::detail::mix(identity ^ getOptions().starFormation.seed) ^
         star_formation_backend::detail::mix(event + UINT64_C(0x9e3779b97f4a7c15)) ^
         star_formation_backend::detail::mix(stream + UINT64_C(0x632be59bd9b4e019)));
 }
+/// Convert deterministic random bits to a double uniformly spaced on [0,1).
 double starFormationUniform(uint64_t identity, uint64_t event, uint64_t stream) {
     return double(starFormationRandomBits(identity, event, stream) >> 11) * 0x1.0p-53;
 }
+/// Return backend parameters at the requested scale factor.
 star_formation_backend::Parameters starFormationParameters(double scaleFactor) {
     return detail::parameters(scaleFactor);
 }
+/// Return the effective star-formation model resolved from current options.
 springel_and_hernquist::Model starFormationModel() {
     return detail::model();
 }
+/// Evaluate gas output diagnostics while retaining the saved post-cooling star-formation
+/// rate.
 star_formation_backend::Output starFormationDiagnostics(ParticleInteger gas, double scaleFactor) {
     auto const input = detail::input(gas);
     auto result = star_formation_backend::diagnostics(input, detail::parameters(scaleFactor));
@@ -212,6 +230,8 @@ star_formation_backend::Output starFormationDiagnostics(ParticleInteger gas, dou
     result.specificStarFormationRate = input.state.specificStarFormationRate;
     return result;
 }
+/// Initialize stable particle identities and report the resolved physical formation
+/// threshold.
 void starFormationInitialize() {
     auto const model = detail::model();
     particlesInitializeStarFormationIds();
@@ -228,6 +248,7 @@ StarFormationUpdate starFormationPrepare(
 void starFormationCommit();
 void starFormationDiscardPrepared();
 HPX_PLAIN_ACTION(starFormationDiscardPrepared, StarFormationDiscardPreparedAction);
+/// Discard staged source and conversion updates throughout the locality tree.
 void starFormationDiscardPrepared() {
     std::vector<hpx::future<void>> children;
     for (auto const& child : hpxChildren()) {
@@ -240,6 +261,7 @@ void starFormationDiscardPrepared() {
 }
 HPX_PLAIN_ACTION(starFormationPrepare, StarFormationPrepareAction);
 HPX_PLAIN_ACTION(starFormationCommit, StarFormationCommitAction);
+/// Prepare selected local and remote star-formation updates and collect their diagnostics.
 StarFormationUpdate starFormationPrepare(
     int minimumRung, double scaleFactor, double baseTimestep, double explicitTimestep) {
     std::vector<hpx::future<StarFormationUpdate>> remote;
@@ -284,6 +306,8 @@ StarFormationUpdate starFormationPrepare(
     }
     return result;
 }
+/// Validate a conversion's identity and replace the gas record with persistent star
+/// metadata.
 void starFormationConvertGas(ParticleInteger gas, StarFormationState const& state) {
     ParticleInteger const particle = sphParticlesParticleIndex(gas);
     if (state.id != particlesStarFormationStates[particle].id ||
@@ -296,6 +320,8 @@ void starFormationConvertGas(ParticleInteger gas, StarFormationState const& stat
     particlesConvertToStar(particle, state.formationTime);
     particlesStarFormationStates[particle] = state;
 }
+/// Group inputs by equal completed intervals and execute batched source updates for each
+/// group.
 std::vector<star_formation_backend::Output> starFormationAdvanceBatch(
     std::vector<star_formation_backend::Input> const& inputs, std::vector<double> const& intervals,
     double scaleFactor) {
@@ -327,6 +353,7 @@ std::vector<star_formation_backend::Output> starFormationAdvanceBatch(
     }
     return outputs;
 }
+/// Commit prepared source and conversion updates throughout the locality tree.
 void starFormationCommit() {
     std::vector<hpx::future<void>> remote;
     for (auto const& child : hpxChildren()) {
@@ -337,6 +364,8 @@ void starFormationCommit() {
         future.get();
     }
 }
+/// Validate distinct gas slots, advance their explicit intervals, and stage the resulting
+/// updates.
 StarFormationUpdate starFormationPrepareLocal(std::vector<ParticleInteger> const& gasIndices,
     std::vector<double> const& intervals, double scaleFactor) {
     if (gasIndices.size() != intervals.size()) {
@@ -355,6 +384,8 @@ StarFormationUpdate starFormationPrepareLocal(std::vector<ParticleInteger> const
     auto const outputs = starFormationAdvanceBatch(inputs, intervals, scaleFactor);
     return detail::stage(gasIndices, inputs, outputs, scaleFactor);
 }
+/// Apply prepared thermodynamic updates or gas-to-star conversions, then clear pending
+/// state.
 void starFormationCommitLocal() {
     for (auto const& update : detail::pending) {
         ParticleInteger const gas = particlesCatIndex(update.particle);
@@ -369,6 +400,8 @@ void starFormationCommitLocal() {
     }
     detail::pending.clear();
 }
+/// Prepare and commit a completed source interval, discarding failures and invalidating
+/// caches after conversions.
 StarFormationUpdate starFormationClose(
     int minimumRung, double scaleFactor, double, double baseTimestep, double explicitTimestep) {
     StarFormationUpdate result;
@@ -389,6 +422,8 @@ StarFormationUpdate starFormationClose(
     return result;
 }
 HPX_PLAIN_ACTION(starFormationPressureIntegral, StarFormationPressureIntegralAction);
+/// Reduce the gas thermal pressure-energy contribution across localities at the supplied
+/// scale.
 double starFormationPressureIntegral(double scaleFactor) {
     std::vector<hpx::future<double>> remote;
     for (auto const& child : hpxChildren()) {

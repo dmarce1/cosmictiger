@@ -38,10 +38,12 @@ class Vector : public std::vector<T, Alloc> {
 
 public:
 #ifdef CHECK_BOUNDS
+    /// Access the indexed element; the index must lie within the logical bounds.
     inline T& operator[](size_t i) {
         DO_BOUNDS_CHECK(i);
         return BaseType::operator[](i);
     }
+    /// Access the indexed element; the index must lie within the logical bounds.
     inline T const& operator[](size_t i) const {
         DO_BOUNDS_CHECK(i);
         return BaseType::operator[](i);
@@ -54,6 +56,7 @@ class Array {
     T a_[n];
 
 public:
+    /// Access the indexed element; the index must lie within the logical bounds.
     CUDA_EXPORT
     inline T& operator[](int i) {
 #ifdef CHECK_BOUNDS
@@ -61,6 +64,7 @@ public:
 #endif
         return a_[i];
     }
+    /// Access the indexed element; the index must lie within the logical bounds.
     CUDA_EXPORT
     inline T const& operator[](int i) const {
 #ifdef CHECK_BOUNDS
@@ -68,34 +72,42 @@ public:
 #endif
         return a_[i];
     }
+    /// Expose the contiguous element storage without copying.
     CUDA_EXPORT
     inline T const* data() const {
         return a_;
     }
+    /// Expose the contiguous element storage without copying.
     CUDA_EXPORT
     inline T* data() {
         return a_;
     }
+    /// Return the logical number of stored elements.
     CUDA_EXPORT
     inline int size() const {
         return n;
     }
+    /// Return a pointer to the first stored element.
     CUDA_EXPORT
     inline T const* begin() const {
         return a_;
     }
+    /// Return a pointer to the first stored element.
     CUDA_EXPORT
     inline T* begin() {
         return a_;
     }
+    /// Return the one-past-end pointer for the stored elements.
     CUDA_EXPORT
     inline T const* end() const {
         return a_ + n;
     }
+    /// Return the one-past-end pointer for the stored elements.
     CUDA_EXPORT
     inline T* end() {
         return a_ + n;
     }
+    /// Archive `a_` in transport order.
     template <class Arc>
     void serialize(Arc&& arc, unsigned) {
         for (int i = 0; i < n; i++) {
@@ -104,6 +116,7 @@ public:
     }
 };
 
+/// Return an array with every spatial component multiplied by the scalar.
 template <class T>
 inline Array<T, kDimensions> operator*(Array<T, kDimensions> const& a, T b) {
     Array<T, kDimensions> c;
@@ -113,6 +126,7 @@ inline Array<T, kDimensions> operator*(Array<T, kDimensions> const& a, T b) {
     return c;
 }
 
+/// Compare corresponding stored values for equality.
 template <class T>
 inline bool operator==(Array<T, kDimensions> const& a, Array<T, kDimensions> const& b) {
     for (int dim = 0; dim < kDimensions; dim++) {
@@ -123,11 +137,13 @@ inline bool operator==(Array<T, kDimensions> const& a, Array<T, kDimensions> con
     return true;
 }
 
+/// Test whether any corresponding array component differs.
 template <class T>
 inline bool operator!=(Array<T, kDimensions> const& a, Array<T, kDimensions> const& b) {
     return !(a == b);
 }
 
+/// Return the componentwise sum of two spatial arrays.
 template <class T>
 inline Array<T, kDimensions> operator+(
     Array<T, kDimensions> const& a, Array<T, kDimensions> const& b) {
@@ -138,6 +154,7 @@ inline Array<T, kDimensions> operator+(
     return c;
 }
 
+/// Return the componentwise difference of two spatial arrays.
 template <class T>
 inline Array<T, kDimensions> operator-(
     Array<T, kDimensions> const& a, Array<T, kDimensions> const& b) {
@@ -157,12 +174,15 @@ struct Pair {
     Pair& operator=(Pair const&) = default;
     Pair(Pair&&) = default;
     Pair& operator=(Pair&&) = default;
+    /// Initialize the first and second values from the supplied pair of arguments.
     Pair(T a, V b)
       : first(a)
       , second(b) {}
+    /// Compare corresponding stored values for equality.
     inline bool operator==(Pair<T> other) const {
         return other.first == first && second == other.second;
     }
+    /// Archive this record in the field order required by distributed transport.
     template <class A>
     void serialize(A&& a, unsigned) {
         a & first;

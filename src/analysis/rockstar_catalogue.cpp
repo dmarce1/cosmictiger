@@ -28,6 +28,8 @@
 // ROCKSTAR section/equation references: Behroozi, Wechsler & Wu (2013),
 // https://arxiv.org/html/1110.4372v3
 
+/// Encode a finite halo field as binary16, reporting the field name on overflow or
+/// nonfinite input.
 Float16 rockstarEncodeHalf(double value, char const* fieldName) {
     Float16 encoded;
     try {
@@ -42,6 +44,8 @@ Float16 rockstarEncodeHalf(double value, char const* fieldName) {
     return encoded;
 }
 
+/// Return a finite positive scale radius within the outer radius, or zero for an invalid
+/// estimate.
 double rockstarBoundedScaleRadius(double scaleRadius, double outerRadius) {
     // Production builds use -ffast-math; test finiteness by bits, not comparisons.
     if (!rockstar::detail::isFinite(scaleRadius) || !rockstar::detail::isFinite(outerRadius) ||
@@ -51,6 +55,7 @@ double rockstarBoundedScaleRadius(double scaleRadius, double outerRadius) {
     return scaleRadius;
 }
 
+/// Write native halo records and atomically publish their format/units metadata sidecar.
 void rockstarWriteCatalogue(
     std::string const& filename, RockstarRecord const* records, size_t count) {
     static_assert(
@@ -100,12 +105,15 @@ namespace detail {
 
 constexpr double kFourPiOverThree = 4.0 * std::numbers::pi / 3.0;
 
+/// Resolve virial and spherical-overdensity thresholds for the current cosmology and scale.
 rockstar::HaloDensityThresholds haloOverdensity(double scale) {
     auto const& cosmology = getOptions().cosmology;
     return rockstar::haloDensityThresholds(
         scale, cosmology.omegaM, cosmology.omegaR, cosmology.omegaLambda, cosmology.omegaK);
 }
 
+/// Compute a particle's squared displacement from the subgroup center in the current
+/// coordinate units.
 double radiusSquared(RockstarParticle const& particle, Subgroup const& group) {
     double const dx = double(particle.x) - group.x;
     double const dy = double(particle.y) - group.y;
@@ -113,6 +121,8 @@ double radiusSquared(RockstarParticle const& particle, Subgroup const& group) {
     return dx * dx + dy * dy + dz * dz;
 }
 
+/// Return sorted particle radii about the subgroup center after undoing position
+/// normalization.
 std::vector<double> sortedRadii(DeviceVector<RockstarParticle> const& particles,
     Subgroup const& group, double positionFactor = 1.0) {
     std::vector<double> radii;
@@ -124,6 +134,7 @@ std::vector<double> sortedRadii(DeviceVector<RockstarParticle> const& particles,
     return radii;
 }
 
+/// Compute the mean phase-space velocity of the supplied particle set.
 Vector3<double> bulkVelocity(DeviceVector<RockstarParticle> const& particles) {
     Vector3<double> result{};
     if (!particles.empty()) {
@@ -168,6 +179,8 @@ void coreVelocity(Subgroup& group, DeviceVector<RockstarParticle> const& particl
     group.vzc = count ? velocity[2] / count : 0.0;
 }
 
+/// Evaluate softened self-potentials for a halo particle set using the selected Barnes-Hut
+/// backend.
 DeviceVector<float> potentials(DeviceVector<RockstarParticle> const& particles) {
     DeviceVector<Vector3<float>> positions;
     for (auto const& particle : particles) {
@@ -181,6 +194,8 @@ DeviceVector<float> potentials(DeviceVector<RockstarParticle> const& particles) 
         positions, getOptions().analysis.groupsCuda && particles.size() > 4096);
 }
 
+/// Compute subgroup kinetic energy about its bulk velocity and pair-counted physical
+/// potential energy.
 void energies(Subgroup& group, DeviceVector<RockstarParticle> const& particles, double scale) {
     auto const velocity = bulkVelocity(particles);
     auto const phi = potentials(particles);
@@ -199,6 +214,7 @@ void energies(Subgroup& group, DeviceVector<RockstarParticle> const& particles, 
     group.w = potential;
 }
 
+/// Reconstruct subgroup child lists from their internal parent indices.
 void rebuildChildren(Vector<Subgroup>& groups) {
     for (auto& group : groups) {
         group.children.clear();
@@ -210,6 +226,8 @@ void rebuildChildren(Vector<Subgroup>& groups) {
     }
 }
 
+/// Remove rejected subgroups, reconnect surviving ancestors, and rebuild compact child
+/// indices.
 void compactGroups(Vector<Subgroup>& groups, std::vector<bool> const& keep) {
     std::vector<int> map(groups.size(), -1);
     int count = 0;
@@ -318,6 +336,8 @@ void internalHierarchy(Vector<Subgroup>& groups) {
     rebuildChildren(groups);
 }
 
+/// Measure inclusive spherical-overdensity masses/radii and update core velocities for each
+/// subgroup.
 void measureMasses(Vector<Subgroup>& groups, double scale) {
     auto const density = haloOverdensity(scale);
     double const mean = darkMatterReferenceCount(getOptions());
@@ -345,6 +365,7 @@ void measureMasses(Vector<Subgroup>& groups, double scale) {
     }
 }
 
+/// Select particles within the specified radius of a subgroup center.
 DeviceVector<RockstarParticle> withinRadius(
     DeviceVector<RockstarParticle> const& particles, Subgroup const& group, double radius) {
     DeviceVector<RockstarParticle> selected;
@@ -405,6 +426,7 @@ DeviceVector<RockstarParticle> rockstarGatherParticles(Vector<Subgroup> const& g
     return result;
 }
 
+/// Update subgroup center, velocity, dispersions, profile scales, and dynamical radius.
 void rockstarUpdateStatistics(
     Subgroup& group, float positionFactor, float velocityFactor, float scale) {
     if (group.parts.empty()) {
@@ -504,6 +526,8 @@ bool rockstarHaloBound(Subgroup& halo, Vector<RockstarParticle>& unboundParticle
     return accepted;
 }
 
+/// Build internal hierarchy, perform the prescribed unbinding pass, and prune catalogue
+/// candidates.
 void rockstarFinalizeSubgroups(Vector<Subgroup>& groups, float scale) {
     if (groups.empty()) {
         return;
@@ -593,6 +617,8 @@ void rockstarFinalizeSubgroups(Vector<Subgroup>& groups, float scale) {
     rockstarPruneCatalogueGroups(groups, scale);
 }
 
+/// Refresh masses, remove undersized halos, and establish final geometric catalogue
+/// parents.
 void rockstarPruneCatalogueGroups(Vector<Subgroup>& groups, float scale) {
     auto const refresh = [&groups, scale]() {
         for (auto& group : groups) {
@@ -662,6 +688,7 @@ void rockstarPruneCatalogueGroups(Vector<Subgroup>& groups, float scale) {
     }
 }
 
+/// Limit a work unit to the native 15-bit halo-ID capacity and report omitted records.
 size_t rockstarCatalogueSize(size_t count) {
     constexpr size_t kCapacity = 32768;
     if (count > kCapacity) {
@@ -674,11 +701,14 @@ size_t rockstarCatalogueSize(size_t count) {
     return std::min(count, kCapacity);
 }
 
+/// Return the conversion from stored particle mass to solar masses per h for halo records.
 double rockstarMassConversion() {
     auto const units = units::scalesFromOptions(getOptions());
     return (units.massScale() * getOptions().cosmology.hubble / units::kSolarMass).value();
 }
 
+/// Measure and encode a halo's catalogue properties with the requested inclusive membership
+/// convention.
 RockstarRecord rockstarMakeRecord(Vector<Subgroup> const& groups, int index, float scale,
     Vector3<double> const& origin, bool inclusive, bool periodic, double* virialRadius) {
     Subgroup const& group = groups[index];
@@ -860,6 +890,8 @@ RockstarRecord rockstarMakeRecord(Vector<Subgroup> const& groups, int index, flo
     return record;
 }
 
+/// Construct the legacy group entry with virial-aperture diagnostics and prior-halo
+/// membership counts.
 GroupEntry rockstarMakeGroupEntry(
     Vector<Subgroup> const& groups, int index, float scale, Vector3<double> const& origin) {
     auto const& group = groups[index];

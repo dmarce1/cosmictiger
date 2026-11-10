@@ -14,18 +14,24 @@ class Semaphore {
     std::atomic<int> available_;
 
 public:
+    /// Initialize the semaphore's available-permit count.
     Semaphore(int cnt) {
         available_ = cnt;
     }
+    /// Initialize the semaphore's available-permit count.
     Semaphore() {
         available_ = 0;
     }
+    /// Acquire count permits, yielding execution and retrying while fewer permits are
+    /// available.
     void wait(int count) {
         while ((available_ -= count) < 0) {
             available_ += count;
             hpxYield();
         }
     }
+    /// Attempt to acquire count permits without waiting; restore the count and return
+    /// false on failure.
     bool tryWait(int count) {
         if ((available_ -= count) < 0) {
             available_ += count;
@@ -34,6 +40,7 @@ public:
             return true;
         }
     }
+    /// Release count permits for waiting or future callers.
     void signal(int count) {
         available_ += count;
     }

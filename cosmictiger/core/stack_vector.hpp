@@ -22,14 +22,18 @@ class StackVector {
     DeviceVector<T> dat_;
     DeviceVector<int> bounds_;
     BarrierType barrier_;
+    /// Return the storage offset of the first element in the current stack frame.
     __device__ inline int begin() const {
         ASSERT(bounds_.size() >= 2);
         return bounds_[bounds_.size() - 2];
     }
+    /// Return the storage offset immediately after the current stack frame.
     __device__ inline int end() const {
         ASSERT(bounds_.size() >= 2);
         return bounds_.back();
     }
+    /// Create an empty base frame and initialize the CUDA block's asynchronous-copy
+    /// barrier.
     __device__ inline void initialize() {
         int const& tid = threadIdx.x;
         bounds_.resize(2);
@@ -45,9 +49,11 @@ class StackVector {
     }
 
 public:
+    /// Return the number of nested frames above the base frame.
     __device__ inline int depth() const {
         return bounds_.size() - 2;
     }
+    /// Initialize the traversal stack and its block-cooperative synchronization state.
     __device__ inline StackVector() {
         initialize();
     }
@@ -64,6 +70,7 @@ public:
         dat_.reserve(entries);
         bounds_.reserve(depth + 2);
     }
+    /// Append an element to the current frame and synchronize the CUDA block.
     __device__ inline void push(T const& a) {
         int const& tid = threadIdx.x;
         ASSERT(bounds_.size() >= 2);
@@ -73,10 +80,13 @@ public:
         }
         __syncthreads();
     }
+    /// Return the element count of the current frame.
     __device__ inline int size() const {
         ASSERT(bounds_.size() >= 2);
         return end() - begin();
     }
+    /// Resize the current frame and update its end offset collectively across the
+    /// block.
     __device__ inline void resize(int sz) {
         int const& tid = threadIdx.x;
         ASSERT(bounds_.size() >= 2);
@@ -86,17 +96,22 @@ public:
         }
         __syncthreads();
     }
+    /// Access the indexed element; the index must lie within the logical bounds.
     __device__ inline T operator[](int i) const {
         ASSERT(i < size());
         return dat_[begin() + i];
     }
+    /// Access the indexed element; the index must lie within the logical bounds.
     __device__ inline T& operator[](int i) {
         ASSERT(i < size());
         return dat_[begin() + i];
     }
+    /// Return a pointer to the first element of the current frame.
     __device__ inline T* data() {
         return dat_.data() + begin();
     }
+    /// Push a copy of the current frame, completing the cooperative copy before
+    /// returning.
     __device__ inline void pushTop() {
         auto const sz = size();
         bounds_.pushBack(end() + sz);
@@ -108,6 +123,7 @@ public:
             barrier_.arrive_and_wait();
         }
     }
+    /// Discard the top frame and restore the preceding frame's storage extent.
     __device__ inline void popTop() {
         ASSERT(bounds_.size() >= 2);
         dat_.resize(begin());

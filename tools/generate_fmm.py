@@ -481,7 +481,8 @@ def emitKernel(E,independentM2lRatios=False):
     plan=EmissionPlan(g,signed)
     stats=plan.statistics(live,range(len(result)))
     extra=', Real sourceRatio, Real targetRatio' if independentM2lRatios else ''
-    out=[f'template <class Real> CUDA_EXPORT void M2L(',
+    out=['/// Accumulate Newtonian local coefficients from the source multipole and displacement.',
+         f'template <class Real> CUDA_EXPORT void M2L(',
          f'    Expansion<Real, {E+1}>& L, Multipole<Real, {E+1}> const& M,',
          f'    Vector3<Real> const& distance{extra}) {{',
          '    Real const dx = distance[0];',
@@ -497,7 +498,8 @@ def emitKernel(E,independentM2lRatios=False):
         out+=plan.accumulate(f'L[{index(a)}]',output)
     out.append('}')
     if independentM2lRatios:
-        out.extend([f'template <class Real> CUDA_EXPORT void M2L(',
+        out.extend(['/// Accumulate the multipole contribution using inverse-distance scale ratios.',
+                    f'template <class Real> CUDA_EXPORT void M2L(',
                     f'    Expansion<Real, {E+1}>& L, Multipole<Real, {E+1}> const& M,',
                     '    Vector3<Real> const& distance) {',
                     '    Real const dx = distance[0];',

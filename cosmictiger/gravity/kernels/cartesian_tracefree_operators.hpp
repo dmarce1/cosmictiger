@@ -44,6 +44,7 @@ CUDA_EXPORT Vector3<Real> fmmScaleDisplacement(Vector3<Real> value) {
 }
 
 namespace cosmictiger::gravity::cartesian {
+/// Accumulate a point mass into the multipole and return the generated operation count.
 template <class Real, int order>
 CUDA_EXPORT int P2M(
     Multipole<Real, order>& target, Real mass, Vector3<Real> const& particleOffset) {
@@ -52,6 +53,8 @@ CUDA_EXPORT int P2M(
     return detail::kP2MFlops<order - 2>;
 }
 
+/// Accumulate a point-mass local expansion, optionally preserving the potential
+/// coefficient.
 template <class Real, int order>
 CUDA_EXPORT int P2L(Expansion<Real, order>& target, Real mass, Vector3<Real> const& displacement,
     bool doPotential = true) {
@@ -64,6 +67,7 @@ CUDA_EXPORT int P2L(Expansion<Real, order>& target, Real mass, Vector3<Real> con
     return detail::kP2LFlops<order - 1> + 7;
 }
 
+/// Accumulate translated moments at unit scale ratio; source and target must be distinct.
 template <class Real, int order>
 CUDA_EXPORT int M2M(Multipole<Real, order>& target, Multipole<Real, order> const& source,
     Vector3<Real> const& displacement) {
@@ -73,6 +77,8 @@ CUDA_EXPORT int M2M(Multipole<Real, order>& target, Multipole<Real, order> const
     return detail::kM2MFlops<order - 2>;
 }
 
+/// Accumulate the source multipole's local field, optionally preserving the potential
+/// coefficient.
 template <class Real, int order>
 CUDA_EXPORT int M2L(Expansion<Real, order>& target, Multipole<Real, order> const& source,
     Vector3<Real> const& displacement, bool doPotential = true) {
@@ -85,6 +91,7 @@ CUDA_EXPORT int M2L(Expansion<Real, order>& target, Multipole<Real, order> const
     return detail::kM2LFlops<order - 1> + 7;
 }
 
+/// Replace the coefficients with the unit-mass Newtonian Green expansion.
 template <class Real, int order>
 CUDA_EXPORT void evaluateGreen(Green<Real, order>& target, Vector3<Real> const& displacement) {
     using namespace math;
@@ -92,6 +99,7 @@ CUDA_EXPORT void evaluateGreen(Green<Real, order>& target, Vector3<Real> const& 
     detail::P2L(target, broadcast<Real>(1), displacement);
 }
 
+/// Accumulate multipole potential and acceleration, optionally preserving potential.
 template <class Real, int order>
 CUDA_EXPORT int M2P(gravity::Field<Real>& target, Multipole<Real, order> const& source,
     Vector3<Real> const& displacement, bool doPotential = true) {
@@ -104,6 +112,7 @@ CUDA_EXPORT int M2P(gravity::Field<Real>& target, Multipole<Real, order> const& 
     return detail::kM2PFlops<order - 2> + 7;
 }
 
+/// Accumulate a translated local expansion; source and target must be distinct.
 template <class Real, int order>
 CUDA_EXPORT int L2L(Expansion<Real, order>& target, Expansion<Real, order> const& source,
     Vector3<Real> const& displacement, bool doPotential = true) {
@@ -117,6 +126,8 @@ CUDA_EXPORT int L2L(Expansion<Real, order>& target, Expansion<Real, order> const
     return detail::kL2LFlops<order - 1>;
 }
 
+/// Accumulate local potential and acceleration at unit scale ratio, optionally preserving
+/// potential.
 template <class Real, int order>
 CUDA_EXPORT int L2P(gravity::Field<Real>& target, Expansion<Real, order> const& source,
     Vector3<Real> const& displacement, bool doPotential = true) {

@@ -25,6 +25,7 @@ HPX_PLAIN_ACTION(drift, DriftAction);
 
 namespace detail {
 
+/// Enable coordinator-level drift timing only on rank zero when profiling is compiled in.
 bool profileDriftCoordinator() {
     // Both drift entry paths execute locally on the driver and recurse only to
     // child localities. CPU workers and CUDA kernels never call drift().
@@ -37,6 +38,8 @@ bool profileDriftCoordinator() {
 
 }    // namespace detail
 
+/// Partition the selected particle range among CPU workers and collect optional lightcone
+/// crossings.
 void cpuDrift(int rung, double a, double dt, double tau0, double tau1, double tauMax, double drag) {
     auto const range =
         rung < 0 ? Pair<ParticleInteger>(0, particlesSize()) : particlesCurrentRange();
@@ -99,6 +102,8 @@ void cpuDrift(int rung, double a, double dt, double tau0, double tau1, double ta
 #endif
 }
 
+/// Expand SPH swept bounds and drift selected particles on the chosen backend, joining
+/// distributed work.
 void drift(
     double scale, double dt, double tau0, double tau1, double tauMax, int rung, double drag) {
     Vector<hpx::future<void>> futures;

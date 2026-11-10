@@ -20,6 +20,8 @@
 
 namespace detail {
 
+/// Execute strided index work on bounded HPX tasks, keeping captured data alive until all
+/// tasks finish.
 template <class Function>
 void particleMeshParallelFor(
     size_t count, size_t workers, char const* annotation, Function const& function) {
@@ -53,10 +55,12 @@ void particleMeshParallelFor(
     }
 }
 
+/// Divide a count into nearly equal chunks without overflowing a count-times-index product.
 size_t particleMeshChunkBoundary(size_t count, size_t chunk, size_t chunks) {
     return (count / chunks) * chunk + std::min(count % chunks, chunk);
 }
 
+/// Compute the linear mesh-cell key from a particle's stored position coordinates.
 uint64_t particleMeshKey(size_t index, uint32_t meshSize) {
     uint64_t const x = particleMeshCoordinate(particlesX[kXi][index].raw(), meshSize);
     uint64_t const y = particleMeshCoordinate(particlesX[kYi][index].raw(), meshSize);
@@ -68,12 +72,14 @@ uint64_t particleMeshKey(size_t index, uint32_t meshSize) {
 // cell stored per particle by the PMMM outer interval.
 struct PositionMeshKey {
     uint32_t meshSize;
+    /// Return the particle mesh key computed from its current position.
     uint64_t operator()(size_t index) const {
         return particleMeshKey(index, meshSize);
     }
 };
 
 struct FrozenMeshKey {
+    /// Return the particle mesh key saved for the current frozen-membership interval.
     uint64_t operator()(size_t index) const {
         return particlesFrozenCells[index];
     }
@@ -89,6 +95,8 @@ struct ParticleMeshPartition {
     uint64_t upperMaximum = 0;
 };
 
+/// Partition particles around a key split while recording the key bounds of both
+/// partitions.
 template <class KeyOf>
 ParticleMeshPartition partitionParticleMeshRange(
     size_t begin, size_t end, uint64_t split, KeyOf const& keyOf) {
@@ -127,6 +135,7 @@ ParticleMeshPartition partitionParticleMeshRange(
     return result;
 }
 
+/// Recursively sort a particle range by mesh key using bounded parallel partition work.
 template <class KeyOf>
 void sortParticleMeshRange(size_t begin, size_t end, uint64_t minimum, uint64_t maximum,
     size_t workers, KeyOf const& keyOf) {
@@ -229,12 +238,16 @@ void sortParticleMeshRange(size_t begin, size_t end, uint64_t minimum, uint64_t 
 
 }    // namespace detail
 
+/// Sort the requested particles by current-position mesh keys and return occupied cell
+/// ranges.
 Vector<ParticleMeshCell> particleMeshSort(int meshSize) {
     return particleMeshSort(meshSize, {0, particlesSize()});
 }
 
 namespace detail {
 
+/// Lock particle reordering, sort by the supplied key accessor, and construct contiguous
+/// occupied-cell ranges.
 template <class KeyOf>
 Vector<ParticleMeshCell> particleMeshSortImpl(
     uint64_t cellCount, Pair<ParticleInteger> range, KeyOf const& keyOf) {
@@ -310,12 +323,16 @@ Vector<ParticleMeshCell> particleMeshSortImpl(
 
 }    // namespace detail
 
+/// Sort the requested particles by current-position mesh keys and return occupied cell
+/// ranges.
 Vector<ParticleMeshCell> particleMeshSort(int meshSize, Pair<ParticleInteger> range) {
     uint64_t const cellCount = detail::particleMeshCellCount(meshSize);
     return detail::particleMeshSortImpl(
         cellCount, range, detail::PositionMeshKey{static_cast<uint32_t>(meshSize)});
 }
 
+/// Validate frozen membership keys and sort the selected particles by those saved cell
+/// assignments.
 Vector<ParticleMeshCell> particleMeshSortByKey(Pair<ParticleInteger> range) {
     if (range.first == range.second) {
         // A locality may own no particle; its key array is then never allocated.

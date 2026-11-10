@@ -30,6 +30,8 @@
 #include <cosmictiger/particles/particles.hpp>
 
 namespace detail {
+/// Restrict sink work to particles on active rungs, creating compact sink nodes for
+/// selected runs.
 Vector<KickWorkitem> selectBatchSinks(Vector<KickWorkitem> workitems, int minimumRung) {
     if (minimumRung <= 0) {
         return workitems;
@@ -93,6 +95,7 @@ Vector<KickWorkitem> selectBatchSinks(Vector<KickWorkitem> workitems, int minimu
     return selected;
 }
 
+/// Sort sink work by particle range and execute the batch through the CUDA gravity backend.
 KickReturn localBatchGpu(KickParameters params, Vector<KickWorkitem> workitems,
     std::unordered_set<TreeId, KickWorkspaceTreeIdHash> const&, FmmForceOutput output) {
 #ifdef USE_CUDA
@@ -108,6 +111,8 @@ KickReturn localBatchGpu(KickParameters params, Vector<KickWorkitem> workitems,
     return {};
 #endif
 }
+/// Dispatch a local tree walk with bounded asynchronous branching and a synchronous
+/// fallback.
 hpx::future<KickReturn> localBatchFork(KickParameters params, ExpansionBuffer const& l,
     Vector3<Position> pos, TreeId self, Vector<TreeId> direct,
     std::shared_ptr<KickWorkspace> workspace, bool threadme) {
@@ -128,6 +133,12 @@ hpx::future<KickReturn> localBatchFork(KickParameters params, ExpansionBuffer co
                 return hpx::async(hpx::annotated_function(
                                       [run = std::move(run)](Vector<TreeId> direct) mutable {
                                           struct ThreadCountGuard {
+                                              /// Release
+                                              /// the
+                                              /// asynchronous
+                                              /// tree-walk
+                                              /// thread-count
+                                              /// reservation.
                                               ~ThreadCountGuard() {
                                                   --threads;
                                               }
@@ -147,6 +158,8 @@ hpx::future<KickReturn> localBatchFork(KickParameters params, ExpansionBuffer co
     return hpx::make_ready_future(run(std::move(direct)));
 }
 }    // namespace detail
+/// Validate and execute a batch of cell-tree sinks and return fields, kick results, and
+/// interaction counts.
 FmmForceResult kickCellBatch(Vector<KickWorkitem> workitems, bool doPotential, int minimumRung) {
     workitems = detail::selectBatchSinks(std::move(workitems), minimumRung);
     ParticleInteger const ownedCount = particlesOwnedSize();

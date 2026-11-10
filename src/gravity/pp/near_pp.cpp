@@ -13,6 +13,8 @@
 #include <cosmictiger/gravity/pp_near_pp.hpp>
 #include <cosmictiger/math/kernel.hpp>
 
+/// Evaluate every supplied source against each sink using the common batched near-field
+/// interface.
 void pmmmNearField(std::vector<PmmmNearParticle> const& sinks,
     std::vector<PmmmNearParticle> const& sources, double cellWidth, bool doPotential,
     std::vector<std::array<double, 4>>& fields) {
@@ -20,6 +22,8 @@ void pmmmNearField(std::vector<PmmmNearParticle> const& sinks,
     pmmmNearFieldBatch(sinks, sources, sourceRanges, cellWidth, doPotential, fields);
 }
 
+/// Validate per-sink source ranges and evaluate softened direct near forces on the selected
+/// backend.
 void pmmmNearFieldBatch(std::vector<PmmmNearParticle> const& sinks,
     std::vector<PmmmNearParticle> const& sources,
     std::vector<PmmmNearSourceRange> const& sourceRanges, double cellWidth, bool doPotential,

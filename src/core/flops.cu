@@ -12,6 +12,7 @@ static __managed__ FlopCount gpuSingleFlops = 0;
 static __managed__ FlopCount gpuDoubleFlops = 0;
 static __managed__ FlopCount gpuUnclassifiedFlops = 0;
 
+/// Clear all GPU precision counters when the CUDA backend is enabled.
 void resetGpuFlops() {
     if (cudaEnabled()) {
         gpuSingleFlops = 0;
@@ -20,17 +21,20 @@ void resetGpuFlops() {
     }
 }
 
+/// Read the GPU precision counters, returning zero when CUDA is disabled.
 FlopCounts getGpuFlopCounts() {
     return cudaEnabled() ? FlopCounts{gpuSingleFlops, gpuDoubleFlops, gpuUnclassifiedFlops} :
                            FlopCounts{};
 }
 
+/// Return the sum of the GPU precision counters.
 FlopCount getGpuFlops() {
     return getGpuFlopCounts().total();
 }
 
 namespace detail {
 
+/// Reduce operation counts over active warp lanes without reading inactive lanes.
 __device__ FlopCount reduceFlopCount(FlopCount count, unsigned mask) {
     if (mask == 0xffffffffu) {
         for (int offset = warpSize / 2; offset > 0; offset /= 2) {
@@ -51,6 +55,7 @@ __device__ FlopCount reduceFlopCount(FlopCount count, unsigned mask) {
     return count;
 }
 
+/// Select the device counter corresponding to the supplied precision category.
 __device__ FlopCount* gpuFlopCounter(FlopPrecision precision) {
     if (precision == FlopPrecision::Single) {
         return &gpuSingleFlops;
@@ -63,6 +68,8 @@ __device__ FlopCount* gpuFlopCounter(FlopPrecision precision) {
 
 }    // namespace detail
 
+/// Aggregate active-lane operation counts by precision before atomically updating device
+/// totals.
 __device__ void addGpuFlops(FlopCount count, FlopPrecision precision) {
 #ifdef COUNT_FLOPS
     unsigned const mask = __activemask();

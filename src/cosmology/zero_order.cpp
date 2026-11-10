@@ -21,6 +21,7 @@
 
 namespace detail {
 
+/// Test IEEE exponent bits for finiteness independently of fast-math assumptions.
 bool isFiniteBackground(double value) {
     constexpr std::uint64_t kExponentMask = UINT64_C(0x7ff0000000000000);
     return (std::bit_cast<std::uint64_t>(value) & kExponentMask) != kExponentMask;
@@ -28,6 +29,7 @@ bool isFiniteBackground(double value) {
 
 }    // namespace detail
 
+/// Return the baryon and cold-dark-matter density fractions at the supplied scale factor.
 void ZeroOrderUniverse::computeMatterFractions(double& oc, double& ob, double a) const {
     double omegaM = params.omegaB + params.omegaC;
     double omegaR = params.omegaGam + params.omegaNu;
@@ -36,6 +38,7 @@ void ZeroOrderUniverse::computeMatterFractions(double& oc, double& ob, double a)
     oc = params.omegaC / denominator;
 }
 
+/// Return photon and neutrino density fractions at the supplied scale factor.
 void ZeroOrderUniverse::computeRadiationFractions(double& ogam, double& onu, double a) const {
     double omegaM = params.omegaB + params.omegaC;
     double omegaR = params.omegaGam + params.omegaNu;
@@ -44,6 +47,7 @@ void ZeroOrderUniverse::computeRadiationFractions(double& ogam, double& onu, dou
     onu = params.omegaNu / denominator;
 }
 
+/// Integrate the background in logarithmic conformal time to recover the scale factor.
 double ZeroOrderUniverse::conformalTimeToScaleFactor(double taumax) {
     taumax *= constants::kH0 / cosmic_constants::kH0;
     double dlogtau = 1.0e-3;
@@ -71,6 +75,7 @@ double ZeroOrderUniverse::conformalTimeToScaleFactor(double taumax) {
     return a;
 }
 
+/// Convert a valid redshift to the physical mean matter density in CGS units.
 double ZeroOrderUniverse::redshiftToDensity(double z) const {
     if (!detail::isFiniteBackground(z) || !(z > -1.0)) {
         throw std::invalid_argument("Matter density requires finite redshift greater than -1");
@@ -82,6 +87,7 @@ double ZeroOrderUniverse::redshiftToDensity(double z) const {
         (8.0 * std::numbers::pi * constants::kG * a * a * a);
 }
 
+/// Integrate the conformal age to the supplied scale factor using logarithmic scale steps.
 double ZeroOrderUniverse::scaleFactorToConformalTime(double a) {
     double amax = a;
     double dloga = 1e-2;
@@ -110,6 +116,7 @@ double ZeroOrderUniverse::scaleFactorToConformalTime(double a) {
     return tau;
 }
 
+/// Integrate the physical age from the minimum scale to the requested redshift.
 double ZeroOrderUniverse::redshiftToTime(double z) const {
     double amax = 1.f / (1.f + z);
     double dloga = 1e-3;
@@ -138,6 +145,8 @@ double ZeroOrderUniverse::redshiftToTime(double z) const {
     return t;
 }
 
+/// Build interpolated thermal and expansion background tables from cosmology and
+/// recombination data.
 void createZeroOrderUniverse(ZeroOrderUniverse* uniPtr, std::function<double(double)> fxe,
     double amax, CosmicParameters cpars, BackgroundThermalHistory thermalHistory) {
     if (uniPtr == nullptr || !fxe || !detail::isFiniteBackground(amax) ||

@@ -20,6 +20,8 @@
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/simd_math.hpp>
 
+/// Partition potential-evaluation particles along one coordinate while preserving their
+/// original-order permutation.
 int bhSort(DeviceVector<Vector3<float>>& parts, Vector<int>& sortOrder, int begin, int end,
     float xm, int xdim) {
     int lo = begin;
@@ -43,6 +45,8 @@ int bhSort(DeviceVector<Vector3<float>>& parts, Vector<int>& sortOrder, int begi
     return hi;
 }
 
+/// Build a bounded Barnes-Hut tree with tight node boxes and count-based fallback splits
+/// for coincident points.
 void bhCreateTree(DeviceVector<BhTreeNode>& nodes, DeviceVector<int>& sinkBuckets, int self,
     DeviceVector<Vector3<float>>& parts, Vector<int>& sortOrder, Range<float> box, int begin,
     int end, int bucketSize, int depth = 0) {
@@ -109,6 +113,8 @@ void bhCreateTree(DeviceVector<BhTreeNode>& nodes, DeviceVector<int>& sinkBucket
         nodes, sinkBuckets, right, parts, sortOrder, box, middle, end, bucketSize, depth + 1);
 }
 
+/// Evaluate softened halo potentials at source particles using SIMD tree walks over sink
+/// buckets.
 void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& sinkBuckets,
     DeviceVector<float>& phi, DeviceVector<Vector3<float>>& parts, float relativeError) {
     float const h = getOptions().gravity.smoothingLength;
@@ -215,6 +221,7 @@ void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& si
     hpx::wait_all(futs.begin(), futs.end());
 }
 
+/// Evaluate the softened Barnes-Hut potential at one arbitrary sink position.
 void bhTreeEvaluatePoint(DeviceVector<BhTreeNode> const& nodes, Vector3<float> pt, float& phi,
     DeviceVector<Vector3<float>>& parts, float relativeError) {
     float const h = getOptions().gravity.smoothingLength;
@@ -304,6 +311,8 @@ void bhTreeEvaluatePoint(DeviceVector<BhTreeNode> const& nodes, Vector3<float> p
     phi *= gm;
 }
 
+/// Build a temporary halo tree, evaluate source-particle potentials, and restore original
+/// particle order.
 DeviceVector<float> bhEvaluatePotential(DeviceVector<Vector3<float>>& positions, bool gpu) {
     gpu = gpu && usesCuda(getOptions());
 #ifndef USE_CUDA
@@ -359,6 +368,8 @@ DeviceVector<float> bhEvaluatePotential(DeviceVector<Vector3<float>>& positions,
     return rpot;
 }
 
+/// Build a temporary source tree and evaluate potentials at the supplied independent sink
+/// positions.
 DeviceVector<float> bhEvaluatePoints(
     DeviceVector<Vector3<float>>& y, DeviceVector<Vector3<float>>& positions, bool gpu) {
     gpu = gpu && usesCuda(getOptions());

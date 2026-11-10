@@ -21,6 +21,8 @@ struct InterpolationFunctor {
     T maxloga;
     int n;
     T dloga;
+    /// Evaluate four-point cubic interpolation in log-coordinate space; out-of-range
+    /// input emits a diagnostic and uses an end stencil.
     T operator()(T a) const {
         T loga = log(a);
         if (loga < minloga || loga > maxloga) {
@@ -46,6 +48,8 @@ struct InterpolationFunctor {
     }
 };
 
+/// Initialize interpolation metadata for samples uniformly spaced in log a; callers provide
+/// positive bounds and enough samples.
 template <class T>
 inline void buildInterpolationFunction(
     InterpolationFunctor<T>* f, std::vector<T> const& values, T amin, T amax) {

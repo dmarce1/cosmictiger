@@ -97,6 +97,8 @@ struct Subgroup {
     double rVir = 0.0;
     int hostParticleCount = 0;
     int depth;
+    /// Initialize an unassigned subgroup with no parent and no measured minimum spatial
+    /// dispersion.
     Subgroup() {
         depth = -1;
         sigmaXMin = std::numeric_limits<float>::max();

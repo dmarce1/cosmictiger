@@ -154,6 +154,8 @@ struct KickParameters {
     bool refreshMembership = false;
     bool frozenNearClose = false;
     bool closeShortOverInterval = false;
+    /// Initialize common kick-policy defaults; callers populate the remaining
+    /// invocation-specific state.
     KickParameters() {
         htime = true;
         openLargerCell = false;
@@ -162,6 +164,8 @@ struct KickParameters {
         velInit = false;
         sign = 1.0;
     }
+    /// Archive `htime`, `ascending`, `descending`, `top`, `maxDt`, `minRung` and the
+    /// remaining fields in transport order.
     template <class A>
     void serialize(A&& arc, unsigned) {
         arc & htime;

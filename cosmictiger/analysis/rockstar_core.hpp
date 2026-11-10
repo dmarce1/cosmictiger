@@ -34,6 +34,7 @@ CUDA_EXPORT bool periodicBoxesOverlap(Box const& a, Box const& b, int dimensions
     return true;
 }
 
+/// Test inclusive coordinate bounds in the requested number of dimensions.
 template <class Box, class Point>
 CUDA_EXPORT bool boxContains(Box const& box, Point const& point, int dimensions) {
     for (int dim = 0; dim < dimensions; dim++) {
@@ -44,6 +45,7 @@ CUDA_EXPORT bool boxContains(Box const& box, Point const& point, int dimensions)
     return true;
 }
 
+/// Estimate particle spacing from the box volume over its nondegenerate dimensions.
 template <class Box>
 float initialLinkingLength(Box const& box, int count, int dimensions) {
     double volume = 1.0;
@@ -62,11 +64,15 @@ float initialLinkingLength(Box const& box, int count, int dimensions) {
     return radius > 0.0f ? radius : std::numeric_limits<float>::min();
 }
 
+/// Convert a positive variance to a dispersion; use unity for a cold or coincident
+/// component.
 inline float normalizationScale(float variance) {
     // A cold or coincident group contributes zero in this metric component.
     return variance > 0.0f ? std::sqrt(variance) : 1.0f;
 }
 
+/// Find the smallest subgroup label within the six-dimensional linking radius, excluding
+/// the particle itself.
 template <class Particle, class ReadLabel>
 CUDA_EXPORT int minimumLinkedLabel(Particle const* particles, int self, int begin, int end,
     float linkingLengthSquared, int minimum, ReadLabel readLabel) {

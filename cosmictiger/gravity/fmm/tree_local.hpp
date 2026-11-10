@@ -39,11 +39,15 @@ CUDA_EXPORT int fromMesh(cartesian::Expansion<double, order>& target, double con
     return basis_conversion::kLocalToCartesianConventionalFlops<order> + order * order + order + 4;
 }
 
+/// Convert the mesh isotropic-background coefficient to tree-coordinate curvature using
+/// mesh and coordinate scales.
 CUDA_EXPORT inline double backgroundCurvature(double meshBackground, int meshSize) {
     double const κ = kScaleFactor;
     return -3 * meshBackground * double(meshSize) * meshSize / (κ * κ * κ);
 }
 
+/// Subtract native fixed-point coordinates before conversion and scale the unwrapped
+/// displacement into tree units.
 template <class Real = double, class PositionType>
 CUDA_EXPORT Vector3<Real> displacement(
     Vector3<PositionType> const& target, Vector3<PositionType> const& source) {

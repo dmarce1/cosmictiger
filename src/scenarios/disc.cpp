@@ -19,6 +19,8 @@
 
 namespace scenarios {
 
+/// Initialize a cold rotating gas annulus around the configured central acceleration and
+/// set its evolution schedule.
 ScenarioPlan initializeDisc() {
     ParticleInteger totalNumberOfParticles = getOptions().run.gasParticleCount;
     double const innerRadius = 0.2;

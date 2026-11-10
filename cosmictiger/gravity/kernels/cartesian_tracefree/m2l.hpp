@@ -27,6 +27,7 @@ inline constexpr int kM2LFlops = 0;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 3) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 3)
 // FMM order 3.
+/// Accumulate Newtonian local coefficients from the source multipole and displacement.
 template <class Real>
 CUDA_EXPORT void M2L(
     Expansion<Real, 3>& L, Multipole<Real, 3> const& M, Vector3<Real> const& distance) {
@@ -85,6 +86,7 @@ inline constexpr int kM2LFlops<2> = 53;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 4) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 4)
 // FMM order 4.
+/// Accumulate Newtonian local coefficients from the source multipole and displacement.
 template <class Real>
 CUDA_EXPORT void M2L(
     Expansion<Real, 4>& L, Multipole<Real, 4> const& M, Vector3<Real> const& distance) {
@@ -198,6 +200,7 @@ inline constexpr int kM2LFlops<3> = 128;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 5) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 5)
 // FMM order 5.
+/// Accumulate Newtonian local coefficients from the source multipole and displacement.
 template <class Real>
 CUDA_EXPORT void M2L(
     Expansion<Real, 5>& L, Multipole<Real, 5> const& M, Vector3<Real> const& distance) {
@@ -419,6 +422,7 @@ inline constexpr int kM2LFlops<4> = 287;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 6) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 6)
 // FMM order 6.
+/// Accumulate Newtonian local coefficients from the source multipole and displacement.
 template <class Real>
 CUDA_EXPORT void M2L(
     Expansion<Real, 6>& L, Multipole<Real, 6> const& M, Vector3<Real> const& distance) {
@@ -851,6 +855,7 @@ inline constexpr int kM2LFlops<5> = 571;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 7) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 7)
 // FMM order 7.
+/// Accumulate Newtonian local coefficients from the source multipole and displacement.
 template <class Real>
 CUDA_EXPORT void M2L(
     Expansion<Real, 7>& L, Multipole<Real, 7> const& M, Vector3<Real> const& distance) {
@@ -1621,6 +1626,7 @@ inline constexpr int kM2LFlops<6> = 1060;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 8) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 8)
 // FMM order 8.
+/// Accumulate Newtonian local coefficients from the source multipole and displacement.
 template <class Real>
 CUDA_EXPORT void M2L(
     Expansion<Real, 8>& L, Multipole<Real, 8> const& M, Vector3<Real> const& distance) {
@@ -2964,6 +2970,7 @@ inline constexpr int kM2LFlops<7> = 1876;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 9) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 9)
 // FMM order 9.
+/// Accumulate Newtonian local coefficients from the source multipole and displacement.
 template <class Real>
 CUDA_EXPORT void M2L(
     Expansion<Real, 9>& L, Multipole<Real, 9> const& M, Vector3<Real> const& distance) {

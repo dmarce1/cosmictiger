@@ -25,6 +25,7 @@ inline constexpr int kM2PFlops = 0;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 3) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 3)
 // FMM order 3.
+/// Accumulate potential and acceleration from all retained multipole ranks.
 template <class Real>
 CUDA_EXPORT void M2P(
     gravity::Field<Real>& field, Multipole<Real, 3> const& M, Vector3<Real> const& distance) {
@@ -64,6 +65,7 @@ inline constexpr int kM2PFlops<1> = 29;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 4) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 4)
 // FMM order 4.
+/// Accumulate potential and acceleration from all retained multipole ranks.
 template <class Real>
 CUDA_EXPORT void M2P(
     gravity::Field<Real>& field, Multipole<Real, 4> const& M, Vector3<Real> const& distance) {
@@ -127,6 +129,7 @@ inline constexpr int kM2PFlops<2> = 61;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 5) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 5)
 // FMM order 5.
+/// Accumulate potential and acceleration from all retained multipole ranks.
 template <class Real>
 CUDA_EXPORT void M2P(
     gravity::Field<Real>& field, Multipole<Real, 5> const& M, Vector3<Real> const& distance) {
@@ -232,6 +235,7 @@ inline constexpr int kM2PFlops<3> = 118;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 6) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 6)
 // FMM order 6.
+/// Accumulate potential and acceleration from all retained multipole ranks.
 template <class Real>
 CUDA_EXPORT void M2P(
     gravity::Field<Real>& field, Multipole<Real, 6> const& M, Vector3<Real> const& distance) {
@@ -392,6 +396,7 @@ inline constexpr int kM2PFlops<4> = 191;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 7) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 7)
 // FMM order 7.
+/// Accumulate potential and acceleration from all retained multipole ranks.
 template <class Real>
 CUDA_EXPORT void M2P(
     gravity::Field<Real>& field, Multipole<Real, 7> const& M, Vector3<Real> const& distance) {
@@ -623,6 +628,7 @@ inline constexpr int kM2PFlops<5> = 289;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 8) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 8)
 // FMM order 8.
+/// Accumulate potential and acceleration from all retained multipole ranks.
 template <class Real>
 CUDA_EXPORT void M2P(
     gravity::Field<Real>& field, Multipole<Real, 8> const& M, Vector3<Real> const& distance) {
@@ -942,6 +948,7 @@ inline constexpr int kM2PFlops<6> = 414;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 9) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 9)
 // FMM order 9.
+/// Accumulate potential and acceleration from all retained multipole ranks.
 template <class Real>
 CUDA_EXPORT void M2P(
     gravity::Field<Real>& field, Multipole<Real, 9> const& M, Vector3<Real> const& distance) {

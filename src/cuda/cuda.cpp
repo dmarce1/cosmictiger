@@ -26,6 +26,7 @@
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
+/// Report whether this build and the resolved options enable a CUDA backend.
 bool cudaEnabled() {
 #ifdef USE_CUDA
     return usesCuda(getOptions());
@@ -42,6 +43,7 @@ struct CudaHostAllocations {
     std::unordered_map<void*, bool> pinned;
 };
 
+/// Return the allocation-provenance registry, retaining it through static destruction.
 CudaHostAllocations& cudaHostAllocations() {
     // Keep provenance alive until after static host containers are destroyed.
     static auto* allocations = new CudaHostAllocations;
@@ -49,6 +51,7 @@ CudaHostAllocations& cudaHostAllocations() {
 }
 #endif
 
+/// Allocate pinned or managed storage when CUDA is active, otherwise ordinary host memory.
 void* allocateHostAccessibleMemory(size_t bytes, bool pinned) {
     if (bytes == 0) {
         return nullptr;
@@ -83,6 +86,7 @@ void* allocateHostAccessibleMemory(size_t bytes, bool pinned) {
     return pointer;
 }
 
+/// Free host-accessible storage using its recorded CUDA allocation provenance.
 void freeHostAccessibleMemory(void* pointer) noexcept {
     if (pointer == nullptr) {
         return;
@@ -109,31 +113,38 @@ void freeHostAccessibleMemory(void* pointer) noexcept {
 
 }    // namespace detail
 
+/// Allocate storage accessible on the host, using managed memory when CUDA is active.
 void* allocateManagedMemory(size_t bytes) {
     return detail::allocateHostAccessibleMemory(bytes, false);
 }
 
+/// Release storage obtained through the host-accessible allocation helpers.
 void freeManagedMemory(void* pointer) noexcept {
     detail::freeHostAccessibleMemory(pointer);
 }
 
+/// Allocate pinned host storage when CUDA is active, otherwise ordinary host storage.
 void* allocatePinnedMemory(size_t bytes) {
     return detail::allocateHostAccessibleMemory(bytes, true);
 }
 
+/// Release pinned or fallback host storage using its allocation provenance.
 void freePinnedMemory(void* pointer) noexcept {
     detail::freeHostAccessibleMemory(pointer);
 }
 
 #ifndef USE_CUDA
+/// Allocate host-accessible storage for the non-CUDA implementation.
 void* cudaAllocate(size_t size) {
     return allocateManagedMemory(size);
 }
 
+/// Release the fallback managed-memory allocation.
 void cudaRelease(void* pointer) {
     freeManagedMemory(pointer);
 }
 
+/// Copy bytes between host-accessible buffers in the non-CUDA implementation.
 void copyCudaMemory(void* destination, void const* source, size_t size) {
     std::memcpy(destination, source, size);
 }
@@ -141,6 +152,8 @@ void copyCudaMemory(void* destination, void const* source, size_t size) {
 
 #ifdef USE_CUDA
 
+/// Allocate device memory after checking that the request leaves the configured free-memory
+/// margin.
 void cudaAllocate(void** ptr, size_t size, char const* file, int line) {
     static MutexType mutex;
     std::lock_guard<MutexType> lock(mutex);
@@ -156,6 +169,7 @@ void cudaAllocate(void** ptr, size_t size, char const* file, int line) {
     CUDA_CHECK(cudaMalloc(ptr, size));
 }
 
+/// Select the GPU assigned by node-local rank, failing if no GPU is visible.
 void cudaSetDevice() {
     int count;
     CUDA_CHECK(cudaGetDeviceCount(&count));
@@ -166,6 +180,7 @@ void cudaSetDevice() {
     CUDA_CHECK(cudaSetDevice(deviceNum));
 }
 
+/// Return the GPU index assigned by node-local rank modulo visible device count.
 int cudaGetDevice() {
     int count;
     CUDA_CHECK(cudaGetDeviceCount(&count));
@@ -176,6 +191,7 @@ int cudaGetDevice() {
     return deviceNum;
 }
 
+/// Select the assigned GPU and return its total memory capacity in bytes.
 size_t cudaTotalMemory() {
     size_t total;
     size_t free;
@@ -184,6 +200,7 @@ size_t cudaTotalMemory() {
     return total;
 }
 
+/// Select the assigned GPU and return its currently free memory in bytes.
 size_t cudaFreeMemory() {
     size_t total;
     size_t free;
@@ -192,6 +209,7 @@ size_t cudaFreeMemory() {
     return free;
 }
 
+/// Return the multiprocessor count of the assigned GPU.
 int cudaSmpCount() {
     int count;
     cudaSetDevice();
@@ -199,6 +217,8 @@ int cudaSmpCount() {
     return count;
 }
 
+/// Initialize the assigned device, restore kernel selections after reset, and initialize
+/// runtime support.
 void cudaInit() {
     cudaSetDevice();
     static std::once_flag initialized;

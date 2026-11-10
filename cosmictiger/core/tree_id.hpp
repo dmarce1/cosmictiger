@@ -16,9 +16,11 @@
 struct TreeId {
     int proc;
     int index;
+    /// Compare both the owning locality and node index.
     inline bool operator==(TreeId other) const {
         return proc == other.proc && index == other.index;
     }
+    /// Order tree identifiers lexicographically by locality and then node index.
     inline bool operator<(TreeId other) const {
         if (proc < other.proc) {
             return true;
@@ -30,9 +32,11 @@ struct TreeId {
             return false;
         }
     }
+    /// Test whether either the owning locality or node index differs.
     inline bool operator!=(TreeId other) const {
         return proc != other.proc || index != other.index;
     }
+    /// Archive this record in the field order required by distributed transport.
     template <class A>
     void serialize(A&& a, unsigned) {
         a & proc;
@@ -41,6 +45,7 @@ struct TreeId {
 };
 
 struct TreeIdHash {
+    /// Map a remote node cache line and its locality to a combined cache key.
     inline size_t operator()(TreeId id) const {
         int const lineSize = getOptions().compute.treeCacheLineSize;
         int const i = id.index / lineSize;
@@ -49,6 +54,7 @@ struct TreeIdHash {
 };
 
 struct TreeIdHashLo {
+    /// Select the cache bucket from the low part of the tree-node hash.
     inline size_t operator()(TreeId id) const {
         TreeIdHash hash;
         return hash(id) % kTreeCacheSize;
@@ -56,6 +62,7 @@ struct TreeIdHashLo {
 };
 
 struct TreeIdHashHi {
+    /// Return the remaining tree-node hash after removing the cache-bucket part.
     inline size_t operator()(TreeId id) const {
         TreeIdHash hash;
         return hash(id) / kTreeCacheSize;

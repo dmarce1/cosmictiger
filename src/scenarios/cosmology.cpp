@@ -9,6 +9,8 @@
 
 namespace scenarios {
 
+/// Initialize the expanding background, validate its requested trajectory, and generate
+/// cosmological particles.
 void initializeCosmology(DriverParameters& state) {
     state.a = 1.0 / (1.0 + getOptions().cosmology.startRedshift);
     state.adot = cosmosDadt(state.a);

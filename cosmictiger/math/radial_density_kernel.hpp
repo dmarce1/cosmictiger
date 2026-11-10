@@ -25,6 +25,7 @@ struct DensityKernelTable {
     TableReal smoothingLengthPerEffectiveRadius = 0;
 };
 
+/// Check kernel family/degree compatibility with the compile-time spatial dimension.
 template <size_t dimension>
 constexpr bool isValidDensity(KernelSpec spec) {
     static_assert(dimension > 0);
@@ -39,6 +40,8 @@ constexpr bool isValidDensity(KernelSpec spec) {
 
 namespace detail {
 
+    /// Integrate a Bernstein polynomial times the requested radius power over one
+    /// radial interval.
     template <size_t power>
     constexpr long double densityMoment(
         long double const* coefficients, int degree, long double a, long double b) {
@@ -63,6 +66,8 @@ namespace detail {
         return (b - a) * integral / (degree + power + 1);
     }
 
+    /// Compute the surface area of the unit sphere bounding a ball in the compile-time
+    /// dimension.
     template <size_t dimension>
     constexpr long double sphereArea() {
         long double area = dimension % 2 == 0 ? kFourPi / 2 : 2;
@@ -72,6 +77,8 @@ namespace detail {
         return area;
     }
 
+    /// Select scalar/SIMD radii belonging to the specified half-open density-kernel
+    /// interval.
     template <size_t dimension, class TableReal, typename Real>
     CUDA_EXPORT inline auto densityMask(
         DensityKernelTable<dimension, TableReal> const& table, int piece, Real q) {
@@ -170,6 +177,8 @@ constexpr DensityKernelTable<dimension, TableReal> makeDensityKernelTable(Kernel
     return result;
 }
 
+/// Evaluate the normalized density-kernel polynomial for nonnegative q, returning zero
+/// outside its support.
 template <size_t dimension, class TableReal, typename Real>
 CUDA_EXPORT inline Real value(DensityKernelTable<dimension, TableReal> const& table, Real q) {
     Real result = math::broadcast<Real>(0);
@@ -189,6 +198,8 @@ CUDA_EXPORT inline Real value(DensityKernelTable<dimension, TableReal> const& ta
     return result;
 }
 
+/// Evaluate the density-kernel derivative for nonnegative q, returning zero outside its
+/// support.
 template <size_t dimension, class TableReal, typename Real>
 CUDA_EXPORT inline Real derivative(DensityKernelTable<dimension, TableReal> const& table, Real q) {
     Real result = math::broadcast<Real>(0);
