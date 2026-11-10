@@ -173,7 +173,6 @@ struct Gravity {
     int pmmmNearWidth{2};    // Direct neighbor cube radius for periodic PMMM, one to four cells.
     // Near field of the PMMM solver: fmm, or its direct particle-pair fallback pp.
     // The field keeps its historical serialized name.
-    std::string pmmmNearMethod{gravity::kBuildPmmmNearMethod};
     int pmmmBatchParticles{4096};    // Target owned sink count per ready near-field batch.
     // PMMM outer interval: the FFT far field is solved only at synchronized
     // outer boundaries, each particle's near-cube membership is frozen for the
@@ -472,7 +471,6 @@ struct Options {
         arc & hydro.method;
         arc & gravity.meshSize;
         arc & gravity.pmmmNearWidth;
-        arc & gravity.pmmmNearMethod;
         arc & analysis.saveAcceleration;
         arc & analysis.savePotential;
         arc & gravity.pmmmBatchParticles;

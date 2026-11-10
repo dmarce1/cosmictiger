@@ -301,12 +301,10 @@ def buildChecks(report, minFmmOrder, maxFmmOrder):
                 ('EwaldGreen', 'evaluate',
                  'output, trace, Real(0.13), Real(-0.21), Real(0.31)',
                  counts['green_weighted_flops']),
-                ('EwaldL2P', 'add',
-                 'output, source, Real(0.23), Real(0.13), Real(-0.21), Real(0.31)',
-                 None)):
+):
             prefix = 'cosmictiger::gravity::spherical::'
             fullName = f'{prefix}{name}<{degree}>'
-            function = 'evaluateEwaldGreen' if name == 'EwaldGreen' else 'ewaldL2P'
+            function = 'evaluateEwaldGreen'
             count = f'{prefix}k{name}Flops<{degree}>'
             lines.extend(['    {',
                           '        Real::operations = 0;', '        Real::squareRoots = 0;',

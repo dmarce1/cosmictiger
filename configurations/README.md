@@ -18,11 +18,11 @@ the cosmology scenario below enable GADGET-4 equilibrium cooling explicitly.
 The parser defaults leave hydro, cooling and star formation disabled.
 
 CMake `COSMICTIGER_ENABLE_*` options select which capabilities are compiled.
-The gravity solver is PMMM; `gravity.method.near=fmm|pp` selects its FMM near
-field (default) or the direct particle-pair fallback. The sole integration scheme
-uses hierarchical short gravity, outer long kicks, and midpoint SPH. The supplied
-configurations select `run.timeIntegrator=hierarchical`; this is also automatic.
-Restart recovers omitted degree and near-field selections from the checkpoint.
+PMMM-FMM is the sole gravity solver. Close leaf particle pairs are part of its
+tree walk. The sole integration scheme uses hierarchical short gravity, outer
+long kicks and midpoint SPH. The supplied configurations select
+`run.timeIntegrator=hierarchical`; this is also automatic.
+Restart recovers omitted degree and integration selections from the checkpoint.
 
 `COSMICTIGER_EXPANSION_DEGREE=4-6` compiles potential degrees 4, 5, and 6 by default.
 `gravity.expansionDegree` chooses a compiled degree and defaults to the largest.

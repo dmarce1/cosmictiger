@@ -15,11 +15,9 @@ cmake --build build_pmmm --parallel 12
 
 PMMM uses a periodic uniform mesh, spherical multipoles about cell centers and
 FFT convolution for distant interactions. Neighboring cells use the adaptive FMM
-near field (`gravity.method.near=fmm`, the default) or its fallback, the direct
-particle-pair near field (`gravity.method.near=pp`). Both near fields are always
-compiled.
+tree walk, including direct particle-pair interactions at close leaves.
+PMMM-FMM is the only gravity solver; `gravity.method.near` is retired.
 
-Use `gravity.method.near=fmm|pp` to select the near field.
 The sole integration scheme is hierarchical short gravity with mandatory outer
 long kicks and midpoint SPH. `run.timeIntegrator=hierarchical` is automatic.
 `gravity.expansionDegree` selects a compiled potential degree and defaults to
@@ -37,7 +35,7 @@ parallelized by HPX. Their planning and destruction also run on native I/O
 threads so waiting for the shared planner lock cannot block HPX workers.
 
 ```sh
-./build_pmmm/cosmictiger --gravity.method.near=pp \
+./build_pmmm/cosmictiger \
   --gravity.expansionDegree=6 --run.timeIntegrator=hierarchical \
   --gravity.meshSize=32 --gravity.pmmmNearWidth=2 \
   --run.darkMatterParticleCount=32768 --run.gasParticleCount=32768 --hydro.enabled=false \
@@ -48,7 +46,6 @@ The runtime settings can also be supplied in an INI file:
 
 ```ini
 [gravity]
-method.near = pp
 expansionDegree = 6
 meshSize = 32
 pmmmNearWidth = 2
@@ -91,19 +88,23 @@ region contains `(2*w+1)^3` cells (27, 125, 343, or 729, respectively),
 including the sink cell when `n >= 2*w+1`. Smaller meshes visit each periodic
 cell once, so the near region contains `min(n, 2*w+1)^3` distinct cells.
 The positive half-box offset resolves even-mesh image ties consistently in
-the Green function and both near methods. Very coarse meshes can have large
+the Green function and the near tree walk. Very coarse meshes can have large
 finite-expansion truncation errors; accepting their size is not an accuracy
 guarantee.
 
-`gravity.method.near=fmm|pp` selects how those near cells are evaluated. The
-`fmm` method (the default) uses the Cartesian FMM operators and adaptive tree
-acceptance within the near-cell region. The `pp` method, its fallback, sums all
-primary particle pairs. It first exchanges complete remote source-cell particle
-records and builds local source trees as individual cells become ready.
-Owned sink cells run once every near-source cell they need is ready, allowing
-interior and ready boundary work to overlap outstanding cell fetches.
-It adds no second periodic correction or distant-cell force:
-the spherical FFT result supplies those contributions in either mode.
+The Cartesian FMM operators and adaptive tree acceptance evaluate the near-cell
+region. Complete remote source-cell records feed local ghost trees; owned sink
+cells run when their dependencies are ready. The spherical FFT result supplies
+the distant interactions and periodic correction.
+
+At an outer boundary, the endpoint kd-tree sort and owned-root construction
+precede the long solve. Mesh moments come from those root multipoles. Solved mesh
+locals are converted to Cartesian locals, translated down the same trees and
+evaluated at their leaves. The immediately following opening short pass reuses
+that forest explicitly, without another sort or owned-root build. No drift,
+migration or particle permutation may intervene between the two passes.
+Production has no direct spherical particle-to-mesh P2M or mesh-to-particle L2P
+path. Their former wrappers survive only as independent test references.
 
 `gravity.expansionDegree` sets the shared PMMM and near FMM potential degree.
 PMMM derives the near-field opening angle `gravity.openingAngle` as
@@ -115,7 +116,7 @@ approximation and actual performance must be checked on the intended
 distribution. With the near FMM capability enabled:
 
 ```sh
-./build_pmmm/cosmictiger --gravity.method.near=fmm \
+./build_pmmm/cosmictiger \
   --run.timeIntegrator=hierarchical --gravity.meshSize=32 --gravity.pmmmNearWidth=2 \
   --gravity.expansionDegree=6 --compute.bucketSize=32 \
   --hydro.enabled=false --gravity.cuda=false
@@ -126,7 +127,7 @@ the normalized support radius must be no larger than `w/N`, where `N` is the
 rounded full-particle side length. The existing
 `gravity.smoothingLength` and `gravity.effectiveRadius` input conventions still
 apply; the parser checks this bound after converting the configured radius
-to box units. Both near methods retain the selected compact gravity kernel for
+to box units. The FMM tree walk retains the selected compact gravity kernel for
 direct pairs, including distinct coincident particles, and exclude primary self.
 PMMM accuracy is controlled by mesh size, expansion degree, and near width.
 The derived opening angle controls only the optional near FMM; the near width
@@ -170,12 +171,11 @@ as real scalar fields. The channel counts are:
 | Local expansions | `(d+1)^2 = q^2` | 49 |
 | Cached harmonic Green filters | `(d+1)^2 = q^2` | 49 |
 
-Let `h=1/n`, and let `a` be a particle's offset from its source cell center in
-box units. P2M accumulates `mass * U(-a/h)` using the generated spherical
-normalization. A degree-`d` Green coefficient is the unit-box physical
-coefficient multiplied by `h^d`. The inverse transform produces local
-coefficients for evaluation at `(position-cellCenter)/h`; acceleration is
-divided by `h` to convert the local gradient back to box coordinates.
+Let `h=1/n`. Cartesian source multipoles are translated from endpoint root
+centers to mesh-cell centers and converted to spherical coefficients in mesh
+units. A degree-`d` Green coefficient is the unit-box physical coefficient
+multiplied by `h^d`. The inverse transform produces mesh locals, which are
+converted to Cartesian tree-coordinate locals before tree descent.
 `gravity.gm` multiplies the complete far-plus-near result once.
 
 The contraction table expresses harmonic conjugation as signed real
@@ -194,7 +194,7 @@ regular limit at the origin. Direct pair evaluation excludes the identical
 particle's primary self interaction and retains distinct coincident
 particles through the compact softened kernel.
 
-Both near methods use the image selected by the two cell
+The FMM tree walk uses the image selected by the two cell
 centers. It is not independently wrapped to a different nearest particle
 image; changing that image would no longer match the primary term omitted
 from the Green filter.
@@ -205,7 +205,7 @@ of cell-relative dipole components, and the radial second moment
 `sum(mass*|a/h|^2)`. These provide the local trace, dipole correction, and
 constant potential correction without additional FFTs. The radial second
 moment enters the constant potential when the source degree includes two
-(`q >= 4`), matching the generated FMM truncation. Trace-aware L2P includes
+(`q >= 4`), matching the generated FMM truncation. Cartesian tree-local evaluation includes
 the quadratic contribution to both potential and acceleration.
 
 The potential follows the Ewald periodic gauge and retains finite periodic
@@ -232,7 +232,7 @@ Each mesh cache lasts until eviction, explicit PMMM destruction, or application
 shutdown. Changing the requested base mesh size, coarse mesh size, degree,
 or near width requires explicit PMMM destruction.
 The near opening angle is fixed by the near width.
-The runtime solver, near method, and degree remain fixed during an evolution.
+The expansion degree remains fixed during an evolution.
 Changing them between runs requires a new build only if the requested capability
 or degree was not compiled.
 Plans use `FFTW_ESTIMATE`; there is no persistent disk-wisdom cache. The
@@ -269,9 +269,7 @@ owner, which sums the packets before the FFT. After the inverse FFT, every
 owner fetches the completed expansion for each of its occupied cells and
 evaluates it on its own particles. Near-field sources never pass through the
 slab owner: the owner of any cell is found from the particle-domain tree by the
-cell center, and sinks read source particles directly from that owner. In PP
-mode each sink cell requests its neighbor cells' particle records from their
-owners, local ones without a message. In FMM mode each locality asks the remote
+cell center. Each locality asks the remote
 owners of its neighbor cells for their particle counts, reserves ghost storage,
 and then fetches each occupied remote cell once; each arrival permits its
 source-tree construction. A source cell is copied once per recipient even when
@@ -320,14 +318,8 @@ uses the existing FMM CPU/CUDA work distribution. Diagnostic fields named
 `nearCpuAcceptedMultipoles` and `nearCpuDirectPairs` count CPU tree-walk work;
 they do not claim to count GPU interactions.
 
-Both near methods group whole sink cells toward `gravity.pmmmBatchParticles`.
-The PP path packs the cells into one submission, preserving a separate source
-range and periodic image coordinates for each sink. CUDA buffers and streams
-are reused across completed submissions and released by `pmmmDestroy()`.
-PP uses the CPU when a complete batch has fewer than 128 sinks with nonempty
-source ranges or fewer than 65,536 candidate pairs. These conservative dispatch
-thresholds are heuristics, not measured crossover points. The PP source staging
-budget is 64 MiB per batch; a single oversized cell runs whole.
+The FMM walk groups whole sink cells toward `gravity.pmmmBatchParticles`.
+CPU and CUDA use the existing FMM work distribution and reusable workspaces.
 
 The local FMM path also compares the generated M2L arithmetic estimate with
 direct PP work for geometrically accepted leaf pairs, choosing PP when its
@@ -338,9 +330,8 @@ mesh cells can fill a useful batch.
 The existing FMM near path accumulates potential and removes the softened
 primary self term in single precision. That subtraction can lose precision
 when the self potential is large compared with the remaining potential,
-especially with a small softening support. Direct PMMM PP accumulates its
-near field in double precision. This potential rounding difference is separate
-from the opening-angle approximation and the force convergence checks.
+especially with a small softening support. This cancellation allowance is
+separate from the opening-angle approximation and force convergence checks.
 
 ## Memory and timestep costs
 
@@ -436,7 +427,7 @@ wall time, including communication, staging, and scheduling overhead. See
 
 ## Outer interval with frozen near membership
 
-`gravity.pmmmOuterInterval = true` (PMMM with `gravity.method.near = fmm|pp`,
+`gravity.pmmmOuterInterval = true` (PMMM-FMM,
 `run.timeIntegrator = hierarchical`) integrates the far field
 on a mandatory outer interval and the near field on the
 inner rung clock. One mesh transform runs per outer boundary; no inner pass
@@ -527,7 +518,7 @@ follow its current particles. Bounds can extend beyond the original cell and
 across a periodic seam. Source and sink cell identities select periodic images;
 the moving tree centers do not change near-neighbor membership. CPU and CUDA
 walks use that same frame. No inner pass deposits moments on the mesh or runs an
-FFT. Both FMM and direct PP near fields use this outer-interval scheme.
+FFT. The FMM near field uses this outer-interval scheme.
 
 ## SPH with PMMM self-gravity
 
@@ -587,11 +578,11 @@ and momentum against a split PMMM run with shorter outer intervals over the same
 
 Checkpoints identify PMMM separately from FMM and record its requested mesh size,
 coarse mesh size, expansion degree (in the historical internal order
-convention), near width, near method, and timestep compatibility parameters.
+convention), near width, fixed FMM solver identity, and timestep compatibility parameters.
 Omitted runtime algorithm, degree, and integrator selectors inherit the saved
-selection on restart. Explicit incompatible selections are rejected, as are
-saved capabilities unavailable in the executable. A build may contain additional
-algorithms or a larger degree range without invalidating a checkpoint.
+degree on restart. Incompatible selections are rejected. The saved near-field
+identity must be FMM; PP checkpoints are retired. A larger compiled degree range
+does not invalidate a checkpoint.
 Historical ordinary PM checkpoints are unsupported. Checkpoints do not store
 FFTW plans or Green spectra: the first solve after restart reconstructs the
 cache, then reuses it for later steps.
@@ -606,8 +597,7 @@ PMMM extension version three appends the PMMM order and resolved opening angle
 to the version-two metadata, which added the near-method selection. Historical
 version-one and version-two extensions retain their legacy shared order
 convention; their saved FMM order must match the selected PMMM order. Version-one
-extensions identify the PP near method and require that capability and runtime
-selection. Version-three restarts also require the resolved opening angle
+extensions identify the retired PP near method and are rejected. Version-three restarts also require the resolved opening angle
 to match. The checkpoint hierarchy flag must match: historical synchronous PMMM
 evolution checkpoints cannot resume under the hierarchical driver. Retired
 traditional/global selections are rejected. Opening angle
@@ -617,13 +607,10 @@ rather than checkpoint identity.
 The standalone `pmmm_kernels` tests check the numerical adapters and total
 degree rule. Application tests compare complete fields against an independent
 direct Ewald sum, exercise periodic boundaries,
-and check cache reuse with the selected near method. Run with each near method
-enabled, either in one combined executable or separate minimal builds. With
-`gravity.method.near=fmm`, a dense, unequal-mass fixture
+and check PMMM-FMM cache reuse. With PMMM-FMM, a dense, unequal-mass fixture
 proves that the CPU walk accepts multipoles and checks convergence when the near
 opening angle is tightened. Distributed tests require ghost source exchange and zero remote
-tree or particle fetches during the near walk. Repeated solves with each PP/FMM
-selection check owned counts, exact position bits, velocities, rungs, and saved
+tree or particle fetches during the near walk. Repeated PMMM-FMM solves check owned counts, exact position bits, velocities, rungs, and saved
 field sentinels after ghost cleanup. The suite includes valid split cell ownership,
 empty localities, periodic seams, distinct coincident sources, exact cell-center containment near
 the fixed-point upper boundary, arbitrary mesh sides, and CPU/CUDA agreement when
@@ -633,12 +620,13 @@ sinks and no retained full-field result arrays, and exercise single-cell and
 batched scheduling. A distributed observer gate holds one requested ghost
 cell until an independent sink completes, checks that dependent sinks wait,
 and compares the resulting fields with the ungated solve.
-The evolution regression checks the selected near method, hierarchical clocks,
+The evolution regression checks hierarchical clocks,
 exactly one scheduled drift per active particle, current restarts, historical
-PP-extension acceptance or rejection, and incompatible restarts. Run it with
-both near methods for full near-method coverage.
+PP-extension rejection and incompatible restarts. An endpoint regression checks
+Cartesian tree descent against the direct spherical test oracle and verifies
+that the immediately following short pass builds no additional owned roots.
 The arbitrary-side force matrix checks `1, 2, 3, 5, 6, 7, 11, 12` against
-an independent finite-expansion reference with both near methods. Source
+an independent finite-expansion reference with the near tree walk. Source
 translation checks cover orders 3–9 and both fixed-point widths; distributed
 domain fixtures use full side 30, coarse sides 5 and 10, and side 15 after
 reload. Evolution and checkpoint regressions use a `30^3` full mesh.
@@ -647,7 +635,7 @@ A small CPU application regression can be selected explicitly:
 
 ```sh
 ./build_pmmm/cosmictiger --run.test=pmmm \
-  --gravity.method.near=pp --run.timeIntegrator=hierarchical --gravity.meshSize=8 \
+  --run.timeIntegrator=hierarchical --gravity.meshSize=8 \
   --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --hydro.enabled=false \
   --gravity.cuda=false --hpx:threads=2 --hpx:bind=none
 ```

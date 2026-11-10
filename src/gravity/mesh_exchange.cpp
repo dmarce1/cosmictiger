@@ -39,44 +39,6 @@ int cellOwner(uint64_t key) {
 
 /// Pack a near-field particle with cell-centered mesh offsets, mass, and stable owner/index
 /// identity.
-PmmmNearParticle particle(ParticleInteger index, std::array<int, 3> const& cell, FlopCount& flops) {
-    PmmmNearParticle result{};
-    for (int axis = 0; axis < kDimensions; ++axis) {
-        result.offset[axis] = positionDomainCoordinate(particlesPos(axis, index)) * cache.meshSize -
-            (cell[axis] + 0.5);
-        // Fixed conversion, mesh scaling, center construction, and subtraction.
-        flops += 4;
-        if constexpr (kPositionBits == 64) {
-            // Mirror the half-open rounding branches in positionDomainCoordinate.
-            // These repeated predicates are accounting overhead, not solver work.
-            auto const position = particlesPos(axis, index);
-            double const coordinate = position.toDouble();
-            if (coordinate < 1.0) {
-                flops += 4;    // Fixed64 limb split in Position(coordinate).
-            }
-            if (coordinate >= 1.0 || Position(coordinate).raw() > position.raw()) {
-                ++flops;    // nextafter.
-            }
-        }
-    }
-    if (frozenNearRequest(state.request)) {
-        // Frozen membership: the particle may have drifted out of its cell or
-        // across the periodic seam. Its offset is taken from the image nearest
-        // the frozen cell center, which is exact while no particle travels half
-        // a box within one outer interval (docs/pmmm.md).
-        double const n = cache.meshSize;
-        for (int axis = 0; axis < kDimensions; ++axis) {
-            result.offset[axis] -= n * std::nearbyint(result.offset[axis] / n);
-        }
-        flops += 3 * kDimensions;
-    }
-    result.mass = particlesMass(index);
-    ++flops;    // Promote the stored float particle mass to double.
-    result.rank = hpxRank();
-    result.index = index;
-    return result;
-}
-
 /// Add received cell moments and radial trace to local FFT-slab storage under the
 /// accumulation lock.
 void accumulate(std::vector<CellData> const& cells) {
@@ -117,32 +79,6 @@ std::vector<ParticleInteger> readCellCounts(
     return counts;
 }
 
-/// Pack near-field particle records for requested nonempty cells owned by this locality.
-std::vector<CellParticles> readCellParticles(
-    uint64_t generation, std::vector<uint64_t> const& keys) {
-    std::vector<CellParticles> result;
-    result.reserve(keys.size());
-    FlopCount flops = 0;
-    for (auto key : keys) {
-        auto const* cell = ownedCell(generation, key);
-        if (cell == nullptr) {
-            continue;
-        }
-        CellParticles particles;
-        particles.key = key;
-        particles.particles.reserve(cell->end - cell->begin);
-        auto const center = coordinates(key);
-        for (ParticleInteger i = cell->begin; i < cell->end; ++i) {
-            particles.particles.push_back(particle(i, center, flops));
-        }
-        result.push_back(std::move(particles));
-    }
-    addCpuFlops(flops, FlopPrecision::Double);
-    return result;
-}
-
-/// Wait for the far transform and return normalized cell coefficients with background
-/// corrections.
 std::vector<double> readExpansion(uint64_t key) {
     state.farReady.get();
     int const n = cache.meshSize;
@@ -194,8 +130,8 @@ void depositCells(std::vector<CellData> cells) {
     }
 }
 
-/// Convert an unrounded tree-root multipole to mesh-cell moments and record the source rung
-/// snapshot.
+/// Convert an unrounded endpoint tree-root multipole to mesh-cell moments and record the source
+/// rung snapshot.
 CellData rootMoments(size_t cellIndex, TreeCreateReturn const& root) {
     auto const& range = state.cells[cellIndex];
     if (!root.multi.isDouble()) {
@@ -235,56 +171,24 @@ CellData rootMoments(size_t cellIndex, TreeCreateReturn const& root) {
 
 /// Deposit all owned-cell source moments, reusing prepared roots when the solve permits it.
 void deposit() {
-    if (reuseOwnedRoots()) {
-        // These futures contain no near consumers and can complete before FFT.
-        for (auto& task : state.ownedTasks) {
-            try {
-                task.get();
-            } catch (...) {
-                recordFailure(std::current_exception());
-            }
+    // These futures contain no near consumers and can complete before FFT.
+    for (auto& task : state.ownedTasks) {
+        try {
+            task.get();
+        } catch (...) {
+            recordFailure(std::current_exception());
         }
-        std::exception_ptr failure;
-        {
-            std::lock_guard<MutexType> lock(state.queueMutex);
-            failure = state.failure;
-        }
-        if (failure) {
-            std::rethrow_exception(failure);
-        }
-        return;
     }
-    // Bound packet sizes and outstanding remote writes independently of N.
-    constexpr size_t kCellsPerPacket = 32;
-    parallelFor((state.cells.size() + kCellsPerPacket - 1) / kCellsPerPacket,
-        "gravity.pmmm.depositMoments", [&](size_t batch) {
-            FlopCount flops = 0;
-            std::vector<CellData> cells;
-            size_t const end = std::min(state.cells.size(), (batch + 1) * kCellsPerPacket);
-            for (size_t cellIndex = batch * kCellsPerPacket; cellIndex < end; ++cellIndex) {
-                auto const& range = state.cells[cellIndex];
-                auto const cellCoordinates = coordinates(range.key);
-                CellData cell;
-                cell.key = range.key;
-                cell.coefficients.assign(cache.sourceCount, 0.0);
-                for (ParticleInteger i = range.begin; i < range.end; ++i) {
-                    auto const source = particle(i, cellCoordinates, flops);
-                    flops += addMoments(
-                        cache.order, cell.coefficients.data(), source.mass, source.offset);
-                    for (int axis = 0; axis < kDimensions; ++axis) {
-                        cell.radialTrace += source.mass * source.offset[axis] * source.offset[axis];
-                    }
-                    flops += 3 * kDimensions;
-                }
-                cells.push_back(std::move(cell));
-            }
-            addCpuFlops(flops, FlopPrecision::Double);
-            depositCells(std::move(cells));
-        });
+    std::exception_ptr failure;
+    {
+        std::lock_guard<MutexType> lock(state.queueMutex);
+        failure = state.failure;
+    }
+    if (failure) {
+        std::rethrow_exception(failure);
+    }
 }
 
-/// Fetch the requested cell's far-field coefficients from its FFT owner and validate their
-/// count.
 std::vector<double> localExpansion(uint64_t key) {
     auto const owner = cache.slabOwner[key / (uint64_t(cache.meshSize) * cache.meshSize)];
     auto coefficients = cache.owners[owner] == hpx::find_here() ?
@@ -301,5 +205,4 @@ std::vector<double> localExpansion(uint64_t key) {
 HPX_REGISTER_ACTION(PmmmAccumulateAction, PmmmAccumulateAction);
 HPX_REGISTER_ACTION(PmmmReadExpansionAction, PmmmReadExpansionAction);
 HPX_REGISTER_ACTION(PmmmReadCellCountsAction, PmmmReadCellCountsAction);
-HPX_REGISTER_ACTION(PmmmReadCellParticlesAction, PmmmReadCellParticlesAction);
 HPX_REGISTER_ACTION(PmmmDepositAction, PmmmDepositAction);

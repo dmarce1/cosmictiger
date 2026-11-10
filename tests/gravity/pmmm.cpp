@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <complex>
@@ -30,7 +31,6 @@
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/gravity/kernels/spherical_ewald_kernels.hpp>
 #include <cosmictiger/gravity/mesh_size.hpp>
-#include <cosmictiger/gravity/pp_near_pp.hpp>
 #include <cosmictiger/gravity/solver.hpp>
 #include <cosmictiger/gravity/sources.hpp>
 #include <cosmictiger/gravity/tree.hpp>
@@ -44,6 +44,8 @@
 #include <cosmictiger/sph/particles.hpp>
 #endif
 #include <src/gravity/state.hpp>
+
+#include "pmmm_reference.hpp"
 
 namespace detail {
 
@@ -184,233 +186,6 @@ void resetPmmmSavedForces() {
             particlesGravityAcceleration(dim, i) = float(4 * (id + 1) + dim);
         }
     }
-}
-
-void checkedPmmmNearField(std::vector<PmmmNearParticle> const& sinks,
-    std::vector<PmmmNearParticle> const& sources, double cellWidth, bool doPotential,
-    std::vector<std::array<double, 4>>& fields) {
-    FlopCount expected = 0;
-    if (!sinks.empty() && !sources.empty()) {
-        expected = 3;
-        double const inverseRadius = 1 / getOptions().gravity.smoothingLength;
-        double const inverseCubed = inverseRadius * inverseRadius * inverseRadius;
-        for (auto const& sink : sinks) {
-            std::array<double, 4> ignored{};
-            for (auto const& source : sources) {
-                expected += pmmm::detail::accumulateNearPair<true>(sink, source, cellWidth,
-                    inverseRadius, inverseCubed, doPotential, selectedGravityKernel(), ignored);
-            }
-        }
-    }
-    // The arithmetic oracle is separately tested against CountingReal. This
-    // check verifies that the production CPU/CUDA path submits it exactly once.
-    resetFlops();
-    pmmmNearField(sinks, sources, cellWidth, doPotential, fields);
-    requirePmmm(readFlops() == expected, "PP backend lost or duplicated operation counts");
-    bool const useCuda = getOptions().gravity.cuda &&
-        pmmm::detail::shouldUsePmmmNearCuda(
-            sources.empty() ? 0 : sinks.size(), sinks.size() * sources.size());
-    FlopCount const expectedGpu = useCuda && expected != 0 ? expected - 3 : 0;
-    requirePmmm(getGpuFlops() == expectedGpu, "PP arithmetic was charged to the wrong backend");
-}
-
-void checkedPmmmNearFieldBatch(std::vector<PmmmNearParticle> const& sinks,
-    std::vector<PmmmNearParticle> const& sources,
-    std::vector<PmmmNearSourceRange> const& sourceRanges, bool doPotential,
-    std::vector<std::array<double, 4>>& fields) {
-    constexpr double kCellWidth = 0.25;
-    double const inverseRadius = 1 / getOptions().gravity.smoothingLength;
-    double const inverseCubed = inverseRadius * inverseRadius * inverseRadius;
-    FlopCount expected = 0;
-    size_t usefulSinks = 0;
-    size_t candidatePairs = 0;
-    std::vector<std::array<double, 4>> reference(sinks.size());
-    for (size_t sink = 0; sink < sinks.size(); ++sink) {
-        auto const range = sourceRanges[sink];
-        usefulSinks += range.begin != range.end;
-        candidatePairs += range.end - range.begin;
-        for (size_t source = range.begin; source < range.end; ++source) {
-            expected += pmmm::detail::accumulateNearPair<true>(sinks[sink], sources[source],
-                kCellWidth, inverseRadius, inverseCubed, doPotential, selectedGravityKernel(),
-                reference[sink]);
-        }
-    }
-    if (candidatePairs != 0) {
-        expected += 3;
-    }
-    resetFlops();
-    pmmmNearFieldBatch(sinks, sources, sourceRanges, kCellWidth, doPotential, fields);
-    requirePmmm(readFlops() == expected, "PP batch lost or duplicated operation counts");
-    bool const useCuda = getOptions().gravity.cuda &&
-        pmmm::detail::shouldUsePmmmNearCuda(usefulSinks, candidatePairs);
-    FlopCount const expectedGpu = useCuda && expected != 0 ? expected - 3 : 0;
-    requirePmmm(getGpuFlops() == expectedGpu, "PP batch arithmetic used the wrong backend");
-    requirePmmm(fields.size() == reference.size(), "PP batch retained stale sink outputs");
-    for (size_t sink = 0; sink < sinks.size(); ++sink) {
-        for (int component = 0; component < 4; ++component) {
-            requirePmmm(std::isfinite(fields[sink][component]) &&
-                    std::abs(fields[sink][component] - reference[sink][component]) <
-                        2.0e-11 * std::max(1.0, std::abs(reference[sink][component])),
-                "PP batch mixed source ranges, identities, images, or retained stale fields");
-        }
-    }
-}
-
-void checkPmmmNearBatches() {
-    auto const saved = getOptions();
-    auto options = saved;
-    options.gravity.smoothingLength = 0.125;
-    // Rectangles straddle both CUDA scheduling limits.
-    // Later heterogeneous batches grow and shrink both reusable device buffers.
-    struct BatchShape {
-        size_t sinks;
-        size_t sources;
-        bool mixedRanges;
-    };
-    std::array<BatchShape, 13> const shapes{
-        {{0, 129, false}, {1, 0, false}, {31, 129, false}, {127, 512, false}, {128, 511, false},
-            {128, 512, false}, {129, 512, false}, {513, 257, true}, {257, 257, true},
-            {513, 385, true}, {129, 1024, false}, {513, 257, true}, {33, 129, false}}};
-    for (int backend = 0; backend < (saved.gravity.cuda ? 2 : 1); ++backend) {
-        options.gravity.cuda = backend != 0;
-        setOptions(options);
-        bool usedCuda = false;
-        std::vector<std::array<double, 4>> fields{{1.0, 2.0, 3.0, 4.0}};
-        for (auto const shape : shapes) {
-            std::vector<PmmmNearParticle> sources(shape.sources);
-            for (size_t source = 0; source < sources.size(); ++source) {
-                auto& particle = sources[source];
-                // Offsets beyond +/-2 retain the specified periodic image;
-                // repeated positions include coincident particles with distinct IDs.
-                particle.offset = {0.75 * (int(source % 9) - 4), 0.0625 * int(source % 5),
-                    -0.125 * int(source % 3)};
-                particle.mass = 0.5 + 0.125 * double(source % 7);
-                particle.rank = int(source % 2);
-                particle.index = int64_t(source);
-            }
-            std::vector<PmmmNearParticle> sinks(shape.sinks);
-            std::vector<PmmmNearSourceRange> sourceRanges(shape.sinks, {0, sources.size()});
-            for (size_t sink = 0; sink < sinks.size(); ++sink) {
-                if (!sources.empty()) {
-                    sinks[sink] = sources[sink % sources.size()];
-                    if (sink % 3 == 0) {
-                        sinks[sink].index += int64_t(sources.size());
-                    }
-                }
-                if (shape.mixedRanges) {
-                    // Unequal cell populations and source spans share one batch.
-                    sourceRanges[sink] = sink % 3 == 0 ? PmmmNearSourceRange{129, sources.size()} :
-                                                         PmmmNearSourceRange{0, 129};
-                }
-            }
-            if (shape.mixedRanges) {
-                sourceRanges[0] = {sources.size(), sources.size()};
-            }
-            for (bool doPotential : {true, false}) {
-                checkedPmmmNearFieldBatch(sinks, sources, sourceRanges, doPotential, fields);
-                usedCuda |= getGpuFlops() != 0;
-            }
-            if (!sinks.empty()) {
-                // A pooled buffer containing a previous field must not leak into
-                // a call whose sources are all omitted by its ranges.
-                std::fill(sourceRanges.begin(), sourceRanges.end(), PmmmNearSourceRange{});
-                checkedPmmmNearFieldBatch(sinks, sources, sourceRanges, true, fields);
-            }
-        }
-        requirePmmm(backend == 0 || usedCuda, "PP batch regression never exercised CUDA");
-        std::vector<PmmmNearParticle> const invalidSinks(2);
-        std::vector<PmmmNearParticle> const invalidSources(3);
-        std::vector<std::vector<PmmmNearSourceRange>> const invalidRanges{
-            {}, {{0, 3}}, {{0, 3}, {0, 3}, {0, 3}}, {{0, 3}, {2, 1}}, {{0, 3}, {0, 4}}};
-        for (auto const& ranges : invalidRanges) {
-            std::vector<std::array<double, 4>> const sentinel{{1.0, 2.0, 3.0, 4.0}};
-            fields = sentinel;
-            bool rejected = false;
-            resetFlops();
-            try {
-                pmmmNearFieldBatch(invalidSinks, invalidSources, ranges, 0.25, true, fields);
-            } catch (std::invalid_argument const&) {
-                rejected = true;
-            }
-            requirePmmm(rejected, "PP batch accepted invalid source range bounds or cardinality");
-            requirePmmm(fields == sentinel, "invalid PP batch corrupted its output fields");
-            requirePmmm(readFlops() == 0 && getGpuFlops() == 0,
-                "invalid PP batch submitted arithmetic counts");
-        }
-    }
-    setOptions(saved);
-}
-
-void checkPmmmNearEdges() {
-    auto options = getOptions();
-    bool const useCuda = options.gravity.cuda;
-    double const support = 0.125;
-    options.gravity.smoothingLength = support;
-    PmmmNearParticle const sink{{0.0, 0.0, 0.0}, 0.75, 0, 7};
-    std::vector<PmmmNearParticle> const sinks{sink};
-    std::vector<std::vector<PmmmNearParticle>> const cases{{sink}, {{{0.0, 0.0, 0.0}, 2.0, 0, 8}},
-        {{{0.0, 0.0, 0.0}, 2.0, 1, 7}}, {{{support * 0.5 / 0.25, 0.0, 0.0}, 2.0, 0, 8}},
-        {{{3.0, 0.0, 0.0}, 2.0, 0, 8}}, {}};
-    std::vector<std::array<double, 4>> cpuResults;
-    for (int backend = 0; backend < (useCuda ? 2 : 1); ++backend) {
-        options.gravity.cuda = backend != 0;
-        setOptions(options);
-        auto const& kernel = selectedGravityKernel();
-        for (size_t example = 0; example < cases.size(); ++example) {
-            std::vector<std::array<double, 4>> fields{{1.0, 2.0, 3.0, 4.0}};
-            checkedPmmmNearField(sinks, cases[example], 0.25, true, fields);
-            requirePmmm(fields.size() == 1, "near kernel changed sink output size");
-            std::array<double, 4> expected{};
-            if (example == 1 || example == 2) {
-                expected[0] = -2.0 * radial_kernel::potential(kernel, 0.0) / support;
-            } else if (example == 3) {
-                expected[0] = -2.0 * radial_kernel::potential(kernel, 0.5) / support;
-                expected[1] = radial_kernel::forceFactor(kernel, 0.5) / (support * support);
-            } else if (example == 4) {
-                // The requested image is +0.75 away. Wrapping to -0.25 would
-                // reverse the force and use the wrong subtracted primary image.
-                expected[0] = -2.0 / 0.75;
-                expected[1] = 2.0 / (0.75 * 0.75);
-            }
-            for (int component = 0; component < 4; ++component) {
-                requirePmmm(std::isfinite(fields[0][component]) &&
-                        std::abs(fields[0][component] - expected[component]) <
-                            2.0e-11 * std::max(1.0, std::abs(expected[component])),
-                    "near kernel failed identity, coincidence, softening, or image selection");
-                if (backend != 0) {
-                    requirePmmm(std::abs(fields[0][component] - cpuResults[example][component]) <
-                            2.0e-11 * std::max(1.0, std::abs(cpuResults[example][component])),
-                        "CPU/CUDA near kernels disagree");
-                }
-            }
-            if (backend == 0) {
-                cpuResults.push_back(fields[0]);
-            }
-            auto const withPotential = fields[0];
-            checkedPmmmNearField(sinks, cases[example], 0.25, false, fields);
-            requirePmmm(fields[0][0] == 0.0, "force-only near evaluation computed a potential");
-            for (int component = 1; component < 4; ++component) {
-                requirePmmm(fields[0][component] == withPotential[component],
-                    "potential switch changed a near acceleration");
-            }
-        }
-        std::vector<std::array<double, 4>> emptyFields{{1.0, 2.0, 3.0, 4.0}};
-        checkedPmmmNearField({}, cases[1], 0.25, true, emptyFields);
-        requirePmmm(emptyFields.empty(), "empty near sink set retained stale outputs");
-        // Cross warp/block boundaries with both self-skipped and active lanes.
-        for (size_t count : {size_t(31), size_t(33), size_t(129)}) {
-            std::vector<PmmmNearParticle> manySinks(count, sink);
-            for (size_t i = 0; i < count; ++i) {
-                manySinks[i].index += i;
-            }
-            for (bool doPotential : {false, true}) {
-                checkedPmmmNearField(manySinks, sinks, 0.25, doPotential, emptyFields);
-            }
-        }
-    }
-    options.gravity.cuda = useCuda;
-    options.gravity.smoothingLength = 0.001;
-    setOptions(options);
 }
 
 void initializePmmmFixture(int fixture, int ownership) {
@@ -1108,7 +883,7 @@ std::array<double, 4> directPmmmExpansionReferenceOrder(
             }
         }
     }
-    spherical::ewaldL2P<kLocalDegree, double>(
+    pmmm::detail::addSphericalLocalReference<kLocalDegree>(
         field, local, localTrace, sinkOffset[0], sinkOffset[1], sinkOffset[2]);
     for (double& component : field) {
         component *= options.gravity.gm;
@@ -1153,11 +928,9 @@ double verifyPmmmReference(Vector<PmmmSample> const& samples) {
         double const potentialScale = std::max(1.0, std::abs(expected[0]));
         // Near FMM subtracts softened self potential in float; keep that
         // cancellation allowance separate from both expansion and FFT errors.
-        double const selfCancellationAllowance = (getOptions().gravity.pmmmNearMethod == "fmm") ?
-            4.0 * std::numeric_limits<float>::epsilon() *
-                std::abs(options.gravity.gm * samples[sink].mass *
-                    selectedGravityKernel().centralPotential / options.gravity.smoothingLength) :
-            0.0;
+        double const selfCancellationAllowance = 4.0 * std::numeric_limits<float>::epsilon() *
+            std::abs(options.gravity.gm * samples[sink].mass *
+                selectedGravityKernel().centralPotential / options.gravity.smoothingLength);
         for (int component = 0; component < 4; ++component) {
             double const scale = component == 0 ? potentialScale : norm;
             double const actual = component == 0 ? samples[sink].potential :
@@ -1207,8 +980,7 @@ double verifyPmmmReference(Vector<PmmmSample> const& samples) {
 void comparePmmmSamples(
     Vector<PmmmSample> const& first, Vector<PmmmSample> const& second, bool potential = true) {
     auto const& options = getOptions();
-    std::string const context = " near=" + options.gravity.pmmmNearMethod +
-        " mesh=" + std::to_string(options.gravity.meshSize) +
+    std::string const context = " near=fmm mesh=" + std::to_string(options.gravity.meshSize) +
         " fmmOrder=" + std::to_string(options.gravity.fmmOrder) +
         " width=" + std::to_string(options.gravity.pmmmNearWidth) +
         " theta=" + std::to_string(options.gravity.openingAngle) +
@@ -1230,13 +1002,10 @@ void comparePmmmSamples(
         if (potential) {
             // The existing FMM accumulates softened self potential and subtracts
             // it in float. Bound that cancellation's rounding scale separately
-            // from the force/approximation limits; direct PMMM PP uses double.
-            double const selfCancellationAllowance = options.gravity.pmmmNearMethod == "fmm" ?
-                4.0 * std::numeric_limits<float>::epsilon() *
-                    std::abs(options.gravity.gm * first[i].mass *
-                        selectedGravityKernel().centralPotential /
-                        options.gravity.smoothingLength) :
-                0.0;
+            // from the force and approximation limits.
+            double const selfCancellationAllowance = 4.0 * std::numeric_limits<float>::epsilon() *
+                std::abs(options.gravity.gm * first[i].mass *
+                    selectedGravityKernel().centralPotential / options.gravity.smoothingLength);
             requirePmmm(std::abs(first[i].potential - second[i].potential) <
                     2.0e-5 * std::max(1.0f, std::abs(first[i].potential)) +
                         selfCancellationAllowance,
@@ -1247,8 +1016,64 @@ void comparePmmmSamples(
     }
 }
 
+std::atomic<size_t> endpointRootBuilds{0};
+
+void installEndpointAudit() {
+    endpointRootBuilds = 0;
+    pmmmSetCellObserver([](PmmmCellEvent event, uint64_t) {
+        if (event == PmmmCellEvent::OwnedRootReady) {
+            ++endpointRootBuilds;
+        }
+    });
+}
+
+std::array<double, 4> readEndpointAudit(bool checkField) {
+    std::array<double, 4> result{0, 0, 1.e30, double(endpointRootBuilds.load())};
+    if (!checkField) {
+        pmmmSetCellObserver({});
+        return result;
+    }
+    auto const& state = pmmm::detail::state;
+    int const meshSize = pmmm::detail::cache.meshSize;
+    double const h = 1. / meshSize;
+    double const trace = (4 * std::numbers::pi / 3) * h * h * state.background[0];
+    double const gm = getOptions().gravity.gm;
+    requirePmmm(state.boundaryTreeReady, "boundary did not retain its endpoint forest");
+    for (auto const& cell : state.cells) {
+        auto const coordinates = pmmm::detail::coordinates(cell.key);
+        auto const coefficients = pmmm::detail::localExpansion(cell.key);
+        for (ParticleInteger i = cell.begin; i < cell.end; ++i) {
+            Vector3<double> offset;
+            for (int axis = 0; axis < kDimensions; ++axis) {
+                double const center = (coordinates[axis] + .5) * h;
+                Position const fixedCenter(center);
+                offset[axis] = (unwrappedDoubleDistance(particlesPos(axis, i), fixedCenter) +
+                                   (fixedCenter.toDouble() - center)) *
+                    meshSize;
+            }
+            std::array<double, 4> expected{};
+            pmmm::evaluate(fmmOrder(), expected, coefficients.data(), trace, offset, h);
+            double norm = 0;
+            for (int axis = 0; axis < kDimensions; ++axis) {
+                double const acceleration = gm * expected[axis + 1];
+                result[0] = std::max(result[0],
+                    std::abs(double(particlesLongAcceleration(axis, i)) - acceleration) /
+                        std::max(1., std::abs(acceleration)));
+                norm += acceleration * acceleration;
+            }
+            result[1] += .5 * double(particlesMass(i)) * gm * expected[0];
+            result[2] = std::min(result[2],
+                state.request.eta *
+                    std::sqrt(state.request.scale * h / std::max(std::sqrt(norm), 1.e-30)));
+        }
+    }
+    return result;
+}
+
 }    // namespace detail
 
+HPX_PLAIN_ACTION(detail::installEndpointAudit, InstallEndpointAuditAction);
+HPX_PLAIN_ACTION(detail::readEndpointAudit, ReadEndpointAuditAction);
 HPX_PLAIN_ACTION(detail::initializePmmmFixture, InitializePmmmFixtureAction);
 HPX_PLAIN_ACTION(detail::moveFrozenPmmmFixture, MoveFrozenPmmmFixtureAction);
 HPX_PLAIN_ACTION(detail::readPmmmFixture, ReadPmmmFixtureAction);
@@ -1418,12 +1243,89 @@ Vector<PmmmSample> gatherPmmmKickSamples() {
 }
 
 /// Compare rebuilt frozen-cell FMM trees with direct forces after cell and seam crossings.
+
+void checkPmmmEndpointReuse() {
+    auto const saved = getOptions();
+    auto options = saved;
+    options.hydro.enabled = false;
+    options.gravity.cuda = false;
+    options.gravity.pmmmOuterInterval = true;
+    options.gravity.meshSize = 8;
+    options.gravity.pmmmCoarseMeshSize = 0;
+    options.gravity.pmmmNearWidth = 1;
+    options.compute.bucketSize = 8;
+    pmmmDestroy();
+    setOptions(options);
+    preparePmmmFixture(5);
+    distributePmmmFixture(5);
+    particlesSortByRung(0);
+    for (auto const& locality : hpxLocalities()) {
+        hpx::async<InstallEndpointAuditAction>(locality).get();
+    }
+    auto before = gatherPmmmKickSamples();
+    auto const boundary = pmmmOuterBoundary(1, 1, 0, 1, 1);
+    auto after = gatherPmmmKickSamples();
+    // Coincident sources can change their relative order during kd partitioning.
+    // The fixture's x velocity is its unique identity and remains unchanged here.
+    auto identity = [](auto const& left, auto const& right) {
+        return left.velocity[0] < right.velocity[0];
+    };
+    std::sort(before.begin(), before.end(), identity);
+    std::sort(after.begin(), after.end(), identity);
+    requirePmmm(before.size() == after.size(), "boundary changed the particle population");
+    for (size_t i = 0; i < before.size(); ++i) {
+        requirePmmm(before[i].rung == after[i].rung && before[i].velocity == after[i].velocity,
+            "long-field endpoint preparation changed velocities or rungs");
+    }
+    double potential = 0;
+    double timestep = 1.e30;
+    double builds = 0;
+    for (auto const& locality : hpxLocalities()) {
+        auto const audit = hpx::async<ReadEndpointAuditAction>(locality, true).get();
+        requirePmmm(audit[0] < 2.e-6, "Cartesian endpoint descent differs from spherical oracle");
+        potential += audit[1];
+        timestep = std::min(timestep, audit[2]);
+        builds += audit[3];
+    }
+    requirePmmm(builds > 0, "endpoint did not build any source roots");
+    requirePmmm(
+        std::abs(potential - boundary.potentialEnergy) < 2.e-11 * std::max(1., std::abs(potential)),
+        "Cartesian endpoint potential differs from spherical oracle");
+    requirePmmm(std::abs(timestep - boundary.accelerationTimestep) <
+            2.e-11 * std::max(1., std::abs(timestep)),
+        "Cartesian endpoint timestep differs from spherical oracle");
+    auto const transforms = pmmmDiagnostics().transformCount;
+    KickParameters parameters{};
+    parameters.htime = true;
+    parameters.top = parameters.ascending = parameters.descending = true;
+    parameters.firstCall = true;
+    parameters.minRung = 0;
+    parameters.a = 1;
+    parameters.t0 = parameters.maxDt = boundary.nextInterval;
+    parameters.eta = options.gravity.timestepEta;
+    parameters.gm = options.gravity.gm;
+    parameters.gravitySmoothingLength = options.gravity.smoothingLength;
+    parameters.frozenNear = parameters.refreshMembership = true;
+    parameters.doPhi = true;
+    pmmmKick(parameters, true);
+    requirePmmm(pmmmDiagnostics().transformCount == transforms,
+        "opening short pass repeated the long transform");
+    double afterBuilds = 0;
+    for (auto const& locality : hpxLocalities()) {
+        afterBuilds += hpx::async<ReadEndpointAuditAction>(locality, false).get()[3];
+    }
+    requirePmmm(afterBuilds == builds, "opening short pass rebuilt the endpoint roots");
+    pmmmDestroy();
+    setOptions(saved);
+    std::cout << "PMMM endpoint roots reused; Cartesian long field matches spherical oracle\n";
+}
+
 void checkPmmmFrozenFmm() {
     auto const saved = getOptions();
     auto options = saved;
     options.hydro.enabled = false;
     options.gravity.pmmmOuterInterval = true;
-    options.gravity.pmmmNearMethod = "fmm";
+
     options.gravity.meshSize = 8;
     options.gravity.pmmmCoarseMeshSize = 0;
     options.gravity.pmmmNearWidth = 1;
@@ -1461,7 +1363,7 @@ void checkPmmmFrozenFmm() {
         }
         parameters.minRung = step == 1 ? 2 : 0;
         particlesSortByRung(parameters.minRung);
-        options.gravity.pmmmNearMethod = "fmm";
+        options.gravity.openingAngle = 0.35;
         setOptions(options);
         pmmmKick(parameters);
         auto const actual = gatherPmmmKickSamples();
@@ -1473,7 +1375,7 @@ void checkPmmmFrozenFmm() {
         requirePmmm(diagnostics.activeParticles == (step == 1 ? 240U : 320U) &&
                 diagnostics.evaluatedParticles == diagnostics.activeParticles,
             "frozen FMM did not select the rung's sources and sinks");
-        options.gravity.pmmmNearMethod = "pp";
+        options.gravity.openingAngle = 1.e-5;
         setOptions(options);
         particlesSortByRung(parameters.minRung);
         pmmmKick(parameters);
@@ -1631,47 +1533,6 @@ void checkPmmmTraditionalKicks() {
               << std::flush;
 }
 
-void checkPmmmPpBatchTargets() {
-    if ((getOptions().gravity.pmmmNearMethod == "fmm")) {
-        return;
-    }
-    auto const saved = getOptions();
-    auto options = saved;
-    options.gravity.meshSize = 8;
-    options.gravity.pmmmNearWidth = 1;
-    options.gravity.pmmmBatchParticles = 1;
-    pmmmDestroy();
-    setOptions(options);
-    preparePmmmFixture(0);
-    distributePmmmFixture(0);
-    pmmmSolve(true);
-    auto const baseline = gatherPmmmSamples();
-    auto const small = pmmmDiagnostics();
-    std::map<std::pair<int, uint64_t>, size_t> cellPopulations;
-    std::map<int, size_t> rankPopulations;
-    size_t largestCell = 0;
-    size_t largestRank = 0;
-    for (auto const& sample : baseline) {
-        largestCell = std::max(largestCell, ++cellPopulations[{sample.rank, sample.cellKey}]);
-        largestRank = std::max(largestRank, ++rankPopulations[sample.rank]);
-    }
-    requirePmmm(
-        small.nearBatches == cellPopulations.size() && small.peakBatchParticles == largestCell,
-        "PP target one did not submit one complete occupied cell per batch");
-    options.gravity.pmmmBatchParticles = 4096;
-    setOptions(options);
-    pmmmSolve(true);
-    comparePmmmSamples(baseline, gatherPmmmSamples());
-    auto const large = pmmmDiagnostics();
-    requirePmmm(
-        large.nearBatches == rankPopulations.size() && large.peakBatchParticles == largestRank,
-        "PP large target did not combine the locality's occupied cells");
-    requirePmmm(large.planBuilds == small.planBuilds && large.greenBuilds == small.greenBuilds,
-        "changing the PP batch target rebuilt its FFT or Green cache");
-    pmmmDestroy();
-    setOptions(saved);
-}
-
 void checkPmmmStreamedStages() {
     auto const saved = getOptions();
     auto options = saved;
@@ -1688,8 +1549,7 @@ void checkPmmmStreamedStages() {
     options.analysis.saveAcceleration = false;
     options.analysis.savePotential = false;
     pmmmDestroy();
-    for (auto const& nearMethod : {std::string(gravity::kBuildPmmmNearMethod)}) {
-        options.gravity.pmmmNearMethod = nearMethod;
+    {
         for (int batchParticles : {1, 4096}) {
             options.gravity.pmmmBatchParticles = batchParticles;
             setOptions(options);
@@ -2111,7 +1971,7 @@ void checkPmmmCoarseMeshes() {
 }
 
 void checkPmmmCellOverlap() {
-    if (hpxSize() < 2 || !(getOptions().gravity.pmmmNearMethod == "fmm")) {
+    if (hpxSize() < 2) {
         return;
     }
     auto const saved = getOptions();
@@ -2179,9 +2039,6 @@ void checkPmmmCellOverlap() {
 }
 
 void checkRootDepositionRecovery() {
-    if (getOptions().gravity.pmmmNearMethod != "fmm") {
-        return;
-    }
     auto const saved = getOptions();
     auto options = saved;
     options.gravity.meshSize = 8;
@@ -2238,8 +2095,7 @@ void checkRootDepositionRecovery() {
 }
 
 void checkPmmmFarOverlap() {
-    if (hpxSize() != 1 || hpx::get_os_thread_count() < 2 ||
-        getOptions().gravity.pmmmNearMethod != "fmm") {
+    if (hpxSize() != 1 || hpx::get_os_thread_count() < 2) {
         return;
     }
     auto const saved = getOptions();
@@ -2284,9 +2140,6 @@ void checkPmmmFarOverlap() {
 }
 
 void checkPmmmFmmNear() {
-    if (!(getOptions().gravity.pmmmNearMethod == "fmm")) {
-        return;
-    }
     auto const saved = getOptions();
     auto options = saved;
     // Coupled mesh/SPH evolution is deferred. Explicit-mass source permutation
@@ -2444,8 +2297,7 @@ void checkPmmmArbitraryMeshes() {
                     double const actual = component == 0 ?
                         samples[sink].potential :
                         samples[sink].acceleration[component - 1];
-                    double const allowance =
-                        component == 0 && options.gravity.pmmmNearMethod == "fmm" ?
+                    double const allowance = component == 0 ?
                         4 * std::numeric_limits<float>::epsilon() *
                             std::abs(options.gravity.gm * samples[sink].mass *
                                 selectedGravityKernel().centralPotential /
@@ -2490,6 +2342,7 @@ void pmmmTest() {
     options.run.hierarchicalGravity =
         usesHierarchicalIntegration(options.run) && options.gravity.enabled;
     setOptions(options);
+    detail::checkPmmmEndpointReuse();
     detail::checkPmmmFrozenFmm();
     if (options.run.test == "pmmmSources") {
         // Focus the changed source pipeline independently of the full-field
@@ -2518,10 +2371,6 @@ void pmmmTest() {
         return;
     }
     detail::checkPmmmArbitraryMeshes();
-    if (options.gravity.pmmmNearMethod == "pp") {
-        detail::checkPmmmNearEdges();
-        detail::checkPmmmNearBatches();
-    }
     // Each base side is at least the smallest side for its near width:
     // 4 for width 1, 8 for widths 2 and 3, 16 for width 4.
     std::array<std::array<int, 2>, 5> const configurations{
@@ -2581,8 +2430,7 @@ void pmmmTest() {
                     n * n * (n / 2 + 1) * (4 * mesh.terms.size() + 2 * mesh.localCount);
                 FlopCount const expected = mesh.forwardFlops + mesh.inverseFlops + 4 * n * n * n +
                     10 * n * n * (n / 2 + 1) * mesh.terms.size() + meshConversions +
-                    5 * FlopCount(hpxSize() - 1) +
-                    ((getOptions().gravity.pmmmNearMethod == "fmm") ? 0 : 4 * FlopCount(hpxSize()));
+                    5 * FlopCount(hpxSize() - 1);
                 detail::requirePmmm(forceFlops == expected,
                     "empty PMMM mesh operation total is incomplete or counted more than once: " +
                         std::to_string(forceFlops) + " expected " + std::to_string(expected));
@@ -2619,7 +2467,6 @@ void pmmmTest() {
     pmmmDestroy();
     detail::checkPmmmFmmNear();
     detail::checkPmmmTraditionalKicks();
-    detail::checkPmmmPpBatchTargets();
     detail::checkPmmmStreamedStages();
     detail::checkPmmmStageMeshes();
     detail::checkPmmmCoarseMeshes();
@@ -2628,6 +2475,6 @@ void pmmmTest() {
     detail::checkPmmmCellOverlap();
     std::cout << std::format("PMMM periodic force, mass, self, ownership, and cache checks passed "
                              "at order {:d} with {:s} near interactions\n",
-                     fmmOrder(), getOptions().gravity.pmmmNearMethod.c_str())
+                     fmmOrder(), "fmm")
               << std::flush;
 }

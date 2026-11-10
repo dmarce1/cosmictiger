@@ -94,8 +94,6 @@ function(cosmictiger_feature_sources output)
             src/gravity/fmm/fmm_batch.cpp
             src/gravity/fmm/ghost_exchange.cpp
             src/gravity/fmm/ghost_storage.cpp
-            src/gravity/pp/near_pp.cpp
-            src/gravity/pp/near_pp.cu
         )
     endif()
 

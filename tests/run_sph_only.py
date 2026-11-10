@@ -86,7 +86,7 @@ def main():
                omitChemistryDefault=True)
     metadata = execute(prepare("metadata"), ["--run.test=checkpointState", "--hydro.enabled=false"])
     execute(prepare("saved_diagnostics"), ["--run.test=sphOnlyDiagnostics", "--hydro.enabled=true"])
-    for key, value in (("gravity.method.near", "none"), ("gravity.expansionDegree", "0"),
+    for key, value in (("gravity.expansionDegree", "0"),
                        ("run.timeIntegrator", selected["run.timeIntegrator"]),
                        ("run.scenario", "sod"),
                        ("compute.positionType", args.position_type), ("gravity.enabled", "F")):
@@ -116,7 +116,7 @@ def main():
         reject(fftTest, [f"--run.test={fftTest}"], f"test {fftTest} is not known")
     reject("hydro_disabled", ["--run.scenario=sod", "--hydro.enabled=false"], "requires hydro.enabled")
     reject("gravity_error", ["--gravity.errorInterval=1"], "requires gravity.enabled=true")
-    reject("near_method", ["--gravity.method.near=pp"], "requires a gravity-enabled build")
+    reject("near_method", ["--gravity.method.near=pp"], "gravity.method.near")
     opposite = "fixed64" if args.position_type == "fixed32" else "fixed32"
     reject("wrong_positions", [f"--compute.positionType={opposite}"], "this build uses")
 

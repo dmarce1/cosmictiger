@@ -124,7 +124,6 @@ imply that an optional backend is enabled or that every declared path runs in pr
 | [cosmictiger/gravity/kernels/cartesian_tracefree_types.hpp](../cosmictiger/gravity/kernels/cartesian_tracefree_types.hpp) | Generated named coefficient fields and storage/access/serialization for Cartesian expansions. |
 | [cosmictiger/gravity/kernels/spherical/ewald_common.hpp](../cosmictiger/gravity/kernels/spherical/ewald_common.hpp) | Generated kernels for shared precision conversion, special-function wrappers, and coefficient accumulation for Ewald sums. |
 | [cosmictiger/gravity/kernels/spherical/ewald_green.hpp](../cosmictiger/gravity/kernels/spherical/ewald_green.hpp) | Generated kernels for periodic Ewald Green coefficients and regularized self terms. |
-| [cosmictiger/gravity/kernels/spherical/ewald_l2p.hpp](../cosmictiger/gravity/kernels/spherical/ewald_l2p.hpp) | Generated kernels for periodic Ewald local-expansion evaluation at particles. |
 | [cosmictiger/gravity/kernels/spherical/green.hpp](../cosmictiger/gravity/kernels/spherical/green.hpp) | Generated kernels for free-space spherical Green-function coefficients. |
 | [cosmictiger/gravity/kernels/spherical/l2p.hpp](../cosmictiger/gravity/kernels/spherical/l2p.hpp) | Generated kernels for spherical local-expansion evaluation at particles. |
 | [cosmictiger/gravity/kernels/spherical/p2m.hpp](../cosmictiger/gravity/kernels/spherical/p2m.hpp) | Generated kernels for particle-to-spherical-multipole accumulation. |
@@ -143,9 +142,8 @@ imply that an optional backend is enabled or that every declared path runs in pr
 | [cosmictiger/gravity/mesh_size.hpp](../cosmictiger/gravity/mesh_size.hpp) | Mesh-size validation and hierarchical coarse/fine mesh selection. |
 | [cosmictiger/gravity/outer_interval.hpp](../cosmictiger/gravity/outer_interval.hpp) | Selection of PMMM outer timesteps from particle force information. |
 | [cosmictiger/gravity/pm_kick.hpp](../cosmictiger/gravity/pm_kick.hpp) | Application of long-range mesh forces to particle momenta, energies, and timestep rungs. |
-| [cosmictiger/gravity/pmmm_kernels.hpp](../cosmictiger/gravity/pmmm_kernels.hpp) | Spherical PMMM moments, periodic Green coefficients, contractions, and field evaluation. |
+| [cosmictiger/gravity/pmmm_kernels.hpp](../cosmictiger/gravity/pmmm_kernels.hpp) | Periodic spherical Green coefficients and PMMM contraction metadata. |
 | [cosmictiger/gravity/pmmm_kick.hpp](../cosmictiger/gravity/pmmm_kick.hpp) | Preparation and completion of particle-mesh kick stages. |
-| [cosmictiger/gravity/pp_near_pp.hpp](../cosmictiger/gravity/pp_near_pp.hpp) | Shared softened near-field pair interaction and CPU/CUDA dispatch policy. |
 | [cosmictiger/gravity/reference_table.hpp](../cosmictiger/gravity/reference_table.hpp) | Periodic gravity correction table indexing, symmetry, interpolation, and construction. |
 | [cosmictiger/gravity/softening.hpp](../cosmictiger/gravity/softening.hpp) | Conversion of configured softening length into the effective force-kernel radius. |
 | [cosmictiger/gravity/solver.hpp](../cosmictiger/gravity/solver.hpp) | Distributed PMMM solve lifecycle, source selection, diagnostics, and particle field access. |
@@ -307,10 +305,8 @@ imply that an optional backend is enabled or that every declared path runs in pr
 | [src/gravity/mesh_exchange.cpp](../src/gravity/mesh_exchange.cpp) | PMMM cell ownership, source deposition, distributed reads, and expansion exchange. |
 | [src/gravity/outer_interval.cpp](../src/gravity/outer_interval.cpp) | Selection of PMMM outer timesteps from particle force information. |
 | [src/gravity/pm_kick.cpp](../src/gravity/pm_kick.cpp) | Application of long-range mesh forces to particle momenta, energies, and timestep rungs. |
-| [src/gravity/pmmm_kernels.cpp](../src/gravity/pmmm_kernels.cpp) | Spherical PMMM moments, periodic Green coefficients, contractions, and field evaluation. |
+| [src/gravity/pmmm_kernels.cpp](../src/gravity/pmmm_kernels.cpp) | Periodic spherical Green coefficients and PMMM contraction metadata. |
 | [src/gravity/pmmm_kick.cpp](../src/gravity/pmmm_kick.cpp) | Preparation and completion of particle-mesh kick stages. |
-| [src/gravity/pp/near_pp.cpp](../src/gravity/pp/near_pp.cpp) | Direct softened particle-particle near-field evaluation over PMMM neighbor cells. |
-| [src/gravity/pp/near_pp.cu](../src/gravity/pp/near_pp.cu) | CUDA implementation: direct softened particle-particle near-field evaluation over PMMM neighbor cells. |
 | [src/gravity/reference_table.cpp](../src/gravity/reference_table.cpp) | Periodic gravity correction table indexing, symmetry, interpolation, and construction. |
 | [src/gravity/solver.cpp](../src/gravity/solver.cpp) | Distributed PMMM solve lifecycle, source selection, diagnostics, and particle field access. |
 | [src/gravity/source_access.cpp](../src/gravity/source_access.cpp) | Local/remote gravity source-position access and reader registration. |
@@ -427,9 +423,9 @@ imply that an optional backend is enabled or that every declared path runs in pr
 | [tests/gravity/particle_mesh_timestep.cpp](../tests/gravity/particle_mesh_timestep.cpp) | Mesh kick timestep selection and field-application operation counting. |
 | [tests/gravity/pmmm.cpp](../tests/gravity/pmmm.cpp) | Application PMMM fixtures covering deposition, near/far forces, transport, precision, and distributed execution. |
 | [tests/gravity/pmmm_kernel_flops.cpp](../tests/gravity/pmmm_kernel_flops.cpp) | Measured arithmetic counts for generated PMMM spherical/Ewald kernels. |
+| [tests/gravity/pmmm_reference.hpp](../tests/gravity/pmmm_reference.hpp) | Independent solid-harmonic polynomial and gradient references for mesh and tree validation. |
 | [tests/gravity/pmmm_kernels.cpp](../tests/gravity/pmmm_kernels.cpp) | Spherical PMMM kernels against independent harmonic/contraction references. |
 | [tests/gravity/pmmm_profile.cpp](../tests/gravity/pmmm_profile.cpp) | PMMM test wrapper collecting tree-depth and profiling diagnostics. |
-| [tests/gravity/pp/near_pp_flops.cpp](../tests/gravity/pp/near_pp_flops.cpp) | Measured operation counts for softened near-field pair interactions. |
 | [tests/gravity/reference_table.cpp](../tests/gravity/reference_table.cpp) | Periodic correction-table symmetries and interpolation against reference values. |
 | [tests/gravity/tree_source_moments.cpp](../tests/gravity/tree_source_moments.cpp) | Source-moment precision, serialization, and cloud-transport checks. |
 | [tests/gresho.cpp](../tests/gresho.cpp) | Gresho vortex profile and initialization tests. |

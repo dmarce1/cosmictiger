@@ -240,7 +240,7 @@ class BuildFeaturesTest(unittest.TestCase):
             self.check()
 
     def testMissingEnabledNearSolver(self):
-        for source in ("pp/near_pp.cpp", "fmm/fmm_batch.cpp"):
+        for source in ("fmm/cell_schedule.cpp", "fmm/fmm_batch.cpp"):
             with self.subTest(source=source):
                 self.configure()
                 self.commands = [entry for entry in self.commands if not entry["file"].endswith("src/gravity/" + source)]
@@ -794,7 +794,7 @@ class FeatureConfigurationTest(unittest.TestCase):
                 self.assertEqual("src/gravity/kick.cpp" in selected, hasGravity(configuration))
                 self.assertEqual("tests/analysis_backends.cpp" in selected, hasGravity(configuration) and testing)
                 self.assertEqual("src/particles/particle_mesh_sort.cpp" in selected, hasGravity(configuration))
-                self.assertEqual("src/gravity/pp/near_pp.cpp" in selected, hasGravity(configuration))
+                self.assertEqual("src/gravity/fmm/cell_schedule.cpp" in selected, hasGravity(configuration))
                 self.assertEqual("src/gravity/fmm/fmm_batch.cpp" in selected, hasGravity(configuration))
 
     def testNoPhysics(self):

@@ -159,7 +159,7 @@ def main():
     parser.add_argument("--order", type=int, choices=range(3, 10), required=True)
     parser.add_argument("--time-integrator", choices=("hierarchical",),
                         required=True)
-    parser.add_argument("--near-method", choices=("pp", "fmm"), default="fmm")
+    parser.add_argument("--near-method", choices=("fmm",), default="fmm")
     args = parser.parse_args()
     executable = args.executable.resolve()
     root = args.workdir.resolve()
@@ -167,7 +167,6 @@ def main():
     ranks = args.ranks if args.mpi_exec else 1
     mesh_size = 16
     common = {"hpx:threads": 2, "hpx:bind": "none",
-              "gravity.method.near": args.near_method,
               "gravity.meshSize": mesh_size, "gravity.pmmmNearWidth": 2,
               "gravity.pmmmOuterInterval": "true",
               "gravity.expansionDegree": args.order - 1,
@@ -206,7 +205,6 @@ def main():
     baseline = prepareCase(root, label + "_baseline")
     log = run(baseline, dict(common, **{"run.maxIterations": iterations}))
     for key, expected in (("run.timeIntegrator", args.time_integrator),
-                          ("gravity.method.near", args.near_method),
                           ("gravity.pmmmOuterInterval", "T")):
         require(re.search(r"^" + re.escape(key) + r"\s*:\s*" + expected + r"\s*$",
                           log, re.MULTILINE), f"{label}: resolved options lack {key}={expected}")

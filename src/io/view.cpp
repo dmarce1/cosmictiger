@@ -229,7 +229,7 @@ void writeViewCommandLine(DBfile* db) {
         size_t separator = name.find('.');
         while (separator != std::string::npos) {
             // PDB treats dots as structure-member syntax. Represent every
-            // option component as a directory, including gravity.method.near.
+            // option component as a directory.
             name[separator] = '/';
             auto const group = name.substr(0, separator);
             if (groups.insert(group).second) {

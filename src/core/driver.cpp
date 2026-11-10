@@ -755,7 +755,7 @@ ForceStepResult pmmmIntervalStep(int minRung, double scale, double scaleDerivati
     ForceStepResult result;
     {
         profile::ScopedPhase phase("pmmmKick.boundary");
-        result = pmmmKick(parameters);
+        result = pmmmKick(parameters, true);
     }
     result.pot += far.potentialEnergy;
     result.dkin += closing.dkin;
@@ -1206,7 +1206,7 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
         }
         if (selfGravity && meshGravity) {
             profile::profileBegin("pmmmKick");
-            thisKr = pmmmKick(kparams);
+            thisKr = pmmmKick(kparams, meshBoundary);
             profile::profileEnd();
             if (meshInterval && top) {
                 thisKr.pot += meshSchedule.longPotentialEnergy;
@@ -2125,9 +2125,7 @@ void driver() {
 
             double const numberOfParticles = getOptions().initial.numberOfParticles;
             double close = 0.0, direct = 0.0;
-            if (getOptions().gravity.pmmmNearMethod == "fmm") {
-                getGravityCounters(close, direct);
-            }
+            getGravityCounters(close, direct);
             direct += close;
             if (outputDue) {
                 fprintf(textfp,

@@ -107,13 +107,13 @@ def main():
     parser.add_argument("--mpi-postflag", action="append", default=[])
     parser.add_argument("--hpx-argument", action="append", default=[])
     parser.add_argument("--threads", type=int, default=4)
-    parser.add_argument("--near-method", choices=("pp", "fmm"), default="fmm")
+    parser.add_argument("--near-method", choices=("fmm",), default="fmm")
     args = parser.parse_args()
     executable = args.executable.resolve()
     root = args.workdir.resolve()
     root.mkdir(parents=True, exist_ok=True)
     configurations = Path(__file__).resolve().parents[1] / "configurations"
-    base = {"run.timeIntegrator": "hierarchical", "gravity.method.near": args.near_method,
+    base = {"run.timeIntegrator": "hierarchical",
             "gravity.pmmmOuterInterval": "true", "gravity.meshSize": 16,
             "chemistry.enabled": "false", "starFormation.enabled": "false",
             "output.silo": "false", "output.directory": ".", "checkpoint.intervalSeconds": 0,

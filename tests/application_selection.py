@@ -20,7 +20,7 @@ def compiled_algorithms(executable):
             raise RuntimeError(f"application help omitted compiled {label}")
         return match[1].split()
     # The gravity solver is PMMM (or none in SPH-only builds); its near field is
-    # the FMM or its direct particle-pair fallback.
+    # its FMM near field.
     return {"far": choices("Gravity solvers"), "near": choices("PMMM near solvers"),
             "integrator": choices("Time integrators")}
 
@@ -45,7 +45,7 @@ def application_options(executable, *, near=None, integrator=None, hydro=False):
     integrator = select(integrator, compiled["integrator"], ("hierarchical",), "integrator")
     result = {"run.timeIntegrator": integrator}
     if gravity:
-        result["gravity.method.near"] = select(near, compiled["near"], ("fmm", "pp"), "near solver")
+        select(near, compiled["near"], ("fmm",), "near solver")
     return result
 
 

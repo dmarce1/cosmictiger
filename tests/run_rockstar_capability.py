@@ -94,7 +94,6 @@ def main():
     }
     if far == "pmmm":
         near = choices("PMMM near solvers")
-        options["gravity.method.near"] = next(value for value in ("fmm", "pp") if value in near)
         options["gravity.meshSize"] = "8"
 
     startup = run("startup", options)

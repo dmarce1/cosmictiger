@@ -673,8 +673,7 @@ std::array<uint64_t, 11> pmmmCheckpointParameters(Options const& opts) {
     return {5, static_cast<uint64_t>(opts.gravity.meshSize),
         static_cast<uint64_t>(opts.gravity.fmmOrder),
         static_cast<uint64_t>(opts.gravity.pmmmNearWidth), static_cast<uint64_t>(opts.run.minRung),
-        timestepEtaBits, 1, opts.gravity.pmmmNearMethod == "fmm" ? 1U : 0U,
-        static_cast<uint64_t>(opts.gravity.fmmOrder), openingAngleBits,
+        timestepEtaBits, 1, 1U, static_cast<uint64_t>(opts.gravity.fmmOrder), openingAngleBits,
         static_cast<uint64_t>(pmmm::detail::resolvedCoarseMeshSize(
             opts.gravity.meshSize, opts.gravity.pmmmCoarseMeshSize, opts.gravity.pmmmNearWidth))};
 }
@@ -734,8 +733,7 @@ std::array<uint64_t, 12> readParticleMeshCheckpointParameters(FILE* fp) {
 // Near codes: 1 pp, 2 fmm.
 std::array<uint64_t, 5> checkpointAlgorithms(Options const& opts) {
     bool const gravityEnabled = opts.gravity.enabled;
-    return {1, gravityEnabled ? 2U : 0U,
-        gravityEnabled ? (opts.gravity.pmmmNearMethod == "fmm" ? 2U : 1U) : 0U,
+    return {1, gravityEnabled ? 2U : 0U, gravityEnabled ? 2U : 0U,
         static_cast<uint64_t>(gravityEnabled ? opts.gravity.fmmOrder : 0),
         usesGlobalIntegration(opts.run) ? 2U : (usesHierarchicalIntegration(opts.run) ? 1U : 0U)};
 }
@@ -1090,7 +1088,7 @@ CheckpointSelection readCheckpointSelection(std::string const& outputDirectory, 
     FREAD(&magic, sizeof(magic), 1, file.get());
     if (magic != detail::kCheckpointMagic) {
         // A headerless legacy file: no near-field or integrator record to recover.
-        return {"none", "hierarchical", 0};
+        return {"hierarchical", 0};
     }
     rewind(file.get());
     detail::CheckpointHeader header;
@@ -1131,7 +1129,10 @@ CheckpointSelection readCheckpointSelection(std::string const& outputDirectory, 
                         "or p3m); only PMMM checkpoints restart\n");
         }
         CheckpointSelection selection;
-        selection.nearMethod = algorithms[2] == 2 ? "fmm" : (algorithms[2] == 1 ? "pp" : "none");
+        if (algorithms[1] == 2 && algorithms[2] != 2) {
+            THROW_ERROR("The checkpoint selects the retired PP near solver; only PMMM-FMM "
+                        "checkpoints restart\n");
+        }
         selection.timeIntegrator =
             algorithms[4] == 2 ? "global" : (algorithms[4] == 1 ? "hierarchical" : "traditional");
         selection.expansionOrder = static_cast<int>(algorithms[3]);
@@ -1139,10 +1140,12 @@ CheckpointSelection readCheckpointSelection(std::string const& outputDirectory, 
     }
     CheckpointSelection result;
     result.timeIntegrator = (header.flags & (1U << 6)) != 0U ? "hierarchical" : "traditional";
-    result.nearMethod = "none";
     if ((header.flags & detail::kParticleMultipoleMesh) != 0U) {
         auto const parameters = detail::readPmmmCheckpointParameters(file.get());
-        result.nearMethod = parameters[0] >= 2 && parameters[7] != 0 ? "fmm" : "pp";
+        if (parameters[0] == 1 || parameters[7] != 1) {
+            THROW_ERROR("The checkpoint selects the retired PP near solver; only PMMM-FMM "
+                        "checkpoints restart\n");
+        }
         result.expansionOrder = static_cast<int>(parameters[2]);
     }
     return result;
@@ -1255,8 +1258,9 @@ void checkpointStateTest() {
     changed.gravity.pmmmNearWidth = changed.gravity.pmmmNearWidth == 1 ? 2 : 1;
     ALWAYS_ASSERT(pmmmParameters != detail::pmmmCheckpointParameters(changed));
     changed = getOptions();
-    changed.gravity.pmmmNearMethod = changed.gravity.pmmmNearMethod == "fmm" ? "pp" : "fmm";
-    ALWAYS_ASSERT(pmmmParameters != detail::pmmmCheckpointParameters(changed));
+    auto retiredPpParameters = pmmmParameters;
+    retiredPpParameters[7] = 0;
+    ALWAYS_ASSERT(!detail::pmmmCheckpointCompatible(retiredPpParameters, changed));
     // The coarse mesh is checkpoint identity: two coarse meshes under one full
     // mesh select different hierarchical stage meshes after the restart. The
     // default resolves to one eighth of the full mesh per axis.
@@ -1271,13 +1275,10 @@ void checkpointStateTest() {
     changed.gravity.pmmmCoarseMeshSize = 0;
     ALWAYS_ASSERT(detail::pmmmCheckpointCompatible(coarsePmmmParameters, changed));
     changed = getOptions();
-    changed.gravity.pmmmNearMethod = "pp";
     auto legacyPmmmParameters = detail::pmmmCheckpointParameters(changed);
     legacyPmmmParameters[0] = 1;
     legacyPmmmParameters[7] = 0;
     legacyPmmmParameters[8] = legacyPmmmParameters[9] = legacyPmmmParameters[10] = 0;
-    ALWAYS_ASSERT(detail::pmmmCheckpointCompatible(legacyPmmmParameters, changed));
-    changed.gravity.pmmmNearMethod = "fmm";
     ALWAYS_ASSERT(!detail::pmmmCheckpointCompatible(legacyPmmmParameters, changed));
     legacyPmmmParameters[0] = 2;
     legacyPmmmParameters[7] = 1;
@@ -1308,7 +1309,6 @@ void checkpointStateTest() {
     constexpr uint64_t kFollowingPayload = 0x0123456789abcdefULL;
     for (uint64_t version = 1; version <= 5; ++version) {
         changed = getOptions();
-        changed.gravity.pmmmNearMethod = "pp";
         auto serialized = detail::pmmmCheckpointParameters(changed);
         serialized[0] = version;
         if (version < 5) {
@@ -1321,7 +1321,7 @@ void checkpointStateTest() {
         ALWAYS_ASSERT(fwrite(&kFollowingPayload, sizeof(uint64_t), 1, stream.get()) == 1);
         rewind(stream.get());
         auto const decoded = detail::readPmmmCheckpointParameters(stream.get());
-        ALWAYS_ASSERT(detail::pmmmCheckpointCompatible(decoded, changed));
+        ALWAYS_ASSERT(detail::pmmmCheckpointCompatible(decoded, changed) == (version >= 2));
         uint64_t followingPayload = 0;
         ALWAYS_ASSERT(fread(&followingPayload, sizeof(uint64_t), 1, stream.get()) == 1 &&
             followingPayload == kFollowingPayload);

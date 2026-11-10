@@ -90,7 +90,7 @@ def degreeRange(value):
 
 
 def hasGravity(configuration):
-    # PMMM gravity: FFT far field, FMM near field and its direct PP fallback.
+    # PMMM gravity: FFT far field and FMM near field, including close leaf pairs.
     return configuration["GRAVITY"]
 
 
@@ -209,7 +209,7 @@ def requiredSources(configuration, cuda):
                              "src/analysis/rockstar.cu"})
     if hasGravity(configuration):
         required.update({"src/gravity/solver.cpp", "src/gravity/fft.cpp",
-                         "src/gravity/pp/near_pp.cpp", "src/gravity/fmm/fmm_batch.cpp",
+                         "src/gravity/fmm/cell_schedule.cpp", "src/gravity/fmm/fmm_batch.cpp",
                          "src/gravity/pm_kick.cpp", "src/gravity/kick.cpp"})
     if configuration["SPH"]:
         required.update({"src/sph/sph.cpp", "src/sph/hydro_cpu.cpp", "src/sph/prehydro_cpu.cpp",

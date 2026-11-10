@@ -110,6 +110,7 @@ void failSource(size_t index, std::exception_ptr failure) {
 /// Clear source-cell planning, ghost membership, tasks, and saved rung state for the
 /// completed solve.
 void clearGhosts() {
+    state.boundaryTreeReady = false;
     fmmGhostClear();
     state.sourceCells.clear();
     state.sourceCellsByKey.clear();
@@ -290,51 +291,57 @@ void startPipeline() {
     state.tasks.reserve(workers + state.sourceCells.size() - ownedCount);
     state.ownedTasks.reserve(workers);
     try {
-        for (size_t worker = 0; worker < workers; ++worker) {
-            state.ownedTasks.push_back(hpx::async(
-                hpx::annotated_function(
-                    [worker, workers, ownedCount]() {
-                        // Retain at most 32 converted cells per producer; the double
-                        // Cartesian root is released after each conversion. Slab
-                        // writes are acknowledged before the next packet is built.
-                        constexpr size_t kPacketCells = 32;
-                        for (size_t begin = worker; begin < ownedCount;
-                            begin += workers * kPacketCells) {
-                            std::vector<CellData> packet;
-                            for (size_t index = begin;
-                                index < std::min(ownedCount, begin + workers * kPacketCells);
-                                index += workers) {
-                                try {
-                                    auto const& cell = state.cells[index];
-                                    TreeCreateReturn completed;
-                                    auto const root = treeCreateCell(cell, cache.meshSize,
-                                        FmmParticleStore::Owned, nullptr, &completed,
-                                        frozenNearRequest(state.request));
-                                    if (reuseOwnedRoots()) {
-                                        packet.push_back(rootMoments(index, completed));
-                                    } else {
-                                        for (ParticleInteger i = cell.begin; i < cell.end; ++i) {
-                                            state.stageRungs[i - state.activeRange.first] =
-                                                particlesRung(i);
+        if (!state.request.reuseBoundaryTree) {
+            for (size_t worker = 0; worker < workers; ++worker) {
+                state.ownedTasks.push_back(hpx::async(
+                    hpx::annotated_function(
+                        [worker, workers, ownedCount]() {
+                            // Retain at most 32 converted cells per producer; the double
+                            // Cartesian root is released after each conversion. Slab
+                            // writes are acknowledged before the next packet is built.
+                            constexpr size_t kPacketCells = 32;
+                            for (size_t begin = worker; begin < ownedCount;
+                                begin += workers * kPacketCells) {
+                                std::vector<CellData> packet;
+                                for (size_t index = begin;
+                                    index < std::min(ownedCount, begin + workers * kPacketCells);
+                                    index += workers) {
+                                    try {
+                                        auto const& cell = state.cells[index];
+                                        TreeCreateReturn completed;
+                                        auto const root = treeCreateCell(cell, cache.meshSize,
+                                            FmmParticleStore::Owned, nullptr, &completed,
+                                            frozenNearRequest(state.request));
+                                        if (reuseOwnedRoots()) {
+                                            packet.push_back(rootMoments(index, completed));
+                                        } else {
+                                            for (ParticleInteger i = cell.begin; i < cell.end;
+                                                ++i) {
+                                                state.stageRungs[i - state.activeRange.first] =
+                                                    particlesRung(i);
+                                            }
                                         }
+                                        observe(PmmmCellEvent::OwnedRootReady, cell.key);
+                                        publishSource(index, root);
+                                    } catch (...) {
+                                        failSource(index, std::current_exception());
                                     }
-                                    observe(PmmmCellEvent::OwnedRootReady, cell.key);
-                                    publishSource(index, root);
-                                } catch (...) {
-                                    failSource(index, std::current_exception());
+                                }
+                                if (!packet.empty()) {
+                                    try {
+                                        depositCells(std::move(packet));
+                                    } catch (...) {
+                                        recordFailure(std::current_exception());
+                                    }
                                 }
                             }
-                            if (!packet.empty()) {
-                                try {
-                                    depositCells(std::move(packet));
-                                } catch (...) {
-                                    recordFailure(std::current_exception());
-                                }
-                            }
-                        }
-                    },
-                    "gravity.pmmm.buildOwnedSourceCells"))
-                    .share());
+                        },
+                        "gravity.pmmm.buildOwnedSourceCells"))
+                        .share());
+            }
+        }
+        if (state.request.farOnly) {
+            return;
         }
         // Each receive suspends independently: a delayed cell must not stop
         // requests for other cells that can release ready boundary work.

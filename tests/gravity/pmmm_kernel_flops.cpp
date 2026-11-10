@@ -19,6 +19,8 @@
 
 // The generated scalar/SIMD adapters use std math internally. Specialize only
 // those adapters so the execution oracle also observes each elementary result.
+#include "pmmm_reference.hpp"
+
 namespace cosmictiger::gravity::spherical::detail {
 
 template <>
@@ -100,25 +102,6 @@ namespace detail {
                 EXPECT_EQ(greenCount, Real::count());
             }
         }
-
-        std::array<double, order * order> local{};
-        std::array<Real, order * order> countedLocal{};
-        for (size_t slot = 0; slot < local.size(); ++slot) {
-            local[slot] = 0.01 * (slot + 1);
-            countedLocal[slot] = local[slot];
-        }
-        std::array<double, 4> field{};
-        FlopCount const evaluationCount =
-            pmmm::evaluate(order, field, local.data(), 0.2, point, kCellWidth);
-        std::array<Real, 4> countedField{};
-        Real::reset();
-        spherical::ewaldL2P<kDegree, Real>(
-            countedField, countedLocal, Real(0.2), Real(point[0]), Real(point[1]), Real(point[2]));
-        EXPECT_EQ(spherical::kEwaldL2PConventionalFlops<kDegree>, Real::count());
-        for (int component = 1; component < 4; ++component) {
-            countedField[component] = countedField[component] / Real(kCellWidth);
-        }
-        EXPECT_EQ(evaluationCount, Real::count());
     }
 
 }    // namespace detail

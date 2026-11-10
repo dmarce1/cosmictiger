@@ -32,6 +32,8 @@ void cosmictigerAssert(char const* condition, bool satisfied, char const* file, 
     }
 }
 
+#include "pmmm_reference.hpp"
+
 namespace pmmm_test {
 namespace detail {
 

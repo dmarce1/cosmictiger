@@ -24,8 +24,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("executable", type=Path)
     parser.add_argument("workdir", type=Path)
-    parser.add_argument("--near-method", choices=("pp", "fmm"), default="fmm",
-                        help="PMMM near field selected by the fixtures (fmm or its pp fallback)")
+    parser.add_argument("--near-method", choices=("fmm",), default="fmm",
+                        help="fixed PMMM-FMM solver used by the fixtures")
     parser.add_argument("--order", type=int, choices=(0, *range(3, 10)), required=True,
                         help="compiled expansion order; 0 for an SPH-only build without gravity")
     parser.add_argument("--time-integrator", choices=("traditional", "hierarchical", "global"), required=True)
@@ -80,7 +80,6 @@ def main():
                 selected["gravity.enabled"] = "false"
             else:
                 selected["gravity.expansionDegree"] = args.order - 1
-                selected["gravity.method.near"] = args.near_method
             options = options + [f"--{key}={value}" for key, value in selected.items()
                                  if not any(option.startswith(f"--{key}=") for option in options)]
         # Most cases inspect unrelated options; supply the required mesh size.
@@ -164,7 +163,7 @@ def main():
                 "starFormation.enabled", "starFormation.seed", "starFormation.criticalPhysicalDensity",
                 "starFormation.criticalOverDensity",
                 "starFormation.evaporationFactor", "starFormation.starFormationTimeGyr"}
-    required.update({"run.timeIntegrator", "gravity.method.near",
+    required.update({"run.timeIntegrator",
                      "gravity.expansionDegree", "hydro.viscosityCoefficientMin",
                      "hydro.viscosityDecay", "hydro.balsaraSoundSpeedCoefficient"})
     required.update({"scenario.cosmology.gadget4Restart", "scenario.cosmology.useGlass",
@@ -246,7 +245,7 @@ def main():
         print("Nonverbose startup printed every registered option alphabetically with resolved values")
         return
 
-    removed_options = {"compute.cuda", "hydro.chemistry", "hydro.conduction", "hydro.diffusion",
+    removed_options = {"gravity.method.near", "compute.cuda", "hydro.chemistry", "hydro.conduction", "hydro.diffusion",
                        "hydro.yReflect", "gravity.sphSmoothing", "cosmology.omegaK",
                        "initial.usePowerFile", "initial.particlesPerDimension",
                        "initial.darkMatterParticleCount", "initial.gasParticleCount", "gravity.method",
@@ -394,12 +393,11 @@ mapSize = 8
                      metadata_options + [f"--gravity.expansionDegree={degree}"])
         assertNumericSetting(output, "gravity.expansionDegree", degree)
     selected_options = [f"--gravity.expansionDegree={args.order - 1}",
-                        f"--run.timeIntegrator={args.time_integrator}",
-                        f"--gravity.method.near={args.near_method}"]
+                        f"--run.timeIntegrator={args.time_integrator}"]
     selection_config = args.workdir / "algorithm_selection.ini"
     selection_config.write_text(
         f"[run]\ntimeIntegrator = {args.time_integrator}\n[gravity]\n"
-        f"expansionDegree = {args.order - 1}\nmethod.near = {args.near_method}\n")
+        f"expansionDegree = {args.order - 1}\n")
     output = run("selection_ini", metadata_options + [
         f"--configuration={selection_config.resolve()}"], selectors=False)
     assertNumericSetting(output, "gravity.expansionDegree", args.order - 1)
@@ -417,16 +415,18 @@ mapSize = 8
                      success=count == 1, selectors=False)
         if count > 1 and key not in output:
             raise RuntimeError(f"ambiguous {key} lacked an explicit-selection diagnostic")
-    # Both near fields are always compiled; the FMM near field is the default and
-    # pp is its fallback.
     compiled_near = re.search(r"^\s*PMMM near solvers:([^\n]*)", help_text, re.MULTILINE)
-    if compiled_near is None or set(compiled_near[1].split()) != {"fmm", "pp"}:
-        raise RuntimeError("help did not list the fmm near field and its pp fallback")
-    output = run("selection_implicit_gravity.method.near", metadata_options + [
-        option for option in selected_options if not option.startswith("--gravity.method.near=")],
-        selectors=False)
-    if not re.search(r"^gravity\.method\.near\s*:\s*fmm\s*$", output, re.MULTILINE):
-        raise RuntimeError("the implicit PMMM near field is not the FMM")
+    if compiled_near is None or compiled_near[1].split() != ["fmm"]:
+        raise RuntimeError("help did not identify PMMM-FMM as the sole gravity solver")
+    for source in ("cli", "ini"):
+        for value in ("fmm", "pp"):
+            retired = args.workdir / f"retired_near_{value}.ini"
+            retired.write_text(f"[gravity]\nmethod.near = {value}\n")
+            arguments = ([f"--gravity.method.near={value}"] if source == "cli" else
+                         [f"--configuration={retired.resolve()}"])
+            output = run(f"retired_near_{source}_{value}", metadata_options + arguments, False)
+            if "gravity.method.near" not in output and "method.near" not in output:
+                raise RuntimeError("retired near solver lacked a diagnostic")
 
     # A comoving Mpc/h box contains rho_m,0 * L^3. Resolution changes the mass
     # unit, and close packing doubles the reference count at fixed resolution.
@@ -585,8 +585,7 @@ mapSize = 8
                        + sph_control_options if sph_controls_available else metadata_options)
     balsara_default = run("balsara_default", balsara_options)
     def assertCompiledSettings(output):
-        for key, value in (("gravity.method.near", args.near_method if gravity_compiled else "none"),
-                           ("run.timeIntegrator", args.time_integrator)):
+        for key, value in (("run.timeIntegrator", args.time_integrator),):
             if not re.search(r"^" + re.escape(key) + r"\s*:\s*" + value + r"\s*$",
                              output, re.MULTILINE):
                 raise RuntimeError(f"compiled metadata did not retain {key}={value}")
@@ -1345,7 +1344,7 @@ mapSize = 8
     root = Path(__file__).resolve().parents[1]
     optional_keys = {"compute.positionType", "compute.bucketSize",
                      "gravity.smoothingLength",
-                     "gravity.method.near", "gravity.expansionDegree",
+                     "gravity.expansionDegree",
                      "units.boxLength",
                      "scenario.disc.centralSmoothingLength"}
     public_keys = set(option_names) - {"help", "configuration"}
@@ -1561,7 +1560,7 @@ mapSize = 8
     for option in sorted(removed_options):
         value = {"cosmology.omegaK": "0.1", "gravity.cloud": "pcs",
                  "gravity.method": "pmmm", "gravity.method.far": "pmmm",
-                 "gravity.pmmmNearMethod": args.near_method,
+                 "gravity.pmmmNearMethod": args.near_method, "gravity.method.near": "pp",
                  "gravity.fmmOrder": str(args.order), "gravity.pmmmOrder": str(args.order),
                  "gravity.p3mSplitCells": "1.25", "gravity.p3mCutoff": "4.5",
                  "gravity.openingAngle": "0.8", "gravity.openingSchedule": "none",

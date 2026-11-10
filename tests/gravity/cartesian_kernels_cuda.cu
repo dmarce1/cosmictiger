@@ -14,8 +14,8 @@
 
 #include <cuda_runtime.h>
 
-#include "cartesian_kernel_test_helpers.hpp"
 #include <tests/cuda_test.hpp>
+#include "cartesian_kernel_test_helpers.hpp"
 
 namespace detail {
 
@@ -27,25 +27,25 @@ void check(cudaError_t status) {
     }
 }
 
-template <typename Real, int order>
+template <int order>
 __global__ void evaluate(
-    KernelInput<Real, order> const* inputs, KernelResult<Real, order>* results) {
+    KernelInput<float, order> const* inputs, KernelResult<float, order>* results) {
     int const index = blockIdx.x * blockDim.x + threadIdx.x;
     if (index < kSampleCount) {
         evaluateKernels(inputs[index], results[index]);
     }
 }
 
-// One launch per order and precision: the device results of every generated
+// One float launch per order: the device results of every generated
 // kernel of that order must match the host evaluation of the same inputs.
-template <typename Real, int order>
+template <int order>
 double testDeviceParity() {
-    using Input = KernelInput<Real, order>;
-    using Result = KernelResult<Real, order>;
+    using Input = KernelInput<float, order>;
+    using Result = KernelResult<float, order>;
     std::array<Input, kSampleCount> inputs{};
     std::array<Result, kSampleCount> results{};
     for (int sample = 0; sample < kSampleCount; ++sample) {
-        inputs[sample] = makeKernelInput<Real, order>(sample);
+        inputs[sample] = makeKernelInput<float, order>(sample);
     }
     Input* deviceInputs = nullptr;
     Result* deviceResults = nullptr;
@@ -56,11 +56,11 @@ double testDeviceParity() {
         check(cudaMemcpy(deviceInputs, inputs.data(), sizeof(inputs), cudaMemcpyHostToDevice));
         check(cudaMemset(deviceResults, 0, sizeof(results)));
         // One block is sufficient to validate the generated device implementations.
-        evaluate<Real, order><<<1, kSampleCount>>>(deviceInputs, deviceResults);
+        evaluate<order><<<1, kSampleCount>>>(deviceInputs, deviceResults);
         check(cudaGetLastError());
         check(cudaDeviceSynchronize());
         check(cudaMemcpy(results.data(), deviceResults, sizeof(results), cudaMemcpyDeviceToHost));
-        double const tolerance = sizeof(Real) == sizeof(float) ? 2e-5 : 3e-12;
+        double const tolerance = 2e-5;
         for (int sample = 0; sample < kSampleCount; ++sample) {
             Result expected{};
             evaluateKernels(inputs[sample], expected);
@@ -72,10 +72,9 @@ double testDeviceParity() {
                 worst = std::isfinite(actualValue) ? std::max(worst, normalized) : INFINITY;
                 if (!std::isfinite(actualValue) || normalized > tolerance) {
                     std::fprintf(stderr,
-                        "CUDA %s Cartesian parity at order %d: sample %d, "
+                        "CUDA float Cartesian parity at order %d: sample %d, "
                         "component %d: %.17g != %.17g\n",
-                        sizeof(Real) == sizeof(float) ? "float" : "double", order, sample, i,
-                        actualValue, expectedValue);
+                        order, sample, i, actualValue, expectedValue);
                     throw std::runtime_error("CUDA Cartesian coefficient mismatch");
                 }
             }
@@ -92,20 +91,19 @@ double testDeviceParity() {
 
 template <int order>
 void testOrder() {
-    double const worstFloat = testDeviceParity<float, order>();
-    double const worstDouble = testDeviceParity<double, order>();
-    std::printf("Cartesian CUDA order %d (degree %d/%d) float/double kernel "
+    double const worstFloat = testDeviceParity<order>();
+    std::printf("Cartesian CUDA order %d (degree %d/%d) float kernel "
                 "parity passed; worst "
-                "normalized discrepancy: float %.1e, double %.1e.\n",
+                "normalized discrepancy: float %.1e.\n",
         order, KernelLayout<order>::kMultipoleDegree_, KernelLayout<order>::kLocalDegree_,
-        worstFloat, worstDouble);
+        worstFloat);
 }
 
 }    // namespace detail
 
 class CartesianKernelsCuda : public detail::CudaTest, public ::testing::WithParamInterface<int> {};
 
-TEST_P(CartesianKernelsCuda, FloatAndDoubleMatchHost) {
+TEST_P(CartesianKernelsCuda, FloatMatchesHost) {
     detail::forEachFmmOrder([&](auto order) {
         if (order.value == GetParam()) {
             detail::testOrder<order.value>();

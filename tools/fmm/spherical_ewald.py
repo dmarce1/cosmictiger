@@ -214,25 +214,9 @@ def generate(minLocalDegree=2,maxLocalDegree=8):
         counts[str(degree+1)] = report
     green.append('} // namespace cosmictiger::gravity::spherical')
     outputs['spherical/ewald_green.hpp'] = '\n'.join(green) + '\n'
-    l2p = ['#pragma once', '#include <cosmictiger/gravity/kernels/spherical/l2p.hpp>',
-           '#include <cosmictiger/math/simd_math.hpp>',
-           '', 'namespace cosmictiger::gravity::spherical {',
-           "template <int degree> inline constexpr int kEwaldL2PFlops = detail::kL2PFlops<degree> + 8;",
-              "template <int degree> inline constexpr int kEwaldL2PConventionalFlops = detail::kL2PConventionalFlops<degree> + 14;",
-              "/// Accumulate the local field including the isotropic trace term of the periodic correction.",
-              "template <int degree, typename Real, typename Field, typename Source>",
-              "CUDA_EXPORT void ewaldL2P(Field& field, Source const& source, Real sourceTrace, Real x, Real y, Real z) {",
-              "detail::L2P<degree, Real>(field, source, x, y, z);",
-              "Real const radiusSquared = math::fma(x, x, math::fma(y, y, z * z));",
-              "field[0] = math::fma(-math::broadcast<Real>(0.5) * sourceTrace, radiusSquared, field[0]);",
-              "field[1] = math::fma(sourceTrace, x, field[1]);",
-              "field[2] = math::fma(sourceTrace, y, field[2]);",
-              "field[3] = math::fma(sourceTrace, z, field[3]);", "}",
-           '} // namespace cosmictiger::gravity::spherical']
-    outputs['spherical/ewald_l2p.hpp'] = '\n'.join(l2p) + '\n'
     facade = ['#pragma once', '',
               '#include <cosmictiger/gravity/kernels/spherical_kernels.hpp>']
     facade.extend(f'#include <cosmictiger/gravity/kernels/spherical/{name}.hpp>'
-                  for name in ('ewald_green', 'ewald_l2p'))
+                  for name in ('ewald_green',))
     outputs['spherical_ewald_kernels.hpp'] = '\n'.join(facade) + '\n'
     return outputs, {"cost_model":{"fma":1,"sqrt":7,"add":1,"multiply":1,"division":1,"special_functions":"reported separately"},"conventional_cost_model":{"fma":2,"sqrt":1,"add":1,"multiply":1,"division":1,"special_functions":1},"lattice_radius":RADIUS,"central_series_terms":SERIES_TERMS,"orders":counts}

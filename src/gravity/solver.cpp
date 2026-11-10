@@ -47,6 +47,32 @@ void prepare(SolveRequest const& request) {
         initializeGreen();
     }
     prepareCollectively([&]() {
+        if (request.reuseBoundaryTree) {
+            if (!state.boundaryTreeReady || !frozenNearRequest(request) ||
+                !request.parameters.refreshMembership ||
+                state.boundaryMeshSize != request.meshSize || state.boundaryOrder != fmmOrder() ||
+                state.activeRange.first != 0 || state.activeRange.second != particlesOwnedSize()) {
+                throw std::runtime_error("PMMM opening kick has no matching endpoint tree");
+            }
+            state.boundaryTreeReady = false;
+            state.request = request;
+            for (auto const& cell : state.cells) {
+                for (ParticleInteger i = cell.begin; i < cell.end; ++i) {
+                    particlesFrozenCell(i) = cell.key;
+                    state.stageRungs[i] = particlesRung(i);
+                }
+            }
+            state.moments.clear();
+            state.radialTrace = 0;
+            state.background = {};
+            state.kickResult = {};
+            state.diagnostics.evaluatedParticles = 0;
+            state.diagnostics.depositedMass = 0;
+            state.farPromise = std::make_shared<hpx::promise<void>>();
+            state.farReady = state.farPromise->get_future().share();
+            return;
+        }
+        state.boundaryTreeReady = false;
         state.request = request;
         bool const frozen = frozenNearRequest(request);
         state.activeRange = selectedRange(request.applyKick && request.parameters.htime);
@@ -96,9 +122,7 @@ void prepare(SolveRequest const& request) {
         state.pendingGhosts = 0;
         state.farPromise = std::make_shared<hpx::promise<void>>();
         state.farReady = state.farPromise->get_future().share();
-        // Only the FMM pipeline fulfills these per-cell promises. Creating them
-        // for PP would report a broken promise for every cell on the next solve.
-        if (getOptions().gravity.pmmmNearMethod == "fmm" && !request.farOnly) {
+        {
             for (size_t index = 0; index < state.cells.size(); ++index) {
                 auto source = std::make_shared<SourceCell>();
                 source->range = state.cells[index];
@@ -230,8 +254,8 @@ void solve(SolveRequest request) {
     std::exception_ptr failure;
     bool started = false;
     try {
-        if (options.pmmmNearMethod == "fmm" && nearField) {
-            {
+        {
+            if (!request.reuseBoundaryTree) {
                 profile::ScopedPhase phase(
                     request.applyKick ? "pmmmKick.planGhosts" : "pmmmSolve.planGhosts",
                     coordinator);
@@ -259,17 +283,11 @@ void solve(SolveRequest request) {
         } else {
             allLocalities<PmmmSkipTransformAction>();
         }
-        if (options.pmmmNearMethod == "fmm" && nearField) {
+        {
             profile::ScopedPhase phase(
                 request.applyKick ? "pmmmKick.finishNearPipeline" : "pmmmSolve.finishNearPipeline",
                 coordinator);
             allLocalities<PmmmFinishPipelineAction>();
-        }
-        // The direct particle-pair near field is the fallback of the FMM near field.
-        if (options.pmmmNearMethod == "pp" && nearField) {
-            profile::ScopedPhase phase(
-                request.applyKick ? "pmmmKick.evaluate" : "pmmmSolve.evaluate", coordinator);
-            allLocalities<PmmmEvaluateAction>(request.doPotential);
         }
         if (request.farOnly) {
             profile::ScopedPhase phase("pmmmBoundary.evaluateFar", coordinator);
@@ -293,7 +311,7 @@ void solve(SolveRequest request) {
         cleanup([]() { allLocalities<PmmmAbortPipelineAction>(); });
         cleanup([]() { allLocalities<PmmmFinishPipelineAction>(); });
     }
-    if (options.pmmmNearMethod == "fmm" && nearField) {
+    if (nearField || failure) {
         profile::ScopedPhase phase(
             request.applyKick ? "pmmmKick.cleanup" : "pmmmSolve.cleanup", coordinator);
         cleanup([]() { treeDestroy(); });
@@ -363,11 +381,12 @@ void pmmmSolve(bool doPotential) {
 }
 
 /// Run the mesh solver in kick mode and return globally reduced kick diagnostics.
-KickReturn pmmmKick(KickParameters const& parameters) {
+KickReturn pmmmKick(KickParameters const& parameters, bool reuseBoundaryTree) {
     pmmm::detail::SolveRequest request;
     request.doPotential = parameters.doPhi;
     request.applyKick = true;
     request.parameters = parameters;
+    request.reuseBoundaryTree = reuseBoundaryTree;
     pmmm::detail::solve(std::move(request));
     return pmmm::detail::globalKickResult;
 }

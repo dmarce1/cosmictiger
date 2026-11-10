@@ -101,20 +101,6 @@ std::vector<ContractionTerm> contractionTerms(int order) {
     return terms;
 }
 
-/// Accumulate one particle's spherical source moments and return the generated arithmetic
-/// count.
-FlopCount addMoments(int order, double* moments, double mass, Vector3<double> const& offset) {
-    detail::checkOrder(order);
-    FlopCount count = 0;
-    fmmDispatch(order, [&](auto selectedOrder) {
-        constexpr int kDegree = decltype(selectedOrder)::value - 2;
-        cosmictiger::gravity::spherical::detail::P2M<kDegree, double>(
-            moments, mass, offset[0], offset[1], offset[2]);
-        count = cosmictiger::gravity::spherical::detail::kP2MConventionalFlops<kDegree>;
-    });
-    return count;
-}
-
 /// Evaluate and rescale periodic Green coefficients, selecting the near correction or full
 /// far interaction.
 FlopCount green(int order, double* coefficients, Vector3<double> const& boxOffset, double cellWidth,
@@ -158,28 +144,6 @@ FlopCount green(int order, double* coefficients, Vector3<double> const& boxOffse
         count += (kDegree + 1) * (kDegree + 1) + (kDegree + 1);
     });
     return count;
-}
-
-/// Replace the particle field with a local Ewald expansion evaluation and convert its
-/// gradient from cell units.
-FlopCount evaluate(int order, std::array<double, 4>& field, double const* coefficients,
-    double localTrace, Vector3<double> const& cellOffset, double cellWidth) {
-    detail::checkOrder(order);
-    if (!(cellWidth > 0.0) || !std::isfinite(cellWidth)) {
-        throw std::invalid_argument("PMMM cell width must be finite and positive");
-    }
-    field = {};
-    FlopCount count = 0;
-    fmmDispatch(order, [&](auto selectedOrder) {
-        constexpr int kDegree = decltype(selectedOrder)::value - 1;
-        cosmictiger::gravity::spherical::ewaldL2P<kDegree, double>(
-            field, coefficients, localTrace, cellOffset[0], cellOffset[1], cellOffset[2]);
-        count = cosmictiger::gravity::spherical::kEwaldL2PConventionalFlops<kDegree>;
-    });
-    for (int component = 1; component < 4; ++component) {
-        field[component] /= cellWidth;
-    }
-    return count + 3;
 }
 
 }    // namespace pmmm

@@ -28,7 +28,7 @@ direct formulas. See [matrix algorithms and measurements](docs/matrix.md).
 
 | Option | Fresh default | Purpose |
 | --- | --- | --- |
-| `COSMICTIGER_ENABLE_GRAVITY` | `ON` | Compile PMMM gravity: the periodic FFT far field with the FMM near field and its direct particle-pair fallback (`gravity.method.near=fmm|pp`). |
+| `COSMICTIGER_ENABLE_GRAVITY` | `ON` | Compile PMMM gravity: the periodic FFT far field with the FMM near field, including close leaf particle pairs. |
 | `COSMICTIGER_DIMENSION_COUNT` | `3` | Spatial dimensions: 1, 2, or 3. Below 3 requires SPH, gravity OFF, chemistry OFF, and stars OFF. See [dimensional SPH](docs/sph_dimensions.md). |
 | `COSMICTIGER_ENABLE_SPH` | `ON` | Compile SPH and hydro problems. |
 | `COSMICTIGER_ENABLE_CHEMISTRY` | `ON` | Compile equilibrium cooling when SPH is also enabled. Inactive with SPH disabled. |
@@ -71,10 +71,9 @@ synchronizes the legacy cache entry and compiler macro with it. Thus
 `-DCOSMICTIGER_ENABLE_STARS=OFF` disables stars even if the old cache entry
 was `ON`; after migration, change `STARS` to select either value.
 
-Runtime selection uses `gravity.method.near=fmm|pp` (the FMM near field or its
-direct particle-pair fallback) and
+PMMM-FMM is the sole gravity solver.
 `run.timeIntegrator=hierarchical` is automatic. Other integrator values are
-rejected. The near-field and degree selections can be recovered on restart.
+rejected. An omitted expansion degree can be recovered on restart.
 
 `gravity.expansionDegree` defaults to the highest compiled degree. Potential
 degree d means source multipole degree d-1 and historical internal order d+1.

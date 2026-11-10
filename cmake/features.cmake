@@ -28,10 +28,9 @@ if(cosmictiger_retired_cache_options)
         "and supply the desired new feature options. The only gravity solver is "
         "PMMM with FMM near interactions, selected by COSMICTIGER_ENABLE_GRAVITY.")
 endif()
-# PMMM gravity: a periodic FFT far field with an FMM near field. The direct
-# particle-pair near field stays compiled as the fallback of the FMM near field
-# (gravity.method.near=pp), including the frozen-membership outer interval.
-option(COSMICTIGER_ENABLE_GRAVITY "Compile PMMM gravity with FMM near interactions and the PP fallback" ON)
+# PMMM gravity: periodic FFT far field and FMM near interactions. Close leaf
+# interactions use the particle-pair kernels inside the FMM tree walk.
+option(COSMICTIGER_ENABLE_GRAVITY "Compile PMMM gravity with FMM near interactions" ON)
 option(COSMICTIGER_ENABLE_SPH "Compile SPH hydrodynamics" ON)
 option(COSMICTIGER_ENABLE_ROCKSTAR "Compile ROCKSTAR halo finding and lightcone analysis when gravity is enabled" ON)
 option(COSMICTIGER_ENABLE_CHEMISTRY "Compile GADGET-4 equilibrium cooling when SPH is enabled" ON)

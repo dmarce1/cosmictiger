@@ -42,7 +42,6 @@
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/pmmm_kernels.hpp>
 #include <cosmictiger/gravity/pmmm_kick.hpp>
-#include <cosmictiger/gravity/pp_near_pp.hpp>
 #include <cosmictiger/gravity/solver.hpp>
 #include <cosmictiger/gravity/sources.hpp>
 #include <cosmictiger/gravity/tree.hpp>
@@ -67,6 +66,7 @@ struct SolveRequest {
     // far potential energy and the acceleration timestep bound reduced through
     // the kick result; no near field, velocity or rung changes.
     bool farOnly = false;
+    bool reuseBoundaryTree = false;
     double scale = 1.0;
     double eta = 0.0;
     KickParameters parameters;
@@ -75,7 +75,7 @@ struct SolveRequest {
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
         archive & generation & meshSize & activeParticles & totalParticles & doPotential &
-            applyKick & farOnly & scale & eta;
+            applyKick & farOnly & reuseBoundaryTree & scale & eta;
         if (applyKick) {
             archive & parameters;
         }
@@ -97,18 +97,6 @@ struct CellData {
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
         archive & key & coefficients & radialTrace;
-    }
-};
-
-// Direct near-field source records of one cell, served by the cell's owner.
-struct CellParticles {
-    uint64_t key = 0;
-    std::vector<PmmmNearParticle> particles;
-
-    /// Archive this record in the field order required by distributed transport.
-    template <class Archive>
-    void serialize(Archive& archive, unsigned) {
-        archive & key & particles;
     }
 };
 
@@ -176,6 +164,11 @@ struct SolveState {
     Vector<ParticleMeshCell> cells;
     SolveRequest request;
     Pair<ParticleInteger> activeRange;
+    // A synchronized endpoint forest can serve the following opening short pass.
+    // Reuse is explicit in the driver, never inferred across particle mutation.
+    bool boundaryTreeReady = false;
+    int boundaryMeshSize = 0;
+    int boundaryOrder = 0;
     std::vector<char> stageRungs;
     std::unordered_map<uint64_t, size_t> ownedCells;
     std::vector<std::shared_ptr<SourceCell>> sourceCells;
@@ -220,7 +213,6 @@ void collectiveCheck(bool okay, char const* message);
 int periodicIndex(int index);
 int signedIndex(int index);
 std::array<int, 3> coordinates(uint64_t key);
-PmmmNearParticle particle(ParticleInteger index, std::array<int, 3> const& cell, FlopCount& flops);
 void initialize(int meshSize);
 std::array<uint64_t, 2> particleCounts(bool applyKick);
 void initializeGreen();
@@ -229,8 +221,6 @@ void accumulate(std::vector<CellData> const& cells);
 // The locality owning every particle of a cell, from the particle-domain tree.
 int cellOwner(uint64_t key);
 std::vector<ParticleInteger> readCellCounts(uint64_t generation, std::vector<uint64_t> const& keys);
-std::vector<CellParticles> readCellParticles(
-    uint64_t generation, std::vector<uint64_t> const& keys);
 Vector<ParticleGhost> readGhostParticles(uint64_t generation, uint64_t key);
 std::vector<double> readExpansion(uint64_t key);
 std::vector<uint64_t> neighbors(uint64_t key);
@@ -244,8 +234,7 @@ CellData rootMoments(size_t cellIndex, TreeCreateReturn const& root);
 void depositCells(std::vector<CellData> cells);
 /// Test whether this solve can reuse owned near-FMM roots for mesh moment deposition.
 inline bool reuseOwnedRoots() {
-    return getOptions().gravity.pmmmNearMethod == "fmm" && !state.request.farOnly &&
-        !frozenNearRequest(state.request);
+    return !frozenNearRequest(state.request);
 }
 void transform();
 // Frozen near passes skip the transform; release waiters on the far field.
@@ -259,7 +248,6 @@ void computeReadyCells();
 void startPipeline();
 void finishPipeline();
 void abortPipeline();
-void evaluateParticles(bool doPotential);
 PmmmDiagnostics diagnostics();
 KickReturn kickResult();
 void destroy();

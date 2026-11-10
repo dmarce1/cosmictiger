@@ -504,11 +504,7 @@ void skipTransform() {
 /// Release retained mesh FFT caches, near-field CUDA workspaces, and solver storage after
 /// work has drained.
 void destroy() {
-#ifdef USE_CUDA
-    // Every solve has drained its tasks before this quiescent teardown. Release
-    // retained PP buffers even when only the standalone near-field API ran.
-    clearPmmmNearCudaWorkspaces();
-#endif
+    state.boundaryTreeReady = false;
     hpx::run_as_os_thread(hpx::annotated_function(
                               []() {
                                   releaseMeshCache(cache);

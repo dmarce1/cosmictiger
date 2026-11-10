@@ -82,7 +82,7 @@ extern "C" void __wrap__Z8pmmmTestv() {
     auto options = saved;
     options.hydro.enabled = false;
     options.gravity.cuda = false;
-    options.gravity.pmmmNearMethod = "fmm";
+
     options.gravity.pmmmNearWidth = 1;
     options.gravity.pmmmCoarseMeshSize = 0;
     options.gravity.openingAngle = .05;

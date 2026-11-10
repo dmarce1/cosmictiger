@@ -188,7 +188,7 @@ message(STATUS "cosmictiger equilibrium cooling = ${COSMICTIGER_WITH_CHEMISTRY} 
 message(STATUS "cosmictiger stars = ${COSMICTIGER_WITH_STARS} (COSMICTIGER_ENABLE_STARS; requires chemistry and SPH)")
 message(STATUS "cosmictiger position storage = ${COSMICTIGER_POSITION_TYPE}")
 message(STATUS "cosmictiger integration: hierarchical short gravity, outer long kicks, midpoint SPH")
-message(STATUS "cosmictiger gravity = ${COSMICTIGER_WITH_GRAVITY} (PMMM: FMM near field with PP fallback)")
+message(STATUS "cosmictiger gravity = ${COSMICTIGER_WITH_GRAVITY} (PMMM-FMM)")
 if(COSMICTIGER_WITH_GRAVITY)
     message(STATUS "cosmictiger potential expansion degrees = ${COSMICTIGER_EXPANSION_DEGREE}")
 endif()
@@ -344,7 +344,6 @@ set(cosmictiger_header_files
     cosmictiger/gravity/fmm/ghost_storage.hpp
     cosmictiger/gravity/pmmm_kernels.hpp
     cosmictiger/gravity/pmmm_kick.hpp
-    cosmictiger/gravity/pp_near_pp.hpp
     cosmictiger/gravity/solver.hpp
     cosmictiger/gravity/source_access.hpp
     cosmictiger/gravity/sources.hpp
@@ -438,7 +437,7 @@ set_source_files_properties(src/cosmology/boltzmann.cpp PROPERTIES
     COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
 # Background and clock guards must remain effective in release builds.
 set_source_files_properties(src/core/driver.cpp src/gravity/error.cpp src/gravity/reference_table.cpp
-    src/gravity/solver.cpp src/gravity/pmmm_kernels.cpp src/gravity/pp/near_pp.cpp tests/gravity/pmmm.cpp
+    src/gravity/solver.cpp src/gravity/pmmm_kernels.cpp tests/gravity/pmmm.cpp
     src/gravity/pmmm_kick.cpp src/cosmology/friedmann.cpp src/cosmology/cosmology.cpp
     src/cosmology/background.cpp src/cosmology/evolution.cpp PROPERTIES
     COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
@@ -482,7 +481,6 @@ set(COSMICTIGER_GENERATED_FMM_FILES
     ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/green.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/ewald_common.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/ewald_green.hpp
-    ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/ewald_l2p.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/operation_counts.json)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 if(COSMICTIGER_WITH_GRAVITY)
@@ -1775,12 +1773,6 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
         target_compile_options(pmmm_kernels_test PRIVATE -fno-fast-math -ffp-contract=off)
         cosmictiger_add_gtest(NAME pmmm_kernels TARGET pmmm_kernels_test
             PROPERTIES TIMEOUT 180 LABELS "pmmm;cpu")
-        add_executable(pmmm_near_flops_test tests/gravity/pp/near_pp_flops.cpp)
-        target_include_directories(pmmm_near_flops_test PRIVATE ${PROJECT_SOURCE_DIR})
-        target_link_libraries(pmmm_near_flops_test PRIVATE HPX::hpx Boost::boost)
-        target_compile_options(pmmm_near_flops_test PRIVATE -fno-fast-math -ffp-contract=off)
-        cosmictiger_add_gtest(NAME pmmm_near_flops TARGET pmmm_near_flops_test
-            PROPERTIES TIMEOUT 60 LABELS "pmmm;cpu;flops")
         add_executable(pmmm_fft_flops_test tests/gravity/fft_flops.cpp)
         target_include_directories(pmmm_fft_flops_test PRIVATE ${PROJECT_SOURCE_DIR} ${FFTW3F_INCLUDE_DIR})
         target_link_libraries(pmmm_fft_flops_test PRIVATE HPX::hpx Boost::boost ${FFTW3F_LIBRARY})
@@ -1807,11 +1799,10 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             --hpx:threads=2 --hpx:bind=none ${cosmictiger_test_integrator_args})
         set_tests_properties(pmmm_sources_cpu PROPERTIES TIMEOUT 300 PROCESSORS 2
             WORKING_DIRECTORY "${pmmm_source_workdir}" LABELS "pmmm;source;cpu")
-        foreach(near_method IN ITEMS pp fmm)
+        foreach(near_method IN ITEMS fmm)
             set(near_workdir "${PROJECT_BINARY_DIR}/tests/pmmm_near_${near_method}")
             file(MAKE_DIRECTORY "${near_workdir}")
             add_test(NAME pmmm_near_${near_method} COMMAND cosmictiger --run.test=pmmm
-            --gravity.method.near=${near_method}
                 --gravity.meshSize=8 --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --hydro.enabled=false
                 --gravity.cuda=false --hydro.cuda=false --drift.cuda=false --hpx:threads=2 --hpx:bind=none
                 ${cosmictiger_test_integrator_args})
@@ -1993,7 +1984,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                 file(MAKE_DIRECTORY "${pm_timestep_workdir}")
                 add_test(NAME particle_mesh_timestep_mpi COMMAND ${MPIEXEC_EXECUTABLE}
                     ${MPIEXEC_NUMPROC_FLAG} 4 ${MPIEXEC_PREFLAGS} $<TARGET_FILE:cosmictiger>
-                    ${MPIEXEC_POSTFLAGS} --run.test=particleMeshTimestep --gravity.method.near=pp --run.darkMatterParticleCount=512 --run.gasParticleCount=512
+                    ${MPIEXEC_POSTFLAGS} --run.test=particleMeshTimestep --run.darkMatterParticleCount=512 --run.gasParticleCount=512
                     --gravity.meshSize=8 --hydro.enabled=false
                     --gravity.cuda=false --hydro.cuda=false --drift.cuda=false --hpx:threads=2 --hpx:bind=none --hpx:localities=4
                     ${cosmictiger_mpi_transport_args}

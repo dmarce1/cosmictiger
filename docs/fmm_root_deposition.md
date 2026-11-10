@@ -2,8 +2,11 @@
 
 Part 3 of `spherical_fmm_tree_plan.md` reuses the completed owned cell kd-tree
 as the source of the spherical FFT moments. The near walk uses that same tree.
-The PP and far-only paths retain direct double spherical P2M; frozen near-only
-passes retain their no-deposition/no-FFT behavior.
+Boundary long solves use the endpoint forest for both deposition and Cartesian
+local descent. The immediately following opening short pass reuses those roots
+without another sort or build. Frozen near-only passes retain their
+no-deposition/no-FFT behavior. The standalone PP solver and direct spherical
+particle deposition/evaluation paths are removed.
 
 ## Boundary arithmetic
 

@@ -122,8 +122,8 @@ headers; `--check` verifies them without writing, and CTest's
 nonzero dipoles, the truncated direct-particle remainder
 series, and SIMD lanes for every order in the selected compiled range,
 printing one pass line per order with the worst normalized discrepancy it saw.
-`cartesian_kernels_cuda` executes the same operations on the device in float and
-double, one launch per order. The PMMM gravity tests compare periodic forces
+`cartesian_kernels_cuda` executes the same operations on the device in float,
+one launch per order. The PMMM gravity tests compare periodic forces
 and potentials with an independent Ewald sum.
 
 `cartesian_l2l_cuda` independently checks every coefficient and every lane after one

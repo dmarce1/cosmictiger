@@ -389,10 +389,6 @@ void setOptions(Options const& requested) {
     if (opts.gravity.enabled && !gravity::kBuildHasGravity) {
         throw std::invalid_argument("gravity is unavailable in this executable");
     }
-    if (gravity::kBuildHasGravity && opts.gravity.pmmmNearMethod != "pp" &&
-        opts.gravity.pmmmNearMethod != "fmm") {
-        throw std::invalid_argument("gravity.method.near must be fmm or its pp fallback");
-    }
     if (opts.run.timeIntegrator != "hierarchical") {
         throw std::invalid_argument(
             "The sole integrator is hierarchical gravity with midpoint SPH");
@@ -546,7 +542,6 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"gravity.meshSize", options.gravity.meshSize},
         {"gravity.pmmmCoarseMeshSize", options.gravity.pmmmCoarseMeshSize},
         {"gravity.pmmmNearWidth", options.gravity.pmmmNearWidth},
-        {"gravity.method.near", options.gravity.pmmmNearMethod},
         {"gravity.pmmmBatchParticles", options.gravity.pmmmBatchParticles},
         {"gravity.pmmmOuterInterval", options.gravity.pmmmOuterInterval},
         {"gravity.expansionDegree",
@@ -904,10 +899,8 @@ bool processOptions(int argc, char* argv[]) {
     gravityOpts.add_options()("gravity.cuda",
         po::value<bool>(&opts.gravity.cuda)->default_value(false),
         "use CUDA for gravitational forces");
-    gravityOpts.add_options()("gravity.method.near",
-        po::value<std::string>(&opts.gravity.pmmmNearMethod)->default_value(""),
-        "PMMM near field: fmm (default) or its direct particle-pair fallback pp")(
-        "gravity.expansionDegree", po::value<int>(&expansionDegree)->default_value(expansionDegree),
+    gravityOpts.add_options()("gravity.expansionDegree",
+        po::value<int>(&expansionDegree)->default_value(expansionDegree),
         "maximum degree of the potential expansion; must be in the compiled degree range")(
         "gravity.enabled",
         po::value<bool>(&opts.gravity.enabled)->default_value(gravity::kBuildHasGravity),
@@ -1110,7 +1103,7 @@ bool processOptions(int argc, char* argv[]) {
                   << (integration::kBuildHasHierarchical ? " hierarchical" : "")
                   << (integration::kBuildHasGlobal ? " global" : "") << "\n"
                   << "  Gravity solvers:" << (gravity::kBuildHasGravity ? " pmmm" : " none") << "\n"
-                  << "  PMMM near solvers:" << (gravity::kBuildHasGravity ? " fmm pp" : "") << "\n";
+                  << "  PMMM near solvers:" << (gravity::kBuildHasGravity ? " fmm" : "") << "\n";
         std::cout << "  Equilibrium cooling: "
                   << (COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_CHEMISTRY ? "enabled" : "disabled")
                   << "\n";
@@ -1244,34 +1237,16 @@ bool processOptions(int argc, char* argv[]) {
         }
     }
     bool const checkpointSelectionNeeded = !isExplicit("run.timeIntegrator") ||
-        (gravity::kBuildHasGravity &&
-            (!isExplicit("gravity.expansionDegree") || !isExplicit("gravity.method.near")));
+        (gravity::kBuildHasGravity && !isExplicit("gravity.expansionDegree"));
     if (opts.checkpoint.readIndex >= 0 && checkpointSelectionNeeded) {
         checkpointSelection = readCheckpointSelection(
             opts.run.test.empty() ? opts.output.directory : "", opts.checkpoint.readIndex);
-        if (!isExplicit("gravity.method.near") && checkpointSelection.nearMethod != "none") {
-            opts.gravity.pmmmNearMethod = checkpointSelection.nearMethod;
-        }
         if (!isExplicit("gravity.expansionDegree") && checkpointSelection.expansionOrder > 0) {
             expansionDegree = checkpointSelection.expansionOrder - 1;
         }
         if (!isExplicit("run.timeIntegrator")) {
             opts.run.timeIntegrator = checkpointSelection.timeIntegrator;
         }
-    }
-    if (opts.gravity.pmmmNearMethod.empty()) {
-        opts.gravity.pmmmNearMethod = gravity::kBuildPmmmNearMethod;
-    }
-    if (gravity::kBuildHasGravity) {
-        if (opts.gravity.pmmmNearMethod != "pp" && opts.gravity.pmmmNearMethod != "fmm") {
-            detail::throwOptionError(
-                "gravity.method.near must select the fmm near field or its pp fallback\n");
-        }
-    } else {
-        if (isExplicit("gravity.method.near")) {
-            detail::throwOptionError("gravity.method.near requires a gravity-enabled build\n");
-        }
-        opts.gravity.pmmmNearMethod = "none";
     }
 #if COSMICTIGER_WITH_GRAVITY
     if (expansionDegree < kFmmMinOrder - 1 || expansionDegree > kFmmMaxOrder - 1) {

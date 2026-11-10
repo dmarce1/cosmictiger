@@ -18,7 +18,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("executable", type=Path)
     parser.add_argument("workdir", type=Path)
-    parser.add_argument("--near-method", choices=("pp", "fmm"), default="fmm")
+    parser.add_argument("--near-method", choices=("fmm",), default="fmm")
     parser.add_argument("--order", type=int)
     parser.add_argument("--time-integrator", choices=("traditional", "hierarchical", "global"), required=True)
     parser.add_argument("--without-sph", action="store_true")
@@ -35,8 +35,7 @@ def main():
               "--run.darkMatterParticleCount=64", "--run.gasParticleCount=64", "--analysis.groups=false",
               "--analysis.tracers=false", "--analysis.views=false", "--analysis.power=false",
               "--lightcone.enabled=false", "--output.silo=false", "--output.directory=."]
-    common += [f"--run.timeIntegrator={args.time_integrator}", "--gravity.meshSize=8",
-               f"--gravity.method.near={args.near_method}"]
+    common += [f"--run.timeIntegrator={args.time_integrator}", "--gravity.meshSize=8"]
     if args.order is not None:
         common.append(f"--gravity.expansionDegree={args.order - 1}")
     metadata = ["--run.test=checkpointState"]
@@ -47,8 +46,7 @@ def main():
         if not re.search(r"^compute\.positionType\s*:\s*" + selected + r"\s*$",
                          output, re.MULTILINE):
             raise RuntimeError(f"{name}: incorrect selected position representation")
-        buildSettings = {"run.timeIntegrator": args.time_integrator,
-                         "gravity.method.near": args.near_method}
+        buildSettings = {"run.timeIntegrator": args.time_integrator,}
         if args.order is not None:
             buildSettings["gravity.expansionDegree"] = str(args.order - 1)
         for setting, expectedValue in buildSettings.items():

@@ -13,6 +13,7 @@
 #include <stdexcept>
 #include <vector>
 
+#include <cosmictiger/gravity/fmm/tree_local.hpp>
 #include <cosmictiger/gravity/kernels/spherical_ewald_kernels.hpp>
 #include <cosmictiger/math/simd_math.hpp>
 #include <cosmictiger/math/vector3.hpp>
@@ -288,10 +289,20 @@ void scalarCases() {
             }
         }
     }
-    // The production evaluator applies the background trace at a point.
-    std::array<Real, kCount> zero{};
-    std::array<Real, 4> field{};
-    ewaldL2P<degree, Real>(field, zero, Real(2), Real(.1), Real(-.2), Real(.3));
+    // Check the production Cartesian background representation and descent.
+    namespace cartesian = cosmictiger::gravity::cartesian;
+    namespace local = cosmictiger::gravity::tree_local;
+    std::array<double, kCount> zero{};
+    cartesian::Expansion<double, degree + 1> wide{};
+    local::fromMesh(wide, zero.data(), 2, 1);
+    cartesian::Expansion<Real, degree + 1> expansion{};
+    for (int i = 0; i < kCount; ++i) {
+        expansion[i] = Real(wide[i]);
+    }
+    cosmictiger::gravity::Field<Real> field{};
+    local::evaluate(field, expansion,
+        Vector3<Real>{Real(.1 * kScaleFactor), Real(-.2 * kScaleFactor), Real(.3 * kScaleFactor)},
+        Real(local::backgroundCurvature(2, 1)), true);
     near(field[0], -.14, epsilon, "background point potential");
     near(field[1], .2, epsilon, "background point x");
     near(field[2], -.4, epsilon, "background point y");

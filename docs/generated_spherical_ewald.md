@@ -85,10 +85,10 @@ encode. These corrections follow Nitadori's equations 38–42. This is one
 specific isotropic periodic trace; it is not the full hierarchy of traces
 needed for Plummer softening.
 
-`ewaldL2P<degree, Real>(field, source, sourceTrace, x, y, z)`
-evaluates it at a point offset. Fields are `[potential, accelerationX,
-accelerationY, accelerationZ]`; acceleration is minus the potential gradient.
-The quadratic trace changes both potential and acceleration.
+Periodic mesh locals are converted to Cartesian locals. Tree-local translation
+and evaluation carry the independent background curvature through descent;
+the direct spherical Ewald point evaluator is removed. The quadratic background
+changes both potential and acceleration.
 
 Do not rotate an arbitrary periodic Green tensor into an axial free-space
 contraction. Rotating the displacement does not rotate the periodic lattice
