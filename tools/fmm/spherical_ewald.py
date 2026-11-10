@@ -13,12 +13,6 @@ from __future__ import annotations
 from math import factorial, gamma, pi
 
 
-NOTICE = """/*
- CosmicTiger - A cosmological N-Body code
- Copyright (C) 2026 Dominic C. Marcello
- Distributed under the Boost Software License, Version 1.0.
- */
-"""
 RADIUS = 6
 SERIES_TERMS = 48
 
@@ -204,14 +198,15 @@ def emitDegree(degree):
               "special_function_calls":{"exp":1+3*pairs,"erfc":2*pairs,"sin":pairs,"cos":pairs},"sqrt_calls":2*pairs}
     body.insert(2, f"static constexpr int kFlops_ = {report['green_weighted_flops']};")
     body.insert(3, f"static constexpr int kConventionalFlops_ = {report['green_conventional_flops']};")
-    return body,report
+    split = next(i for i, line in enumerate(body) if line.startswith('template <> class EwaldM2L<'))
+    return body[:split], body[split:], report
 
 
 def generate(minLocalDegree=2,maxLocalDegree=8):
     if not 2 <= minLocalDegree <= maxLocalDegree <= 8:
         raise ValueError("Spherical Ewald is validated for local degrees 2 through 8")
-    lines = [NOTICE,"#pragma once", "#include <cmath>", "#include <type_traits>", "", "#include <cosmictiger/cuda/cuda_export.hpp>",
-             "#include <cosmictiger/gravity/kernels/spherical_kernels.hpp>", "#include <cosmictiger/math/simd_math.hpp>",
+    lines = ["#pragma once", "#include <cmath>", "#include <type_traits>", "", "#include <cosmictiger/cuda/cuda_export.hpp>",
+             "#include <cosmictiger/math/simd_math.hpp>",
              "", "namespace cosmictiger::gravity::spherical {", "namespace detail {"]
     lines += ["template <typename Real> class EwaldWorkingType { public: using Type = Real; };",
               "template <> class EwaldWorkingType<float> { public: using Type = double; };",
@@ -228,17 +223,30 @@ def generate(minLocalDegree=2,maxLocalDegree=8):
                   f"if constexpr (std::is_arithmetic_v<Real>) {{ return std::{function}(value); }}",
                   f"else {{ return Real([&](auto lane) {{ return std::{function}(value[lane]); }}); }}", "}"]
     lines += ["template <typename Real>", "CUDA_EXPORT inline void ewaldAccumulate(Real& sum, Real& correction, Real value) {",
-              "Real const adjusted = value - correction;", "Real const next = sum + adjusted;", "correction = (next - sum) - adjusted;", "sum = next;", "}", "}",
-              "template <int degree> class EwaldGreen;", "template <int degree> class EwaldM2L;"]
+              "Real const adjusted = value - correction;", "Real const next = sum + adjusted;", "correction = (next - sum) - adjusted;", "sum = next;", "}",
+              "}", "template <int degree> class EwaldGreen;", "template <int degree> class EwaldM2L;", "}"]
+    outputs = {'spherical/ewald_common.hpp': '\n'.join(lines) + '\n'}
+    green = ['#pragma once', '#include <cosmictiger/gravity/kernels/spherical/ewald_common.hpp>',
+             '', 'namespace cosmictiger::gravity::spherical {']
+    m2l = ['#pragma once', '#include <cosmictiger/gravity/kernels/spherical/ewald_common.hpp>',
+           '#include <cosmictiger/gravity/kernels/spherical/m2l_derivatives.hpp>',
+           '', 'namespace cosmictiger::gravity::spherical {']
     counts = {}
     for degree in range(minLocalDegree,maxLocalDegree+1):
-        code,report = emitDegree(degree)
-        lines.append(f'#if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= {degree + 1}) && '
-                     f'(!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= {degree + 1})')
-        lines += code
-        lines.append('#endif')
+        greenCode, m2lCode, report = emitDegree(degree)
+        guard = (f'#if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= {degree + 1}) && '
+                 f'(!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= {degree + 1})')
+        green.extend((guard, *greenCode, '#endif'))
+        m2l.extend((guard, *m2lCode, '#endif'))
         counts[str(degree+1)] = report
-    lines += ["template <int degree> class EwaldL2L {", "public:", "static constexpr int kFlops_ = detail::L2L<degree>::kFlops_ + 9;",
+    green.append('} // namespace cosmictiger::gravity::spherical')
+    m2l.append('} // namespace cosmictiger::gravity::spherical')
+    outputs['spherical/ewald_green.hpp'] = '\n'.join(green) + '\n'
+    outputs['spherical/ewald_m2l.hpp'] = '\n'.join(m2l) + '\n'
+    l2l = ['#pragma once', '#include <cosmictiger/gravity/kernels/spherical/l2l.hpp>',
+           '#include <cosmictiger/math/simd_math.hpp>',
+           '', 'namespace cosmictiger::gravity::spherical {',
+           "template <int degree> class EwaldL2L {", "public:", "static constexpr int kFlops_ = detail::L2L<degree>::kFlops_ + 9;",
               "static constexpr int kConventionalFlops_ = detail::L2L<degree>::kConventionalFlops_ + 15;",
               "template <typename Real, typename Local, typename Source>",
               "CUDA_EXPORT static void add(Local& output, Real& outputTrace, Source const& source, Real sourceTrace, Real x, Real y, Real z) {",
@@ -249,7 +257,12 @@ def generate(minLocalDegree=2,maxLocalDegree=8):
               "output[1] = math::fma(-sourceTrace, y, output[1]);",
               "output[2] = math::fma(-sourceTrace, z, output[2]);",
               "outputTrace += sourceTrace;", "}", "};",
-              "template <int degree> class EwaldL2P {", "public:", "static constexpr int kFlops_ = detail::L2P<degree>::kFlops_ + 8;",
+           '} // namespace cosmictiger::gravity::spherical']
+    outputs['spherical/ewald_l2l.hpp'] = '\n'.join(l2l) + '\n'
+    l2p = ['#pragma once', '#include <cosmictiger/gravity/kernels/spherical/l2p.hpp>',
+           '#include <cosmictiger/math/simd_math.hpp>',
+           '', 'namespace cosmictiger::gravity::spherical {',
+           "template <int degree> class EwaldL2P {", "public:", "static constexpr int kFlops_ = detail::L2P<degree>::kFlops_ + 8;",
               "static constexpr int kConventionalFlops_ = detail::L2P<degree>::kConventionalFlops_ + 14;",
               "template <typename Real, typename Field, typename Source>",
               "CUDA_EXPORT static void add(Field& field, Source const& source, Real sourceTrace, Real x, Real y, Real z) {",
@@ -258,5 +271,12 @@ def generate(minLocalDegree=2,maxLocalDegree=8):
               "field[0] = math::fma(-math::broadcast<Real>(0.5) * sourceTrace, radiusSquared, field[0]);",
               "field[1] = math::fma(sourceTrace, x, field[1]);",
               "field[2] = math::fma(sourceTrace, y, field[2]);",
-              "field[3] = math::fma(sourceTrace, z, field[3]);", "}", "};", "}", ""]
-    return {"spherical_ewald_kernels.hpp":"\n".join(lines)}, {"cost_model":{"fma":1,"sqrt":7,"add":1,"multiply":1,"division":1,"special_functions":"reported separately"},"conventional_cost_model":{"fma":2,"sqrt":1,"add":1,"multiply":1,"division":1,"special_functions":1},"lattice_radius":RADIUS,"central_series_terms":SERIES_TERMS,"orders":counts}
+              "field[3] = math::fma(sourceTrace, z, field[3]);", "}", "};",
+           '} // namespace cosmictiger::gravity::spherical']
+    outputs['spherical/ewald_l2p.hpp'] = '\n'.join(l2p) + '\n'
+    facade = ['#pragma once', '',
+              '#include <cosmictiger/gravity/kernels/spherical_kernels.hpp>']
+    facade.extend(f'#include <cosmictiger/gravity/kernels/spherical/{name}.hpp>'
+                  for name in ('ewald_green', 'ewald_m2l', 'ewald_l2l', 'ewald_l2p'))
+    outputs['spherical_ewald_kernels.hpp'] = '\n'.join(facade) + '\n'
+    return outputs, {"cost_model":{"fma":1,"sqrt":7,"add":1,"multiply":1,"division":1,"special_functions":"reported separately"},"conventional_cost_model":{"fma":2,"sqrt":1,"add":1,"multiply":1,"division":1,"special_functions":1},"lattice_radius":RADIUS,"central_series_terms":SERIES_TERMS,"orders":counts}

@@ -22,6 +22,24 @@ namespace detail {
         CUDA_EXPORT static constexpr int index(int n, int m) {
             return n * (n + 1) + m;
         }
+        CUDA_EXPORT Real& operator()(int n, int m) {
+            return coefficients_[index(n, m)];
+        }
+        CUDA_EXPORT Real const& operator()(int n, int m) const {
+            return coefficients_[index(n, m)];
+        }
+        CUDA_EXPORT Real& real(int n, int m) {
+            return (*this)(n, m);
+        }
+        CUDA_EXPORT Real const& real(int n, int m) const {
+            return (*this)(n, m);
+        }
+        CUDA_EXPORT Real& imaginary(int n, int m) {
+            return (*this)(n, -m);
+        }
+        CUDA_EXPORT Real const& imaginary(int n, int m) const {
+            return (*this)(n, -m);
+        }
         CUDA_EXPORT Real& operator[](int i) {
             return coefficients_[i];
         }

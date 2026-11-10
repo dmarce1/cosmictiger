@@ -30,6 +30,7 @@ public:
     inline static int squareRoots = 0;
     inline static int fusedOperations = 0;
     CountingReal(double x = 0) : value(x) {}
+    CountingReal(CountingReal const& other) : value(other.value) {}
     CountingReal operator-() const { return CountingReal(-value); }
     CountingReal& operator+=(CountingReal const& rhs) {
         ++operations; value += rhs.value; return *this;
@@ -108,6 +109,8 @@ def selectReportOrders(report, minFmmOrder, maxFmmOrder):
     spherical['selections'] = [row for row in spherical['selections'] if includes(row['fmm_order'])]
     ewald = selected['representations']['sphericalEwald']
     ewald['orders'] = {order: counts for order, counts in ewald['orders'].items() if includes(int(order))}
+    conversions = selected['representations']['basisConversion']
+    conversions['kernels'] = [row for row in conversions['kernels'] if includes(row['fmm_order'])]
     comparisons = selected['m2l_comparison']
     comparisons['orders'] = [row for row in comparisons['orders'] if includes(row['fmm_order'])]
     return selected
@@ -122,11 +125,23 @@ def appendAvailabilityChecks(lines, report, minFmmOrder, maxFmmOrder):
         '    Vector3<CountingReal> const& distance) {',
         '    cosmictiger::gravity::cartesian::tracefree::detail::M2L(L, M, distance);',
         '};',
+        'template <int order> concept HasSourceConversion = requires(',
+        '    cosmictiger::gravity::spherical::Multipole<CountingReal, order>& S,',
+        '    cosmictiger::gravity::cartesian::tracefree::Multipole<CountingReal, order> const& C) {',
+        '    cosmictiger::gravity::basis_conversion::sourceToSpherical(S, C);',
+        '};',
+        'template <int order> concept HasLocalConversion = requires(',
+        '    cosmictiger::gravity::cartesian::tracefree::Expansion<CountingReal, order>& C,',
+        '    cosmictiger::gravity::spherical::Expansion<CountingReal, order> const& L) {',
+        '    cosmictiger::gravity::basis_conversion::localToCartesian(C, L);',
+        '};',
     ])
     for order in range(report['min_local_degree'] + 1, report['max_local_degree'] + 2):
         selected = str(minFmmOrder <= order <= maxFmmOrder).lower()
         degree = order - 1
         lines.append(f'static_assert(HasCartesianM2L<{order}> == {selected});')
+        lines.append(f'static_assert(HasSourceConversion<{order}> == {selected});')
+        lines.append(f'static_assert(HasLocalConversion<{order}> == {selected});')
         for kernel in (f'spherical::detail::M2L<{degree}>',
                        f'spherical::detail::P2M<{order - 2}>',
                        f'spherical::EwaldGreen<{degree}>'):
@@ -189,6 +204,7 @@ def appendCartesianChecks(lines, report, checks):
 def buildChecks(report, minFmmOrder, maxFmmOrder):
     checks = []
     lines = ['#include <array>', '#include <cstdio>', '',
+             '#include <cosmictiger/gravity/kernels/basis_conversion.hpp>',
              '#include <cosmictiger/gravity/kernels/cartesian_tracefree/p2m.hpp>',
              '#include <cosmictiger/gravity/kernels/cartesian_tracefree/p2l.hpp>',
              '#include <cosmictiger/gravity/kernels/cartesian_tracefree/m2m.hpp>',
@@ -220,6 +236,27 @@ def buildChecks(report, minFmmOrder, maxFmmOrder):
              '        output[i] = Real(0.125);', '    }'])
     appendCartesianChecks(lines, report, checks)
     representations = report['representations']
+    for kernel in representations['basisConversion']['kernels']:
+        name, order = kernel['operator'], kernel['fmm_order']
+        constant = name[0].upper() + name[1:]
+        sourceType, targetType = (
+            ('cartesian::tracefree::Multipole', 'spherical::Multipole') if name == 'sourceToSpherical'
+            else ('spherical::Expansion', 'cartesian::tracefree::Expansion'))
+        expected = kernel['weighted_flops']
+        fused = kernel['arithmetic'].get('fma', 0)
+        if kernel['conventional_flops'] != expected + fused:
+            raise ValueError(f'Incorrect conventional basis-conversion count: {kernel}')
+        lines.extend(['    {', '        using namespace cosmictiger::gravity;',
+            f'        {sourceType}<Real, {order}> source{{}};',
+            f'        {targetType}<Real, {order}> target{{}};',
+            f'        static_assert(basis_conversion::k{constant}Flops<{order}> == {expected});',
+            f'        static_assert(basis_conversion::k{constant}ConventionalFlops<{order}> == {kernel["conventional_flops"]});',
+            '        Real::operations = Real::fusedOperations = 0;',
+            f'        basis_conversion::{name}(target, source);',
+            f'        if (Real::operations != {expected} || Real::fusedOperations != {fused}) {{',
+            f'            std::fprintf(stderr, "{name}<{order}> operation count mismatch\\n");',
+            '            return 7;', '        }', '    }'])
+        checks.append(f'{name}<{order}>')
     namespace = 'spherical'
     spherical = representations['spherical']
     selections = {}
@@ -356,16 +393,11 @@ template <class Real> struct Field {
 ''')
         includeDir = root/'cosmictiger/gravity/kernels'
         includeDir.mkdir(parents=True)
-        for name in ('cartesian_tracefree_config.hpp', 'cartesian_tracefree_types.hpp',
-                     'cartesian_tracefree/geometry.hpp', 'cartesian_tracefree/p2m.hpp',
-                     'cartesian_tracefree/p2l.hpp', 'cartesian_tracefree/m2m.hpp',
-                     'cartesian_tracefree/m2l.hpp', 'cartesian_tracefree/m2p.hpp',
-                     'cartesian_tracefree/l2l.hpp', 'cartesian_tracefree/l2p.hpp',
-                     'cartesian_tracefree/l2l_warp.hpp', 'spherical_kernels.hpp',
-                     'spherical_ewald_kernels.hpp'):
+        for path in generated.rglob('*.hpp'):
+            name = path.relative_to(generated)
             destination = includeDir/name
             destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.symlink_to(generated/name)
+            destination.symlink_to(path)
         source = root/'counts.cpp'
         source.write_text(buildChecks(report, minFmmOrder, maxFmmOrder))
         executable = root/'counts'

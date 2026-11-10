@@ -739,13 +739,15 @@ def generate(minLocalDegree=2, maxLocalDegree=8, independentM2lRatios=False):
     """
     from fmm.spherical import generate as generateSpherical
     from fmm.spherical_ewald import generate as generateSphericalEwald
+    from fmm.basis_conversion import generate as generateBasisConversion
 
     outputs = generateCartesianTracefree(minLocalDegree, maxLocalDegree, independentM2lRatios)
     report = json.loads(outputs.pop('operation_counts.json'))
     report['representations'] = {}
     for name, generator in (
             ('spherical', generateSpherical),
-            ('sphericalEwald', generateSphericalEwald)):
+            ('sphericalEwald', generateSphericalEwald),
+            ('basisConversion', generateBasisConversion)):
         generated, counts = generator(minLocalDegree, maxLocalDegree)
         overlap = outputs.keys() & generated.keys()
         if overlap:
@@ -894,7 +896,10 @@ def main():
         if not name.endswith('.hpp'):
             continue
         cpp = unnameUnusedGeneratedParameters(cpp)
-        cpp = useUnqualifiedMathInGeneratedFunctions(cpp)
+        # The lightweight coefficient storage has no math calls and must also
+        # compile before any header declares namespace math.
+        if name != 'cartesian_tracefree_types.hpp':
+            cpp = useUnqualifiedMathInGeneratedFunctions(cpp)
         directory = SYMBOL_DIRECTORIES.get(name, '')
         cpp = directory + ('\n' if directory else '') + cpp
         if name != 'cartesian_tracefree_types.hpp':

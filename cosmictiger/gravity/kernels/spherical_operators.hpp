@@ -7,12 +7,14 @@
 // Symbol directory (typed real-spherical FMM operators):
 // M: source or destination multipole; L: source or destination local expansion.
 // G: free-space or periodic Green harmonics; R: source-target separation radius.
-// Source and local traces carry radial/background terms separately.
+// The radial source moment is independent of the harmonic coefficients.
+// A completed periodic local may use an implicit known background curvature.
 
 #pragma once
 
 #include <cosmictiger/gravity/fmm_types.hpp>
 #include <cosmictiger/gravity/kernels/spherical_ewald_kernels.hpp>
+#include <cosmictiger/gravity/kernels/spherical_kernels.hpp>
 #include <cosmictiger/math/vector3.hpp>
 
 namespace cosmictiger::gravity::spherical {
@@ -147,6 +149,55 @@ CUDA_EXPORT int L2P(gravity::Field<Real>& target, Expansion<Real, order> const& 
         target[0] = oldPotential;
     }
     return detail::L2P<order - 1>::kFlops_;
+}
+
+// Derived for the negative Newtonian periodic potential:
+// ∇²Φ = -3β, Φ(x) = H′(x) - 3β z² / 2, β = 4π M / (3V).
+// The harmonic proxy H′ is initialized once at the completed far local.
+// Symbol directory: β is the known uniform-background coefficient;
+// H′ is the compact harmonic proxy; z is displacement from the local center.
+// Code names: backgroundBeta = β; curvature = -3β.
+template <class Real>
+struct PeriodicBackground {
+    Real backgroundBeta;
+};
+
+template <class Real, int order>
+CUDA_EXPORT void preparePeriodicLocal(
+    Expansion<Real, order>& target, PeriodicBackground<Real> const& background) {
+    using namespace math;
+    // Derived: U₂⁰ = (2z² - x² - y²)/4; add 2β once to the harmonic local.
+    target.real(2, 0) += broadcast<Real>(2) * background.backgroundBeta;
+}
+
+template <class Real, int order>
+CUDA_EXPORT int translatePeriodicLocal(Expansion<Real, order>& target,
+    Expansion<Real, order> const& source, Vector3<Real> const& displacement,
+    PeriodicBackground<Real> const& background, bool doPotential = true) {
+    using namespace math;
+    Real const curvature = -broadcast<Real>(3) * background.backgroundBeta;
+    Real const z = displacement[2];
+    int const flops = L2L(target, source, displacement, doPotential);
+    target.real(1, 0) = math::fma(curvature, z, target.real(1, 0));
+    if (doPotential) {
+        target.real(0, 0) = math::fma(curvature * broadcast<Real>(0.5) * z, z, target.real(0, 0));
+    }
+    return flops + (doPotential ? 5 : 2);
+}
+
+template <class Real, int order>
+CUDA_EXPORT int evaluatePeriodicLocal(gravity::Field<Real>& target,
+    Expansion<Real, order> const& source, Vector3<Real> const& displacement,
+    PeriodicBackground<Real> const& background, bool doPotential = true) {
+    using namespace math;
+    Real const curvature = -broadcast<Real>(3) * background.backgroundBeta;
+    Real const z = displacement[2];
+    int const flops = L2P(target, source, displacement, doPotential);
+    target[3] = math::fma(-curvature, z, target[3]);
+    if (doPotential) {
+        target[0] = math::fma(curvature * broadcast<Real>(0.5) * z, z, target[0]);
+    }
+    return flops + (doPotential ? 5 : 2);
 }
 
 // The periodic Laplacian is independent of the harmonic coefficients.

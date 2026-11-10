@@ -3429,6 +3429,186 @@
         }
       }
     },
+    "basisConversion": {
+      "description": "Exact sparse basis maps; overwrite outputs at the same center and units. No coordinate, potential or background scaling. Source dipoles always retained.",
+      "cost_model": {
+        "add": 1,
+        "subtract": 1,
+        "multiply": 1,
+        "fma": 1
+      },
+      "conventional_cost_model": {
+        "add": 1,
+        "subtract": 1,
+        "multiply": 1,
+        "fma": 2
+      },
+      "kernels": [
+        {
+          "operator": "sourceToSpherical",
+          "fmm_order": 3,
+          "arithmetic": {
+            "multiply": 2
+          },
+          "weighted_flops": 2,
+          "conventional_flops": 2
+        },
+        {
+          "operator": "localToCartesian",
+          "fmm_order": 3,
+          "arithmetic": {
+            "add": 1,
+            "multiply": 3,
+            "subtract": 1
+          },
+          "weighted_flops": 5,
+          "conventional_flops": 5
+        },
+        {
+          "operator": "sourceToSpherical",
+          "fmm_order": 4,
+          "arithmetic": {
+            "multiply": 7,
+            "add": 1,
+            "subtract": 1
+          },
+          "weighted_flops": 9,
+          "conventional_flops": 9
+        },
+        {
+          "operator": "localToCartesian",
+          "fmm_order": 4,
+          "arithmetic": {
+            "add": 4,
+            "multiply": 11,
+            "subtract": 3,
+            "fma": 1
+          },
+          "weighted_flops": 19,
+          "conventional_flops": 20
+        },
+        {
+          "operator": "sourceToSpherical",
+          "fmm_order": 5,
+          "arithmetic": {
+            "multiply": 15,
+            "add": 4,
+            "subtract": 3,
+            "fma": 1
+          },
+          "weighted_flops": 23,
+          "conventional_flops": 24
+        },
+        {
+          "operator": "localToCartesian",
+          "fmm_order": 5,
+          "arithmetic": {
+            "add": 8,
+            "multiply": 22,
+            "subtract": 5,
+            "fma": 6
+          },
+          "weighted_flops": 41,
+          "conventional_flops": 47
+        },
+        {
+          "operator": "sourceToSpherical",
+          "fmm_order": 6,
+          "arithmetic": {
+            "multiply": 25,
+            "add": 10,
+            "subtract": 5,
+            "fma": 4
+          },
+          "weighted_flops": 44,
+          "conventional_flops": 48
+        },
+        {
+          "operator": "localToCartesian",
+          "fmm_order": 6,
+          "arithmetic": {
+            "add": 13,
+            "multiply": 36,
+            "subtract": 8,
+            "fma": 17
+          },
+          "weighted_flops": 74,
+          "conventional_flops": 91
+        },
+        {
+          "operator": "sourceToSpherical",
+          "fmm_order": 7,
+          "arithmetic": {
+            "multiply": 38,
+            "add": 15,
+            "subtract": 9,
+            "fma": 14
+          },
+          "weighted_flops": 76,
+          "conventional_flops": 90
+        },
+        {
+          "operator": "localToCartesian",
+          "fmm_order": 7,
+          "arithmetic": {
+            "add": 20,
+            "multiply": 54,
+            "subtract": 12,
+            "fma": 35
+          },
+          "weighted_flops": 121,
+          "conventional_flops": 156
+        },
+        {
+          "operator": "sourceToSpherical",
+          "fmm_order": 8,
+          "arithmetic": {
+            "multiply": 54,
+            "add": 23,
+            "subtract": 13,
+            "fma": 31
+          },
+          "weighted_flops": 121,
+          "conventional_flops": 152
+        },
+        {
+          "operator": "localToCartesian",
+          "fmm_order": 8,
+          "arithmetic": {
+            "add": 29,
+            "multiply": 76,
+            "subtract": 17,
+            "fma": 62
+          },
+          "weighted_flops": 184,
+          "conventional_flops": 246
+        },
+        {
+          "operator": "sourceToSpherical",
+          "fmm_order": 9,
+          "arithmetic": {
+            "multiply": 73,
+            "add": 31,
+            "subtract": 20,
+            "fma": 57
+          },
+          "weighted_flops": 181,
+          "conventional_flops": 238
+        },
+        {
+          "operator": "localToCartesian",
+          "fmm_order": 9,
+          "arithmetic": {
+            "add": 37,
+            "multiply": 100,
+            "subtract": 22,
+            "fma": 103
+          },
+          "weighted_flops": 262,
+          "conventional_flops": 365
+        }
+      ]
+    },
     "cartesianTracefree": {
       "description": "Static emitted arithmetic counts. Conventional FMA=2; weighted FMA=1. Distance geometry is evaluated inside direct kernels and excluded from DAG counts.",
       "kernels": [

@@ -466,6 +466,7 @@ set_source_files_properties(src/particles/domain.cpp tests/mesh_domains.cpp PROP
 # Ordinary builds use the source headers.
 set(COSMICTIGER_GENERATED_FMM_DIR ${PROJECT_SOURCE_DIR}/cosmictiger/gravity/kernels)
 set(COSMICTIGER_GENERATED_FMM_FILES
+    ${COSMICTIGER_GENERATED_FMM_DIR}/basis_conversion.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree_config.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree_types.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree/geometry.hpp
@@ -479,6 +480,20 @@ set(COSMICTIGER_GENERATED_FMM_FILES
     ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree/l2l_warp.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/spherical_kernels.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/spherical_ewald_kernels.hpp
+    ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/p2m.hpp
+    ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/p2l.hpp
+    ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/m2m.hpp
+    ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/m2l.hpp
+    ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/m2p.hpp
+    ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/l2l.hpp
+    ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/l2p.hpp
+    ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/green.hpp
+    ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/m2l_derivatives.hpp
+    ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/ewald_common.hpp
+    ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/ewald_green.hpp
+    ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/ewald_m2l.hpp
+    ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/ewald_l2l.hpp
+    ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/ewald_l2p.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/operation_counts.json)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 if(COSMICTIGER_WITH_GRAVITY)
@@ -1751,6 +1766,16 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
         endforeach()
         # Splitting the spherical templates by degree bounds compiler memory use.
         foreach(spherical_order IN LISTS COSMICTIGER_FMM_ORDERS)
+            set(conversion_target "basis_conversion_order_${spherical_order}_test")
+            add_executable(${conversion_target} tests/gravity/basis_conversion.cpp)
+            target_include_directories(${conversion_target} PRIVATE ${PROJECT_SOURCE_DIR})
+            target_compile_definitions(${conversion_target} PRIVATE
+                BASIS_CONVERSION_TEST_ORDER=${spherical_order})
+            cosmictiger_use_generated_kernels(${conversion_target})
+            target_compile_options(${conversion_target} PRIVATE -fno-fast-math -ffp-contract=off)
+            add_test(NAME "basis_conversion_order_${spherical_order}" COMMAND ${conversion_target})
+            set_tests_properties("basis_conversion_order_${spherical_order}" PROPERTIES
+                TIMEOUT 180 PROCESSORS 1 LABELS "fmm;generator;cpu")
             math(EXPR spherical_degree "${spherical_order} - 1")
             set(spherical_target "generated_spherical_degree_${spherical_degree}_test")
             add_executable(${spherical_target} tests/gravity/generated_spherical.cpp)

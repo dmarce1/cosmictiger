@@ -35,9 +35,7 @@ namespace detail {
         };
         CUDA_EXPORT CoefficientFields() = default;
         CUDA_EXPORT explicit CoefficientFields(CoefficientArrayInit)
-          : coefficients() {
-            using namespace math;
-        }
+          : coefficients() {}
     };
 
     static_assert(sizeof(CoefficientFields<float, 1>) == 4 * sizeof(float));
@@ -59,9 +57,7 @@ namespace detail {
         };
         CUDA_EXPORT CoefficientFields() = default;
         CUDA_EXPORT explicit CoefficientFields(CoefficientArrayInit)
-          : coefficients() {
-            using namespace math;
-        }
+          : coefficients() {}
     };
 
     static_assert(sizeof(CoefficientFields<float, 2>) == 9 * sizeof(float));
@@ -90,9 +86,7 @@ namespace detail {
         };
         CUDA_EXPORT CoefficientFields() = default;
         CUDA_EXPORT explicit CoefficientFields(CoefficientArrayInit)
-          : coefficients() {
-            using namespace math;
-        }
+          : coefficients() {}
     };
 
     static_assert(sizeof(CoefficientFields<float, 3>) == 16 * sizeof(float));
@@ -130,9 +124,7 @@ namespace detail {
         };
         CUDA_EXPORT CoefficientFields() = default;
         CUDA_EXPORT explicit CoefficientFields(CoefficientArrayInit)
-          : coefficients() {
-            using namespace math;
-        }
+          : coefficients() {}
     };
 
     static_assert(sizeof(CoefficientFields<float, 4>) == 25 * sizeof(float));
@@ -181,9 +173,7 @@ namespace detail {
         };
         CUDA_EXPORT CoefficientFields() = default;
         CUDA_EXPORT explicit CoefficientFields(CoefficientArrayInit)
-          : coefficients() {
-            using namespace math;
-        }
+          : coefficients() {}
     };
 
     static_assert(sizeof(CoefficientFields<float, 5>) == 36 * sizeof(float));
@@ -245,9 +235,7 @@ namespace detail {
         };
         CUDA_EXPORT CoefficientFields() = default;
         CUDA_EXPORT explicit CoefficientFields(CoefficientArrayInit)
-          : coefficients() {
-            using namespace math;
-        }
+          : coefficients() {}
     };
 
     static_assert(sizeof(CoefficientFields<float, 6>) == 49 * sizeof(float));
@@ -324,9 +312,7 @@ namespace detail {
         };
         CUDA_EXPORT CoefficientFields() = default;
         CUDA_EXPORT explicit CoefficientFields(CoefficientArrayInit)
-          : coefficients() {
-            using namespace math;
-        }
+          : coefficients() {}
     };
 
     static_assert(sizeof(CoefficientFields<float, 7>) == 64 * sizeof(float));
@@ -420,9 +406,7 @@ namespace detail {
         };
         CUDA_EXPORT CoefficientFields() = default;
         CUDA_EXPORT explicit CoefficientFields(CoefficientArrayInit)
-          : coefficients() {
-            using namespace math;
-        }
+          : coefficients() {}
     };
 
     static_assert(sizeof(CoefficientFields<float, 8>) == 81 * sizeof(float));
@@ -433,18 +417,14 @@ namespace detail {
     template <class Real, int degree>
     struct CoefficientStorage<Real, degree, false> : CoefficientFields<Real, degree> {
         CUDA_EXPORT CoefficientStorage()
-          : CoefficientFields<Real, degree>(CoefficientArrayInit()) {
-            using namespace math;
-        }
+          : CoefficientFields<Real, degree>(CoefficientArrayInit()) {}
         CUDA_EXPORT CoefficientStorage(CoefficientStorage const& other)
           : CoefficientStorage() {
-            using namespace math;
             for (int i = 0; i < (degree + 1) * (degree + 1); i++) {
                 this->coefficients[i] = other.coefficients[i];
             }
         }
         CUDA_EXPORT CoefficientStorage& operator=(CoefficientStorage const& other) {
-            using namespace math;
             for (int i = 0; i < (degree + 1) * (degree + 1); i++) {
                 this->coefficients[i] = other.coefficients[i];
             }
@@ -456,42 +436,35 @@ namespace detail {
         static constexpr int kDegree_ = degree;
         static constexpr int kSize_ = (degree + 1) * (degree + 1);
         CUDA_EXPORT constexpr int size() const {
-            using namespace math;
             return kSize_;
         }
         CUDA_EXPORT static constexpr int index(int nx, int ny, int nz) {
-            using namespace math;
             int const rank = nx + ny + nz;
             return rank * rank + (nz == 0 ? nx : rank + 1 + nx);
         }
         CUDA_EXPORT Coefficients& operator=(Real const& value) {
-            using namespace math;
             for (int i = 0; i < kSize_; i++) {
                 this->coefficients[i] = value;
             }
             return *this;
         }
         CUDA_EXPORT Real& operator[](int i) {
-            using namespace math;
 #ifdef CHECK_BOUNDS
             DO_BOUNDS_CHECK(i);
 #endif
             return this->coefficients[i];
         }
         CUDA_EXPORT Real const& operator[](int i) const {
-            using namespace math;
 #ifdef CHECK_BOUNDS
             DO_BOUNDS_CHECK(i);
 #endif
             return this->coefficients[i];
         }
         CUDA_EXPORT Real& operator()(int nx, int ny, int nz) {
-            using namespace math;
             ASSERT(nz <= 1);
             return (*this)[index(nx, ny, nz)];
         }
         CUDA_EXPORT Real operator()(int nx, int ny, int nz) const {
-            using namespace math;
             if (nz < 2) {
                 return (*this)[index(nx, ny, nz)];
             }

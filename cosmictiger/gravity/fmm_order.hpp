@@ -31,9 +31,9 @@
 // fmmDispatch() selects its order at tree, CPU walk, and CUDA launch boundaries.
 // Runtime and serialized internal orders remain one greater than potential degree.
 //
-// Coefficient counts use compact rank-major Cartesian storage: a degree-d
-// harmonic tensor stores (d + 1)^2 coefficients, and local expansions append one constant Laplacian
-// (the periodic background trace).
+// Coefficient counts use compact rank-major harmonic storage: a degree-d
+// tensor stores (d + 1)^2 coefficients. The known periodic background trace
+// is implicit and does not occupy another local coefficient.
 
 #ifndef FMM_MIN_ORDER
 #error "FMM_MIN_ORDER must be defined by the build configuration"
