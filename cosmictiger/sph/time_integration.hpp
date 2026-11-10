@@ -32,6 +32,7 @@ struct SphRungBalanceReturn {
     int maximumRung = 0;
     int passes = 0;
     size_t changedParticles = 0;
+    /// Archive this record in the field order required by distributed transport.
     template <typename Archive>
     void serialize(Archive& archive, unsigned) {
         archive & maximumRung & passes & changedParticles;

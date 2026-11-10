@@ -65,6 +65,8 @@ FlopCount treeSourceToMesh(double* output, SourceMultipoleBuffer const& source,
 #include <cosmictiger/gravity/kernels/cartesian_tracefree_operators.hpp>
 #include <cosmictiger/math/simd_math.hpp>
 
+/// Translate two child multipoles to the parent center in double SIMD and combine them into
+/// float transport storage.
 template <int order>
 FlopCounts treeComputeMultipole(MultipoleBuffer& multi, MultipoleBuffer const& left,
     MultipoleBuffer const& right, Vector3<double> const& leftCenter,
@@ -98,6 +100,8 @@ FlopCounts treeComputeMultipole(MultipoleBuffer& multi, MultipoleBuffer const& l
     return counts;
 }
 
+/// Evaluate particle moments in float SIMD and accumulate into the selected precision,
+/// optionally widening lane reduction.
 template <int order, class Buffer, bool wideReduction = false>
 FlopCounts treeComputeMixedMultipoleImpl(Buffer& multi, Pair<ParticleInteger> particleRange,
     Vector3<double> const& center, FmmSourceView const& sources) {
@@ -179,17 +183,23 @@ FlopCounts treeComputeMixedMultipoleImpl(Buffer& multi, Pair<ParticleInteger> pa
     return counts;
 }
 
+/// Evaluate mixed-precision leaf moments and store the result in the float transport
+/// buffer.
 template <int order>
 FlopCounts treeComputeMultipole(MultipoleBuffer& multi, Pair<ParticleInteger> particleRange,
     Vector3<double> const& center, FmmSourceView const& sources) {
     return treeComputeMixedMultipoleImpl<order>(multi, particleRange, center, sources);
 }
+/// Compute mixed-precision leaf moments while retaining their double-precision
+/// accumulation.
 template <int order>
 FlopCounts treeComputeMixedMultipole(SourceMultipoleBuffer& multi,
     Pair<ParticleInteger> particleRange, Vector3<double> const& center,
     FmmSourceView const& sources) {
     return treeComputeMixedMultipoleImpl<order>(multi, particleRange, center, sources);
 }
+/// Compute float SIMD moments with double-precision lane reduction and retained double
+/// source storage.
 template <int order>
 FlopCounts treeComputeWideReductionMultipole(SourceMultipoleBuffer& multi,
     Pair<ParticleInteger> particleRange, Vector3<double> const& center,
@@ -198,6 +208,8 @@ FlopCounts treeComputeWideReductionMultipole(SourceMultipoleBuffer& multi,
         multi, particleRange, center, sources);
 }
 
+/// Translate both child moments with native fixed-position displacements and retain the
+/// parent sum in double precision.
 template <int order>
 FlopCounts treeComputeMultipole(SourceMultipoleBuffer& multi, TreeBuildMoments const& left,
     TreeBuildMoments const& right, Vector3<Position> const& leftCenter,
@@ -226,6 +238,8 @@ FlopCounts treeComputeMultipole(SourceMultipoleBuffer& multi, TreeBuildMoments c
     return counts;
 }
 
+/// Evaluate particle-to-multipole moments in double SIMD using native fixed-coordinate
+/// differences.
 template <int order>
 FlopCounts treeComputeMultipole(SourceMultipoleBuffer& multi, Pair<ParticleInteger> particleRange,
     Vector3<Position> const& center, FmmSourceView const& sources) {
@@ -260,6 +274,8 @@ FlopCounts treeComputeMultipole(SourceMultipoleBuffer& multi, Pair<ParticleInteg
     return counts;
 }
 
+/// Translate tree moments to a mesh-cell center, convert to spherical coefficients, and
+/// rescale each degree to mesh units.
 template <int order>
 FlopCount treeSourceToMesh(double* output, SourceMultipoleBuffer const& source,
     Vector3<Position> const& sourceCenter, Vector3<Position> const& meshCenter, int meshSize) {

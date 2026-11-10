@@ -48,6 +48,7 @@ HPX_PLAIN_ACTION(detail::scenarioMaximumDensity, ScenarioMaximumDensityAction);
 
 namespace detail {
 
+/// Reduce the maximum gas density across the locality tree.
 double scenarioMaximumDensity() {
     std::vector<hpx::future<double>> futures;
     for (auto const& child : hpxChildren()) {
@@ -66,6 +67,7 @@ double scenarioMaximumDensity() {
     return result;
 }
 
+/// Append energy, momentum, and maximum-density diagnostics for a fixed scenario.
 void writeScenarioDiagnostics(DriverParameters const& state) {
     auto const& energy = state.energies;
     double const total = energy.kin + energy.therm + energy.pot;
@@ -92,6 +94,8 @@ void writeScenarioDiagnostics(DriverParameters const& state) {
 
 }    // namespace detail
 
+/// Initialize or resume the chosen scenario and advance its planned stages with diagnostics
+/// and output.
 void runFixedScenario() {
     profile::checkForInterrupt();
     auto const& definition = scenarios::definition(getOptions().run.scenario);

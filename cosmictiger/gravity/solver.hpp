@@ -41,6 +41,7 @@ struct PmmmDiagnostics {
     // on this locality; frozen-membership near passes never add to it.
     uint64_t transformCount = 0;
 
+    /// Archive this record in the field order required by distributed transport.
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
         archive & meshSize & activeParticles & totalParticles & sourceMass & depositedMass &

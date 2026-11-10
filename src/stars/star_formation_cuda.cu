@@ -13,6 +13,8 @@
 
 namespace star_formation_backend {
 namespace detail {
+    /// Evaluate the selected star-formation operation for each input in a grid-stride
+    /// CUDA loop.
     __global__ void batchKernel(Operation operation, Input const* inputs, Output* outputs,
         size_t count, Parameters parameters) {
         size_t const stride = size_t(blockDim.x) * gridDim.x;
@@ -21,6 +23,7 @@ namespace detail {
             outputs[index] = evaluate(operation, inputs[index], outputs[index], parameters);
         }
     }
+    /// Translate a CUDA failure into a star-formation backend exception.
     inline void check(cudaError_t error) {
         if (error != cudaSuccess) {
             throw std::runtime_error(std::string("SH03 CUDA: ") + cudaGetErrorString(error));
@@ -31,12 +34,15 @@ namespace detail {
         T* pointer_{};
 
     public:
+        /// Allocate an owned device array for the requested number of elements.
         explicit Buffer(size_t count) {
             check(cudaMalloc(reinterpret_cast<void**>(&pointer_), count * sizeof(T)));
         }
+        /// Release the owned device allocation.
         ~Buffer() {
             cudaFree(pointer_);
         }
+        /// Expose the device pointer without transferring ownership.
         T* get() const {
             return pointer_;
         }
@@ -44,6 +50,8 @@ namespace detail {
         Buffer& operator=(Buffer const&) = delete;
     };
 }    // namespace detail
+/// Validate and transfer a batch, execute it, and publish host outputs only after all
+/// results pass validation.
 void runCuda(Operation operation, Input const* inputs, Output* outputs, size_t count,
     Parameters const& parameters) {
     if (count == 0) {

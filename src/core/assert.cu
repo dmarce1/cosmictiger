@@ -10,6 +10,7 @@ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
 #include <cosmictiger/core/safe_io.hpp>
 
 #ifdef __CUDA_ARCH__
+/// On failure, print the device assertion location and trap the executing CUDA thread.
 __device__ void cosmictigerCudaAssert(
     char const* condStr, bool cond, char const* filename, int line) {
     if (!cond) {

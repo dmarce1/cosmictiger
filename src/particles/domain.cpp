@@ -69,6 +69,8 @@ static Vector<DomainLocal> localDomains;
 
 namespace detail {
 
+/// Measure the actual serialized size of a vector containing the requested number of
+/// migration records.
 template <typename Record>
 size_t migrationPayloadBytes(Record const& record, size_t count) {
     std::vector<char> buffer;
@@ -78,6 +80,7 @@ size_t migrationPayloadBytes(Record const& record, size_t count) {
     return archive.bytes_written();
 }
 
+/// Sum particle counts below proposed domain boundaries across all localities.
 Vector<size_t> countDomainSplits(Vector<double> const& bounds, int depth) {
     profile::ScopedPhase profilePhase("domains.rebound.countSplits");
     Vector<hpx::future<Vector<size_t>>> pending;
@@ -199,6 +202,7 @@ Vector<double> alignedDomainCuts(
 
 }    // namespace detail
 
+/// Return maximum particle load divided by the mean load, minus one.
 double domainsGetLoadImbalance() {
     auto const loads = domainsGetLoads();
     size_t max = 0;
@@ -212,6 +216,7 @@ double domainsGetLoadImbalance() {
     return imbalance;
 }
 
+/// Gather local particle counts through the locality tree.
 Vector<size_t> domainsGetLoads() {
     Vector<hpx::future<Vector<size_t>>> futs;
     for (auto const& c : hpxChildren()) {
@@ -226,6 +231,7 @@ Vector<size_t> domainsGetLoads() {
     return loads;
 }
 
+/// Write the domain-key map and local domain records to the checkpoint stream.
 void domainsSave(FILE* fp) {
     size_t size = boxesByKey.size();
     fwrite((char const*) &size, sizeof(size_t), 1, fp);
@@ -235,6 +241,7 @@ void domainsSave(FILE* fp) {
     fwrite(localDomains.data(), sizeof(DomainLocal), hpxSize(), fp);
 }
 
+/// Restore the domain-key map and local domain records from the checkpoint stream.
 void domainsLoad(FILE* fp) {
     boxesByKey = decltype(boxesByKey)();
     size_t size;
@@ -248,10 +255,12 @@ void domainsLoad(FILE* fp) {
     FREAD(localDomains.data(), sizeof(DomainLocal), hpxSize(), fp);
 }
 
+/// Return the spatial box associated with a domain-tree key.
 Range<double> domainsRange(size_t key) {
     return boxesByKey[key].box;
 }
 
+/// Install and broadcast the updated domain-tree box map.
 void domainsTransmitBoxes(std::unordered_map<size_t, DomainT> boxes) {
     Vector<hpx::future<void>> futs;
     for (auto const& c : hpxChildren()) {
@@ -261,6 +270,7 @@ void domainsTransmitBoxes(std::unordered_map<size_t, DomainT> boxes) {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
+/// Initialize local rebalance state with the full unit box and complete rank range.
 void domainsInitRebounds() {
     Vector<hpx::future<void>> futs;
     for (auto const& c : hpxChildren()) {
@@ -277,6 +287,7 @@ void domainsInitRebounds() {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
+/// Count local particles below each proposed split at the requested decomposition depth.
 Vector<size_t> domainsCountBelow(Vector<double> bounds, int depth) {
     assert(bounds.size() == localDomains.size());
     Vector<size_t> counts(bounds.size());
@@ -383,6 +394,8 @@ std::vector<std::vector<size_t>> domainsCountCoarseSlabs(int depth, int coarseMe
     return counts;
 }
 
+/// Partition local particle ranges at the accepted boundaries and replace domains with
+/// their children.
 void domainsReboundSort(Vector<double> bounds, int depth) {
     assert(bounds.size() == localDomains.size());
     Vector<size_t> mids(bounds.size());
@@ -420,6 +433,8 @@ void domainsReboundSort(Vector<double> bounds, int depth) {
     localDomains = std::move(newDomains);
 }
 
+/// Build a particle-balanced domain decomposition, respecting coarse mesh planes for PMMM
+/// ownership.
 void domainsRebound() {
     {
         profile::ScopedPhase profilePhase("domains.rebound.initialize");
@@ -566,6 +581,7 @@ void domainsRebound() {
     }
 }
 
+/// Append an incoming particle parcel to the synchronized receive queue.
 void domainsTransmitParticles(Vector<Particle> parts) {
     static MutexType mutex;
     std::lock_guard<MutexType> lock(mutex);
@@ -580,6 +596,8 @@ struct GasMigrationState {
     SphParticleFlags flags;
     Float16Storage bulkViscosityCoefficient;
     float electronFraction{1.0f};
+    /// Archive `smoothingLength`, `entropy`, `density`, `flags.bits`,
+    /// `bulkViscosityCoefficient.bits`, `electronFraction` in transport order.
     template <class Archive>
     void serialize(Archive& arc, unsigned) {
         arc & smoothingLength;
@@ -595,6 +613,7 @@ struct GasMigrationState {
 struct SphMigrationParticle {
     Particle part;
     GasMigrationState gas{};
+    /// Archive `part`, `gas` in transport order.
     template <class Archive>
     void serialize(Archive& arc, unsigned) {
         arc & part;
@@ -610,12 +629,15 @@ struct SphMigrationParcel {
     Vector<SphMigrationParticle> particles;
 };
 static Vector<SphMigrationParcel> receivedSphParticles;
+/// Queue an incoming mixed-species parcel with its sender and sequence for deterministic
+/// reassembly.
 void receiveSphParticles(Vector<SphMigrationParticle> parts, int sourceRank, size_t sequence) {
     static MutexType mutex;
     std::lock_guard<MutexType> lock(mutex);
     receivedSphParticles.push_back({sourceRank, sequence, std::move(parts)});
 }
 HPX_PLAIN_ACTION(receiveSphParticles, ReceiveSphParticlesAction);
+/// Pack a base particle and its optional gas thermodynamic state into one migration record.
 static SphMigrationParticle packSphParticle(ParticleInteger index) {
     SphMigrationParticle result;
     result.part = particlesGetParticle(index);
@@ -635,6 +657,7 @@ static SphMigrationParticle packSphParticle(ParticleInteger index) {
     }
     return result;
 }
+/// Install a migration record and rebuild the base-particle/gas catalogue cross-reference.
 static void unpackSphParticle(
     SphMigrationParticle record, ParticleInteger index, ParticleInteger gasIndex) {
     if (record.part.type == kSphType) {
@@ -656,6 +679,8 @@ static void unpackSphParticle(
         }
     }
 }
+/// Select outgoing mixed-species records, retain local records, and complete bounded parcel
+/// submissions.
 static void beginSphMigration(int rung) {
     Vector<hpx::future<void>> pending;
     for (auto const& child : hpxChildren()) {
@@ -702,6 +727,8 @@ static void beginSphMigration(int rung) {
         future.get();
     }
 }
+/// Reassemble mixed-species arrivals in sender order and rebuild contiguous particle and
+/// gas storage.
 static void endSphMigration() {
     Vector<hpx::future<void>> pending;
     for (auto const& child : hpxChildren()) {
@@ -739,6 +766,8 @@ static void endSphMigration() {
 
 #endif
 
+/// Measure serialized particle or gas migration payload bytes for the current enabled
+/// fields.
 size_t domainsMigrationPayloadBytes(bool gas, size_t count) {
 #if COSMICTIGER_WITH_SPH
     if (gas) {
@@ -754,6 +783,7 @@ size_t domainsMigrationPayloadBytes(bool gas, size_t count) {
     return detail::migrationPayloadBytes(Particle{}, count);
 }
 
+/// Infer and validate the fixed serialized record stride from small sample payloads.
 size_t domainsMigrationRecordBytes(bool gas) {
     // Measure the actual serializer, including enabled optional fields. Difference
     // of two vector sizes removes fixed archive/vector headers. Verify affine
@@ -769,11 +799,13 @@ size_t domainsMigrationRecordBytes(bool gas) {
     return stride;
 }
 
+/// Return the record count fitting within the migration parcel byte budget.
 size_t domainsMigrationParcelCapacity(bool gas) {
     return (kMaxMigrationParcelBytes - kMigrationParcelOverheadBytes) /
         domainsMigrationRecordBytes(gas);
 }
 
+/// Dispatch outgoing particles for the active range to their new domain owners.
 void domainsBegin(int rung) {
 #if COSMICTIGER_WITH_SPH
     if (getOptions().hydro.enabled) {
@@ -850,6 +882,8 @@ void domainsBegin(int rung) {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
+/// Install received particles, compact retained storage, and complete domain migration
+/// across localities.
 void domainsEnd() {
 #if COSMICTIGER_WITH_SPH
     if (getOptions().hydro.enabled) {
@@ -948,10 +982,12 @@ void domainsEnd() {
 #endif
 }
 
+/// Return this rank's current spatial domain box.
 Range<double> domainsFindMyBox() {
     return localDomains[hpxRank()].box;
 }
 
+/// Find the owning rank for a position, requiring an initialized multi-rank decomposition.
 int domainsFindRank(Vector3<double> const& position) {
     if (hpxSize() == 1) {
         return 0;
@@ -962,6 +998,7 @@ int domainsFindRank(Vector3<double> const& position) {
     return findParticleDomain(position);
 }
 
+/// Verify that particles in the selected local range lie inside this rank's domain.
 static void domainsCheck() {
     std::atomic<int> fail(0);
     auto const myDomain = domainsFindMyBox();

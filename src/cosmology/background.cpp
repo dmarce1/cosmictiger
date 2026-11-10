@@ -14,6 +14,7 @@ namespace cosmology {
 
 namespace detail {
 
+    /// Reject nonfinite or negative background-history durations.
     void validateBackgroundInterval(double finalConformalTime) {
         if (!std::isfinite(finalConformalTime) || finalConformalTime < 0.0) {
             throw std::invalid_argument(
@@ -23,6 +24,7 @@ namespace detail {
 
 }    // namespace detail
 
+/// Integrate and retain a Friedmann trajectory over the requested conformal-time interval.
 SimulationBackgroundTable::SimulationBackgroundTable(
     FriedmannCosmology const& model, FriedmannState initialState, double finalConformalTime)
   : finalConformalTime_(finalConformalTime) {
@@ -31,6 +33,7 @@ SimulationBackgroundTable::SimulationBackgroundTable(
         model.trajectory(initialState, finalConformalTime, CosmologicalTime::conformal));
 }
 
+/// Construct a fixed-scale background history after validating its scale and duration.
 SimulationBackgroundTable::SimulationBackgroundTable(double fixedScale, double finalConformalTime)
   : fixedScale_(fixedScale)
   , finalConformalTime_(finalConformalTime) {
@@ -40,6 +43,8 @@ SimulationBackgroundTable::SimulationBackgroundTable(double fixedScale, double f
     }
 }
 
+/// Sample the integrated or fixed background, clamping only roundoff-sized endpoint
+/// excursions.
 FriedmannAdvance SimulationBackgroundTable::sample(double conformalTime) const {
     double const tolerance = 32.0 * std::numeric_limits<double>::epsilon() * finalConformalTime_;
     if (!std::isfinite(conformalTime) || conformalTime < -tolerance ||
@@ -60,10 +65,12 @@ FriedmannAdvance SimulationBackgroundTable::sample(double conformalTime) const {
     return result;
 }
 
+/// Return the duration covered by this background history.
 double SimulationBackgroundTable::finalConformalTime() const {
     return finalConformalTime_;
 }
 
+/// Return a cached background history matching the current options and requested duration.
 std::shared_ptr<SimulationBackgroundTable const> simulationBackground(double finalConformalTime) {
     detail::validateBackgroundInterval(finalConformalTime);
     auto const& options = getOptions();

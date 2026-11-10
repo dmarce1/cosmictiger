@@ -61,6 +61,7 @@ constexpr std::array<std::pair<char const*, Float16 RockstarRecord::*>, 31> kHal
         {"vxb", &RockstarRecord::vxb}, {"vyb", &RockstarRecord::vyb},
         {"vzb", &RockstarRecord::vzb}}};
 
+/// Throw a catalogue validation error prefixed with the affected path.
 [[noreturn]] void fail(fs::path const& path, std::string const& reason) {
     throw std::runtime_error(path.string() + ": " + reason);
 }
@@ -74,6 +75,8 @@ struct JsonNumber {
     double value;
 };
 
+/// Write a finite JSON floating-point number with locale-independent formatting and
+/// explicit floating syntax.
 std::ostream& operator<<(std::ostream& output, JsonNumber const number) {
     if (!std::isfinite(number.value)) {
         throw std::runtime_error("nonfinite value cannot be written as a JSON number");
@@ -91,6 +94,7 @@ std::ostream& operator<<(std::ostream& output, JsonNumber const number) {
     return output;
 }
 
+/// Open a regular text metadata file or report a path-specific failure.
 std::ifstream openText(fs::path const& path) {
     std::ifstream input(path);
     if (!fs::is_regular_file(path) || !input) {
@@ -99,6 +103,8 @@ std::ifstream openText(fs::path const& path) {
     return input;
 }
 
+/// Parse an entire field as an unsigned 64-bit integer, rejecting malformed or out-of-range
+/// input.
 std::uint64_t unsignedInteger(std::string const& value, fs::path const& path) {
     std::uint64_t number = 0;
     auto const result = std::from_chars(value.data(), value.data() + value.size(), number);
@@ -108,6 +114,7 @@ std::uint64_t unsignedInteger(std::string const& value, fs::path const& path) {
     return number;
 }
 
+/// Split a metadata line into whitespace-delimited fields.
 std::vector<std::string> tokens(std::string const& line) {
     std::istringstream input(line);
     std::vector<std::string> result;
@@ -118,6 +125,7 @@ std::vector<std::string> tokens(std::string const& line) {
     return result;
 }
 
+/// Read exactly the expected metadata fields and reject additional nonempty content.
 std::vector<std::string> oneLine(fs::path const& path, size_t count) {
     auto input = openText(path);
     std::string line;
@@ -139,6 +147,8 @@ std::vector<std::string> oneLine(fs::path const& path, size_t count) {
     return values;
 }
 
+/// Validate a catalogue format sidecar, including ABI, encoding, units, and density
+/// conventions.
 CatalogueFormat readFormat(fs::path const& path) {
     auto const formatPath = fs::path(path.string() + ".format");
     auto input = openText(formatPath);
@@ -202,6 +212,8 @@ CatalogueFormat readFormat(fs::path const& path) {
     return result;
 }
 
+/// Read the native group header and validate its size, snapshot identity, time, scale, and
+/// box length.
 GroupHeader readHeader(fs::path const& directory) {
     auto const path = directory / "groups.dat";
     if (fs::file_size(path) != sizeof(GroupHeader)) {
@@ -219,6 +231,7 @@ GroupHeader readHeader(fs::path const& directory) {
     return header;
 }
 
+/// Reject nonfinite halo properties, invalid half encodings, and malformed parent indices.
 void validateProperties(Halo const& halo, fs::path const& path) {
     auto const& record = halo.record;
     std::array<double, 13> const values{
@@ -241,6 +254,8 @@ void validateProperties(Halo const& halo, fs::path const& path) {
     }
 }
 
+/// Read per-rank catalogues and history, resolve global host identities, and reject
+/// inconsistent or cyclic relationships.
 std::vector<Halo> readHalos(fs::path const& directory, int rankCount, size_t expectedCount,
     CatalogueFormat& catalogueFormat) {
     std::vector<Halo> halos;
@@ -347,6 +362,8 @@ std::vector<Halo> readHalos(fs::path const& directory, int rankCount, size_t exp
     return halos;
 }
 
+/// Validate a completed catalogue snapshot and export its halo records and metadata as JSON
+/// Lines.
 void exportSnapshot(fs::path const& directory) {
     auto const manifestPath = directory / "rockstar_hosts.complete";
     auto const manifest = oneLine(manifestPath, 3);
@@ -404,6 +421,8 @@ void exportSnapshot(fs::path const& directory) {
 
 }    // namespace detail
 
+/// Require a snapshot directory, export it, and report validation failures through the exit
+/// status.
 int main(int argc, char** argv) {
     if (argc != 2) {
         std::cerr << "Usage: halo_catalog_export SNAPSHOT_DIRECTORY\n";

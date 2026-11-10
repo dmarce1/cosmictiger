@@ -35,14 +35,17 @@
 
 using SedReal = __float128;
 
+/// Evaluate the exponential in the precision used by the Sedov reference solver.
 SedReal sedovExp(SedReal a) {
     return expq(a);
 }
 
+/// Evaluate a real power using the reference solver's pointer-based numerical interface.
 SedReal powDd(SedReal* a, SedReal* b) {
     return powq(*a, *b);
 }
 
+/// Copy the sign of the second reference-solver argument onto the magnitude of the first.
 SedReal dSign(SedReal* a, SedReal* b) {
     return copysignq(*a, *b);
 }
@@ -94,10 +97,13 @@ static SedReal sedRFind(SedReal* rArg);
     SedReal* xa, SedReal* ya, int* n, SedReal* x, SedReal* y, SedReal* dy);
 static SedReal zeroin(SedReal* ax, SedReal* bx, DFp f, SedReal* tol);
 
+/// Evaluate the integer-power helper used by the translated Sedov reference routines.
 int powIi(int* a, int* b) {
     return std::pow(*a, *b);
 }
 
+/// Compute radial Sedov blast-wave density, pressure, energy, velocity, and sound-speed
+/// samples.
 /* Subroutine */ int sed1d(SedReal* time, int* nstep, SedReal* xpos, SedReal* eblast,
     SedReal* omegaInArg, SedReal* xgeomInArg, SedReal* rho0, SedReal* vel0, SedReal* ener0,
     SedReal* pres0, SedReal* ambientSoundSpeed, SedReal* gam0, SedReal* den, SedReal* ener,
@@ -448,6 +454,7 @@ int powIi(int* a, int* b) {
     return 0;
 } /* sed_1d__ */
 
+/// Evaluate the kinetic-energy integrand for the Sedov similarity solution.
 SedReal efun01(SedReal* v) {
     /* System generated locals */
     SedReal retVal, d1, d2;
@@ -475,6 +482,7 @@ SedReal efun01(SedReal* v) {
     return retVal;
 } /* efun01_ */
 
+/// Evaluate the thermal-energy integrand for the Sedov similarity solution.
 SedReal efun02(SedReal* v) {
     /* System generated locals */
     SedReal retVal, d1;
@@ -504,6 +512,7 @@ SedReal efun02(SedReal* v) {
     return retVal;
 } /* efun02_ */
 
+/// Return the radius residual used to recover the Sedov similarity variable.
 SedReal sedVFind(SedReal* v) {
     /* System generated locals */
     SedReal retVal;
@@ -522,6 +531,8 @@ SedReal sedVFind(SedReal* v) {
     return retVal;
 } /* sed_v_find__ */
 
+/// Return the residual between the requested radius and the radius at the fixed similarity
+/// variable.
 SedReal sedRFind(SedReal* rArg) {
     /* System generated locals */
     SedReal retVal;
@@ -540,6 +551,8 @@ SedReal sedRFind(SedReal* rArg) {
     return retVal;
 } /* sed_r_find__ */
 
+/// Evaluate the Sedov similarity radius, its derivative, and the dimensionless velocity,
+/// density, and pressure profiles.
 /* Subroutine */ int sedovFuncs(SedReal* v, SedReal* lFunArg, SedReal* dlamdv, SedReal* fFunArg,
     SedReal* gFunArg, SedReal* hFunArg) {
     /* System generated locals */
@@ -659,6 +672,8 @@ SedReal sedRFind(SedReal* rArg) {
     return 0;
 } /* sedov_funcs__ */
 
+/// Refine an extended midpoint quadrature estimate, tripling the number of panels after the
+/// initial estimate.
 /* Subroutine */ int midpnt(DFp func, SedReal* a, SedReal* b, SedReal* s, int* n) {
     /* System generated locals */
     int i1;
@@ -702,6 +717,8 @@ SedReal sedRFind(SedReal* rArg) {
     return 0;
 } /* midpnt_ */
 
+/// Refine midpoint quadrature after a variable substitution regularizes a power-law
+/// singularity at the lower endpoint.
 /* Subroutine */ int midpowl(DFp funk, SedReal* aa, SedReal* bb, SedReal* s, int* n) {
     /* System generated locals */
     int i1;
@@ -761,6 +778,8 @@ SedReal sedRFind(SedReal* rArg) {
     return 0;
 } /* midpowl_ */
 
+/// Refine midpoint quadrature with the reversed power-law substitution used by the singular
+/// Sedov integrals.
 /* Subroutine */ int midpowl2(DFp funk, SedReal* aa, SedReal* bb, SedReal* s, int* n) {
     /* System generated locals */
     int i1;
@@ -818,6 +837,8 @@ SedReal sedRFind(SedReal* rArg) {
     return 0;
 } /* midpowl2_ */
 
+/// Extrapolate successive midpoint quadrature estimates toward zero step size with Romberg
+/// integration.
 /* Subroutine */ int qromo(
     DFp func, SedReal* a, SedReal* b, SedReal* eps, SedReal* ss, SFp choose) {
     /* Builtin functions */
@@ -853,6 +874,8 @@ SedReal sedRFind(SedReal* rArg) {
     return 0;
 } /* qromo_ */
 
+/// Interpolate the supplied tabulated values with a polynomial and return the final
+/// correction as an error estimate.
 /* Subroutine */ int polint(SedReal* xa, SedReal* ya, int* n, SedReal* x, SedReal* y, SedReal* dy) {
     /* System generated locals */
     int i1, i2;
@@ -921,6 +944,7 @@ SedReal sedRFind(SedReal* rArg) {
     return 0;
 } /* polint_ */
 
+/// Refine a bracketed scalar root using interpolation with bisection safeguards.
 SedReal zeroin(SedReal* ax, SedReal* bx, DFp f, SedReal* tol) {
     /* System generated locals */
     SedReal retVal, d1;
@@ -1092,6 +1116,8 @@ using MutexType = hpx::spinlock;
 
 namespace sedov {
 
+/// Validate a Sedov query and interpolate a cached reference profile for its time,
+/// geometry, and gas gamma.
 void solution(double time, double r, double rmax, double& d, double& velocity, double& p, int ndim,
     double gasGamma) {
     if (!(time > 0.0) || !(rmax > 0.0) || !(gasGamma > 1.0) || ndim < 1 || ndim > 3 ||

@@ -19,6 +19,8 @@ namespace profile {
 class DeviceProfiler {
 public:
 #if COSMICTIGER_PROFILE && COSMICTIGER_DEVICE_PROFILE
+    /// Begin cooperative timing for a single-warp block when a result record is
+    /// supplied.
     __device__ explicit DeviceProfiler(DeviceBlockRecord* perBlockRecord, DevicePhase initial)
       : record_(perBlockRecord)
       , phase_(initial) {
@@ -35,6 +37,7 @@ public:
         }
     }
 
+    /// Charge elapsed cycles to the previous phase and switch to the requested phase.
     __device__ void next(DevicePhase phase) {
         if (record_ != nullptr) {
             assert(static_cast<unsigned>(phase) < kDevicePhaseCount);
@@ -43,6 +46,8 @@ public:
         }
     }
 
+    /// Flush the final phase counters to the block record and disable further
+    /// recording.
     __device__ void finish() {
         if (record_ != nullptr) {
             accumulate();
@@ -54,8 +59,11 @@ public:
         }
     }
 #else
+    /// Provide the no-op counterpart when device profiling is disabled.
     __device__ explicit DeviceProfiler(DeviceBlockRecord*, DevicePhase) {}
+    /// Provide the no-op counterpart when device profiling is disabled.
     __device__ void next(DevicePhase) {}
+    /// Provide the no-op counterpart when device profiling is disabled.
     __device__ void finish() {}
 #endif
 
@@ -64,6 +72,8 @@ public:
 
 private:
 #if COSMICTIGER_PROFILE && COSMICTIGER_DEVICE_PROFILE
+    /// Synchronize the warp and charge the leader's elapsed interval to the lane owning
+    /// the current phase.
     __device__ void accumulate() {
         // Wait for all work in the preceding phase, then broadcast one leader
         // interval. Only the lane owning that phase updates its local counters.

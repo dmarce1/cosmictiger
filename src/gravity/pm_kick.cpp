@@ -29,6 +29,8 @@ struct LongKick {
     Vector3<float> acceleration{};
 };
 
+/// Load stored long-range acceleration and half-step factors when a long-range kick is
+/// requested.
 LongKick readLongKick(
     ParticleInteger index, KickParameters const& parameters, FlopCounter<>& flops) {
     LongKick result;
@@ -50,6 +52,8 @@ LongKick readLongKick(
 
 }    // namespace
 
+/// Apply the mesh/near field to an active particle, update its rung, and accumulate kick
+/// diagnostics.
 KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& acceleration,
     float potential, KickParameters const& parameters, FlopCount* flopCount,
     FlopCounts* precisionCounts) {

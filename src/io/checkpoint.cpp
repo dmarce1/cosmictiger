@@ -53,6 +53,8 @@
 HPX_PLAIN_ACTION(writeCheckpoint, WriteCheckpointAction);
 HPX_PLAIN_ACTION(readCheckpoint, ReadCheckpointAction);
 
+/// Prevent a fresh run from reusing an output directory containing checkpoint state without
+/// an explicit restart.
 void validateCheckpointOutput() {
     auto const& options = getOptions();
     if (hpxRank() != 0 || !options.run.test.empty()) {
@@ -88,6 +90,8 @@ void validateCheckpointOutput() {
     }
 }
 
+/// Read optional requested checkpoint redshifts from checkpoint.txt and report the parsed
+/// list.
 Vector<double> readCheckpointList() {
     Vector<double> chkpts;
     FILE* fp = fopen("checkpoint.txt", "rt");
@@ -106,6 +110,7 @@ Vector<double> readCheckpointList() {
 
 namespace detail {
 
+/// Create a non-overwriting redshift alias for a completed indexed checkpoint.
 void checkpointRedshiftAlias(int iteration, double redshift) {
     char aliasName[128];
     snprintf(aliasName, sizeof(aliasName), "checkpoint.z.%.1f", redshift);
@@ -187,18 +192,23 @@ struct CheckpointFileInfo {
 
 using CheckpointFile = UniqueFile;
 
+/// Return the final output-directory path for an indexed checkpoint.
 fs::path checkpointDirectory(int iteration) {
     return outputPath("checkpoint." + std::to_string(iteration));
 }
 
+/// Return the incomplete staging-directory path used while an indexed checkpoint is being
+/// written.
 fs::path checkpointStagingDirectory(int iteration) {
     return outputPath("checkpoint." + std::to_string(iteration) + ".incomplete");
 }
 
+/// Construct the checkpoint payload filename for one rank inside a supplied directory.
 fs::path checkpointRankFile(fs::path const& directory, int rank) {
     return directory / ("checkpoint." + std::to_string(rank) + ".dat");
 }
 
+/// Synchronize directory metadata to storage and require successful descriptor closure.
 void syncDirectory(fs::path const& directory) {
     int const fd = open(directory.c_str(), O_RDONLY | O_DIRECTORY);
     if (fd < 0) {
@@ -211,6 +221,7 @@ void syncDirectory(fs::path const& directory) {
     }
 }
 
+/// Check, flush, synchronize, and close a checkpoint file before publication.
 void flushAndCloseCheckpointFile(CheckpointFile& file, fs::path const& path) {
     if (ferror(file.get()) != 0 || fflush(file.get()) != 0 || fsync(fileno(file.get())) != 0) {
         THROW_ERROR("Unable to flush checkpoint file %s\n", path.c_str());
@@ -221,6 +232,7 @@ void flushAndCloseCheckpointFile(CheckpointFile& file, fs::path const& path) {
     }
 }
 
+/// Compute a checkpoint file's byte count and FNV checksum, rejecting read failures.
 CheckpointFileInfo checkpointFileInfo(fs::path const& path) {
     std::ifstream file(path, std::ios::binary);
     if (!file) {
@@ -243,6 +255,8 @@ CheckpointFileInfo checkpointFileInfo(fs::path const& path) {
     return info;
 }
 
+/// Read the version from a recognized checkpoint header, returning zero for an unrecognized
+/// file.
 uint32_t checkpointFileVersion(fs::path const& path) {
     std::ifstream file(path, std::ios::binary);
     uint64_t magic = 0;
@@ -255,6 +269,8 @@ uint32_t checkpointFileVersion(fs::path const& path) {
     return version;
 }
 
+/// Write and synchronize the scenario identity, duration, and gravity mode for restart
+/// validation.
 void writeCheckpointScenario(fs::path const& directory) {
     auto const& options = getOptions();
     if (!options.run.test.empty()) {
@@ -270,6 +286,8 @@ void writeCheckpointScenario(fs::path const& directory) {
     flushAndCloseCheckpointFile(file, path);
 }
 
+/// Require scenario metadata to match the requested run and reject malformed or trailing
+/// content.
 void validateCheckpointScenario(fs::path const& directory) {
     if (!getOptions().run.test.empty()) {
         return;
@@ -299,6 +317,8 @@ void validateCheckpointScenario(fs::path const& directory) {
     }
 }
 
+/// Write and synchronize payload sizes/checksums and scenario metadata for a completed
+/// checkpoint set.
 void writeCheckpointManifest(fs::path const& directory, int iteration) {
     fs::path const path = directory / "checkpoint.meta";
     CheckpointFile file(fopen(path.c_str(), "wb"));
@@ -334,6 +354,8 @@ void writeCheckpointManifest(fs::path const& directory, int iteration) {
     flushAndCloseCheckpointFile(file, path);
 }
 
+/// Validate checkpoint presence, scenario compatibility, rank files, and available manifest
+/// integrity checks.
 void validateCheckpointDirectory(fs::path const& directory, int iteration) {
     if (!fs::is_directory(directory)) {
         THROW_ERROR("Checkpoint directory %s does not exist\n", directory.c_str());
@@ -462,6 +484,7 @@ struct LegacyDriver {
     TimeType itime;
 };
 
+/// Encode enabled persistent layouts and runtime modes into the checkpoint feature flags.
 uint32_t checkpointFlags(Options const& opts) {
     constexpr uint32_t kSph = 1U << 0;
     constexpr uint32_t kHierarchical = 1U << 6;
@@ -491,6 +514,8 @@ uint32_t checkpointFlags(Options const& opts) {
         (opts.starFormation.enabled ? kStarFormation : 0U);
 }
 
+/// Encode star-formation model parameters and stochastic seed for exact restart
+/// compatibility checks.
 std::array<uint64_t, 11> starFormationCheckpointParameters(Options const& opts) {
     auto bits = [](double value) {
         uint64_t result;
@@ -507,6 +532,7 @@ std::array<uint64_t, 11> starFormationCheckpointParameters(Options const& opts) 
         bits(opts.cosmology.hubble)};
 }
 
+/// Encode a supported kernel family and degree into the checkpoint selection field.
 uint32_t checkpointKernelCode(std::string const& family, int degree) {
     uint32_t familyCode = 0;
     if (family == "spline") {
@@ -524,6 +550,8 @@ uint32_t checkpointKernelCode(std::string const& family, int degree) {
     return (familyCode << 4) | static_cast<uint32_t>(degree);
 }
 
+/// Encode hydro formulation, storage, kernel choices, and spatial dimension into the
+/// reserved header field.
 uint32_t checkpointPhysicsCode(Options const& opts) {
     // Preserve the existing low-byte formulation and native header layout.
     // Historical default kernels encode zero in both new selection bytes.
@@ -550,6 +578,8 @@ bool legacyCheckpointCompatible(Options const& opts) {
         opts.gravity.kernelDegree == 8;
 }
 
+/// Build the checkpoint header from the current physics, units, particle counts, and
+/// integration schedule.
 CheckpointHeader checkpointHeader(Options const& opts) {
     CheckpointHeader header;
     header.magic = kCheckpointMagic;
@@ -572,6 +602,8 @@ CheckpointHeader checkpointHeader(Options const& opts) {
     return header;
 }
 
+/// Check supported header versions and required physical/layout values against the current
+/// options.
 bool checkpointCompatible(CheckpointHeader const& header, Options const& opts) {
     bool const supportedVersion = header.version == kCheckpointVersion ||
         (!opts.hydro.enabled && opts.compute.positionType == "fixed32" &&
@@ -606,11 +638,13 @@ std::array<double, 12> sphCheckpointParameters(Options const& opts) {
         opts.hydro.damping, opts.gravity.enabled ? 1.0 : 0.0};
 }
 
+/// Return viscosity bounds and model controls recorded for restart compatibility.
 std::array<double, 4> viscosityCheckpointParameters(Options const& opts) {
     return {opts.hydro.minimumBulkViscosityCoefficient, opts.hydro.maximumBulkViscosityCoefficient,
         opts.hydro.viscosityDecay, opts.hydro.balsaraSoundSpeedCoefficient};
 }
 
+/// Require a finite saved plane acceleration equal to the current scenario setting.
 bool zPlaneCheckpointCompatible(double acceleration, Options const& opts) {
     // Inspect the exponent bits because this translation unit permits fast-math.
     uint64_t bits;
@@ -619,6 +653,8 @@ bool zPlaneCheckpointCompatible(double acceleration, Options const& opts) {
         acceleration == opts.scenario.rayleighTaylor.zPlaneAcceleration;
 }
 
+/// Encode mesh force conventions, solver orders, timestep controls, and coarse-mesh
+/// selection.
 std::array<uint64_t, 11> pmmmCheckpointParameters(Options const& opts) {
     uint64_t timestepEtaBits;
     std::memcpy(&timestepEtaBits, &opts.gravity.timestepEta, sizeof(timestepEtaBits));
@@ -643,6 +679,7 @@ std::array<uint64_t, 11> pmmmCheckpointParameters(Options const& opts) {
             opts.gravity.meshSize, opts.gravity.pmmmCoarseMeshSize, opts.gravity.pmmmNearWidth))};
 }
 
+/// Read the version-dependent mesh parameter extension and reject unsupported versions.
 std::array<uint64_t, 11> readPmmmCheckpointParameters(FILE* fp) {
     std::array<uint64_t, 11> parameters{};
     FREAD(parameters.data(), sizeof(uint64_t), 7, fp);
@@ -658,6 +695,8 @@ std::array<uint64_t, 11> readPmmmCheckpointParameters(FILE* fp) {
     return parameters;
 }
 
+/// Normalize supported historical mesh metadata and compare it with current restart
+/// requirements.
 bool pmmmCheckpointCompatible(std::array<uint64_t, 11> parameters, Options const& opts) {
     auto const expected = pmmmCheckpointParameters(opts);
     if (parameters[0] == 1 || parameters[0] == 2) {
@@ -701,6 +740,7 @@ std::array<uint64_t, 5> checkpointAlgorithms(Options const& opts) {
         usesGlobalIntegration(opts.run) ? 2U : (usesHierarchicalIntegration(opts.run) ? 1U : 0U)};
 }
 
+/// Read and validate the runtime solver/integrator selection extension.
 std::array<uint64_t, 5> readCheckpointAlgorithms(FILE* fp) {
     std::array<uint64_t, 5> algorithms{};
     FREAD(algorithms.data(), sizeof(uint64_t), algorithms.size(), fp);
@@ -718,6 +758,7 @@ std::array<uint64_t, 5> readCheckpointAlgorithms(FILE* fp) {
 constexpr size_t kHistoricalDriverBytes = offsetof(DriverParameters, globalTimestep);
 static_assert(kHistoricalDriverBytes == offsetof(DriverParameters, itime) + sizeof(TimeType));
 
+/// Write the versioned driver state and enabled physics/integration metadata extensions.
 void writeDriverState(FILE* fp, DriverParameters const& params) {
     auto const header = checkpointHeader(getOptions());
     if (fwrite(&header, sizeof(header), 1, fp) != 1) {
@@ -806,6 +847,8 @@ void writeDriverState(FILE* fp, DriverParameters const& params) {
     }
 }
 
+/// Validate and restore current or supported legacy driver state and its enabled
+/// extensions.
 DriverParameters readDriverState(FILE* fp) {
     DriverParameters params{};
     CheckpointHeader header{};
@@ -1034,6 +1077,8 @@ DriverParameters readDriverState(FILE* fp) {
 
 }    // namespace detail
 
+/// Inspect rank-zero checkpoint metadata to recover the saved solver and integration
+/// selections.
 CheckpointSelection readCheckpointSelection(std::string const& outputDirectory, int iteration) {
     auto const path = detail::checkpointRankFile(
         detail::fs::path(outputDirectory) / ("checkpoint." + std::to_string(iteration)), 0);
@@ -1103,6 +1148,8 @@ CheckpointSelection readCheckpointSelection(std::string const& outputDirectory, 
     return result;
 }
 
+/// Exercise driver-state round trips and rejection of incompatible checkpoint modes and
+/// layouts.
 void checkpointStateTest() {
     constexpr double kScale = 0.5;
     constexpr double kClock = 0.125;
@@ -1593,6 +1640,8 @@ void checkpointStateTest() {
     std::cout << "Checkpoint state and mode validation passed\n" << std::flush;
 }
 
+/// Write and synchronize all rank payloads, then publish the complete checkpoint directory
+/// atomically.
 void writeCheckpoint(DriverParameters params) {
     auto const directory = detail::checkpointDirectory(params.iter);
     auto const stagingDirectory = detail::checkpointStagingDirectory(params.iter);
@@ -1648,6 +1697,8 @@ void writeCheckpoint(DriverParameters params) {
     }
 }
 
+/// Validate the checkpoint set and restore distributed driver, particle, domain, and
+/// optional analysis state.
 DriverParameters readCheckpoint() {
     DriverParameters params{};
     if (hpxRank() == 0) {

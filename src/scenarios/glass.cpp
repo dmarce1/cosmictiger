@@ -10,6 +10,7 @@
 
 namespace scenarios {
 
+/// Create random single-locality particles for a fixed-background glass relaxation.
 void initializeGlass(DriverParameters& state) {
     if (hpxSize() != 1) {
         THROW_ERROR("Glass generation requires one HPX locality\n");
@@ -32,6 +33,8 @@ void initializeGlass(DriverParameters& state) {
     state.adot = 0.0;
 }
 
+/// Validate the cubic particle count and write fixed-point glass positions in
+/// dimension-major order.
 void saveGlass() {
     int const side = getOptions().initial.latticeSide;
     if (uint64_t(particlesSize()) != uint64_t(side) * side * side) {

@@ -142,6 +142,7 @@ def emit(name, order, rows, targetType, sourceType):
     constant = name[0].upper() + name[1:]
     lines = [f'template <> inline constexpr int k{constant}Flops<{order}> = {weighted};',
              f'template <> inline constexpr int k{constant}ConventionalFlops<{order}> = {conventional};',
+             '/// Assign the equivalent coefficients in the destination basis without changing spatial scale.',
              'template <class Real>',
              f'CUDA_EXPORT void {name}({targetType}<Real, {order}>& target,',
              f'    {sourceType}<Real, {order}> const& source) {{', *code]

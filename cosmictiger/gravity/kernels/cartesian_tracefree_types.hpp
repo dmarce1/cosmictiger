@@ -33,7 +33,9 @@ namespace detail {
             };
             Real coefficients[4];
         };
+        /// Leave scalar coefficient initialization to the caller.
         CUDA_EXPORT CoefficientFields() = default;
+        /// Value-initialize the coefficient array as the active union member.
         CUDA_EXPORT explicit CoefficientFields(CoefficientArrayInit)
           : coefficients() {}
     };
@@ -55,7 +57,9 @@ namespace detail {
             };
             Real coefficients[9];
         };
+        /// Leave scalar coefficient initialization to the caller.
         CUDA_EXPORT CoefficientFields() = default;
+        /// Value-initialize the coefficient array as the active union member.
         CUDA_EXPORT explicit CoefficientFields(CoefficientArrayInit)
           : coefficients() {}
     };
@@ -84,7 +88,9 @@ namespace detail {
             };
             Real coefficients[16];
         };
+        /// Leave scalar coefficient initialization to the caller.
         CUDA_EXPORT CoefficientFields() = default;
+        /// Value-initialize the coefficient array as the active union member.
         CUDA_EXPORT explicit CoefficientFields(CoefficientArrayInit)
           : coefficients() {}
     };
@@ -122,7 +128,9 @@ namespace detail {
             };
             Real coefficients[25];
         };
+        /// Leave scalar coefficient initialization to the caller.
         CUDA_EXPORT CoefficientFields() = default;
+        /// Value-initialize the coefficient array as the active union member.
         CUDA_EXPORT explicit CoefficientFields(CoefficientArrayInit)
           : coefficients() {}
     };
@@ -171,7 +179,9 @@ namespace detail {
             };
             Real coefficients[36];
         };
+        /// Leave scalar coefficient initialization to the caller.
         CUDA_EXPORT CoefficientFields() = default;
+        /// Value-initialize the coefficient array as the active union member.
         CUDA_EXPORT explicit CoefficientFields(CoefficientArrayInit)
           : coefficients() {}
     };
@@ -233,7 +243,9 @@ namespace detail {
             };
             Real coefficients[49];
         };
+        /// Leave scalar coefficient initialization to the caller.
         CUDA_EXPORT CoefficientFields() = default;
+        /// Value-initialize the coefficient array as the active union member.
         CUDA_EXPORT explicit CoefficientFields(CoefficientArrayInit)
           : coefficients() {}
     };
@@ -310,7 +322,9 @@ namespace detail {
             };
             Real coefficients[64];
         };
+        /// Leave scalar coefficient initialization to the caller.
         CUDA_EXPORT CoefficientFields() = default;
+        /// Value-initialize the coefficient array as the active union member.
         CUDA_EXPORT explicit CoefficientFields(CoefficientArrayInit)
           : coefficients() {}
     };
@@ -404,7 +418,9 @@ namespace detail {
             };
             Real coefficients[81];
         };
+        /// Leave scalar coefficient initialization to the caller.
         CUDA_EXPORT CoefficientFields() = default;
+        /// Value-initialize the coefficient array as the active union member.
         CUDA_EXPORT explicit CoefficientFields(CoefficientArrayInit)
           : coefficients() {}
     };
@@ -416,14 +432,17 @@ namespace detail {
     struct CoefficientStorage : CoefficientFields<Real, degree> {};
     template <class Real, int degree>
     struct CoefficientStorage<Real, degree, false> : CoefficientFields<Real, degree> {
+        /// Initialize coefficient storage for a nontrivially copyable scalar or SIMD type.
         CUDA_EXPORT CoefficientStorage()
           : CoefficientFields<Real, degree>(CoefficientArrayInit()) {}
+        /// Copy each coefficient while preserving the active array member.
         CUDA_EXPORT CoefficientStorage(CoefficientStorage const& other)
           : CoefficientStorage() {
             for (int i = 0; i < (degree + 1) * (degree + 1); i++) {
                 this->coefficients[i] = other.coefficients[i];
             }
         }
+        /// Assign each coefficient without relying on a deleted union copy operation.
         CUDA_EXPORT CoefficientStorage& operator=(CoefficientStorage const& other) {
             for (int i = 0; i < (degree + 1) * (degree + 1); i++) {
                 this->coefficients[i] = other.coefficients[i];
@@ -435,41 +454,49 @@ namespace detail {
     struct Coefficients : CoefficientStorage<Real, degree> {
         static constexpr int kDegree_ = degree;
         static constexpr int kSize_ = (degree + 1) * (degree + 1);
+        /// Return the number of stored independent trace-free coefficients.
         CUDA_EXPORT constexpr int size() const {
             return kSize_;
         }
+        /// Map a stored Cartesian component (nz <= 1) to its compact coefficient slot.
         CUDA_EXPORT static constexpr int index(int nx, int ny, int nz) {
             int const rank = nx + ny + nz;
             return rank * rank + (nz == 0 ? nx : rank + 1 + nx);
         }
+        /// Fill every independent coefficient with the supplied value.
         CUDA_EXPORT Coefficients& operator=(Real const& value) {
             for (int i = 0; i < kSize_; i++) {
                 this->coefficients[i] = value;
             }
             return *this;
         }
+        /// Access a mutable compact coefficient, checking the index when CHECK_BOUNDS is enabled.
         CUDA_EXPORT Real& operator[](int i) {
 #ifdef CHECK_BOUNDS
             DO_BOUNDS_CHECK(i);
 #endif
             return this->coefficients[i];
         }
+        /// Read a compact coefficient, checking the index when CHECK_BOUNDS is enabled.
         CUDA_EXPORT Real const& operator[](int i) const {
 #ifdef CHECK_BOUNDS
             DO_BOUNDS_CHECK(i);
 #endif
             return this->coefficients[i];
         }
+        /// Access a stored Cartesian component; components with nz > 1 are not writable.
         CUDA_EXPORT Real& operator()(int nx, int ny, int nz) {
             ASSERT(nz <= 1);
             return (*this)[index(nx, ny, nz)];
         }
+        /// Read a Cartesian component, reconstructing higher z powers from the zero-trace relation.
         CUDA_EXPORT Real operator()(int nx, int ny, int nz) const {
             if (nz < 2) {
                 return (*this)[index(nx, ny, nz)];
             }
             return -(*this)(nx + 2, ny, nz - 2) - (*this)(nx, ny + 2, nz - 2);
         }
+        /// Archive the independent coefficients in compact storage order.
         template <class Archive>
         void serialize(Archive& arc, unsigned) {
             for (auto& coefficient : this->coefficients) {

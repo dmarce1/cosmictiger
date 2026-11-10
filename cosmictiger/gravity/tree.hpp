@@ -48,23 +48,29 @@ struct TreeNode {
     };
     CUDA_EXPORT
 
+    /// Return the number of particles in this node's half-open interval.
     CUDA_EXPORT
     inline ParticleInteger numberOfParticles() const {
         return particleRange.second - particleRange.first;
     }
+    /// Combine the node's particle interval with its owning process for source reads.
     inline ParticleGlobalRange globalParticleRange() const {
         ParticleGlobalRange r;
         r.proc = processRange.first;
         r.range = particleRange;
         return r;
     }
+    /// Test whether the node spans exactly one locality.
     inline bool isLocal() const {
         return processRange.second - processRange.first == 1;
     }
+    /// Test whether the node is wholly owned by the current locality.
     inline bool isLocalHere() const {
         return isLocal() && processRange.first == hpxRank();
     }
     HPX_SERIALIZATION_SPLIT_MEMBER();
+    /// Restore node metadata and allocate local transport storage for the received
+    /// positioned multipole.
     template <class A>
     void load(A&& arc, unsigned) {
         Vector3<Position> multipolePosition;
@@ -89,6 +95,8 @@ struct TreeNode {
         depth = depth0;
         leaf = leaf0;
     }
+    /// Archive the node and its pointed-to multipole contents rather than serializing
+    /// the pointer value.
     template <class A>
     void save(A&& arc, unsigned) const {
         MultipoleBuffer multipole;
@@ -125,6 +133,7 @@ struct TreeCreateReturn {
     TreeId id;
     float radius;
     Range<double> box;
+    /// Archive this record in the field order required by distributed transport.
     template <class A>
     void serialize(A&& a, unsigned) {
         a & multi;
@@ -142,11 +151,15 @@ struct TreeCreateParameters {
     int minLevel{};
     bool leafPushed;
     bool doLeafSizes;
+    /// Initialize leaf-processing and leaf-size diagnostics flags for tree
+    /// construction.
     TreeCreateParameters() {
         leafPushed = false;
         doLeafSizes = false;
     }
     TreeCreateParameters(int minRung, double theta);
+    /// Archive `parallelParticleThreshold`, `doLeafSizes`, `leafPushed`, `minRung`,
+    /// `theta`, `minLevel` in transport order.
     template <class A>
     void serialize(A&& arc, unsigned) {
         arc & parallelParticleThreshold;

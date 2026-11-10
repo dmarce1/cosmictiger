@@ -42,6 +42,7 @@ struct KernelTable {
     Real centralPotential = 0;
 };
 
+/// Check whether the requested spline, Wendland, or Ferrers degree is supported.
 constexpr bool isValid(KernelSpec spec) {
     switch (spec.family) {
     case Family::Spline:
@@ -58,6 +59,8 @@ namespace detail {
 
     inline constexpr long double kFourPi = 4 * std::numbers::pi_v<long double>;
 
+    /// Compute a binomial coefficient in long-double arithmetic for polynomial
+    /// construction.
     constexpr long double binomial(int n, int k) {
         long double result = 1;
         for (int i = 1; i <= k; ++i) {
@@ -66,6 +69,7 @@ namespace detail {
         return result;
     }
 
+    /// Approximate a positive square root with a fixed compile-time Newton iteration.
     constexpr long double squareRoot(long double value) {
         long double result = value > 1 ? value : 1;
         for (int i = 0; i < 64; ++i) {
@@ -84,6 +88,8 @@ namespace detail {
         coefficients[0] *= a;
     }
 
+    /// Integrate a Bernstein polynomial weighted by a radius power over the specified
+    /// interval.
     constexpr long double moment(
         long double const* coefficients, int degree, int power, long double a, long double b) {
         long double weighted[kMaximumDegree + 5]{};
@@ -100,6 +106,8 @@ namespace detail {
         return result * (b - a) / (degree + power + 1);
     }
 
+    /// Replace the left Bernstein polynomial with its product with the right
+    /// polynomial.
     constexpr void multiplyPolynomials(
         long double* left, int leftDegree, long double const* right, int rightDegree) {
         long double product[kMaximumDegree + 1]{};
@@ -114,6 +122,7 @@ namespace detail {
         }
     }
 
+    /// Clamp each scalar/SIMD value to the supplied interval.
     template <typename Real, class TableReal>
     CUDA_EXPORT inline Real clamp(Real value, TableReal lower, TableReal upper) {
         Real const lowerBound = math::broadcast<Real>(lower);
@@ -122,6 +131,8 @@ namespace detail {
             value < lowerBound, lowerBound, math::select(value > upperBound, upperBound, value));
     }
 
+    /// Evaluate a Bernstein polynomial by repeated linear interpolation of its control
+    /// coefficients.
     template <typename Real, class TableReal>
     CUDA_EXPORT inline Real evaluate(
         TableReal const* coefficients, int degree, Real leftWeight, Real rightWeight) {
@@ -137,6 +148,8 @@ namespace detail {
         return work[0];
     }
 
+    /// Evaluate a Bernstein polynomial by repeated linear interpolation of its control
+    /// coefficients.
     template <typename Real, class TableReal>
     CUDA_EXPORT inline Real evaluate(TableReal const* coefficients, int degree, Real t) {
         return evaluate(coefficients, degree, math::broadcast<Real>(1) - t, t);
@@ -153,6 +166,7 @@ namespace detail {
             (radius - math::broadcast<Real>(a)) / width);
     }
 
+    /// Clamp a radius to a kernel piece and map it to that piece's unit interval.
     template <typename Real, class TableReal>
     CUDA_EXPORT inline Real localCoordinate(
         KernelTable<TableReal> const& table, int piece, Real q) {
@@ -161,6 +175,7 @@ namespace detail {
         return (clamp(q, a, b) - math::broadcast<Real>(a)) / math::broadcast<Real>(b - a);
     }
 
+    /// Select scalar/SIMD radii belonging to the specified half-open kernel piece.
     template <typename Real, class TableReal>
     CUDA_EXPORT inline auto pieceMask(KernelTable<TableReal> const& table, int piece, Real q) {
         auto const upper = q < math::broadcast<Real>(table.changePoints[piece + 1]);
@@ -316,6 +331,8 @@ constexpr KernelTable<Real> makeKernelTable(KernelSpec spec) {
     return result;
 }
 
+/// Evaluate the radial density polynomial for nonnegative q, returning zero beyond compact
+/// support.
 template <typename Real, class TableReal>
 CUDA_EXPORT inline Real value(KernelTable<TableReal> const& table, Real q) {
     Real result = math::broadcast<Real>(0);
@@ -335,6 +352,8 @@ CUDA_EXPORT inline Real value(KernelTable<TableReal> const& table, Real q) {
     return result;
 }
 
+/// Evaluate the radial density derivative for nonnegative q, returning zero beyond compact
+/// support.
 template <typename Real, class TableReal>
 CUDA_EXPORT inline Real derivative(KernelTable<TableReal> const& table, Real q) {
     Real result = math::broadcast<Real>(0);
@@ -356,6 +375,8 @@ CUDA_EXPORT inline Real derivative(KernelTable<TableReal> const& table, Real q) 
 
 namespace detail {
 
+    /// Evaluate the softened radial force factor on one piece, using a finite central
+    /// polynomial near the origin.
     template <typename Real, class TableReal>
     CUDA_EXPORT inline Real forceOnPiece(KernelTable<TableReal> const& table, int piece, Real q) {
         Real const t = localCoordinate(table, piece, q);
@@ -368,6 +389,8 @@ namespace detail {
             inverseRadius * inverseRadius;
     }
 
+    /// Evaluate the positive potential magnitude on one piece, including enclosed mass
+    /// and outer-shell contributions.
     template <typename Real, class TableReal>
     CUDA_EXPORT inline Real potentialOnPiece(
         KernelTable<TableReal> const& table, int piece, Real q) {

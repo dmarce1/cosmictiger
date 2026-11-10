@@ -34,6 +34,8 @@ Vector<ParticleMeshCell> particleMeshSortByKey(Pair<ParticleInteger> range);
 
 namespace detail {
 
+/// Map unsigned fixed-position bits to a half-open mesh cell using an exact wide multiply
+/// before truncation.
 template <class Integer>
 constexpr uint64_t particleMeshCoordinate(Integer rawPosition, uint32_t meshSize) {
     static_assert(std::is_unsigned_v<Integer>);
@@ -45,6 +47,7 @@ constexpr uint64_t particleMeshCoordinate(Integer rawPosition, uint32_t meshSize
         std::numeric_limits<Integer>::digits);
 }
 
+/// Compute the cubic cell count after checking positivity and 64-bit key overflow.
 inline uint64_t particleMeshCellCount(int meshSize) {
     if (meshSize <= 0) {
         throw std::invalid_argument("Particle mesh size must be positive");

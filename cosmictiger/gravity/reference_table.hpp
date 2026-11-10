@@ -31,6 +31,8 @@ static_assert(gravityReferenceTableIndex(kGravityReferenceTableMaximumIndex + 1,
 // positive halo is evaluated analytically beyond 1/2; it is never wrapped.
 std::vector<Vector3<double>> const& gravityReferenceCorrectionTable();
 
+/// Sort three coordinate magnitudes in descending order while retaining their original-axis
+/// permutation.
 template <class Value>
 CUDA_EXPORT inline void gravityReferenceTableSort(Value* coordinates, int* permutation) {
     for (int pass = 0; pass < 3; ++pass) {
@@ -47,6 +49,7 @@ CUDA_EXPORT inline void gravityReferenceTableSort(Value* coordinates, int* permu
     }
 }
 
+/// Enforce equal force components on symmetry planes by averaging the corresponding values.
 CUDA_EXPORT inline void gravityReferenceTableEqualComponents(
     Vector3<double> const& coordinates, Vector3<double>& force) {
     if (coordinates[0] == coordinates[2]) {
@@ -61,6 +64,7 @@ CUDA_EXPORT inline void gravityReferenceTableEqualComponents(
     }
 }
 
+/// Fetch a symmetry-reduced correction-table node and restore axis order and signs.
 CUDA_EXPORT inline Vector3<double> gravityReferenceTableNode(
     int i, int j, int k, Vector3<double> const* values) {
     int coordinates[3] = {i < 0 ? -i : i, j < 0 ? -j : j, k < 0 ? -k : k};

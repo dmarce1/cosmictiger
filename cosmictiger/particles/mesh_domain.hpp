@@ -16,6 +16,7 @@
 
 namespace mesh_domain {
 
+/// Convert a validated integer mesh plane to its normalized box coordinate.
 inline double boundaryCoordinate(uint32_t plane, uint32_t meshSize) {
     if (meshSize == 0 || plane > meshSize) {
         throw std::invalid_argument("Invalid mesh-domain boundary");
@@ -33,6 +34,7 @@ inline uint32_t boundaryIndex(double boundary, uint32_t meshSize) {
     return static_cast<uint32_t>(std::llround(boundary * meshSize));
 }
 
+/// Compare raw fixed-position bits with an exact mesh plane through integer cell ownership.
 template <class Integer>
 bool belowBoundary(Integer rawPosition, uint32_t plane, uint32_t meshSize) {
     if (meshSize == 0 || plane > meshSize) {
@@ -41,6 +43,7 @@ bool belowBoundary(Integer rawPosition, uint32_t plane, uint32_t meshSize) {
     return ::detail::particleMeshCoordinate(rawPosition, meshSize) < plane;
 }
 
+/// Test whether a fixed-point position belongs to a half-open mesh-plane interval.
 template <class Integer>
 bool contains(Integer rawPosition, uint32_t beginPlane, uint32_t endPlane, uint32_t meshSize) {
     if (meshSize == 0 || beginPlane > endPlane || endPlane > meshSize) {
@@ -50,6 +53,8 @@ bool contains(Integer rawPosition, uint32_t beginPlane, uint32_t endPlane, uint3
     return cell >= beginPlane && cell < endPlane;
 }
 
+/// Compare the lower-side particle count with the locality-weighted target using exact wide
+/// integer products.
 inline int compareTarget(size_t below, size_t total, uint32_t leftRanks, uint32_t rankCount) {
     if (rankCount == 0 || leftRanks > rankCount || below > total) {
         throw std::invalid_argument("Invalid mesh-domain particle counts");
@@ -61,6 +66,7 @@ inline int compareTarget(size_t below, size_t total, uint32_t leftRanks, uint32_
 
 namespace detail {
 
+    /// Return the unsigned difference of two wide integers without underflow.
     inline unsigned __int128 absoluteDifference(unsigned __int128 a, unsigned __int128 b) {
         return a < b ? b - a : a - b;
     }

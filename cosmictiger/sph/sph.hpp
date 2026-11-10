@@ -35,6 +35,7 @@ inline Fixed32Range emptySphBounds() {
 struct SphTreeNeighborReturn {
     Fixed32Range innerBox = emptySphBounds();
     Fixed32Range outerBox = emptySphBounds();
+    /// Merge neighbor-search inner and outer bounding boxes by coordinatewise union.
     CUDA_EXPORT
     SphTreeNeighborReturn& operator+=(SphTreeNeighborReturn const& other) {
         for (int dim = 0; dim < kDimensions; dim++) {
@@ -45,6 +46,7 @@ struct SphTreeNeighborReturn {
         }
         return *this;
     }
+    /// Archive `innerBox`, `outerBox` in transport order.
     template <typename A>
     void serialize(A&& arc, unsigned) {
         arc & innerBox;
@@ -81,6 +83,9 @@ struct SphTreeNeighborParameters {
     SphInteractionDirection interactionDirection = SphInteractionDirection::EitherSupport;
     SphParticleSelection innerParticleSelection = SphParticleSelection::All;
     SphParticleSelection outerParticleSelection = SphParticleSelection::Active;
+    /// Archive `interactionDirection`, `innerParticleSelection`,
+    /// `outerParticleSelection`, `operation`, `smoothingLengthMultiplier`,
+    /// `minimumRung` in transport order.
     template <typename T>
     void serialize(T&& arc, unsigned) {
         arc & interactionDirection;
@@ -111,6 +116,9 @@ struct SphRunReturn {
     float maximumSupportResidual = 0.0f;    // Largest |sum w - target|/target of a free support.
     int heldSupports = 0;                   // Supports at an active bound, with zeta = 0.
     int illConditionedSupports = 0;         // Free supports with a small Omega.
+    /// Archive `minimumTimestep`, `needsAnotherPass`, `minimumGradHOmega`,
+    /// `maximumSupportResidual`, `heldSupports`, `illConditionedSupports` and the
+    /// remaining fields in transport order.
     template <typename Archive>
     void serialize(Archive&& arc, unsigned) {
         arc & minimumTimestep;
@@ -130,6 +138,8 @@ struct SphRunReturn {
         arc & maximumRung;
         arc & maximumSignalSpeed;
     }
+    /// Merge SPH work and convergence results, retaining restrictive timestep limits
+    /// and global diagnostic extrema.
     SphRunReturn& operator+=(SphRunReturn const& other) {
         minimumTimestep = std::min(minimumTimestep, other.minimumTimestep);
         floatingPointOperations += other.floatingPointOperations;
@@ -197,6 +207,7 @@ struct SphRunParameters {
     // disables evolution at midpoints, initialization, and diagnostic refreshes.
     double viscosityTimestep = 0.0;
     float velocityDampingRate;    // Velocity damping used while relaxing the gas sphere.
+    /// Initialize SPH pass defaults from the current runtime options.
     SphRunParameters() {
         auto const opts = getOptions();
         minimumProposedRung = opts.run.minRung;
@@ -213,9 +224,14 @@ struct SphRunParameters {
         viscosityDecay = opts.hydro.viscosityDecay;
         balsaraSoundSpeedCoefficient = opts.hydro.balsaraSoundSpeedCoefficient;
     }
+    /// Test whether a rung lies in this pass's inclusive active-rung interval.
     CUDA_EXPORT bool isActiveRung(int rung) const {
         return rung >= minimumRung && rung <= maximumRung;
     }
+    /// Archive `vonNeumannRichtmyerCoefficient`, `viscosityEpsilon`,
+    /// `minimumBulkViscosityCoefficient`, `maximumBulkViscosityCoefficient`,
+    /// `viscosityDecay`, `balsaraSoundSpeedCoefficient` and the remaining fields in
+    /// transport order.
     template <typename Archive>
     void serialize(Archive&& arc, unsigned) {
         arc & vonNeumannRichtmyerCoefficient;
@@ -250,6 +266,8 @@ struct SphRunParameters {
         arc & zPlaneAcceleration;
         arc & conductionCoefficient;
     }
+    /// Return the configured acceleration toward z=0.5, with zero acceleration exactly
+    /// on the midplane.
     CUDA_EXPORT
     float midplaneAccelerationZ(Position const z) const {
         Position const middle(0.5);

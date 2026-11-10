@@ -681,7 +681,8 @@ Owned particle storage stays in `particles/`; PMMM owns its
 separate ghost arena in `gravity/fmm/`.
 
 See [the source organization guide](docs/source_layout.md) for file responsibilities,
-dependency boundaries, and generated-code placement.
+dependency boundaries, and generated-code placement. The [source and header inventory](docs/source_inventory.md)
+lists each file with a short description.
 
 ## Build
 

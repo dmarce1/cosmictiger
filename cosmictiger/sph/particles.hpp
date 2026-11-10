@@ -68,14 +68,17 @@ SPH_PARTICLES_EXTERN Float16Storage* sphParticlesBulkViscosityCoefficients;
 // This storage persists across SPH passes, migration, and checkpoints.
 SPH_PARTICLES_EXTERN SphParticleFlags* sphParticlesFlags;
 
+/// Read the gas particle's proposed timestep rung from packed flags.
 inline int sphParticlesProposedRung(ParticleInteger gas) {
     return sphParticlesFlags[gas].proposedRung();
 }
 
+/// Validate and replace the gas particle's packed timestep proposal.
 inline void sphParticlesSetProposedRung(ParticleInteger gas, int rung) {
     sphParticlesFlags[gas].setProposedRung(rung);
 }
 
+/// Return the hydrodynamic rung proposal currently stored for this gas particle.
 inline int sphParticlesHydroRung(ParticleInteger gas) {
     return sphParticlesProposedRung(gas);
 }
@@ -106,57 +109,72 @@ void sphParticlesLoad(FILE* fp);
 void sphParticlesSave(FILE* fp);
 void sphCheckpointTest();
 
+/// Return the configured uniform gas-particle mass after checking the gas index.
 inline float sphParticlesMass(ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
     return float(getOptions().initial.gasMass);
 }
 
+/// Read the gas particle's smoothing-solve convergence flag.
 inline bool sphParticlesConverged(ParticleInteger index) {
     return sphParticlesFlags[index].converged();
 }
 
+/// Set the gas particle's smoothing-solve convergence flag.
 inline void sphParticlesSetConverged(ParticleInteger index, bool value) {
     sphParticlesFlags[index].setConverged(value);
 }
 
+/// Read whether neighbor activity has marked this gas particle semiactive.
 inline bool sphParticlesSemiactive(ParticleInteger index) {
     return sphParticlesFlags[index].semiactive();
 }
 
+/// Update the gas particle's neighbor-induced activity flag.
 inline void sphParticlesSetSemiactive(ParticleInteger index, bool value) {
     sphParticlesFlags[index].setSemiactive(value);
 }
 
+/// Access the mapping from a gas-array index to the main particle arrays.
 inline ParticleInteger& sphParticlesParticleIndex(ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
     return sphParticlesParticleIndices[index];
 }
 
+/// Access an active position component through the gas-to-particle mapping.
 inline Position& sphParticlesPosition(int dim, int index) {
     return particlesPos(dim, sphParticlesParticleIndex(index));
 }
 
+/// Access an active stored velocity component through the gas-to-particle mapping.
 inline float& sphParticlesVelocity(int dim, int index) {
     return particlesVel(dim, sphParticlesParticleIndex(index));
 }
 
+/// Read a mapped particle position component, using the inactive-dimension fallback where
+/// applicable.
 inline Position sphParticlesPositionValue(int dim, int index) {
     return particlesPositionValue(dim, sphParticlesParticleIndex(index));
 }
+/// Read a mapped particle velocity component, returning zero for inactive dimensions.
 inline float sphParticlesVelocityValue(int dim, int index) {
     return particlesVelocityValue(dim, sphParticlesParticleIndex(index));
 }
 
+/// Access the main particle timestep rung associated with this gas index.
 inline char& sphParticlesRung(int index) {
     return particlesRung(sphParticlesParticleIndex(index));
 }
 
+/// Access initialized gas entropy storage; thermodynamic preparation must have completed.
 inline float& sphParticlesEntropy(ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
     ALWAYS_ASSERT(sphParticlesEntropyInitialized);
     return sphParticlesEntropies[index];
 }
 
+/// Return stored specific energy, converting from entropy after thermodynamic
+/// initialization.
 inline float sphParticlesInternalEnergy(ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
     if (!sphParticlesEntropyInitialized) {
@@ -175,15 +193,19 @@ inline void sphParticlesSetInternalEnergy(ParticleInteger index, float energy) {
         energy;
 }
 
+/// Access the gas particle's smoothing length.
 inline float& sphParticlesSmoothingLength(ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
     return sphParticlesSmoothingLengths[index];
 }
 
+/// Access the stored gas density.
 inline float& sphParticlesDensity(ParticleInteger index) {
     return sphParticlesDensities[index];
 }
 
+/// Compute stored gas pressure from density, internal energy, and the configured adiabatic
+/// index.
 inline float sphParticlesPressure(ParticleInteger index) {
     // Options require hydro.heatCapacityRatio=5/3 whenever chemistry or star formation is enabled.
     float const ratio = getOptions().hydro.heatCapacityRatio - 1.0f;

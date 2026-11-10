@@ -61,9 +61,11 @@ def emitDegree(degree):
     body = [f"template <> class EwaldGreen<{degree}> {{", "public:",
             f"static constexpr int kDegree_ = {degree};", f"static constexpr int kCount_ = {count};",
             f"static constexpr int kLatticeRadius_ = {RADIUS};",
+            "/// Assign regular solid harmonics using the supplied coordinates and squared radius.",
             "template <typename Real>",
             "CUDA_EXPORT static void regular(Real* output, Real x, Real y, Real z, Real radiusSquared) {"]
-    body += polynomial + ["}", "template <typename Real, typename Output>",
+    body += polynomial + ["}", "/// Assign periodic Ewald correction coefficients and trace using compensated lattice sums.",
+            "template <typename Real, typename Output>",
             "CUDA_EXPORT static void evaluateWorking(Output& output, Real& greenTrace, Real x, Real y, Real z) {",
             f"Real harmonics[{count}];", f"Real compensation[{count}];", f"Real imagePair[{count}];",
             "Real const radiusSquared = math::fma(x, x, math::fma(y, y, z * z));",
@@ -144,7 +146,8 @@ def emitDegree(degree):
             operand = f"waveRadial{n}" if f == 1 else f"{scalar(f)} * waveRadial{n}"
             body += [f"detail::ewaldAccumulate(output[{slot}], compensation[{slot}], {operand} * harmonics[{slot}]);"]
             wave_cost += 1 + (f != 1) + 4
-    body += ["}", "}", "}", "}", "template <typename Real, typename Output>",
+    body += ["}", "}", "}", "}", "/// Evaluate the periodic correction with promoted working precision, then convert the result.",
+             "template <typename Real, typename Output>",
              "CUDA_EXPORT static void evaluate(Output& output, Real& greenTrace, Real x, Real y, Real z) {",
              "using Working = typename detail::EwaldWorkingType<Real>::Type;",
              f"Working temporary[{count}];", "Working trace;",
@@ -181,17 +184,20 @@ def generate(minLocalDegree=2,maxLocalDegree=8):
               "template <> class EwaldWorkingType<float> { public: using Type = double; };",
               "#ifndef __CUDACC__",
               "template <int lanes> class EwaldWorkingType<SimdVector<float, lanes>> { public: using Type = SimdVector<double, lanes>; };",
-              "#endif", "template <typename Destination, typename Source>",
+              "#endif", "/// Convert an Ewald working value between scalar or corresponding SIMD precisions.",
+              "template <typename Destination, typename Source>",
               "CUDA_EXPORT inline Destination ewaldConvert(Source const& value) {",
               "if constexpr (std::is_same_v<Destination, Source>) { return value; }",
               "else if constexpr (std::is_arithmetic_v<Destination>) { return static_cast<Destination>(value); }",
               "else { return Destination([&](auto lane) { return static_cast<typename Destination::value_type>(value[lane]); }); }", "}"]
     for name in ["Exp","Erfc","Cos","Sin"]:
         function = name.lower()
-        lines += ["template <typename Real>", f"CUDA_EXPORT inline Real ewald{name}(Real const& value) {{",
+        lines += [f"/// Evaluate {function} for a scalar or independently in each SIMD lane.",
+                  "template <typename Real>", f"CUDA_EXPORT inline Real ewald{name}(Real const& value) {{",
                   f"if constexpr (std::is_arithmetic_v<Real>) {{ return std::{function}(value); }}",
                   f"else {{ return Real([&](auto lane) {{ return std::{function}(value[lane]); }}); }}", "}"]
-    lines += ["template <typename Real>", "CUDA_EXPORT inline void ewaldAccumulate(Real& sum, Real& correction, Real value) {",
+    lines += ["/// Add a lattice contribution with Kahan compensation, updating sum and correction.",
+              "template <typename Real>", "CUDA_EXPORT inline void ewaldAccumulate(Real& sum, Real& correction, Real value) {",
               "Real const adjusted = value - correction;", "Real const next = sum + adjusted;", "correction = (next - sum) - adjusted;", "sum = next;", "}",
               "}", "template <int degree> class EwaldGreen;", "}"]
     outputs = {'spherical/ewald_common.hpp': '\n'.join(lines) + '\n'}
@@ -211,6 +217,7 @@ def generate(minLocalDegree=2,maxLocalDegree=8):
            '', 'namespace cosmictiger::gravity::spherical {',
            "template <int degree> class EwaldL2P {", "public:", "static constexpr int kFlops_ = detail::L2P<degree>::kFlops_ + 8;",
               "static constexpr int kConventionalFlops_ = detail::L2P<degree>::kConventionalFlops_ + 14;",
+              "/// Accumulate the local field including the isotropic trace term of the periodic correction.",
               "template <typename Real, typename Field, typename Source>",
               "CUDA_EXPORT static void add(Field& field, Source const& source, Real sourceTrace, Real x, Real y, Real z) {",
               "detail::L2P<degree>::template add<Real>(field, source, x, y, z);",

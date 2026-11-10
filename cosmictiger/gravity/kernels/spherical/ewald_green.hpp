@@ -20,6 +20,7 @@ public:
     static constexpr int kDegree_ = 2;
     static constexpr int kCount_ = 9;
     static constexpr int kLatticeRadius_ = 6;
+    /// Assign regular solid harmonics using the supplied coordinates and squared radius.
     template <typename Real>
     CUDA_EXPORT static void regular(Real* output, Real x, Real y, Real z, Real radiusSquared) {
         using namespace math;
@@ -35,6 +36,7 @@ public:
         output[8] = broadcast<Real>(0.25) * fma(x, output[3], -y * output[1]);
         output[4] = broadcast<Real>(0.25) * fma(y, output[3], x * output[1]);
     }
+    /// Assign periodic Ewald correction coefficients and trace using compensated lattice sums.
     template <typename Real, typename Output>
     CUDA_EXPORT static void evaluateWorking(
         Output& output, Real& greenTrace, Real x, Real y, Real z) {
@@ -456,6 +458,7 @@ public:
             }
         }
     }
+    /// Evaluate the periodic correction with promoted working precision, then convert the result.
     template <typename Real, typename Output>
     CUDA_EXPORT static void evaluate(Output& output, Real& greenTrace, Real x, Real y, Real z) {
         using namespace math;
@@ -482,6 +485,7 @@ public:
     static constexpr int kDegree_ = 3;
     static constexpr int kCount_ = 16;
     static constexpr int kLatticeRadius_ = 6;
+    /// Assign regular solid harmonics using the supplied coordinates and squared radius.
     template <typename Real>
     CUDA_EXPORT static void regular(Real* output, Real x, Real y, Real z, Real radiusSquared) {
         using namespace math;
@@ -509,6 +513,7 @@ public:
         output[15] = broadcast<Real>(0.16666666666666666) * fma(x, output[8], -y * output[4]);
         output[9] = broadcast<Real>(0.16666666666666666) * fma(y, output[8], x * output[4]);
     }
+    /// Assign periodic Ewald correction coefficients and trace using compensated lattice sums.
     template <typename Real, typename Output>
     CUDA_EXPORT static void evaluateWorking(
         Output& output, Real& greenTrace, Real x, Real y, Real z) {
@@ -1106,6 +1111,7 @@ public:
             }
         }
     }
+    /// Evaluate the periodic correction with promoted working precision, then convert the result.
     template <typename Real, typename Output>
     CUDA_EXPORT static void evaluate(Output& output, Real& greenTrace, Real x, Real y, Real z) {
         using namespace math;
@@ -1132,6 +1138,7 @@ public:
     static constexpr int kDegree_ = 4;
     static constexpr int kCount_ = 25;
     static constexpr int kLatticeRadius_ = 6;
+    /// Assign regular solid harmonics using the supplied coordinates and squared radius.
     template <typename Real>
     CUDA_EXPORT static void regular(Real* output, Real x, Real y, Real z, Real radiusSquared) {
         using namespace math;
@@ -1176,6 +1183,7 @@ public:
         output[24] = broadcast<Real>(0.125) * fma(x, output[15], -y * output[9]);
         output[16] = broadcast<Real>(0.125) * fma(y, output[15], x * output[9]);
     }
+    /// Assign periodic Ewald correction coefficients and trace using compensated lattice sums.
     template <typename Real, typename Output>
     CUDA_EXPORT static void evaluateWorking(
         Output& output, Real& greenTrace, Real x, Real y, Real z) {
@@ -1975,6 +1983,7 @@ public:
             }
         }
     }
+    /// Evaluate the periodic correction with promoted working precision, then convert the result.
     template <typename Real, typename Output>
     CUDA_EXPORT static void evaluate(Output& output, Real& greenTrace, Real x, Real y, Real z) {
         using namespace math;
@@ -2001,6 +2010,7 @@ public:
     static constexpr int kDegree_ = 5;
     static constexpr int kCount_ = 36;
     static constexpr int kLatticeRadius_ = 6;
+    /// Assign regular solid harmonics using the supplied coordinates and squared radius.
     template <typename Real>
     CUDA_EXPORT static void regular(Real* output, Real x, Real y, Real z, Real radiusSquared) {
         using namespace math;
@@ -2067,6 +2077,7 @@ public:
         output[35] = broadcast<Real>(0.10000000000000001) * fma(x, output[24], -y * output[16]);
         output[25] = broadcast<Real>(0.10000000000000001) * fma(y, output[24], x * output[16]);
     }
+    /// Assign periodic Ewald correction coefficients and trace using compensated lattice sums.
     template <typename Real, typename Output>
     CUDA_EXPORT static void evaluateWorking(
         Output& output, Real& greenTrace, Real x, Real y, Real z) {
@@ -3093,6 +3104,7 @@ public:
             }
         }
     }
+    /// Evaluate the periodic correction with promoted working precision, then convert the result.
     template <typename Real, typename Output>
     CUDA_EXPORT static void evaluate(Output& output, Real& greenTrace, Real x, Real y, Real z) {
         using namespace math;
@@ -3119,6 +3131,7 @@ public:
     static constexpr int kDegree_ = 6;
     static constexpr int kCount_ = 49;
     static constexpr int kLatticeRadius_ = 6;
+    /// Assign regular solid harmonics using the supplied coordinates and squared radius.
     template <typename Real>
     CUDA_EXPORT static void regular(Real* output, Real x, Real y, Real z, Real radiusSquared) {
         using namespace math;
@@ -3212,6 +3225,7 @@ public:
         output[48] = broadcast<Real>(0.083333333333333329) * fma(x, output[35], -y * output[25]);
         output[36] = broadcast<Real>(0.083333333333333329) * fma(y, output[35], x * output[25]);
     }
+    /// Assign periodic Ewald correction coefficients and trace using compensated lattice sums.
     template <typename Real, typename Output>
     CUDA_EXPORT static void evaluateWorking(
         Output& output, Real& greenTrace, Real x, Real y, Real z) {
@@ -4489,6 +4503,7 @@ public:
             }
         }
     }
+    /// Evaluate the periodic correction with promoted working precision, then convert the result.
     template <typename Real, typename Output>
     CUDA_EXPORT static void evaluate(Output& output, Real& greenTrace, Real x, Real y, Real z) {
         using namespace math;
@@ -4515,6 +4530,7 @@ public:
     static constexpr int kDegree_ = 7;
     static constexpr int kCount_ = 64;
     static constexpr int kLatticeRadius_ = 6;
+    /// Assign regular solid harmonics using the supplied coordinates and squared radius.
     template <typename Real>
     CUDA_EXPORT static void regular(Real* output, Real x, Real y, Real z, Real radiusSquared) {
         using namespace math;
@@ -4640,6 +4656,7 @@ public:
         output[63] = broadcast<Real>(0.071428571428571425) * fma(x, output[48], -y * output[36]);
         output[49] = broadcast<Real>(0.071428571428571425) * fma(y, output[48], x * output[36]);
     }
+    /// Assign periodic Ewald correction coefficients and trace using compensated lattice sums.
     template <typename Real, typename Output>
     CUDA_EXPORT static void evaluateWorking(
         Output& output, Real& greenTrace, Real x, Real y, Real z) {
@@ -6193,6 +6210,7 @@ public:
             }
         }
     }
+    /// Evaluate the periodic correction with promoted working precision, then convert the result.
     template <typename Real, typename Output>
     CUDA_EXPORT static void evaluate(Output& output, Real& greenTrace, Real x, Real y, Real z) {
         using namespace math;
@@ -6219,6 +6237,7 @@ public:
     static constexpr int kDegree_ = 8;
     static constexpr int kCount_ = 81;
     static constexpr int kLatticeRadius_ = 6;
+    /// Assign regular solid harmonics using the supplied coordinates and squared radius.
     template <typename Real>
     CUDA_EXPORT static void regular(Real* output, Real x, Real y, Real z, Real radiusSquared) {
         using namespace math;
@@ -6381,6 +6400,7 @@ public:
         output[80] = broadcast<Real>(0.0625) * fma(x, output[63], -y * output[49]);
         output[64] = broadcast<Real>(0.0625) * fma(y, output[63], x * output[49]);
     }
+    /// Assign periodic Ewald correction coefficients and trace using compensated lattice sums.
     template <typename Real, typename Output>
     CUDA_EXPORT static void evaluateWorking(
         Output& output, Real& greenTrace, Real x, Real y, Real z) {
@@ -8235,6 +8255,7 @@ public:
             }
         }
     }
+    /// Evaluate the periodic correction with promoted working precision, then convert the result.
     template <typename Real, typename Output>
     CUDA_EXPORT static void evaluate(Output& output, Real& greenTrace, Real x, Real y, Real z) {
         using namespace math;

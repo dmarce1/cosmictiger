@@ -17,6 +17,8 @@ static_assert(std::numeric_limits<std::float16_t>::is_iec559 &&
     std::numeric_limits<std::float16_t>::min_exponent == -13 &&
     std::numeric_limits<std::float16_t>::max_exponent == 16);
 
+/// Convert double to IEEE binary16 bits, rejecting finite magnitudes above the maximum
+/// before rounding.
 Float16 double2float16(double value) {
     // Check the original value before rounding: even a finite value just above
     // the largest binary16 value must fail instead of rounding back into range.
@@ -28,6 +30,7 @@ Float16 double2float16(double value) {
     return {std::bit_cast<std::uint16_t>(half)};
 }
 
+/// Decode IEEE binary16 bits and promote the represented value to double.
 double float162double(Float16 value) {
     return static_cast<double>(std::bit_cast<std::float16_t>(value.bits));
 }

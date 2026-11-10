@@ -15,6 +15,8 @@ inline constexpr bool isPowerOfTwo(uint64_t value) {
     return value != 0 && (value & (value - 1)) == 0;
 }
 
+/// Round a positive mesh length up to a power of two, returning one for small inputs and
+/// rejecting int overflow.
 inline constexpr int nextPowerOfTwo(int value) {
     if (value <= 1) {
         return 1;

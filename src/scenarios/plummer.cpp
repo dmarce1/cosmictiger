@@ -18,6 +18,7 @@
 
 namespace scenarios {
 
+/// Sample a reproducible Plummer realization in opposite position/velocity pairs.
 void initializePlummerParticles() {
     auto const numberOfParticles = getOptions().initial.numberOfParticles;
     particlesResize(numberOfParticles);
@@ -87,6 +88,7 @@ void initializePlummerParticles() {
         particlesRung(i) = 0;
     }
 }
+/// Set the fixed Plummer background and duration, then populate its particle realization.
 void initializePlummer(DriverParameters& state) {
     state.a = 1.0;
     state.adot = 0.0;

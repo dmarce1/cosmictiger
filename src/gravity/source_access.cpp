@@ -6,9 +6,12 @@
 #include <cosmictiger/particles/particles.hpp>
 
 static std::atomic<GravityRemoteSourceReader> remoteSourceReader{nullptr};
+/// Publish the callback used to gather remote owned-particle source data.
 void gravitySetRemoteSourceReader(GravityRemoteSourceReader reader) {
     remoteSourceReader.store(reader);
 }
+/// Gather a node's positions and optional types/masses from its local store or remote
+/// reader.
 void gravityReadSourcePositions(TreeNode const& source, Position* x, Position* y, Position* z,
     char* types, float* masses, ParticleInteger offset) {
     if (!source.isLocalHere()) {

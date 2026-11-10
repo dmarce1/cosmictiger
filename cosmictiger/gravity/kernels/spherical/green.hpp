@@ -29,6 +29,7 @@ class Green<2> {
 public:
     static constexpr int kFlops_ = 29;
     static constexpr int kConventionalFlops_ = 28;
+    /// Assign singular solid harmonics for the supplied displacement.
     template <typename Real, typename Output, typename Source = Output>
     CUDA_EXPORT static void evaluate(Output& output, Real x, Real y, Real z) {
         using namespace math;
@@ -77,6 +78,7 @@ class Green<3> {
 public:
     static constexpr int kFlops_ = 46;
     static constexpr int kConventionalFlops_ = 50;
+    /// Assign singular solid harmonics for the supplied displacement.
     template <typename Real, typename Output, typename Source = Output>
     CUDA_EXPORT static void evaluate(Output& output, Real x, Real y, Real z) {
         using namespace math;
@@ -149,6 +151,7 @@ class Green<4> {
 public:
     static constexpr int kFlops_ = 68;
     static constexpr int kConventionalFlops_ = 79;
+    /// Assign singular solid harmonics for the supplied displacement.
     template <typename Real, typename Output, typename Source = Output>
     CUDA_EXPORT static void evaluate(Output& output, Real x, Real y, Real z) {
         using namespace math;
@@ -252,6 +255,7 @@ class Green<5> {
 public:
     static constexpr int kFlops_ = 95;
     static constexpr int kConventionalFlops_ = 115;
+    /// Assign singular solid harmonics for the supplied displacement.
     template <typename Real, typename Output, typename Source = Output>
     CUDA_EXPORT static void evaluate(Output& output, Real x, Real y, Real z) {
         using namespace math;
@@ -393,6 +397,7 @@ class Green<6> {
 public:
     static constexpr int kFlops_ = 125;
     static constexpr int kConventionalFlops_ = 156;
+    /// Assign singular solid harmonics for the supplied displacement.
     template <typename Real, typename Output, typename Source = Output>
     CUDA_EXPORT static void evaluate(Output& output, Real x, Real y, Real z) {
         using namespace math;
@@ -577,6 +582,7 @@ class Green<7> {
 public:
     static constexpr int kFlops_ = 162;
     static constexpr int kConventionalFlops_ = 206;
+    /// Assign singular solid harmonics for the supplied displacement.
     template <typename Real, typename Output, typename Source = Output>
     CUDA_EXPORT static void evaluate(Output& output, Real x, Real y, Real z) {
         using namespace math;
@@ -813,6 +819,7 @@ class Green<8> {
 public:
     static constexpr int kFlops_ = 203;
     static constexpr int kConventionalFlops_ = 262;
+    /// Assign singular solid harmonics for the supplied displacement.
     template <typename Real, typename Output, typename Source = Output>
     CUDA_EXPORT static void evaluate(Output& output, Real x, Real y, Real z) {
         using namespace math;

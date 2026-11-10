@@ -28,6 +28,7 @@ inline void setVerbose(bool enabled) {
     detail::verboseEnabled.store(enabled, std::memory_order_relaxed);
 }
 
+/// Read the current verbosity flag without introducing inter-thread ordering.
 inline bool verbose() {
     return detail::verboseEnabled.load(std::memory_order_relaxed);
 }
@@ -68,6 +69,7 @@ inline std::string formatDuration(double seconds) {
     return text.data();
 }
 
+/// Print and flush a formatted diagnostic only when verbose output is enabled.
 template <class... Args>
 inline void detailPrint(char const* format, Args... args) {
     if (verbose()) {
@@ -80,6 +82,7 @@ inline void detailPrint(char const* format, Args... args) {
     }
 }
 
+/// Print and flush a section title followed by the standard separator.
 inline void section(char const* title) {
     std::printf("\n  %s\n  %s\n", title,
         "----------------------------------------------------------------------------");

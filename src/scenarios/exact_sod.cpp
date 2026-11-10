@@ -18,6 +18,8 @@ static double pl, pr, rhol, rhor, leftSoundSpeed, rightSoundSpeed, gammaValue;
 static double func(double pm);
 static double rtbis(double x1, double x2, double xacc);
 
+/// Evaluate the exact Sod shock-tube density, pressure, and velocity at the requested
+/// position and time.
 void exactSod(SodStateT* out, SodInitT const* in, double position, double t, double dx) {
     if (t == 0.0) {
         out->velocity = 0.0;
@@ -93,6 +95,7 @@ void exactSod(SodStateT* out, SodInitT const* in, double position, double t, dou
     }
 }
 
+/// Evaluate the pressure-matching residual between the Sod rarefaction and shock states.
 static double func(double pm) {
     double const mu2 = (gammaValue - 1.) / (gammaValue + 1.);
     double rc = -2 * leftSoundSpeed * (1 - pow((pm / pl), ((-1 + gammaValue) / (2 * gammaValue)))) /
@@ -101,6 +104,8 @@ static double func(double pm) {
     return rc;
 }
 
+/// Bisect the bracketed Sod pressure residual to the requested absolute accuracy, aborting
+/// on failure.
 static double rtbis(double x1, double x2, double xacc) {
     double rc;
     int const jmax = 100;

@@ -48,6 +48,7 @@ CUDA_EXPORT inline Real broadcast(Value value) {
     }
 }
 
+/// Choose yes or no for a scalar boolean or independently for each SIMD mask lane.
 template <class Mask, class Real>
 CUDA_EXPORT inline Real select(Mask const& mask, Real const& yes, Real const& no) {
     if constexpr (std::is_same_v<Mask, bool>) {
@@ -63,16 +64,19 @@ CUDA_EXPORT inline Real select(Mask const& mask, Real const& yes, Real const& no
     }
 }
 
+/// Select the smaller scalar/SIMD value in each lane.
 template <class Real>
 CUDA_EXPORT inline Real min(Real const& left, Real const& right) {
     return select(left < right, left, right);
 }
 
+/// Select the larger scalar/SIMD value in each lane.
 template <class Real>
 CUDA_EXPORT inline Real max(Real const& left, Real const& right) {
     return select(left > right, left, right);
 }
 
+/// Evaluate square roots through the selected scalar or SIMD backend.
 template <class Real>
 CUDA_EXPORT inline Real sqrt(Real const& value) {
     if constexpr (std::is_arithmetic_v<Real>) {
@@ -87,6 +91,7 @@ CUDA_EXPORT inline Real sqrt(Real const& value) {
     }
 }
 
+/// Evaluate fused multiply-add with one rounding per scalar or SIMD lane.
 template <class Real>
 #if defined(__GNUC__) && !defined(__CUDACC__)
 [[gnu::always_inline]]
@@ -113,12 +118,14 @@ CUDA_EXPORT inline Real fma(Real const& first, Real const& second, Real const& t
 // A local callable named fma suppresses argument-dependent lookup of SIMD
 // library overloads when generated kernels import the math namespace.
 struct Fma {
+    /// Forward the callable FMA interface to the scalar/SIMD fused operation.
     template <class Real>
     CUDA_EXPORT Real operator()(Real const& first, Real const& second, Real const& third) const {
         return math::fma(first, second, third);
     }
 };
 
+/// Test whether any lane of a mask is true, also accepting a scalar boolean.
 template <class Mask>
 CUDA_EXPORT inline bool anyOf(Mask const& mask) {
     if constexpr (std::is_same_v<Mask, bool>) {
@@ -132,6 +139,7 @@ CUDA_EXPORT inline bool anyOf(Mask const& mask) {
     }
 }
 
+/// Test whether every lane of a mask is true, also accepting a scalar boolean.
 template <class Mask>
 CUDA_EXPORT inline bool allOf(Mask const& mask) {
     if constexpr (std::is_same_v<Mask, bool>) {
@@ -149,6 +157,7 @@ CUDA_EXPORT inline bool allOf(Mask const& mask) {
 
 #ifndef __CUDACC__
 
+/// Convert corresponding SIMD lanes to the destination element type.
 template <class Destination, class Source>
 inline Destination simdCast(Source const& source) {
 #if COSMICTIGER_SIMD_STANDARD
@@ -159,6 +168,7 @@ inline Destination simdCast(Source const& source) {
 #endif
 }
 
+/// Replace one lane while preserving all other initialized lanes.
 template <class Pack, class Value>
 inline void simdSetLane(Pack& pack, size_t lane, Value value) {
     using Element = typename Pack::value_type;
@@ -172,6 +182,7 @@ inline void simdSetLane(Pack& pack, size_t lane, Value value) {
 #endif
 }
 
+/// Reduce the SIMD pack to the sum of its lanes.
 template <class Pack>
 inline auto simdSum(Pack const& value) {
 #if COSMICTIGER_SIMD_STANDARD
@@ -181,6 +192,7 @@ inline auto simdSum(Pack const& value) {
 #endif
 }
 
+/// Reduce the SIMD pack to its largest lane value.
 template <class Pack>
 inline auto simdMaximum(Pack const& value) {
 #if COSMICTIGER_SIMD_STANDARD
@@ -190,6 +202,7 @@ inline auto simdMaximum(Pack const& value) {
 #endif
 }
 
+/// Round each SIMD lane toward negative infinity.
 template <class Pack>
 inline Pack simdFloor(Pack const& value) {
 #if COSMICTIGER_SIMD_STANDARD
@@ -199,11 +212,13 @@ inline Pack simdFloor(Pack const& value) {
 #endif
 }
 
+/// Floor each lane before converting to the destination integer pack.
 template <class Destination, class Source>
 inline Destination simdFloorToInt(Source const& source) {
     return simdCast<Destination>(simdFloor(source));
 }
 
+/// Round each lane to the nearest integer with ties to even, preserving signed zero.
 template <class Pack>
 inline Pack simdRound(Pack const& value) {
     // Unlike std::round, the original kernels use nearest with ties to even.
@@ -227,6 +242,8 @@ inline Pack simdRound(Pack const& value) {
     });
 }
 
+/// Subtract position bits modulo their storage width before interpreting each result as
+/// signed.
 template <class Pack>
 inline Pack simdPositionDifference(Pack const& left, Pack const& right) {
     static_assert(std::is_integral_v<typename Pack::value_type> &&
@@ -236,16 +253,20 @@ inline Pack simdPositionDifference(Pack const& left, Pack const& right) {
     return simdCast<Pack>(simdCast<UnsignedPack>(left) - simdCast<UnsignedPack>(right));
 }
 
+/// Compute the reciprocal square root in each lane.
 template <class Pack>
 inline Pack simdRsqrt(Pack const& value) {
     return math::broadcast<Pack>(1) / math::sqrt(value);
 }
 
+/// Return lane-wise absolute values using a maximum with the negated pack.
 template <class Pack>
 inline Pack simdAbs(Pack const& value) {
     return math::max(value, -value);
 }
 
+/// Reinterpret each lane's bits as the destination element type without numerical
+/// conversion.
 template <class Destination, class Source>
 inline Destination simdBitCast(Source const& source) {
     static_assert(Destination::size() == Source::size());

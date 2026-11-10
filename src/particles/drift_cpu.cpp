@@ -18,6 +18,8 @@
 #if !defined(COSMICTIGER_ENABLE_ROCKSTAR) || COSMICTIGER_ENABLE_ROCKSTAR
 namespace detail {
 
+/// Interpolate observer-lightcone crossings along a particle drift and append their
+/// phase-space records.
 void appendDriftLightconeEntries(Vector3<double> const& before, Vector3<double> const& after,
     Vector3<float> const& velocity, Vector3<float> const& outputVelocity, char type,
     DriftParameters const& parameters, std::vector<LightconeEntry>& entries) {
@@ -76,6 +78,8 @@ void appendDriftLightconeEntries(Vector3<double> const& before, Vector3<double> 
 }    // namespace detail
 #endif
 
+/// Drift the selected CPU particle range with periodic fixed-point updates and optional
+/// damping/lightcone capture.
 void cpuDriftKernel(Position* x, Position* y, Position* z, ParticleVector<float>* velocities,
     char const* rungs, char const* types, size_t count, DriftParameters const& parameters,
     std::vector<LightconeEntry>* entries) {

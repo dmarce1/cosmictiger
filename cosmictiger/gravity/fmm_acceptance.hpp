@@ -26,6 +26,7 @@ struct FmmAcceptance {
     Mask supportSeparated;
 };
 
+/// Convert the configured opening angle to the inverse form used by FMM acceptance tests.
 CUDA_EXPORT inline float fmmInverseOpeningAngle(float theta) {
 #ifdef __CUDA_ARCH__
     return __fdiv_rn(1.0f, theta);

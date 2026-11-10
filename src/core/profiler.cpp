@@ -67,6 +67,7 @@ namespace detail {
         std::uint64_t calls;
     };
 
+    /// Atomically add elapsed nanoseconds and one call to a valid work-phase counter.
     void recordNanoseconds(WorkPhase phase, std::uint64_t nanoseconds) noexcept {
         size_t const index = static_cast<size_t>(phase);
         if (index >= kWorkCount) {
@@ -77,12 +78,14 @@ namespace detail {
         counter.calls.fetch_add(1, std::memory_order_relaxed);
     }
 
+    /// Convert a steady-clock duration to nanoseconds and record it for the phase.
     void recordInterval(WorkPhase phase, Clock::duration elapsed) noexcept {
         auto const nanoseconds =
             std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed).count();
         recordNanoseconds(phase, static_cast<std::uint64_t>(nanoseconds));
     }
 
+    /// Append sorted host or device work-counter statistics to the report text.
     void appendWorkReport(std::string& report, bool device) {
         std::vector<WorkRow> rows;
         size_t const begin = device ? kDeviceWorkBegin : 0;
@@ -156,11 +159,13 @@ namespace detail {
         DeviceSnapshot snapshot;
     };
 
+    /// Return the shared registry of aggregated device timing samples.
     DeviceRegistry& deviceRegistry() {
         static DeviceRegistry value;
         return value;
     }
 
+    /// Update a cycle distribution's sample count, total, minimum, and maximum.
     void addCycleSample(CycleDistribution& distribution, std::uint64_t cycles) noexcept {
         ++distribution.samples;
         distribution.total += cycles;
@@ -168,6 +173,7 @@ namespace detail {
         distribution.maximum = std::max(distribution.maximum, cycles);
     }
 
+    /// Snapshot device counters and append phase and block/launch cycle distributions.
     void appendDeviceReport(std::string& report) {
         DeviceSnapshot snapshot;
         {
@@ -227,6 +233,7 @@ namespace detail {
         appendDistribution("launches", snapshot.launches);
     }
 #else
+    /// Snapshot device counters and append phase and block/launch cycle distributions.
     void appendDeviceReport(std::string&) {}
 #endif
 
@@ -246,6 +253,7 @@ namespace detail {
         std::vector<Frame> stack;
     };
 
+    /// Return the shared registry for nested application phase timing.
     Registry& registry() {
         static Registry value;
         return value;
@@ -263,15 +271,18 @@ namespace detail {
 
 }    // namespace detail
 
+/// Provide the no-op counterpart when this profiling facility is disabled.
 ScopedWork::ScopedWork(WorkPhase phase, bool enabled) noexcept
   : phase_(phase)
   , resumed_(enabled ? detail::Clock::now() : detail::Clock::time_point{})
   , enabled_(enabled) {}
 
+/// Record the remaining interval if this scope still owns an active work timer.
 ScopedWork::~ScopedWork() {
     stop();
 }
 
+/// Charge elapsed time to the current work phase and begin timing the next phase.
 void ScopedWork::next(WorkPhase phase) noexcept {
     if (enabled_) {
         auto const now = detail::Clock::now();
@@ -281,6 +292,7 @@ void ScopedWork::next(WorkPhase phase) noexcept {
     }
 }
 
+/// Record the current work interval once and disable further recording by this scope.
 void ScopedWork::stop() noexcept {
     if (enabled_) {
         detail::recordInterval(phase_, detail::Clock::now() - resumed_);
@@ -288,6 +300,8 @@ void ScopedWork::stop() noexcept {
     }
 }
 
+/// Record an externally measured work interval, ignoring invalid or unrepresentable
+/// durations.
 void recordWork(WorkPhase phase, double seconds) noexcept {
     long double const nanoseconds = static_cast<long double>(seconds) * 1.0e9L;
     if (!std::isfinite(seconds) || nanoseconds < 0.0L ||
@@ -298,6 +312,8 @@ void recordWork(WorkPhase phase, double seconds) noexcept {
 }
 
 #if COSMICTIGER_DEVICE_PROFILE
+/// Aggregate block phase counters and merge their cycle distributions into the shared
+/// registry.
 void recordDeviceBlocks(DeviceBlockRecord const* blocks, size_t count) noexcept {
     if (blocks == nullptr || count == 0) {
         return;
@@ -340,6 +356,7 @@ void recordDeviceBlocks(DeviceBlockRecord const* blocks, size_t count) noexcept 
 }
 #endif
 
+/// Pause the current parent phase and push a newly timed named phase.
 void profileBegin(char const* name) {
     auto const now = detail::Clock::now();
     auto& state = detail::registry();
@@ -349,6 +366,7 @@ void profileBegin(char const* name) {
     ++state.phases[name].calls;
 }
 
+/// Finish the active phase and resume its parent without charging the child's time to it.
 void profileEnd() {
     auto const now = detail::Clock::now();
     auto& state = detail::registry();
@@ -364,6 +382,7 @@ void profileEnd() {
     }
 }
 
+/// Snapshot phase and work counters and format a combined timing report.
 std::string profileReport() {
     auto const now = detail::Clock::now();
     auto& state = detail::registry();
@@ -414,6 +433,7 @@ std::string profileReport() {
     return report;
 }
 
+/// Write the current profile report to a file, reporting open or close failures.
 void profileOutput(std::string const& filename) {
     std::string const report = profileReport();
     if (report.empty()) {

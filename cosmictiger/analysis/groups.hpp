@@ -28,6 +28,8 @@ struct ParticleData {
     GroupInteger lastHost = kNoParticleGroup;
     ParticleInteger index;
     int rank;
+    /// Archive `position`, `velocity`, `lastGroup`, `identity`, `lastHost`, `index` and
+    /// the remaining fields in transport order.
     template <class A>
     void serialize(A&& arc, unsigned) {
         arc & position;
@@ -47,6 +49,7 @@ struct HaloAperture {
     Vector3<double> center;
     double radius;
     int rank;
+    /// Archive `center`, `radius`, `rank` in transport order.
     template <class A>
     void serialize(A&& arc, unsigned) {
         arc & center;

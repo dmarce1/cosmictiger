@@ -15,10 +15,13 @@ namespace detail {
 std::atomic<int> selectedFmmOrder{kFmmDefaultOrder};
 }    // namespace detail
 
+/// Read the currently selected runtime FMM order.
 int fmmOrder() {
     return detail::selectedFmmOrder.load(std::memory_order_relaxed);
 }
 
+/// Validate the requested order against the compiled range and publish it for subsequent
+/// work.
 void setFmmOrder(int order) {
     if (order < kFmmMinOrder || order > kFmmMaxOrder) {
         THROW_ERROR(

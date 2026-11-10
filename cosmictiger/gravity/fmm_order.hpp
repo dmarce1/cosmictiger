@@ -47,26 +47,32 @@ inline constexpr int kFmmDefaultOrder = gravity::kBuildFmmOrder;
 static_assert(kFmmMinOrder <= kFmmDefaultOrder && kFmmDefaultOrder <= kFmmMaxOrder,
     "The default expansion degree must be in the compiled range");
 
+/// Return the maximum source-multipole degree for this FMM order.
 CUDA_EXPORT constexpr int fmmMultipoleDegree(int order) {
     return order - 2;
 }
 
+/// Return the maximum local-expansion degree for this FMM order.
 CUDA_EXPORT constexpr int fmmLocalDegree(int order) {
     return order - 1;
 }
 
+/// Count independent real harmonic coefficients through the supplied degree.
 CUDA_EXPORT constexpr int fmmHarmonicCoefficientCount(int degree) {
     return (degree + 1) * (degree + 1);
 }
 
+/// Count source-multipole coefficients for the requested FMM order.
 CUDA_EXPORT constexpr int fmmMultipoleCoefficientCount(int order) {
     return fmmHarmonicCoefficientCount(fmmMultipoleDegree(order));
 }
 
+/// Count harmonic local-expansion coefficients for the requested FMM order.
 CUDA_EXPORT constexpr int fmmLocalHarmonicCoefficientCount(int order) {
     return fmmHarmonicCoefficientCount(fmmLocalDegree(order));
 }
 
+/// Return the stored local-expansion coefficient count for this FMM order.
 CUDA_EXPORT constexpr int fmmLocalCoefficientCount(int order) {
     return fmmLocalHarmonicCoefficientCount(order);
 }
@@ -86,11 +92,13 @@ CUDA_EXPORT constexpr int fmmPositionedMultipoleBytes(int order) {
 // copies. The required padding depends on the order and position width.
 inline constexpr int kFmmPositionedMultipoleAlignment = 16;
 
+/// Round a positioned multipole record size up to its required alignment.
 CUDA_EXPORT constexpr int fmmPositionedMultipoleStride(int order) {
     return (fmmPositionedMultipoleBytes(order) + kFmmPositionedMultipoleAlignment - 1) /
         kFmmPositionedMultipoleAlignment * kFmmPositionedMultipoleAlignment;
 }
 
+/// Return the byte count of a float local expansion at the requested order.
 CUDA_EXPORT constexpr int fmmLocalExpansionBytes(int order) {
     return int(sizeof(float)) * fmmLocalCoefficientCount(order);
 }
@@ -138,6 +146,8 @@ void setFmmOrder(int order);
 
 namespace detail {
 
+/// Recursively select the compile-time order matching the runtime value and invoke the
+/// callable.
 template <int candidate, class F>
 decltype(auto) dispatchFmmOrder(int order, F&& f) {
     if constexpr (candidate < kFmmMaxOrder) {
@@ -153,12 +163,14 @@ decltype(auto) dispatchFmmOrder(int order, F&& f) {
 
 }    // namespace detail
 
+/// Validate a requested FMM order and dispatch the callable with its integral-constant tag.
 template <class F>
 decltype(auto) fmmDispatch(int order, F&& f) {
     ALWAYS_ASSERT(order >= kFmmMinOrder && order <= kFmmMaxOrder);
     return detail::dispatchFmmOrder<kFmmMinOrder>(order, std::forward<F>(f));
 }
 
+/// Dispatch the callable at the currently configured runtime FMM order.
 template <class F>
 decltype(auto) fmmDispatch(F&& f) {
     return fmmDispatch(fmmOrder(), std::forward<F>(f));

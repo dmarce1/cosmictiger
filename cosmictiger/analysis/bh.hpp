@@ -26,6 +26,8 @@ struct BhTreeNode {
     float mass;
     float radius;
     float meanSquaredRadius;
+    /// Initialize an empty Barnes–Hut node with absent children and zero mass/radius
+    /// summaries.
     BhTreeNode() {
         children[kLeftChild] = children[kRightChild] = -1;
         mass = 0;

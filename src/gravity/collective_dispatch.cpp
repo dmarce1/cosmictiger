@@ -17,6 +17,8 @@ class CollectiveAbortWorker {
     std::thread worker_;
 
 public:
+    /// Start the native worker that can abort a failed collective independently of HPX
+    /// worker availability.
     CollectiveAbortWorker()
       : worker_([this]() {
           request_.wait(0);
@@ -28,12 +30,15 @@ public:
           }
       }) {}
 
+    /// Request orderly worker termination and join the native thread.
     ~CollectiveAbortWorker() {
         request_.store(1);
         request_.notify_one();
         worker_.join();
     }
 
+    /// Request collective abort from the prestarted native worker and park the failing
+    /// caller.
     [[noreturn]] void abort() noexcept {
         request_.store(2);
         request_.notify_one();
@@ -45,15 +50,19 @@ public:
     }
 };
 
+/// Return the lazily constructed process-wide collective-abort worker.
 CollectiveAbortWorker& collectiveAbortWorker() {
     static CollectiveAbortWorker worker;
     return worker;
 }
 
+/// Create the abort worker before entering operations whose failure could block runtime
+/// workers.
 void prepareCollectiveDispatch() {
     (void) collectiveAbortWorker();
 }
 
+/// Request process-wide collective termination through the prestarted abort worker.
 [[noreturn]] void abortCollectiveDispatch() noexcept {
     collectiveAbortWorker().abort();
 }

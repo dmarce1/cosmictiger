@@ -23,11 +23,14 @@
 
 namespace detail {
 
+/// Require a positive finite double using an exponent-bit check robust to fast-math
+/// assumptions.
 bool positiveFinite(double value) {
     return value > 0.0 &&
         (std::bit_cast<uint64_t>(value) & 0x7ff0000000000000ULL) != 0x7ff0000000000000ULL;
 }
 
+/// Open a catalogue input file with owned lifetime or throw a path-specific error.
 UniqueFile openInput(std::filesystem::path const& path) {
     UniqueFile input(fopen(path.c_str(), "rb"));
     if (!input) {
@@ -36,6 +39,8 @@ UniqueFile openInput(std::filesystem::path const& path) {
     return input;
 }
 
+/// Parse catalogue options, measure the logarithmic halo mass function, and write number
+/// density per bin.
 int haloFunction(int argc, char* argv[]) {
     int snapshot;
     int numberOfBins;
@@ -174,6 +179,8 @@ int haloFunction(int argc, char* argv[]) {
 
 }    // namespace detail
 
+/// Run the halo mass-function utility and convert exceptions to a diagnostic and failure
+/// exit code.
 int main(int argc, char* argv[]) {
     try {
         return detail::haloFunction(argc, argv);

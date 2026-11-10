@@ -15,6 +15,7 @@ namespace detail {
 static FmmSourceView borrowedSources;
 }    // namespace detail
 
+/// Return the live owned-particle view or the currently registered borrowed ghost view.
 FmmSourceView fmmSourceView(FmmParticleStore store) {
     if (store == FmmParticleStore::Ghost) {
         return detail::borrowedSources;
@@ -27,6 +28,8 @@ FmmSourceView fmmSourceView(FmmParticleStore store) {
     return view;
 }
 
+/// Replace the ghost source view while rejecting attempts to replace owned particle
+/// storage.
 void fmmRegisterSourceView(FmmParticleStore store, FmmSourceView view) {
     if (store != FmmParticleStore::Ghost) {
         throw std::invalid_argument("Owned particle storage cannot be replaced by a borrowed view");
@@ -34,6 +37,8 @@ void fmmRegisterSourceView(FmmParticleStore store, FmmSourceView view) {
     detail::borrowedSources = view;
 }
 
+/// Partition the selected source range by one coordinate while keeping its particle fields
+/// aligned.
 ParticleInteger fmmSourcePartition(FmmParticleStore store, FmmSourceView const& sources,
     Pair<ParticleInteger> range, Position split, int dimension) {
     if (store == FmmParticleStore::Owned) {

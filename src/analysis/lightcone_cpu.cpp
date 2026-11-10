@@ -8,6 +8,7 @@
 
 namespace detail {
 
+/// Test whether two lightcone particles lie strictly inside the squared linking distance.
 bool lightconeParticlesLinked(LightconeParticles const& first, int firstIndex,
     LightconeParticles const& second, int secondIndex, float linkingLengthSquared) {
     float const dx = distance(first.pos[kXi][firstIndex], second.pos[kXi][secondIndex]);
@@ -16,6 +17,7 @@ bool lightconeParticlesLinked(LightconeParticles const& first, int firstIndex,
     return sqr(dx, dy, dz) < linkingLengthSquared;
 }
 
+/// Find a union-find component representative with path halving.
 int lightconeComponentRoot(std::vector<int>& parents, int index) {
     while (parents[index] != index) {
         parents[index] = parents[parents[index]];
@@ -26,6 +28,8 @@ int lightconeComponentRoot(std::vector<int>& parents, int index) {
 
 }    // namespace detail
 
+/// Snapshot local and boundary activity for the next connectivity pass and clear current
+/// activity.
 void prepareLightconeGroupIteration(DeviceVector<LightconeTreeId> const& leaves,
     LightconeTreeMapType& treeMap, Pair<int> ownedPixels) {
     for (auto const& leaf : leaves) {
@@ -42,6 +46,8 @@ void prepareLightconeGroupIteration(DeviceVector<LightconeTreeId> const& leaves,
     }
 }
 
+/// Propagate connected-component labels in a serial host sweep and mark neighboring leaves
+/// for further work.
 size_t cpuLightcone(DeviceVector<LightconeTreeId> const& leaves,
     LightconeParticleMapType& particleMap, LightconeTreeMapType& treeMap, LightconeGroup& nextGroup,
     double linkingLength, int rank, int ranks) {

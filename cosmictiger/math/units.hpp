@@ -100,6 +100,8 @@ inline constexpr auto kElectronVoltTemperature = Temperature::from_value(constan
 
 namespace detail {
 
+    /// Reject nonpositive or nonfinite unit scales using bit checks that remain valid
+    /// under fast math.
     inline void requirePositiveFinite(double value, char const* name) {
         // Host compilation uses -ffast-math, which can discard std::isfinite checks.
         static_assert(sizeof(double) == sizeof(uint64_t) && std::numeric_limits<double>::is_iec559,
@@ -112,6 +114,7 @@ namespace detail {
         }
     }
 
+    /// Require a finite normalized coordinate in [0,1), accepting signed zero.
     inline void requireNormalizedPosition(double value) {
         // Positive binary64 values have the same ordering as their unsigned bits.
         // This check also rejects NaN and infinity when -ffast-math is enabled.
@@ -133,6 +136,8 @@ class UnitScales {
     Time timeScale_;
 
 public:
+    /// Construct CGS base scales and validate the derived velocity, density, energy,
+    /// and pressure scales.
     UnitScales(double lengthCm, double massG, double timeSeconds)
       : lengthScale_(Length::from_value(lengthCm))
       , massScale_(Mass::from_value(massG))
@@ -146,33 +151,43 @@ public:
         detail::requirePositiveFinite(pressureScale().value(), "pressure scale");
     }
 
+    /// Return the physical length represented by one stored length unit.
     Length lengthScale() const {
         return lengthScale_;
     }
+    /// Return the physical mass represented by one stored mass unit.
     Mass massScale() const {
         return massScale_;
     }
+    /// Return the physical duration represented by one stored time unit.
     Time timeScale() const {
         return timeScale_;
     }
+    /// Return the derived length/time velocity scale.
     Velocity velocityScale() const {
         return lengthScale_ / timeScale_;
     }
+    /// Return the derived mass/volume density scale.
     Density densityScale() const {
         return massScale_ / lengthScale_ / lengthScale_ / lengthScale_;
     }
+    /// Return the squared-velocity scale for specific energy.
     SpecificEnergy specificEnergyScale() const {
         return velocityScale() * velocityScale();
     }
+    /// Return the mass times specific-energy scale.
     Energy energyScale() const {
         return massScale_ * specificEnergyScale();
     }
+    /// Return the density times specific-energy pressure scale.
     Pressure pressureScale() const {
         return densityScale() * specificEnergyScale();
     }
+    /// Return the velocity/time acceleration scale.
     Acceleration accelerationScale() const {
         return velocityScale() / timeScale_;
     }
+    /// Return the reciprocal-time frequency scale.
     Frequency frequencyScale() const {
         return Frequency::from_value(1.0 / timeScale_.value());
     }
@@ -184,6 +199,7 @@ class CosmologicalContext {
     double hubbleParameter_;
 
 public:
+    /// Store validated positive scale factor a and reduced Hubble parameter h.
     CosmologicalContext(double scaleFactor, double hubbleParameter)
       : scaleFactor_(scaleFactor)
       , hubbleParameter_(hubbleParameter) {
@@ -191,9 +207,11 @@ public:
         detail::requirePositiveFinite(hubbleParameter, "Hubble parameter h");
     }
 
+    /// Return the cosmological scale factor a.
     double scaleFactor() const {
         return scaleFactor_;
     }
+    /// Return the reduced Hubble parameter h.
     double hubbleParameter() const {
         return hubbleParameter_;
     }
@@ -208,9 +226,11 @@ class FramedQuantity {
 public:
     using QuantityType = QuantityTypeT;
 
+    /// Attach a coordinate-frame tag to an already typed physical quantity.
     explicit constexpr FramedQuantity(QuantityType quantity)
       : quantity_(quantity) {}
 
+    /// Return the underlying typed physical quantity.
     constexpr QuantityType quantity() const {
         return quantity_;
     }
@@ -221,9 +241,11 @@ class StoredScalar {
     double value_;
 
 public:
+    /// Wrap a dimensionless stored value with its semantic quantity tag.
     explicit constexpr StoredScalar(double value)
       : value_(value) {}
 
+    /// Return the wrapped dimensionless stored value.
     constexpr double value() const {
         return value_;
     }
@@ -275,47 +297,62 @@ class ComovingPosition {
     Storage storage_;
 
 public:
+    /// Retain the supplied fixed-point storage as a comoving position.
     explicit ComovingPosition(Storage storage)
       : storage_(std::move(storage)) {}
 
+    /// Expose the underlying fixed-point position without converting its bits.
     Storage const& storage() const {
         return storage_;
     }
 };
 
+/// Convert to comoving CGS length using the stored length scale or removing the
+/// proper-length scale factor.
 inline ComovingLength toComovingLength(StoredLength length, UnitScales const& scales) {
     return ComovingLength(length.value() * scales.lengthScale());
 }
 
+/// Convert to comoving CGS length using the stored length scale or removing the
+/// proper-length scale factor.
 template <typename Storage>
 ComovingLength toComovingLength(
     ComovingPosition<Storage> const& position, UnitScales const& scales) {
     return ComovingLength(position.storage().toDouble() * scales.lengthScale());
 }
 
+/// Convert to proper CGS length by applying the scale factor to the comoving length.
 inline ProperLength toProperLength(ComovingLength length, CosmologicalContext const& context) {
     return ProperLength(length.quantity() * context.scaleFactor());
 }
 
+/// Convert to comoving CGS length using the stored length scale or removing the
+/// proper-length scale factor.
 inline ComovingLength toComovingLength(ProperLength length, CosmologicalContext const& context) {
     return ComovingLength(length.quantity() / context.scaleFactor());
 }
 
+/// Convert to proper CGS length by applying the scale factor to the comoving length.
 inline ProperLength toProperLength(
     StoredLength length, UnitScales const& scales, CosmologicalContext const& context) {
     return toProperLength(toComovingLength(length, scales), context);
 }
 
+/// Convert to proper CGS length by applying the scale factor to the comoving length.
 template <typename Storage>
 ProperLength toProperLength(ComovingPosition<Storage> const& position, UnitScales const& scales,
     CosmologicalContext const& context) {
     return toProperLength(toComovingLength(position, scales), context);
 }
 
+/// Remove physical length units and any proper-coordinate scale factor to recover the
+/// stored length.
 inline StoredLength toStoredLength(ComovingLength length, UnitScales const& scales) {
     return StoredLength((length.quantity() / scales.lengthScale()).value());
 }
 
+/// Remove physical length units and any proper-coordinate scale factor to recover the
+/// stored length.
 inline StoredLength toStoredLength(
     ProperLength length, UnitScales const& scales, CosmologicalContext const& context) {
     return toStoredLength(toComovingLength(length, context), scales);
@@ -331,16 +368,20 @@ ComovingPosition<Storage> toComovingPosition(ComovingLength length, UnitScales c
     return ComovingPosition<Storage>(Storage(normalized));
 }
 
+/// Convert proper length to normalized fixed-point comoving storage, validating the allowed
+/// coordinate interval.
 template <typename Storage>
 ComovingPosition<Storage> toComovingPosition(
     ProperLength length, UnitScales const& scales, CosmologicalContext const& context) {
     return toComovingPosition<Storage>(toComovingLength(length, context), scales);
 }
 
+/// Convert stored mass into a typed CGS mass.
 inline Mass toMass(StoredMass mass, UnitScales const& scales) {
     return mass.value() * scales.massScale();
 }
 
+/// Divide physical mass by the simulation's mass scale.
 inline StoredMass toStoredMass(Mass mass, UnitScales const& scales) {
     return StoredMass((mass / scales.massScale()).value());
 }
@@ -351,36 +392,46 @@ inline PeculiarVelocity toPeculiarVelocity(
     return PeculiarVelocity(velocity.value() * scales.velocityScale() / context.scaleFactor());
 }
 
+/// Convert peculiar velocity to stored canonical velocity by multiplying by a and removing
+/// the velocity scale.
 inline StoredVelocity toStoredVelocity(
     PeculiarVelocity velocity, UnitScales const& scales, CosmologicalContext const& context) {
     return StoredVelocity(
         (velocity.quantity() / scales.velocityScale()).value() * context.scaleFactor());
 }
 
+/// Convert to comoving density, applying the storage scale or multiplying proper density by
+/// a cubed.
 inline ComovingDensity toComovingDensity(StoredDensity density, UnitScales const& scales) {
     return ComovingDensity(density.value() * scales.densityScale());
 }
 
+/// Convert comoving density to proper density by dividing by a cubed.
 inline ProperDensity toProperDensity(ComovingDensity density, CosmologicalContext const& context) {
     double const a = context.scaleFactor();
     return ProperDensity(density.quantity() / a / a / a);
 }
 
+/// Convert to comoving density, applying the storage scale or multiplying proper density by
+/// a cubed.
 inline ComovingDensity toComovingDensity(
     ProperDensity density, CosmologicalContext const& context) {
     double const a = context.scaleFactor();
     return ComovingDensity(density.quantity() * a * a * a);
 }
 
+/// Convert comoving density to proper density by dividing by a cubed.
 inline ProperDensity toProperDensity(
     StoredDensity density, UnitScales const& scales, CosmologicalContext const& context) {
     return toProperDensity(toComovingDensity(density, scales), context);
 }
 
+/// Remove the density scale and, for proper density, restore the comoving a-cubed factor.
 inline StoredDensity toStoredDensity(ComovingDensity density, UnitScales const& scales) {
     return StoredDensity((density.quantity() / scales.densityScale()).value());
 }
 
+/// Remove the density scale and, for proper density, restore the comoving a-cubed factor.
 inline StoredDensity toStoredDensity(
     ProperDensity density, UnitScales const& scales, CosmologicalContext const& context) {
     return toStoredDensity(toComovingDensity(density, context), scales);
@@ -393,6 +444,8 @@ inline PhysicalSpecificEnergy toPhysicalSpecificEnergy(
     return PhysicalSpecificEnergy(energy.value() * scales.specificEnergyScale() / a / a);
 }
 
+/// Convert physical specific energy to stored energy by multiplying by a squared and
+/// removing its unit scale.
 inline StoredSpecificEnergy toStoredSpecificEnergy(
     PhysicalSpecificEnergy energy, UnitScales const& scales, CosmologicalContext const& context) {
     double const a = context.scaleFactor();
@@ -406,6 +459,8 @@ inline PhysicalPressure toPhysicalPressure(
     return PhysicalPressure(pressure.value() * scales.pressureScale() / a / a / a / a / a);
 }
 
+/// Convert physical pressure to stored pressure by multiplying by a to the fifth power and
+/// removing its unit scale.
 inline StoredPressure toStoredPressure(
     PhysicalPressure pressure, UnitScales const& scales, CosmologicalContext const& context) {
     double const a = context.scaleFactor();
@@ -420,6 +475,8 @@ inline PeculiarPotential toPeculiarPotential(
         potential.value() * scales.specificEnergyScale() / context.scaleFactor());
 }
 
+/// Convert peculiar gravitational potential to its stored value by multiplying by a and
+/// removing the energy scale.
 inline StoredPotential toStoredPotential(
     PeculiarPotential potential, UnitScales const& scales, CosmologicalContext const& context) {
     return StoredPotential(
@@ -434,6 +491,8 @@ inline PeculiarGravitationalAcceleration toPeculiarGravitationalAcceleration(
         acceleration.value() * scales.accelerationScale() / a / a);
 }
 
+/// Convert peculiar acceleration to its stored value by multiplying by a squared and
+/// removing the acceleration scale.
 inline StoredAcceleration toStoredAcceleration(PeculiarGravitationalAcceleration acceleration,
     UnitScales const& scales, CosmologicalContext const& context) {
     double const a = context.scaleFactor();
@@ -446,6 +505,7 @@ inline PhysicalTime toPhysicalInterval(ConformalTime interval, CosmologicalConte
     return PhysicalTime(interval.quantity() * context.scaleFactor());
 }
 
+/// Convert a physical interval to a conformal interval at the supplied fixed scale factor.
 inline ConformalTime toConformalInterval(
     PhysicalTime interval, CosmologicalContext const& context) {
     return ConformalTime(interval.quantity() / context.scaleFactor());
@@ -459,6 +519,8 @@ inline UnitScales cosmologicalScales(CosmologicalContext const& context) {
     return UnitScales(lengthCm, massG, lengthCm / 1.0e5);
 }
 
+/// Select the conventional cosmological unit scale appropriate to the requested physical
+/// quantity type.
 template <typename QuantityType>
 QuantityType cosmologicalScale(CosmologicalContext const& context) {
     auto const scales = cosmologicalScales(context);
@@ -490,22 +552,29 @@ QuantityType cosmologicalScale(CosmologicalContext const& context) {
     }
 }
 
+/// Express a typed physical quantity as a scalar in the conventional cosmological units for
+/// this context.
 template <typename Dimension>
 double toCosmologicalValue(Quantity<Dimension> quantity, CosmologicalContext const& context) {
     return (quantity / cosmologicalScale<Quantity<Dimension>>(context)).value();
 }
 
+/// Express a typed physical quantity as a scalar in the conventional cosmological units for
+/// this context.
 template <typename Tag, typename QuantityType>
 double toCosmologicalValue(
     FramedQuantity<Tag, QuantityType> quantity, CosmologicalContext const& context) {
     return toCosmologicalValue(quantity.quantity(), context);
 }
 
+/// Construct a frame-tagged physical quantity from a scalar in conventional cosmological
+/// units.
 template <typename FramedType>
 FramedType fromCosmologicalValue(double value, CosmologicalContext const& context) {
     return FramedType(value * cosmologicalScale<typename FramedType::QuantityType>(context));
 }
 
+/// Construct a typed physical quantity from a scalar in conventional cosmological units.
 template <typename QuantityType>
 QuantityType quantityFromCosmologicalValue(double value, CosmologicalContext const& context) {
     return value * cosmologicalScale<QuantityType>(context);

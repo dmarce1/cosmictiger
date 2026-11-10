@@ -54,6 +54,7 @@ void particlesGroupCacheFree();
 struct ParticlesCacheEntry {
     ParticleVector<Position> position;
     char type;
+    /// Archive `type`, `position` in transport order.
     template <class A>
     void serialize(A&& arc, unsigned) {
         arc & type;
@@ -187,6 +188,8 @@ HPX_PLAIN_ACTION(particlesPopRungs, ParticlesPopRungsAction);
 HPX_PLAIN_ACTION(particlesPushRungs, ParticlesPushRungsAction);
 HPX_PLAIN_ACTION(particlesActivePct, ParticlesActivePctAction);
 
+/// Reduce active particle counts through the locality tree; rank zero returns the global
+/// fraction.
 double particlesActivePct() {
     Vector<hpx::future<double>> futs;
     for (auto& c : hpxChildren()) {
@@ -204,6 +207,7 @@ double particlesActivePct() {
 
 HPX_PLAIN_ACTION(particlesDisplace, ParticlesDisplaceAction);
 
+/// Apply a periodic position displacement to all particles across localities.
 void particlesDisplace(double dx, double dy, double dz) {
     Vector<hpx::future<void>> futs;
     for (auto& c : hpxChildren()) {
@@ -239,6 +243,7 @@ void particlesDisplace(double dx, double dy, double dz) {
     }
 }
 
+/// Restore the previously saved active-range boundary on each locality.
 void particlesPopRungs() {
     Vector<hpx::future<void>> futs;
     for (auto& c : hpxChildren()) {
@@ -249,6 +254,7 @@ void particlesPopRungs() {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
+/// Save the current active-range boundary on each locality for nested rung traversal.
 void particlesPushRungs() {
     Vector<hpx::future<void>> futs;
     for (auto& c : hpxChildren()) {
@@ -261,12 +267,14 @@ void particlesPushRungs() {
 struct LineIdType {
     int proc;
     ParticleInteger index;
+    /// Compare a cache-line identity by owning process and particle index.
     inline bool operator==(LineIdType other) const {
         return proc == other.proc && index == other.index;
     }
 };
 
 struct LineIdHash {
+    /// Map a remote owner and aligned particle index to a unique cache-line hash.
     inline size_t operator()(LineIdType id) const {
         ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
         ParticleInteger const i = id.index / lineSize;
@@ -275,6 +283,7 @@ struct LineIdHash {
 };
 
 struct LineIdHashLo {
+    /// Select the cache bin from the low part of the remote line hash.
     inline size_t operator()(LineIdType id) const {
         LineIdHash hash;
         return hash(id) % kParticleCacheSize;
@@ -282,6 +291,7 @@ struct LineIdHashLo {
 };
 
 struct LineIdHashHi {
+    /// Return the high part of the remote line hash within its cache bin.
     inline size_t operator()(LineIdType id) const {
         LineIdHash hash;
         return hash(id) / kParticleCacheSize;
@@ -316,6 +326,8 @@ static Array<std::unordered_map<LineIdType, GroupCacheEntry, LineIdHashHi>, kPar
     groupParticleCache;
 static Array<SpinlockType, kParticleCacheSize> groupMutexes;
 
+/// Fetch a cache line once through a shared future, allowing concurrent readers to share
+/// completion or failure.
 template <typename Action, typename T>
 static T const* readParticleCacheLine(LineIdType lineId,
     Array<std::unordered_map<LineIdType, std::shared_ptr<hpx::shared_future<Vector<T>>>,
@@ -366,6 +378,8 @@ static T const* readParticleCacheLine(LineIdType lineId,
     return future->get().data();
 }
 
+/// Partition a particle range so dark matter precedes other species and return the split
+/// index.
 ParticleInteger particlesPartitionDarkMatter(Pair<ParticleInteger> rng) {
     if (!getOptions().hydro.enabled) {
         return rng.second;
@@ -387,6 +401,7 @@ ParticleInteger particlesPartitionDarkMatter(Pair<ParticleInteger> rng) {
     return hi;
 }
 
+/// Gather output records for particles inside the requested spatial box across localities.
 Vector<OutputParticle> particlesGetSample(Range<double> const& box) {
     Vector<hpx::future<Vector<OutputParticle>>> futs;
     Vector<OutputParticle> output;
@@ -415,6 +430,7 @@ Vector<OutputParticle> particlesGetSample(Range<double> const& box) {
     return std::move(output);
 }
 
+/// Gather output records for particles carrying the tracer flag across localities.
 Vector<OutputParticle> particlesGetTracers() {
     Vector<hpx::future<Vector<OutputParticle>>> futs;
     Vector<OutputParticle> output;
@@ -439,6 +455,7 @@ Vector<OutputParticle> particlesGetTracers() {
     return std::move(output);
 }
 
+/// Assign evenly distributed tracer flags using global particle counts and rank offsets.
 void particlesSetTracers(size_t count, size_t totalCount) {
     if (hpxRank() == 0) {
         Vector<hpx::future<ParticleInteger>> counts;
@@ -471,6 +488,8 @@ void particlesSetTracers(size_t count, size_t totalCount) {
     }
 }
 
+/// Allocate unassigned group labels, initialize cache epochs, and establish global particle
+/// offsets.
 std::unordered_map<int, ParticleInteger> particlesGroupsInit() {
     Vector<hpx::future<std::unordered_map<int, ParticleInteger>>> futs;
     for (auto const& c : hpxChildren()) {
@@ -505,6 +524,7 @@ std::unordered_map<int, ParticleInteger> particlesGroupsInit() {
     return map;
 }
 
+/// Locate the rank owning the global particle index used as a group identity.
 int particlesGroupHome(GroupInteger grp) {
     int begin = 0;
     int end = hpxSize();
@@ -519,6 +539,7 @@ int particlesGroupHome(GroupInteger grp) {
     return begin;
 }
 
+/// Install and broadcast the per-rank global particle offsets.
 static void particlesSetGlobalOffset(Vector<size_t> map) {
     particlesGlobalOffset = map[hpxRank()];
     Vector<hpx::future<void>> futs;
@@ -530,6 +551,8 @@ static void particlesSetGlobalOffset(Vector<size_t> map) {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
+/// Preserve final group history and release temporary group labels and caches across
+/// localities.
 void particlesGroupsDestroy() {
     Vector<hpx::future<void>> futs;
     for (auto const& c : hpxChildren()) {
@@ -555,6 +578,7 @@ void particlesGroupsDestroy() {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
+/// Clear local caches of remote positions, groups, rungs, and velocities.
 void particlesCacheFreeLocal() {
     for (size_t i = 0; i < kParticleCacheSize; i++) {
         particleRungCache[i].clear();
@@ -564,6 +588,7 @@ void particlesCacheFreeLocal() {
     groupParticleCache = decltype(groupParticleCache)();
 }
 
+/// Clear remote-particle caches throughout the locality tree.
 void particlesCacheFree() {
     particlesCacheFreeLocal();
     Vector<hpx::future<void>> futs;
@@ -575,6 +600,7 @@ void particlesCacheFree() {
 
 static std::function<void()> undoLastMemadvise = nullptr;
 
+/// Apply GPU access advice to the active particle range while retaining an undo operation.
 void particlesMemadviseGpu() {
 #ifdef USE_CUDA
     if (!cudaEnabled()) {
@@ -611,6 +637,7 @@ void particlesMemadviseGpu() {
 #endif
 }
 
+/// Restore host memory preference and prefetch the active particle fields to CPU memory.
 void particlesMemadviseCpu() {
 #ifdef USE_CUDA
     if (!cudaEnabled()) {
@@ -658,6 +685,8 @@ void particlesMemadviseCpu() {
 #endif
 }
 
+/// Gather local or cached remote particle positions and group labels into caller-provided
+/// arrays.
 void particlesGlobalReadPosAndGroup(ParticleGlobalRange range, Position* x, Position* y,
     Position* z, GroupInteger* groupNumbers, ParticleInteger offset) {
     ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
@@ -707,6 +736,7 @@ void particlesGlobalReadPosAndGroup(ParticleGlobalRange range, Position* x, Posi
     }
 }
 
+/// Read a shared remote group cache line, refreshing group labels when its epoch is stale.
 static GroupParticle const* particlesGroupCacheReadLine(LineIdType lineId) {
     size_t const bin = LineIdHashLo()(lineId);
     int const epoch = groupCacheEpoch;
@@ -769,6 +799,7 @@ static GroupParticle const* particlesGroupCacheReadLine(LineIdType lineId) {
 
 HPX_PLAIN_ACTION(particlesRungCounts, ParticlesRungCountsAction);
 
+/// Reduce particle counts for every occupied rung across workers and localities.
 Vector<size_t> particlesRungCounts() {
     Vector<hpx::future<Vector<size_t>>> futs;
     for (auto& c : hpxChildren()) {
@@ -814,6 +845,7 @@ Vector<size_t> particlesRungCounts() {
 
 HPX_PLAIN_ACTION(particlesSetMinrung, ParticlesSetMinrungAction);
 
+/// Promote every particle below the requested minimum rung throughout the locality tree.
 void particlesSetMinrung(int minrung) {
     Vector<hpx::future<void>> futs;
     for (auto& c : hpxChildren()) {
@@ -837,6 +869,7 @@ void particlesSetMinrung(int minrung) {
     }
 }
 
+/// Gather species-dependent masses from local particles or remote cache entries.
 void particlesGlobalReadMasses(ParticleGlobalRange range, float* masses, ParticleInteger offset) {
     if (range.range.first == range.range.second) {
         return;
@@ -865,6 +898,8 @@ void particlesGlobalReadMasses(ParticleGlobalRange range, float* masses, Particl
     }
 }
 
+/// Gather local or cached remote positions and optional species labels into caller-provided
+/// arrays.
 void particlesGlobalReadPos(ParticleGlobalRange range, Position* x, Position* y, Position* z,
     char* types, ParticleInteger offset) {
     static bool const sph = getOptions().hydro.enabled;
@@ -930,10 +965,12 @@ void particlesGlobalReadPos(ParticleGlobalRange range, Position* x, Position* y,
     }
 }
 
+/// Read the shared remote position/type cache line for the supplied owner and index.
 static ParticlesCacheEntry const* particlesCacheReadLine(LineIdType lineId) {
     return readParticleCacheLine<ParticlesFetchCacheLineAction>(lineId, particleCache, mutexes);
 }
 
+/// Pack a local position/type cache line while holding the particle-reordering read lock.
 static Vector<ParticlesCacheEntry> particlesFetchCacheLine(ParticleInteger index) {
     std::shared_lock<SharedMutexType> lock(sharedMutex);
     bool const sph = getOptions().hydro.enabled;
@@ -957,6 +994,7 @@ static Vector<ParticlesCacheEntry> particlesFetchCacheLine(ParticleInteger index
     return line;
 }
 
+/// Pack local positions and current group labels for a remote group-cache request.
 static Vector<GroupParticle> particlesGroupFetchCacheLine(ParticleInteger index) {
     std::shared_lock<SharedMutexType> lock(sharedMutex);
     ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
@@ -972,6 +1010,7 @@ static Vector<GroupParticle> particlesGroupFetchCacheLine(ParticleInteger index)
     return line;
 }
 
+/// Advance the group-cache refresh epoch throughout the locality tree.
 void particlesIncGroupCacheEpoch() {
     ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
     Vector<hpx::future<void>> futs;
@@ -983,6 +1022,7 @@ void particlesIncGroupCacheEpoch() {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
+/// Pack current local group labels without retransmitting unchanged positions.
 static Vector<GroupInteger> particlesGroupRefreshCacheLine(ParticleInteger index) {
     std::shared_lock<SharedMutexType> lock(sharedMutex);
     ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
@@ -995,6 +1035,8 @@ static Vector<GroupInteger> particlesGroupRefreshCacheLine(ParticleInteger index
     return line;
 }
 
+/// Clear distributed particle handles and release separately owned diagnostic and
+/// star-formation buffers.
 void particlesDestroy() {
     Vector<hpx::future<void>> futs;
     auto const children = hpxChildren();
@@ -1017,18 +1059,23 @@ void particlesDestroy() {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
+/// Return the number of local particles in the base storage.
 ParticleInteger particlesSize() {
     return size;
 }
 
+/// Return the local owned-particle count, excluding separately stored gravity ghosts.
 ParticleInteger particlesOwnedSize() {
     return size;
 }
 
+/// Read the process-local remote particle-cache fetch count.
 uint64_t particlesRemoteFetchCount() {
     return remoteParticleFetches.load(std::memory_order_relaxed);
 }
 
+/// Allocate a replacement particle array, copy existing records, and release the previous
+/// allocation.
 template <class T>
 void particlesArrayResize(T*& ptr, ParticleInteger newCapacity, bool reg) {
     T* newPtr = static_cast<T*>(reg ? allocateManagedMemory(sizeof(T) * newCapacity) :
@@ -1048,6 +1095,7 @@ void particlesArrayResize(T*& ptr, ParticleInteger newCapacity, bool reg) {
     ptr = newPtr;
 }
 
+/// Allocate and initialize sample-index storage when gravity-error capture is enabled.
 static void particlesEnsureGravitySampleStorage() {
     if (getOptions().gravity.errorInterval > 0 && particlesGravitySampleIndices == nullptr &&
         capacity > 0) {
@@ -1056,6 +1104,7 @@ static void particlesEnsureGravitySampleStorage() {
     }
 }
 
+/// Allocate and initialize per-particle star-formation metadata when required.
 static void particlesEnsureStarFormationStorage() {
     if (getOptions().starFormation.enabled && particlesStarFormationStates == nullptr &&
         capacity > 0) {
@@ -1065,6 +1114,8 @@ static void particlesEnsureStarFormationStorage() {
 }
 
 #if !COSMICTIGER_WITH_GRAVITY
+/// Zero retained force-output fields for particle slots without a gravity pass to populate
+/// them.
 static void particlesClearGravityDiagnostics(ParticleInteger begin, ParticleInteger end) {
     if (begin >= end) {
         return;
@@ -1081,6 +1132,8 @@ static void particlesClearGravityDiagnostics(ParticleInteger begin, ParticleInte
 }
 #endif
 
+/// Grow enabled particle arrays together and initialize metadata for newly exposed particle
+/// slots.
 static void particlesResizeStorage(ParticleInteger sz, bool lock) {
     if (sz > capacity) {
         if (lock) {
@@ -1177,6 +1230,7 @@ static void particlesResizeStorage(ParticleInteger sz, bool lock) {
     }
 }
 
+/// Set the particle count and ensure optional diagnostic and star-formation arrays exist.
 void particlesResize(ParticleInteger sz, bool lock) {
     if (sz != size) {
         particlesResizeStorage(sz, lock);
@@ -1186,6 +1240,7 @@ void particlesResize(ParticleInteger sz, bool lock) {
     }
 }
 
+/// Count local particles lacking stable identities and reject duplicate nonzero identities.
 static Pair<uint64_t> particlesStarFormationCount() {
     particlesEnsureStarFormationStorage();
     std::unordered_set<uint64_t> ids;
@@ -1201,6 +1256,7 @@ static Pair<uint64_t> particlesStarFormationCount() {
     return {uint64_t(particlesOwnedSize()), missing};
 }
 
+/// Assign source-order identities to a population initialized entirely on rank zero.
 static void particlesAssignStarFormationIds() {
     // Fixed scenarios initialize their full population on rank zero. Assign
     // source-order IDs there before the first migration, independently of MPI size.
@@ -1210,6 +1266,8 @@ static void particlesAssignStarFormationIds() {
 }
 HPX_PLAIN_ACTION(particlesStarFormationCount, ParticlesStarFormationCountAction);
 
+/// Validate distributed identity coverage or assign identities before initial rank-zero
+/// particles migrate.
 void particlesInitializeStarFormationIds() {
     if (!getOptions().starFormation.enabled) {
         return;
@@ -1258,6 +1316,8 @@ void particlesInitializeStarFormationIds() {
     particlesAssignStarFormationIds();
 }
 
+/// Convert a synchronized gas particle to a star, remove its gas record, and record
+/// formation metadata.
 void particlesConvertToStar(ParticleInteger index, double formationTime) {
 #if COSMICTIGER_WITH_SPH
     uint64_t timeBits;
@@ -1279,10 +1339,12 @@ void particlesConvertToStar(ParticleInteger index, double formationTime) {
 #endif
 }
 
+/// Register dependent storage cleanup to run before particle arrays are released.
 void particlesRegisterReleaseHook(void (*hook)()) {
     particleReleaseHooks.push_back(hook);
 }
 
+/// Replace gravity sample-acceleration storage and reset particle-to-sample markers.
 void particlesGravitySamplesBegin(size_t sampleCount) {
     if (sampleCount > 0 && getOptions().gravity.errorInterval <= 0) {
         throw std::logic_error("Gravity sample capture requires gravity.errorInterval > 0");
@@ -1313,6 +1375,7 @@ void particlesGravitySamplesBegin(size_t sampleCount) {
     }
 }
 
+/// Run dependent release hooks and free the enabled local particle arrays.
 void particlesFree() {
     for (auto hook : particleReleaseHooks) {
         hook();
@@ -1358,6 +1421,8 @@ void particlesFree() {
     }
 }
 
+/// Create this rank's share of random initial positions with zero velocities and initial
+/// rungs.
 void particlesRandomInit() {
     Vector<hpx::future<void>> futs;
     auto const children = hpxChildren();
@@ -1402,6 +1467,8 @@ void particlesRandomInit() {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
+/// Estimate an enclosing sphere from a particle range's bounding-box center and maximum
+/// distance.
 Pair<Vector3<double>, double> particlesEnclosingSphere(Pair<ParticleInteger> rng) {
     auto totRng = particlesCurrentRange();
     auto totalNumberOfParticles = totRng.second - totRng.first;
@@ -1473,11 +1540,15 @@ Pair<Vector3<double>, double> particlesEnclosingSphere(Pair<ParticleInteger> rng
     return rc;
 }
 
+/// Convert a floating split coordinate and partition the particle range along the selected
+/// dimension.
 ParticleInteger particlesSort(Pair<ParticleInteger> rng, double xm, int xdim) {
     addCpuFlops(1, FlopPrecision::Double);
     return particlesPartition(rng, Position(xm), xdim);
 }
 
+/// Partition particles in place around a stored coordinate while keeping all particle
+/// fields aligned.
 ParticleInteger particlesPartition(Pair<ParticleInteger> rng, Position xmid, int xdim) {
     ParticleInteger begin = rng.first;
     ParticleInteger end = rng.second;
@@ -1499,6 +1570,7 @@ ParticleInteger particlesPartition(Pair<ParticleInteger> rng, Position xmid, int
     return hi;
 }
 
+/// Return the active suffix selected by the current rung traversal.
 Pair<ParticleInteger, ParticleInteger> particlesCurrentRange() {
     Pair<ParticleInteger, ParticleInteger> rc;
     rc.first = rungBegin;
@@ -1508,6 +1580,8 @@ Pair<ParticleInteger, ParticleInteger> particlesCurrentRange() {
 
 HPX_PLAIN_ACTION(particlesSortByRung, ParticlesSortByRungAction);
 
+/// Partition active particles by minimum rung and update the active suffix across
+/// localities.
 void particlesSortByRung(int minrung) {
     Vector<hpx::future<void>> futs;
     for (auto& c : hpxChildren()) {
@@ -1540,6 +1614,7 @@ void particlesSortByRung(int minrung) {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
+/// Gather local or cached remote rung values into a caller-provided array.
 void particlesGlobalReadRungs(ParticleGlobalRange range, char* r, ParticleInteger offset) {
     ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
     if (range.range.first != range.range.second) {
@@ -1568,11 +1643,13 @@ void particlesGlobalReadRungs(ParticleGlobalRange range, char* r, ParticleIntege
     }
 }
 
+/// Read the shared remote cache line of particle rungs.
 static char const* particlesCacheReadLineRungs(LineIdType lineId) {
     return readParticleCacheLine<ParticlesFetchCacheLineRungsAction>(
         lineId, particleRungCache, mutexesRungs);
 }
 
+/// Pack a local rung cache line for remote retrieval.
 static Vector<char> particlesFetchCacheLineRungs(ParticleInteger index) {
     ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
     Vector<char> line(lineSize);
@@ -1586,6 +1663,7 @@ static Vector<char> particlesFetchCacheLineRungs(ParticleInteger index) {
 }
 
 #if COSMICTIGER_WITH_GRAVITY
+/// Gather the requested output sample, including enabled force diagnostics.
 Vector<ParticleSample> particlesSample(int cnt) {
     auto const& analysis = getOptions().analysis;
     Vector<ParticleSample> parts;
@@ -1638,12 +1716,14 @@ namespace detail {
 constexpr uint64_t kStarFormationParticleMagic = 0x4354534650415254ULL;
 constexpr uint64_t kStarFormationParticleVersion = 2;
 
+/// Test stored double exponent bits for finiteness independently of fast-math assumptions.
 bool finiteStarFormationScalar(double value) {
     uint64_t bits;
     std::memcpy(&bits, &value, sizeof(bits));
     return (bits & 0x7ff0000000000000ULL) != 0x7ff0000000000000ULL;
 }
 
+/// Read and validate versioned particle identities, event counters, and formation metadata.
 void loadStarFormationParticles(FILE* fp) {
     uint64_t magic, version;
     FREAD(&magic, sizeof(magic), 1, fp);
@@ -1673,6 +1753,7 @@ void loadStarFormationParticles(FILE* fp) {
     }
 }
 
+/// Write versioned per-particle star-formation metadata and require complete writes.
 void saveStarFormationParticles(FILE* fp) {
     if (fwrite(&kStarFormationParticleMagic, sizeof(uint64_t), 1, fp) != 1 ||
         fwrite(&kStarFormationParticleVersion, sizeof(uint64_t), 1, fp) != 1) {
@@ -1693,6 +1774,8 @@ void saveStarFormationParticles(FILE* fp) {
 
 }    // namespace detail
 
+/// Restore enabled particle arrays, rung traversal state, and species metadata from a
+/// checkpoint stream.
 void particlesLoad(FILE* fp) {
     ParticleInteger size;
     FREAD(&size, sizeof(ParticleInteger), 1, fp);
@@ -1755,6 +1838,7 @@ void particlesLoad(FILE* fp) {
 #endif
 }
 
+/// Write enabled particle arrays and rung traversal state to a checkpoint stream.
 void particlesSave(FILE* fp) {
     ParticleInteger size = particlesSize();
     fwrite(&size, sizeof(ParticleInteger), 1, fp);
@@ -1794,6 +1878,7 @@ void particlesSave(FILE* fp) {
     fwrite(rungBegins.data(), sizeof(ParticleInteger), rungBegins.size(), fp);
 }
 
+/// Write species-separated fixed-point positions in the glass initial-condition format.
 void particlesSaveGlass(char const* filename) {
     FILE* fp = fopen(outputPath(filename).c_str(), "wb");
     ParticleInteger size = getOptions().initial.latticeSide;
@@ -1838,6 +1923,7 @@ void particlesSaveGlass(char const* filename) {
 }
 
 #if COSMICTIGER_WITH_SPH
+/// Rebuild gas-to-base-particle indices after base particles have been reordered.
 void particlesResolveWithSphParticles() {
     int const numberOfThreads = hpxHardwareConcurrency();
     std::vector<hpx::future<void>> futs;
@@ -1860,6 +1946,7 @@ void particlesResolveWithSphParticles() {
 }
 
 #endif
+/// Gather local or cached remote velocity components into caller-provided arrays.
 void particlesGlobalReadVels(
     ParticleGlobalRange range, float* vx, float* vy, float* vz, ParticleInteger offset) {
     static bool const sph = getOptions().hydro.enabled;
@@ -1896,11 +1983,13 @@ void particlesGlobalReadVels(
     }
 }
 
+/// Read the shared remote velocity cache line for the supplied particle identity.
 static ParticleVector<float> const* particlesCacheReadLineVels(LineIdType lineId) {
     return readParticleCacheLine<ParticlesFetchCacheLineVelsAction>(
         lineId, particleVelocityCache, velsMutexes);
 }
 
+/// Pack a local velocity cache line for remote retrieval.
 static Vector<ParticleVector<float>> particlesFetchCacheLineVels(ParticleInteger index) {
     static bool const sph = getOptions().hydro.enabled;
     ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
@@ -1918,6 +2007,8 @@ static Vector<ParticleVector<float>> particlesFetchCacheLineVels(ParticleInteger
 
 HPX_PLAIN_ACTION(particlesSumEnergies, ParticlesSumEnergiesAction);
 
+/// Reduce stored kinetic, potential, momentum, and optional gas thermal diagnostics across
+/// localities.
 EnergiesT particlesSumEnergies(bool includeGas) {
     std::vector<hpx::future<EnergiesT>> futs;
     for (auto& c : hpxChildren()) {
@@ -1970,10 +2061,12 @@ EnergiesT particlesSumEnergies(bool includeGas) {
     return energies;
 }
 
+/// Expose the reader/writer lock coordinating particle reordering and remote packing.
 SharedMutexType& particlesSharedMutex() {
     return sharedMutex;
 }
 
+/// Pack local position ranges into dimension-major storage under particle read locks.
 Vector<Position> particlesGetLocal(Vector<Pair<ParticleInteger>> const& ranges) {
     Vector<Position> rc;
     size_t sz = 0;
@@ -2015,11 +2108,13 @@ Vector<Position> particlesGetLocal(Vector<Pair<ParticleInteger>> const& ranges) 
 
 HPX_PLAIN_ACTION(particlesGetLocal, ParticlesGetLocalAction);
 
+/// Request asynchronously packed position ranges from the specified owning rank.
 hpx::future<Vector<Position>> particlesGet(int rank, Vector<Pair<ParticleInteger>> const& ranges) {
     return hpx::async<ParticlesGetLocalAction>(hpxLocalities()[rank], ranges);
 }
 
 namespace detail {
+/// Read and validate the supported constant-mass, dark-matter-only Gadget header layout.
 GadgetIoHeader readGadgetHeader(FILE* fp, std::string const& filename) {
     int marker = 0;
     FREAD(&marker, sizeof(marker), 1, fp);
@@ -2045,6 +2140,7 @@ GadgetIoHeader readGadgetHeader(FILE* fp, std::string const& filename) {
 }
 }    // namespace detail
 
+/// Read the first snapshot file's validated header without loading its particle arrays.
 GadgetIoHeader particlesReadGadget4Header(std::string const& filenameBase) {
     std::string const filename = filenameBase + (hpxSize() > 1 ? ".0" : "");
     UniqueFile file(fopen(filename.c_str(), "rb"));
@@ -2056,6 +2152,8 @@ GadgetIoHeader particlesReadGadget4Header(std::string const& filenameBase) {
 
 HPX_PLAIN_ACTION(particlesReadGadget4, ParticlesReadGadget4Action);
 
+/// Load each locality's Gadget particle file and convert positions and velocities to
+/// simulation storage units.
 GadgetIoHeader particlesReadGadget4(std::string fnameBase) {
     std::cout << "Reading gadget4 file\n" << std::flush;
     Vector<hpx::future<void>> futs;

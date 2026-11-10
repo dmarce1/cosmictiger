@@ -31,10 +31,12 @@ HPX_PLAIN_ACTION(hpxInitCuda, HpxInitCudaAction);
 static void detectProcessesPerNode();
 static bool detectHyperthreading();
 
+/// Yield the current HPX task so other queued work can run.
 void hpxYield() {
     hpx::this_thread::yield();
 }
 
+/// Estimate the worker count per process after accounting for SMT and colocated ranks.
 int hpxHardwareConcurrency() {
     static bool firstCall = true;
     int threads = hpx::thread::hardware_concurrency();
@@ -53,6 +55,8 @@ int hpxHardwareConcurrency() {
     return threads;
 }
 
+/// Discover locality IDs, build the broadcast tree, and determine node-local rank
+/// placement.
 void hpxInit() {
     rank = hpx::get_locality_id();
     auto tmp = hpx::find_all_localities();
@@ -77,6 +81,7 @@ void hpxInit() {
     hyper = detectHyperthreading();
 }
 
+/// Initialize each locality's CUDA backend and optional HEALPix device lookup tables.
 void hpxInitCuda() {
 #ifdef USE_CUDA
     cudaInit();
@@ -94,26 +99,32 @@ void hpxInitCuda() {
     }
 }
 
+/// Return this locality's global rank.
 int hpxRank() {
     return rank;
 }
 
+/// Return this locality's rank among processes on the same host.
 int hpxLocalRank() {
     return localRank;
 }
 
+/// Return the total number of HPX localities.
 int hpxSize() {
     return numberOfRanks;
 }
 
+/// Return the global locality-ID list.
 Vector<hpx::id_type> const& hpxLocalities() {
     return localities;
 }
 
+/// Return this rank's children in the binary collective tree.
 Vector<hpx::id_type> const& hpxChildren() {
     return children;
 }
 
+/// Read Linux's SMT activity flag, returning false if it cannot be read.
 static bool detectHyperthreading() {
     FILE* fp = fopen("/sys/devices/system/cpu/smt/active", "rt");
     if (fp != nullptr) {
@@ -135,6 +146,7 @@ static bool detectHyperthreading() {
     }
 }
 
+/// Return the operating system hostname used to group colocated ranks.
 static std::string getHostname() {
     char buffer[1024];
     gethostname(buffer, 1023);
@@ -144,6 +156,7 @@ static std::string getHostname() {
 
 HPX_PLAIN_ACTION(getHostname, GetHostnameAction);
 
+/// Query locality hostnames to determine this process's node-local rank and sharing count.
 static void detectProcessesPerNode() {
     Vector<hpx::future<std::string>> futs;
     for (int i = 0; i < localities.size(); i++) {

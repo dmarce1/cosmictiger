@@ -23,6 +23,7 @@ struct PmmmNearParticle {
     int rank = 0;
     int64_t index = 0;
 
+    /// Archive this record in the field order required by distributed transport.
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
         archive & offset & mass & rank & index;
@@ -56,11 +57,14 @@ namespace pmmm::detail {
 inline constexpr size_t kPmmmNearCudaMinimumSinks = 128;
 inline constexpr size_t kPmmmNearCudaMinimumPairs = 65536;
 
+/// Select CUDA only when both useful sink count and candidate-pair count meet the launch
+/// thresholds.
 inline constexpr bool shouldUsePmmmNearCuda(size_t usefulSinkCount, size_t candidatePairs) {
     return usefulSinkCount >= kPmmmNearCudaMinimumSinks &&
         candidatePairs >= kPmmmNearCudaMinimumPairs;
 }
 
+/// Count the polynomial arithmetic used by the near-field softening kernel.
 CUDA_EXPORT inline FlopCount nearBernsteinFlops(int degree) {
     return FlopCount(3) * degree * (degree + 1) / 2;
 }

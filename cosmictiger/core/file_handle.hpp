@@ -15,6 +15,7 @@
 // -Wignored-attributes warning that decltype(&fclose) triggers, because glibc
 // attaches attributes to fclose that a template argument cannot carry.
 struct FileCloser {
+    /// Close an owned non-null FILE handle when its RAII owner releases it.
     void operator()(FILE* file) const {
         if (file != nullptr) {
             std::fclose(file);

@@ -71,10 +71,13 @@ class BoltzmannIntegrator {
     size_t accepted_ = 0;
     size_t rejected_ = 0;
 
+    /// Map a species and multipole ell >= 3 into the hierarchy-tail storage.
     size_t tailIndex(int species, int ell) const {
         return CoreSize + species * tailSize_ + ell - 3;
     }
 
+    /// Evaluate expansion, density fractions, sound speed, and collision coefficients
+    /// at logarithmic scale.
     Background background(double logScale) const {
         double const a = std::exp(logScale);
         double const matter = universe_.params.omegaC + universe_.params.omegaB;
@@ -100,12 +103,15 @@ class BoltzmannIntegrator {
         return bg;
     }
 
+    /// Evaluate the metric eta derivative from the coupled fluid velocities and
+    /// background fractions.
     double etaPrime(LinearState const& state, Background const& bg) const {
         return (1.5 * (bg.baryon + 4.0 * bg.photon / 3.0) * state.values[Velocity] +
                    2.0 * bg.neutrino * state.values[VelocityNeutrino]) /
             bg.eps;
     }
 
+    /// Assemble the coupled metric, fluid, and quadrupole evolution matrix.
     CoreMatrix coreOperator(Background const& bg) const {
         CoreMatrix matrix{};
         matrix[HPrime][HPrime] = -bg.metricFriction;
@@ -186,6 +192,8 @@ class BoltzmannIntegrator {
         return matrix;
     }
 
+    /// Solve an implicit stage by eliminating hierarchy tails, solving the core, and
+    /// back-substituting.
     LinearState implicitStage(LinearState const& rhs, Background const& bg, double weight) const {
         LinearState result = rhs;
         result.tau += weight / bg.expansion;
@@ -246,6 +254,7 @@ class BoltzmannIntegrator {
         return result;
     }
 
+    /// Advance the coupled linear system with the third-order L-stable SDIRK stages.
     LinearState step(LinearState const& start, double logScale, double stepSize) const {
         // Alexander's three-stage, third-order, stiffly accurate SDIRK.
         // Its L-stability damps unresolved collision and hierarchy modes;
@@ -274,6 +283,8 @@ class BoltzmannIntegrator {
         return result;
     }
 
+    /// Estimate normalized step-doubling error using a shared amplitude floor near
+    /// acoustic zeros.
     double error(LinearState const& start, LinearState const& full, LinearState const& half) const {
         if (!std::isfinite(full.tau) || !std::isfinite(half.tau) || !(full.tau > 0.0) ||
             !(half.tau > 0.0)) {
@@ -304,6 +315,8 @@ class BoltzmannIntegrator {
     }
 
 public:
+    /// Retain the background, wavenumber, and integration controls and size the
+    /// hierarchy tails.
     BoltzmannIntegrator(ZeroOrderUniverse const& universe, double k, BoltzmannSolverOptions options)
       : universe_(universe)
       , k_(k)
@@ -311,6 +324,8 @@ public:
       , tailSize_(options.maxMultipole - 2)
       , species_(universe.params.omegaNu > 0.0 ? 3 : 2) {}
 
+    /// Initialize the adiabatic mode and adaptively integrate transfers at the
+    /// requested scale factors.
     std::vector<BoltzmannTransfer> solve(std::vector<double> const& scales) {
         double const radiation = universe_.params.omegaGam + universe_.params.omegaNu;
         double const matter = universe_.params.omegaB + universe_.params.omegaC;
@@ -427,6 +442,8 @@ public:
 
 }    // namespace detail
 
+/// Validate the background and ordered sample scales before solving one wavenumber's
+/// transfers.
 std::vector<BoltzmannTransfer> solveBoltzmannTransfers(ZeroOrderUniverse const& universe, double k,
     std::vector<double> const& scaleFactors, BoltzmannSolverOptions const& options) {
     auto const& params = universe.params;

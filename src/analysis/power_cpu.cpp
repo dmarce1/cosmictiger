@@ -9,6 +9,7 @@
 #include <cosmictiger/analysis/power_cpu.hpp>
 #include <cosmictiger/cosmology/fft.hpp>
 
+/// Deposit mass-weighted folded particle clouds into the requested CPU mesh box.
 void accumulateDensityCpuKernel(Position const* positionX, Position const* positionY,
     Position const* positionZ, float const* masses, size_t particleCount, int fold, int gridSize,
     Range<int64_t> const& box, float* density) {

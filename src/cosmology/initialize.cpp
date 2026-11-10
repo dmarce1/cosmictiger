@@ -59,12 +59,16 @@ struct PowerSpectrumFunction {
     linear_power::LogarithmicTable derivativeAmplitude;
     double normalizationFactor = 1.0;
 
+    /// Return the normalized density or velocity-derivative transfer amplitude at a
+    /// wavenumber.
     double amplitude(double wavenumber, bool velocity) const {
         return std::sqrt(normalizationFactor) *
             (velocity ? derivativeAmplitude(wavenumber) : densityAmplitude(wavenumber));
     }
 };
 
+/// Determine the fundamental and largest corner wavenumbers for the configured initial
+/// Fourier mesh.
 static std::pair<double, double> initialWavenumberRange() {
     double const boxSize =
         (units::scalesFromOptions(getOptions()).lengthScale() / units::kMegaparsec).value();
@@ -104,6 +108,8 @@ static void clearX0();
 HPX_PLAIN_ACTION(initX0, InitX0Action);
 HPX_PLAIN_ACTION(clearX0, ClearX0Action);
 
+/// Solve the background and linear transfers, normalize the initial spectrum, and write
+/// spectrum diagnostics.
 PowerSpectrumFunction computePowerSpectrum() {
     auto const& options = getOptions();
     if (std::abs(options.cosmology.omegaK) > 1.0e-12) {
@@ -253,6 +259,8 @@ PowerSpectrumFunction computePowerSpectrum() {
     return spectrum;
 }
 
+/// Build cosmological particle initial conditions using transfer functions, Zel'dovich
+/// displacement, and optional 2LPT.
 void initialize(double z0) {
     profile::checkForInterrupt();
     auto const checkInitializationInterrupt = []() {
@@ -442,6 +450,7 @@ void initialize(double z0) {
     }
 }
 
+/// Save the Fourier-transformed second-order density source on every locality.
 void twolptF2delta2Inv() {
     Vector<hpx::future<void>> futs;
     for (auto const& c : hpxChildren()) {
@@ -452,6 +461,7 @@ void twolptF2delta2Inv() {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
+/// Load the second-order source into a fresh real mesh and transform it to Fourier space.
 void twolptCorrection1() {
     int const n = getOptions().initial.fourierSize;
     if (hpxRank() == 0) {
@@ -470,6 +480,8 @@ void twolptCorrection1() {
     }
 }
 
+/// Build one Fourier component of the second-order displacement correction and
+/// inverse-transform it.
 void twolptCorrection2(int dim, int latticePhase) {
     int const n = getOptions().initial.fourierSize;
     if (hpxRank() == 0) {
@@ -538,6 +550,8 @@ void twolptCorrection2(int dim, int latticePhase) {
     }
 }
 
+/// Generate deterministic Fourier modes for the requested density/displacement derivative
+/// and lattice phase.
 void twolptGenerate(int dim1, int dim2, bool velocity = false, int latticePhase = 0) {
     int64_t const n = getOptions().initial.fourierSize;
     float const boxSize =
@@ -596,6 +610,8 @@ void twolptGenerate(int dim1, int dim2, bool velocity = false, int latticePhase 
     fft3dAccumulateComplex(box, yValue);
 }
 
+/// Build and inverse-transform a selected second derivative used by the second-order
+/// source.
 void twolpt(int dim1, int dim2) {
     int const n = getOptions().initial.fourierSize;
     if (hpxRank() == 0) {
@@ -619,6 +635,8 @@ void twolpt(int dim1, int dim2) {
     }
 }
 
+/// Accumulate one real-space derivative product into the distributed second-order density
+/// source.
 void twolptPhase(int phase) {
     Vector<hpx::future<void>> futs;
     for (auto const& c : hpxChildren()) {
@@ -634,6 +652,8 @@ void twolptPhase(int phase) {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
+/// Allocate and zero local second-order source and intermediate arrays across all
+/// localities.
 void twolptInit() {
     Vector<hpx::future<void>> futs;
     for (auto const& c : hpxChildren()) {
@@ -645,6 +665,7 @@ void twolptInit() {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
+/// Release distributed second-order perturbation work arrays.
 void twolptDestroy() {
     Vector<hpx::future<void>> futs;
     for (auto const& c : hpxChildren()) {
@@ -656,6 +677,8 @@ void twolptDestroy() {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
+/// Generate the requested Fourier displacement or velocity component across the locality
+/// tree.
 static void zeldovichBegin(int dim1, int dim2, bool velocity, int latticePhase) {
     Vector<hpx::future<void>> futs;
     for (auto c : hpxChildren()) {
@@ -665,6 +688,7 @@ static void zeldovichBegin(int dim1, int dim2, bool velocity, int latticePhase) 
     hpx::wait_all(futs.begin(), futs.end());
 }
 
+/// Determine this locality's recursively partitioned initial-condition lattice box.
 static Range<int64_t> findMyBox(Range<int64_t> box, int begin, int end, int depth) {
     if (end - begin == 1) {
         return box;
@@ -684,6 +708,7 @@ static Range<int64_t> findMyBox(Range<int64_t> box, int begin, int end, int dept
     }
 }
 
+/// Determine this locality's recursively partitioned initial-condition lattice box.
 static Range<int64_t> findMyBox() {
     Range<int64_t> box;
     for (int dim = 0; dim < kDimensions; dim++) {
@@ -693,6 +718,7 @@ static Range<int64_t> findMyBox() {
     return findMyBox(box, 0, hpxSize(), 0);
 }
 
+/// Release the saved unperturbed particle coordinates throughout the locality tree.
 static void clearX0() {
     Vector<hpx::future<void>> futures;
     for (auto const& child : hpxChildren()) {
@@ -706,6 +732,8 @@ static void clearX0() {
     }
 }
 
+/// Construct the unperturbed particle lattice or glass and initialize species-specific
+/// state.
 static void initX0() {
     Vector<hpx::future<void>> remoteFutures;
     for (auto const& child : hpxChildren()) {
@@ -915,6 +943,8 @@ static void initX0() {
     }
 }
 
+/// Interpolate the transformed mode onto particles, apply its displacement or velocity, and
+/// return maximum displacement.
 static float zeldovichEnd(
     int dim, float d1Value, float prefac1, bool velocityOnly, int latticePhase) {
     float dxmax = 0.0;

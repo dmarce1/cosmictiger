@@ -14,6 +14,7 @@ struct StarFormationState {
 
     bool operator==(StarFormationState const&) const = default;
 
+    /// Archive this record in the field order required by distributed transport.
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
         archive & id & eventCounter & formationTime & specificStarFormationRate &

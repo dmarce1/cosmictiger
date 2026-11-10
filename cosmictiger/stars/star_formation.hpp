@@ -10,6 +10,7 @@
 struct StarFormationUpdate {
     double heating{};
     uint64_t converted{};
+    /// Archive this record in the field order required by distributed transport.
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
         archive & heating & converted;

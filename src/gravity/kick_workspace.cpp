@@ -15,6 +15,7 @@
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
+/// Initialize a kick workspace with its parameters, total particle goal, and GPU executor.
 KickWorkspace::KickWorkspace(
     KickParameters p, ParticleInteger totalParticlesArgument, KickGpuExecutor executor) {
     gpuExecutor_ = executor;
@@ -23,6 +24,7 @@ KickWorkspace::KickWorkspace(
     numberOfProcessedParticles_ = 0;
 }
 
+/// Initialize batch-mode kick storage with the caller-provided force-output view.
 KickWorkspace::KickWorkspace(KickParameters p, ParticleInteger totalParticlesArgument,
     detail::FmmForceOutput output, KickGpuExecutor executor)
   : KickWorkspace(p, totalParticlesArgument, executor) {
@@ -30,13 +32,16 @@ KickWorkspace::KickWorkspace(KickParameters p, ParticleInteger totalParticlesArg
     output_ = output;
 }
 
+/// Destroy the workspace and release its owned containers through member destruction.
 KickWorkspace::~KickWorkspace() {}
 
+/// Merge a completed batch's kick diagnostics under the workspace mutex.
 void KickWorkspace::accumulateBatchReturn(KickReturn const& result) {
     std::lock_guard<MutexType> lock(mutex_);
     batchReturn_ += result;
 }
 
+/// Accumulate each interaction category under the workspace mutex.
 void KickWorkspace::addInteractionCounts(KickInteractionCounts const& counts) {
     std::lock_guard<MutexType> lock(mutex_);
     interactionCounts_.acceptanceTests += counts.acceptanceTests;
@@ -51,11 +56,14 @@ void KickWorkspace::addInteractionCounts(KickInteractionCounts const& counts) {
     interactionCounts_.deferredSources += counts.deferredSources;
 }
 
+/// Return a synchronized snapshot of accumulated interaction counts.
 KickInteractionCounts KickWorkspace::interactionCounts() {
     std::lock_guard<MutexType> lock(mutex_);
     return interactionCounts_;
 }
 
+/// Require all producers to finish, execute queued GPU work, and return combined batch
+/// diagnostics.
 KickReturn KickWorkspace::finishBatch() {
     ALWAYS_ASSERT(batch_);
     {
@@ -69,11 +77,14 @@ KickReturn KickWorkspace::finishBatch() {
     return batchReturn_;
 }
 
+/// Pass the queued work items and output view to the configured GPU executor.
 KickReturn KickWorkspace::toGpu() {
     ALWAYS_ASSERT(gpuExecutor_ != nullptr);
     return gpuExecutor_(params_, std::move(workitems_), treeIds_, output_);
 }
 
+/// Record completed CPU particles and trigger deferred GPU execution when all producers
+/// finish.
 void KickWorkspace::recordProcessedParticles(
     std::shared_ptr<KickWorkspace> ptr, ParticleInteger n) {
     profile::ScopedWork work(profile::WorkPhase::KickGpuQueue,
@@ -97,6 +108,8 @@ void KickWorkspace::recordProcessedParticles(
     }
 }
 
+/// Queue one GPU sink work item and trigger execution when the complete particle goal is
+/// accounted for.
 void KickWorkspace::addWork(std::shared_ptr<KickWorkspace> ptr, ExpansionBuffer const& l,
     Vector3<Position> pos, TreeId self, Vector<TreeId>&& dchecks, FmmGeometry const& geometry,
     ParticleInteger outputOffset) {

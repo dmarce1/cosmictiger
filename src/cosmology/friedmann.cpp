@@ -41,12 +41,15 @@ namespace detail {
         double amplitude;
     };
 
+    /// Throw a domain error when a Friedmann precondition fails.
     void require(bool condition, char const* message) {
         if (!condition) {
             throw std::domain_error(message);
         }
     }
 
+    /// Evaluate the scaled Friedmann polynomial and component amplitude for error
+    /// normalization.
     FriedmannPolynomial friedmannPolynomial(
         BackgroundCosmologyParameters const& parameters, double a, uint64_t& flops) {
         double const matter = parameters.omegaMatter * a;
@@ -92,6 +95,8 @@ namespace detail {
         return true;
     }
 
+    /// Form a Runge-Kutta stage from weighted derivatives while accumulating arithmetic
+    /// cost.
     FriedmannVariables friedmannStage(FriedmannVariables const& value, double step,
         FriedmannStages const& stages, std::array<double, kFriedmannStages> const& weights,
         uint64_t& flops) {
@@ -110,6 +115,8 @@ namespace detail {
         return result;
     }
 
+    /// Evaluate the embedded Dormand-Prince stages and error estimate, rejecting
+    /// invalid stage states.
     bool friedmannStep(BackgroundCosmologyParameters const& parameters, CosmologicalTime time,
         FriedmannVariables const& value, double step, FriedmannVariables& next,
         FriedmannVariables& error, FriedmannStages& stages, uint64_t& flops) {
@@ -142,6 +149,8 @@ namespace detail {
         return true;
     }
 
+    /// Build the quartic continuous extension from accepted Runge-Kutta stage
+    /// derivatives.
     FriedmannDenseSegment denseSegment(double begin, double step, FriedmannVariables const& initial,
         FriedmannStages const& stages, uint64_t& flops) {
         // Dormand-Prince/Shampine quartic continuous extension. Each row
@@ -175,6 +184,7 @@ namespace detail {
         return segment;
     }
 
+    /// Measure the Friedmann constraint residual relative to the component amplitude.
     double constraintError(
         FriedmannVariables const& value, FriedmannPolynomial const& polynomial, uint64_t& flops) {
         double const normalizedU = value[1] / std::sqrt(polynomial.amplitude);
@@ -182,12 +192,16 @@ namespace detail {
         return std::abs(normalizedU * normalizedU - polynomial.value / polynomial.amplitude);
     }
 
+    /// Construct the constraint tolerance from integration tolerances and
+    /// floating-point roundoff.
     double constraintTolerance(FriedmannOptions const& options) {
         return 256.0 *
             (options.relativeTolerance + options.absoluteTolerance +
                 std::numeric_limits<double>::epsilon());
     }
 
+    /// Convert internal normalized variables to a physical background state and
+    /// integrated time factors.
     FriedmannAdvance result(BackgroundCosmologyParameters const& parameters,
         FriedmannVariables const& value, uint64_t flops) {
         double const conformalDerivative = parameters.hubbleConstant * value[1];
@@ -208,6 +222,7 @@ namespace detail {
 
 }    // namespace detail
 
+/// Validate and retain the cosmological parameters and adaptive-integration controls.
 FriedmannCosmology::FriedmannCosmology(
     BackgroundCosmologyParameters parameters, FriedmannOptions options)
   : parameters_(parameters)
@@ -229,14 +244,18 @@ FriedmannCosmology::FriedmannCosmology(
         "Invalid Friedmann integration tolerances or maximum step count");
 }
 
+/// Return this model's cosmological parameters.
 BackgroundCosmologyParameters const& FriedmannCosmology::parameters() const noexcept {
     return parameters_;
 }
 
+/// Return this model's integration tolerances and step limit.
 FriedmannOptions const& FriedmannCosmology::options() const noexcept {
     return options_;
 }
 
+/// Construct a constraint-satisfying state at the requested scale on the chosen expansion
+/// branch.
 FriedmannState FriedmannCosmology::state(double scaleFactor, ExpansionBranch branch) const {
     detail::require(std::isfinite(scaleFactor) && scaleFactor > 0.0,
         "Friedmann scale factor must be positive and finite");
@@ -252,6 +271,8 @@ FriedmannState FriedmannCosmology::state(double scaleFactor, ExpansionBranch bra
     return detail::result(parameters_, {scaleFactor, u, 0.0, 0.0, 0.0}, flops).state;
 }
 
+/// Adaptively evolve the background and time integrals, optionally retaining dense
+/// trajectory segments.
 FriedmannAdvance FriedmannCosmology::integrate(FriedmannState const& initialState,
     double elapsedTime, CosmologicalTime time,
     std::vector<detail::FriedmannDenseSegment>* segments) const {
@@ -393,21 +414,25 @@ FriedmannAdvance FriedmannCosmology::integrate(FriedmannState const& initialStat
         "Friedmann evolution exceeded maxSteps; check singular boundaries and tolerances");
 }
 
+/// Evolve an existing state and return only its final background state.
 FriedmannState FriedmannCosmology::advance(
     FriedmannState const& initialState, double elapsedTime, CosmologicalTime time) const {
     return advanceWithIntegrals(initialState, elapsedTime, time).state;
 }
 
+/// Evolve an existing state and return the physical, conformal, and drift time integrals.
 FriedmannAdvance FriedmannCosmology::advanceWithIntegrals(
     FriedmannState const& initialState, double elapsedTime, CosmologicalTime time) const {
     return integrate(initialState, elapsedTime, time, nullptr);
 }
 
+/// Construct the chosen initial branch and advance it over the requested time interval.
 FriedmannState FriedmannCosmology::evolve(double initialScaleFactor, double elapsedTime,
     CosmologicalTime time, ExpansionBranch branch) const {
     return advance(state(initialScaleFactor, branch), elapsedTime, time);
 }
 
+/// Integrate the background while retaining dense segments for subsequent time sampling.
 FriedmannTrajectory FriedmannCosmology::trajectory(
     FriedmannState const& initialState, double elapsedTime, CosmologicalTime time) const {
     FriedmannTrajectory answer;
@@ -419,10 +444,13 @@ FriedmannTrajectory FriedmannCosmology::trajectory(
     return answer;
 }
 
+/// Return the integrated endpoint and accumulated time factors.
 FriedmannAdvance const& FriedmannTrajectory::final() const noexcept {
     return final_;
 }
 
+/// Interpolate within the stored trajectory, returning exact endpoint states without
+/// extrapolation.
 FriedmannAdvance FriedmannTrajectory::sample(double elapsedTime) const {
     detail::require(std::isfinite(elapsedTime) && elapsedTime >= std::min(0.0, elapsedTime_) &&
             elapsedTime <= std::max(0.0, elapsedTime_),
@@ -465,6 +493,7 @@ FriedmannAdvance FriedmannTrajectory::sample(double elapsedTime) const {
 
 namespace detail {
 
+    /// Evaluate the scale derivative of the normalized Friedmann polynomial.
     double polynomialDerivative(BackgroundCosmologyParameters const& parameters, double a) {
         return parameters.omegaMatter + 2.0 * parameters.omegaCurvature * a +
             4.0 * parameters.omegaDarkEnergy * a * a * a;
@@ -531,6 +560,8 @@ namespace detail {
         bool lowerRoot;
         bool upperRoot;
 
+        /// Evaluate endpoint-regularized time-integral kernels at the transformed
+        /// angular coordinate.
         FriedmannIntegrals evaluate(double angle, uint64_t& flops) const {
             double const sine = std::sin(angle);
             double const cosine = std::cos(angle);
@@ -564,6 +595,8 @@ namespace detail {
         }
     };
 
+    /// Estimate time integrals and their quadrature errors using an embedded
+    /// Gauss-Kronrod rule.
     std::pair<FriedmannIntegrals, FriedmannIntegrals> gaussKronrod(
         ScaleIntegrand const& integrand, double lower, double upper, uint64_t& flops) {
         constexpr std::array<double, 8> kAbscissae{0.99145537112081263921, 0.94910791234275852453,
@@ -612,6 +645,8 @@ namespace detail {
 
 }    // namespace detail
 
+/// Integrate time factors between allowed scale factors with adaptive endpoint-aware
+/// quadrature.
 FriedmannAdvance FriedmannCosmology::intervalsBetweenScales(
     double initialScale, double finalScale) const {
     auto const finalState = state(finalScale);

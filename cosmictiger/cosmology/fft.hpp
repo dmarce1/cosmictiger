@@ -95,6 +95,7 @@ void fft3d2silo(bool real);
 inline constexpr int kCloudMin = -2;
 inline constexpr int kCloudMax = 3;
 
+/// Evaluate the compact six-cell density-assignment weight at a grid-cell displacement.
 inline CUDA_EXPORT float cloudWeight(float x) {
     x = fabs(x);
     float const x2 = sqr(x);
@@ -112,6 +113,7 @@ inline CUDA_EXPORT float cloudWeight(float x) {
     }
 }
 
+/// Return the inverse squared assignment-window factor for dimensionless wavenumber kh.
 inline double cloudFilter(double kh) {
     double const s = sinc(0.5 * kh);
     return 1.0 / (sqr(s * sqr(s)));

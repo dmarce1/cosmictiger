@@ -15,6 +15,7 @@
 #include <cosmictiger/cuda/cuda.hpp>
 #include <cosmictiger/math/math.hpp>
 
+/// Synchronize participating CUDA block threads; the host path requires no barrier.
 CUDA_EXPORT
 inline void syncthreads() {
 #ifdef __CUDA_ARCH__

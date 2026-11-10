@@ -104,6 +104,8 @@ __device__ inline FlopCount sphReductionFlops() {
     return count;
 }
 
+/// Accumulate precision-separated GPU work and reduce each full warp into the per-launch
+/// exact diagnostic total.
 __device__ inline void recordSphGpuFlops(sph_flops::Counter const& flops, SphReduction* reduction) {
     if constexpr (kCountFlops) {
         addGpuFlops(flops.counts());

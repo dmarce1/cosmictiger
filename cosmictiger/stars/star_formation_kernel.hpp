@@ -52,6 +52,7 @@ struct Output {
     bool convert{};
 };
 enum class Operation { eos, diagnostics, advance, pressure };
+/// Translate a batch result status into its diagnostic label.
 inline char const* statusName(int status) {
     switch (status) {
     case 0:
@@ -72,28 +73,38 @@ inline char const* statusName(int status) {
 }
 
 namespace detail {
+    /// Scramble a 64-bit input deterministically for particle/event random streams.
     CUDA_EXPORT inline uint64_t mix(uint64_t value) {
         value = (value ^ (value >> 30)) * UINT64_C(0xbf58476d1ce4e5b9);
         value = (value ^ (value >> 27)) * UINT64_C(0x94d049bb133111eb);
         return value ^ (value >> 31);
     }
+    /// Generate a reproducible [0,1) deviate from particle identity, event, stream, and
+    /// seed.
     CUDA_EXPORT inline double uniform(
         uint64_t identity, uint64_t event, uint64_t stream, uint64_t seed) {
         uint64_t const bits = mix(mix(identity ^ seed) ^ mix(event + UINT64_C(0x9e3779b97f4a7c15)) ^
             mix(stream + UINT64_C(0x632be59bd9b4e019)));
         return double(bits >> 11) * 0x1.0p-53;
     }
+    /// Forward finite-value validation to the multiphase model helper.
     CUDA_EXPORT inline bool finite(double value) {
         return springel_and_hernquist::detail::finite(value);
     }
+    /// Convert stored comoving density to proper CGS density at the selected scale
+    /// factor.
     CUDA_EXPORT inline double density(Input const& input, Parameters const& parameters) {
         return double(input.density) * parameters.densityScale / parameters.scaleFactor /
             parameters.scaleFactor / parameters.scaleFactor;
     }
+    /// Convert stored specific energy to physical CGS energy using the
+    /// scale-factor-squared convention.
     CUDA_EXPORT inline double energy(float value, Parameters const& parameters) {
         return double(value) * parameters.energyScale / parameters.scaleFactor /
             parameters.scaleFactor;
     }
+    /// Convert physical specific energy to positive finite float storage, returning
+    /// false if it is unrepresentable.
     CUDA_EXPORT inline bool storedEnergy(
         double value, Parameters const& parameters, float& result) {
         double const stored =
@@ -104,12 +115,15 @@ namespace detail {
         result = float(stored);
         return result > 0.0f;
     }
+    /// Apply the physical density threshold and, for cosmological runs, the comoving
+    /// overdensity threshold.
     CUDA_EXPORT inline bool eligible(Input const& input, Parameters const& parameters) {
         return density(input, parameters) >= parameters.model.thresholdDensity &&
             (!parameters.cooling.comoving ||
                 double(input.density) * parameters.densityScale >=
                     parameters.model.overdensityThreshold);
     }
+    /// Create a staged output that initially preserves the input particle state.
     CUDA_EXPORT inline Output initial(Input const& input) {
         Output output;
         output.state = input.state;
@@ -119,6 +133,8 @@ namespace detail {
         output.velocity = input.velocity;
         return output;
     }
+    /// Record equilibrium phase diagnostics and suppress star formation for gas
+    /// substantially hotter than equilibrium.
     CUDA_EXPORT inline void recordPhase(
         Output& output, springel_and_hernquist::Equilibrium const& phase, double energy) {
         output.starForming = true;
@@ -129,6 +145,8 @@ namespace detail {
             energy > 1.01 * phase.effectiveEnergy ? 0.0 : phase.specificStarFormationRate;
     }
 }    // namespace detail
+/// Validate carried bulk energy and return the gamma=5/3 hydrodynamic pressure/signal
+/// factors.
 CUDA_EXPORT inline Output evaluateEos(Input const& input, Parameters const&) {
     Output output = detail::initial(input);
     if (!(input.energy > 0.0f) || !detail::finite(input.energy)) {
@@ -141,6 +159,7 @@ CUDA_EXPORT inline Output evaluateEos(Input const& input, Parameters const&) {
     output.signalIndex = float(5.0 / 3.0);
     return output;
 }
+/// Evaluate multiphase diagnostics for eligible gas without committing an evolution step.
 CUDA_EXPORT inline Output diagnostics(Input const& input, Parameters const& parameters) {
     Output output = detail::initial(input);
     if (!detail::eligible(input, parameters)) {
@@ -156,6 +175,8 @@ CUDA_EXPORT inline Output diagnostics(Input const& input, Parameters const& para
     detail::recordPhase(output, phase, detail::energy(input.energy, parameters));
     return output;
 }
+/// Stage a selected-interval gas update, sampling the saved star-formation rate before
+/// cooling and returning explicit failure status.
 CUDA_EXPORT inline Output advance(Input const& input, Parameters const& parameters) {
     Output output = detail::initial(input);
     double const step = parameters.explicitTimestep >= 0.0 ?
@@ -258,6 +279,7 @@ CUDA_EXPORT inline Output advance(Input const& input, Parameters const& paramete
         -parameters.gasMass * (double(output.energy) - input.energy) / parameters.scaleFactor;
     return output;
 }
+/// Dispatch EOS, diagnostics, evolution, or pressure work into a staged output record.
 CUDA_EXPORT inline Output evaluate(
     Operation operation, Input const& input, Output output, Parameters const& parameters) {
     switch (operation) {

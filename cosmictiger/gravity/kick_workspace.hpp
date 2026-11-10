@@ -22,6 +22,7 @@
 #include <cosmictiger/math/vector3.hpp>
 
 struct KickWorkspaceTreeIdHash {
+    /// Combine node index and locality into a workspace lookup key.
     inline size_t operator()(TreeId id) const {
         return size_t(id.index) * size_t(hpxSize()) + size_t(id.proc);
     }
@@ -54,6 +55,8 @@ public:
     KickWorkspace& operator=(KickWorkspace const&) = delete;
     KickWorkspace& operator=(KickWorkspace&&) = delete;
     ~KickWorkspace();
+    /// Provide the empty serialization hook; process-local workspace state is not
+    /// transported.
     template <class A>
     void serialize(A&&, unsigned) {}
     void addWork(std::shared_ptr<KickWorkspace> ptr, ExpansionBuffer const& l,
@@ -61,9 +64,11 @@ public:
         FmmGeometry const& geometry, ParticleInteger outputOffset = 0);
     void recordProcessedParticles(std::shared_ptr<KickWorkspace> ptr, ParticleInteger n);
     KickReturn toGpu();
+    /// Test whether this workspace represents a cell batch.
     bool isBatch() const {
         return batch_;
     }
+    /// Return the force-output view associated with this workspace.
     detail::FmmForceOutput output() const {
         return output_;
     }

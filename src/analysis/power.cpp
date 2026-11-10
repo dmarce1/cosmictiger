@@ -40,6 +40,8 @@ static PowerSpectrumReturn powerSpectrumBinDeviation(
 HPX_PLAIN_ACTION(powerSpectrumBin, PowerSpectrumBinAction);
 HPX_PLAIN_ACTION(powerSpectrumBinDeviation, PowerSpectrumBinDeviationAction);
 
+/// Bin the current density transform and return mean power, wavenumber, and sampling-error
+/// estimates.
 PowerSpectrumT powerSpectrumFromTransform() {
     Vector<float> kbins;
     double const boxSize =
@@ -94,6 +96,8 @@ PowerSpectrumT powerSpectrumFromTransform() {
     return ret;
 }
 
+/// Locate a wavenumber in the half-open bin intervals, returning -1 outside the upper
+/// range.
 static int searchKbins(Vector<float> kbins, double k, int binmin, int binmax) {
     if (k < 0.0 || k >= kbins.back()) {
         return -1;
@@ -114,6 +118,8 @@ static int searchKbins(Vector<float> kbins, double k, int binmin, int binmax) {
     return -1;
 };
 
+/// Reduce Fourier-mode counts, powers, and wavenumber sums across the distributed
+/// transform.
 static PowerSpectrumReturn powerSpectrumBin(Vector<float> const& kbins) {
     Vector<hpx::future<PowerSpectrumReturn>> futs;
     for (auto c : hpxChildren()) {
@@ -189,6 +195,7 @@ static PowerSpectrumReturn powerSpectrumBin(Vector<float> const& kbins) {
     return rc;
 }
 
+/// Accumulate squared deviations from the previously measured mean power in each bin.
 static PowerSpectrumReturn powerSpectrumBinDeviation(
     PowerSpectrumReturn rc, Vector<float> const& kbins) {
     Vector<hpx::future<PowerSpectrumReturn>> futs;
@@ -245,6 +252,8 @@ static PowerSpectrumReturn powerSpectrumBinDeviation(
     return rc;
 }
 
+/// Build a folded density contrast, transform it, measure its spectrum, and release FFT
+/// scratch storage.
 PowerSpectrumT powerSpectrumCompute(int m) {
     int const n = getOptions().initial.fourierSize;
     {
@@ -270,6 +279,8 @@ PowerSpectrumT powerSpectrumCompute(int m) {
     return power;
 }
 
+/// Pack optional species masses and deposit local particles into the requested folded CPU
+/// density box.
 Vector<float> accumulateDensityCpu(int fold, int gridSize, Range<int64_t> box) {
     Vector<float> density(box.volume(), 0.0f);
     size_t const particleCount = particlesSize();
@@ -289,6 +300,8 @@ Vector<float> accumulateDensityCpu(int fold, int gridSize, Range<int64_t> box) {
     return density;
 }
 
+/// Deposit folded particle density in bounded boxes and accumulate it into the distributed
+/// FFT grid.
 static void computeDensityFolded(int m) {
     Vector<hpx::future<void>> futs1;
     for (auto c : hpxChildren()) {

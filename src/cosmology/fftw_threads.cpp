@@ -17,6 +17,8 @@
 namespace fftw_threads {
 namespace detail {
 
+    /// Run FFTW jobs on HPX workers and wait for all jobs before their caller-owned
+    /// data expires.
     void parallelLoop(
         void* (*work)(char*), char* jobData, size_t elementSize, int jobs, void* context) noexcept {
         try {
@@ -42,6 +44,7 @@ namespace detail {
 
 }    // namespace detail
 
+/// Register an HPX-backed FFTW thread callback under the shared planner lock.
 void initialize() {
     static auto executor = []() {
         hpx::launch policy = hpx::launch::async;

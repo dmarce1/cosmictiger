@@ -54,6 +54,7 @@ template <>
 inline constexpr int kL2LWarpFlops<2> = 1030;
 template <>
 inline constexpr int kL2LWarpNoPotentialFlops<2> = 676;
+/// Translate a local expansion collectively across a full warp; synchronize all L reads.
 template <bool kReplicate, class Real, class Target>
 __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 3> const& L, Real const dx,
     Real const dy, Real const dz, bool doPhi) {
@@ -170,12 +171,14 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 3> const& L, Rea
     // before permitting that write.
     __syncwarp(kMask);
 }
+/// Translate collectively and replicate the resulting expansion in every warp lane.
 template <class Real>
 __device__ void L2LWarp(Expansion<Real, 3>& targetL, Expansion<Real, 3> const& L,
     Vector3<Real> const& distance, bool doPhi) {
     using namespace math;
     executeL2LWarp<true>(targetL, L, distance[0], distance[1], distance[2], doPhi);
 }
+/// Translate collectively into shared targetL coefficients, with each output written once.
 template <class Real>
 __device__ void L2LWarpInto(
     Real* targetL, Expansion<Real, 3> const& L, Vector3<Real> const& distance, bool doPhi) {
@@ -224,6 +227,7 @@ template <>
 inline constexpr int kL2LWarpFlops<3> = 2123;
 template <>
 inline constexpr int kL2LWarpNoPotentialFlops<3> = 1673;
+/// Translate a local expansion collectively across a full warp; synchronize all L reads.
 template <bool kReplicate, class Real, class Target>
 __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 4> const& L, Real const dx,
     Real const dy, Real const dz, bool doPhi) {
@@ -383,12 +387,14 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 4> const& L, Rea
     // before permitting that write.
     __syncwarp(kMask);
 }
+/// Translate collectively and replicate the resulting expansion in every warp lane.
 template <class Real>
 __device__ void L2LWarp(Expansion<Real, 4>& targetL, Expansion<Real, 4> const& L,
     Vector3<Real> const& distance, bool doPhi) {
     using namespace math;
     executeL2LWarp<true>(targetL, L, distance[0], distance[1], distance[2], doPhi);
 }
+/// Translate collectively into shared targetL coefficients, with each output written once.
 template <class Real>
 __device__ void L2LWarpInto(
     Real* targetL, Expansion<Real, 4> const& L, Vector3<Real> const& distance, bool doPhi) {
@@ -443,6 +449,7 @@ template <>
 inline constexpr int kL2LWarpFlops<4> = 2994;
 template <>
 inline constexpr int kL2LWarpNoPotentialFlops<4> = 2160;
+/// Translate a local expansion collectively across a full warp; synchronize all L reads.
 template <bool kReplicate, class Real, class Target>
 __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 5> const& L, Real const dx,
     Real const dy, Real const dz, bool doPhi) {
@@ -669,12 +676,14 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 5> const& L, Rea
     // before permitting that write.
     __syncwarp(kMask);
 }
+/// Translate collectively and replicate the resulting expansion in every warp lane.
 template <class Real>
 __device__ void L2LWarp(Expansion<Real, 5>& targetL, Expansion<Real, 5> const& L,
     Vector3<Real> const& distance, bool doPhi) {
     using namespace math;
     executeL2LWarp<true>(targetL, L, distance[0], distance[1], distance[2], doPhi);
 }
+/// Translate collectively into shared targetL coefficients, with each output written once.
 template <class Real>
 __device__ void L2LWarpInto(
     Real* targetL, Expansion<Real, 5> const& L, Vector3<Real> const& distance, bool doPhi) {
@@ -750,6 +759,7 @@ template <>
 inline constexpr int kL2LWarpFlops<5> = 5051;
 template <>
 inline constexpr int kL2LWarpNoPotentialFlops<5> = 3705;
+/// Translate a local expansion collectively across a full warp; synchronize all L reads.
 template <bool kReplicate, class Real, class Target>
 __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 6> const& L, Real const dx,
     Real const dy, Real const dz, bool doPhi) {
@@ -1101,12 +1111,14 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 6> const& L, Rea
     // before permitting that write.
     __syncwarp(kMask);
 }
+/// Translate collectively and replicate the resulting expansion in every warp lane.
 template <class Real>
 __device__ void L2LWarp(Expansion<Real, 6>& targetL, Expansion<Real, 6> const& L,
     Vector3<Real> const& distance, bool doPhi) {
     using namespace math;
     executeL2LWarp<true>(targetL, L, distance[0], distance[1], distance[2], doPhi);
 }
+/// Translate collectively into shared targetL coefficients, with each output written once.
 template <class Real>
 __device__ void L2LWarpInto(
     Real* targetL, Expansion<Real, 6> const& L, Vector3<Real> const& distance, bool doPhi) {
@@ -1213,6 +1225,7 @@ template <>
 inline constexpr int kL2LWarpFlops<6> = 8902;
 template <>
 inline constexpr int kL2LWarpNoPotentialFlops<6> = 6724;
+/// Translate a local expansion collectively across a full warp; synchronize all L reads.
 template <bool kReplicate, class Real, class Target>
 __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 7> const& L, Real const dx,
     Real const dy, Real const dz, bool doPhi) {
@@ -1725,12 +1738,14 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 7> const& L, Rea
     // before permitting that write.
     __syncwarp(kMask);
 }
+/// Translate collectively and replicate the resulting expansion in every warp lane.
 template <class Real>
 __device__ void L2LWarp(Expansion<Real, 7>& targetL, Expansion<Real, 7> const& L,
     Vector3<Real> const& distance, bool doPhi) {
     using namespace math;
     executeL2LWarp<true>(targetL, L, distance[0], distance[1], distance[2], doPhi);
 }
+/// Translate collectively into shared targetL coefficients, with each output written once.
 template <class Real>
 __device__ void L2LWarpInto(
     Real* targetL, Expansion<Real, 7> const& L, Vector3<Real> const& distance, bool doPhi) {
@@ -1884,6 +1899,7 @@ template <>
 inline constexpr int kL2LWarpFlops<7> = 13939;
 template <>
 inline constexpr int kL2LWarpNoPotentialFlops<7> = 10545;
+/// Translate a local expansion collectively across a full warp; synchronize all L reads.
 template <bool kReplicate, class Real, class Target>
 __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 8> const& L, Real const dx,
     Real const dy, Real const dz, bool doPhi) {
@@ -2641,12 +2657,14 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 8> const& L, Rea
     // before permitting that write.
     __syncwarp(kMask);
 }
+/// Translate collectively and replicate the resulting expansion in every warp lane.
 template <class Real>
 __device__ void L2LWarp(Expansion<Real, 8>& targetL, Expansion<Real, 8> const& L,
     Vector3<Real> const& distance, bool doPhi) {
     using namespace math;
     executeL2LWarp<true>(targetL, L, distance[0], distance[1], distance[2], doPhi);
 }
+/// Translate collectively into shared targetL coefficients, with each output written once.
 template <class Real>
 __device__ void L2LWarpInto(
     Real* targetL, Expansion<Real, 8> const& L, Vector3<Real> const& distance, bool doPhi) {
@@ -2876,6 +2894,7 @@ template <>
 inline constexpr int kL2LWarpFlops<8> = 22722;
 template <>
 inline constexpr int kL2LWarpNoPotentialFlops<8> = 17536;
+/// Translate a local expansion collectively across a full warp; synchronize all L reads.
 template <bool kReplicate, class Real, class Target>
 __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 9> const& L, Real const dx,
     Real const dy, Real const dz, bool doPhi) {
@@ -3998,12 +4017,14 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 9> const& L, Rea
     // before permitting that write.
     __syncwarp(kMask);
 }
+/// Translate collectively and replicate the resulting expansion in every warp lane.
 template <class Real>
 __device__ void L2LWarp(Expansion<Real, 9>& targetL, Expansion<Real, 9> const& L,
     Vector3<Real> const& distance, bool doPhi) {
     using namespace math;
     executeL2LWarp<true>(targetL, L, distance[0], distance[1], distance[2], doPhi);
 }
+/// Translate collectively into shared targetL coefficients, with each output written once.
 template <class Real>
 __device__ void L2LWarpInto(
     Real* targetL, Expansion<Real, 9> const& L, Vector3<Real> const& distance, bool doPhi) {

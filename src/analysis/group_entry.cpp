@@ -9,16 +9,20 @@ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
 #include <cosmictiger/analysis/group_entry.hpp>
 #include <cosmictiger/core/safe_io.hpp>
 
+/// Write one binary value to the group catalogue stream.
 template <class T>
 void fwriteSingle(FILE* fp, T const& data) {
     fwrite(&data, sizeof(T), 1, fp);
 }
 
+/// Read one binary value from the group catalogue stream with short-read checking.
 template <class T>
 void freadSingle(FILE* fp, T& data) {
     FREAD(&data, sizeof(T), 1, fp);
 }
 
+/// Write group properties and parent membership counts in the catalogue's fixed field
+/// order.
 void GroupEntry::write(FILE* fp) {
     fwriteSingle(fp, id);
     fwriteSingle(fp, com);
@@ -51,6 +55,8 @@ void GroupEntry::write(FILE* fp) {
     }
 }
 
+/// Read one group record and its parent map, returning false when no next record ID is
+/// available.
 bool GroupEntry::read(FILE* fp) {
     if (fread(&id, sizeof(id), 1, fp) == 0) {
         return false;

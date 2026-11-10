@@ -8,12 +8,15 @@
 
 namespace pmmm::detail {
 
+/// Convert an unsuccessful MPI status into an operation-specific runtime error.
 void mpiCheck(int status, char const* operation) {
     if (status != MPI_SUCCESS) {
         throw std::runtime_error(std::string("PMMM MPI failure: ") + operation);
     }
 }
 
+/// Agree across the mesh communicator that a local preparation step succeeded before
+/// continuing.
 void collectiveCheck(bool okay, char const* message) {
     int local = okay ? 1 : 0;
     int global = 0;
@@ -71,6 +74,7 @@ static void releaseMeshCache(MeshCache& entry) {
     entry = MeshCache{};
 }
 
+/// Select the least-recently-used initialized mesh cache available for replacement.
 static MeshCache& oldestInactiveCache() {
     auto const oldest = std::min_element(meshCachePool.inactive.begin(),
         meshCachePool.inactive.end(), [](MeshCache const& first, MeshCache const& second) {
@@ -82,6 +86,8 @@ static MeshCache& oldestInactiveCache() {
     return *oldest;
 }
 
+/// Estimate real and complex FFT workspace bytes, including minimum allocations for empty
+/// slabs.
 static double fftWorkspaceBytes(ptrdiff_t sourceAllocation, ptrdiff_t localAllocation) {
     // Empty FFT slabs still own the one-element allocation required by FFTW.
     return sizeof(float) *
@@ -89,6 +95,8 @@ static double fftWorkspaceBytes(ptrdiff_t sourceAllocation, ptrdiff_t localAlloc
             6.0 * std::max(ptrdiff_t(1), localAllocation));
 }
 
+/// Validate mesh settings and initialize or reuse distributed FFT plans, buffers, and
+/// contraction metadata.
 void initialize(int meshSize) {
     auto const& options = getOptions().gravity;
     int const baseMeshSize = options.meshSize;
@@ -347,6 +355,8 @@ void initialize(int meshSize) {
     cache.initialized = true;
 }
 
+/// Build and Fourier-transform the far-field Green coefficients once for the current mesh
+/// cache.
 void initializeGreen() {
     if (cache.greenReady) {
         return;
@@ -388,6 +398,8 @@ void initializeGreen() {
     ++state.diagnostics.greenBuilds;
 }
 
+/// Deposit source moments into FFT storage, convolve with the Green tensor, and publish
+/// far-field readiness.
 void transform() {
     int const n = cache.meshSize;
     std::array<double, 5> background{};
@@ -465,6 +477,7 @@ void transform() {
     state.farPromise->set_value();
 }
 
+/// Complete far-field readiness without a transform for a frozen-membership near-only pass.
 void skipTransform() {
     // A frozen-membership near pass: nothing is deposited or transformed, so the
     // far field never becomes available; near work waits on nothing.
@@ -472,6 +485,8 @@ void skipTransform() {
     state.farPromise->set_value();
 }
 
+/// Release retained mesh FFT caches, near-field CUDA workspaces, and solver storage after
+/// work has drained.
 void destroy() {
 #ifdef USE_CUDA
     // Every solve has drained its tasks before this quiescent teardown. Release

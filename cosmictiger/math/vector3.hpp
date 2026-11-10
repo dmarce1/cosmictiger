@@ -17,8 +17,10 @@ class Vector3 : public math::Vector<T, 3, Vector3<T>> {
 
 public:
     CUDA_EXPORT constexpr Vector3() = default;
+    /// Broadcast one scalar value into all three components.
     CUDA_EXPORT constexpr explicit Vector3(T const& value)
       : Base(value) {}
+    /// Construct a three-component vector from its x, y, and z values.
     CUDA_EXPORT constexpr Vector3(T const& x, T const& y, T const& z)
       : Base(x, y, z) {}
     // Converts each component, for example Vector3<float> to Vector3<SimdFloat>.
@@ -26,6 +28,7 @@ public:
     CUDA_EXPORT constexpr explicit Vector3(Vector3<U> const& other)
       : Base(static_cast<math::Vector<U, 3, Vector3<U>> const&>(other)) {}
 
+    /// Return the right-handed three-dimensional cross product with the other vector.
     CUDA_EXPORT constexpr Vector3 cross(Vector3 const& other) const {
         return {(*this)[1] * other[2] - (*this)[2] * other[1],
             (*this)[2] * other[0] - (*this)[0] * other[2],
@@ -36,6 +39,7 @@ public:
 // Keep this exact overload: the scalar/SIMD helper also accepts arbitrary Real
 // types, so relying only on deduction through the math::Vector base is insufficient.
 namespace math {
+/// Select each of the three components from yes or no using a common scalar/SIMD mask.
 template <class Mask, class T>
 CUDA_EXPORT inline Vector3<T> select(
     Mask const& mask, Vector3<T> const& yes, Vector3<T> const& no) {

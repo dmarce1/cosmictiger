@@ -7,6 +7,7 @@
 
 #include <cosmictiger/sph/cpu.hpp>
 
+/// Dispatch one staged target node to the smoothing, density, hydro, or rung CPU kernel.
 SphRunReturn sphRunCpuNode(
     SphRunParameters const& parameters, SphRunData const& data, int targetNodeIndex) {
     switch (parameters.runType) {

@@ -9,6 +9,8 @@
 #include <cosmictiger/cosmology/evolution.hpp>
 #include <cosmictiger/gravity/outer_interval.hpp>
 
+/// Clamp the proposed mesh interval to the end time and next coarse output boundary without
+/// tiny residual steps.
 double pmSelectOuterInterval(double accelerationTimestep, double expansionTimestep, double time,
     double coarseInterval, double endTime) {
     if (!(coarseInterval > 0.0) || !std::isfinite(coarseInterval)) {

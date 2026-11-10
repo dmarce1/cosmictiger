@@ -16,6 +16,8 @@
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/scenarios/sphere.hpp>
 
+/// Relax one spherical point shell per CUDA block using tangential forces and damped
+/// motion.
 __global__ void sphereSurfaceKernel(float** xMain, float** yMain, float** zMain, int* nMain) {
     int const tid = threadIdx.x;
     int const bid = blockIdx.x;
@@ -145,6 +147,8 @@ __global__ void sphereSurfaceKernel(float** xMain, float** yMain, float** zMain,
     (&gz)->~DeviceVector<float>();
 }
 
+/// Copy shells into managed buffers, relax them on CUDA, and copy their final positions
+/// back.
 void solveSphereSurfaceProblemCuda(Vector<Array<Vector<float>, kDimensions>>& xValue) {
     float** devX;
     float** devY;

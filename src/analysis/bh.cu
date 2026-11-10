@@ -27,6 +27,8 @@ struct BhShmem {
     Array<float, kBhBucketSize> sinkZ;
 };
 
+/// Evaluate softened source-particle potentials with warp-local tree workspaces and
+/// dynamically assigned buckets.
 __global__ void bhTreeEvaluateKernel(BhTreeNode const* treeNodes, int const* sinkBuckets,
     float* phi, Vector3<float> const* parts, float relativeError, float hsoft, float gm,
     int* nextSinkBucket, int numberOfSinks) {
@@ -188,6 +190,8 @@ __global__ void bhTreeEvaluateKernel(BhTreeNode const* treeNodes, int const* sin
     (&ws)->~BhWorkspace();
 }
 
+/// Evaluate independent sink potentials with warp-local tree workspaces and a shared sink
+/// counter.
 __global__ void bhTreeEvaluatePointsKernel(BhTreeNode const* treeNodes, float* phi,
     Vector3<float> const* parts, Vector3<float> const* sinks, float relativeError, float hsoft,
     float gm, int* nextSink, int numberOfSinks) {
@@ -338,6 +342,8 @@ __global__ void bhTreeEvaluatePointsKernel(BhTreeNode const* treeNodes, float* p
     (&ws)->~BhWorkspace();
 }
 
+/// Launch a bounded CUDA Barnes-Hut bucket evaluation and return potentials after stream
+/// completion.
 DeviceVector<float> bhEvaluatePotentialGpu(DeviceVector<BhTreeNode> const& devTreeNodes,
     DeviceVector<Vector3<float>> const& devX, DeviceVector<int> const devSinkBuckets,
     float relativeError, float hsoft, float gm, int maximumBlockCount) {
@@ -372,6 +378,7 @@ DeviceVector<float> bhEvaluatePotentialGpu(DeviceVector<BhTreeNode> const& devTr
     return devPhi;
 }
 
+/// Launch the CUDA arbitrary-point potential evaluation and return completed sink values.
 DeviceVector<float> bhEvaluatePotentialPointsGpu(DeviceVector<BhTreeNode> const& devTreeNodes,
     DeviceVector<Vector3<float>> const& devX, DeviceVector<Vector3<float>> const& devY,
     float relativeError, float hsoft, float gm) {

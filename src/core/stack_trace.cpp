@@ -50,6 +50,7 @@ static_assert(decltype(reportingThread)::is_always_lock_free);
 std::array<char, 384> processHeader{};
 size_t processHeaderSize = 0;
 
+/// Write as much diagnostic text as possible, retrying interrupted descriptor writes.
 void writeDescriptor(int descriptor, char const* text, size_t length) noexcept {
     while (length != 0) {
         auto const written = ::write(descriptor, text, length);
@@ -64,6 +65,7 @@ void writeDescriptor(int descriptor, char const* text, size_t length) noexcept {
     }
 }
 
+/// Write diagnostic text to standard error and, when open, the stack-trace file.
 void writeDiagnostic(int descriptor, char const* text, size_t length) noexcept {
     writeDescriptor(STDERR_FILENO, text, length);
     if (descriptor >= 0) {
@@ -71,11 +73,13 @@ void writeDiagnostic(int descriptor, char const* text, size_t length) noexcept {
     }
 }
 
+/// Write diagnostic text to standard error and, when open, the stack-trace file.
 template <size_t length>
 void writeDiagnostic(int descriptor, char const (&text)[length]) noexcept {
     writeDiagnostic(descriptor, text, length - 1);
 }
 
+/// Restore default handling and terminate with the original fatal signal.
 [[noreturn]] void terminateWithSignal(int signal) noexcept {
     struct sigaction action{};
     action.sa_handler = SIG_DFL;
@@ -89,6 +93,7 @@ void writeDiagnostic(int descriptor, char const (&text)[length]) noexcept {
     std::_Exit(128 + signal);
 }
 
+/// Return a native-thread identifier suitable for detecting recursive signal reporting.
 uintptr_t currentSignalThread() noexcept {
 #if defined(__linux__)
     return static_cast<uintptr_t>(::syscall(SYS_gettid));
@@ -100,6 +105,7 @@ uintptr_t currentSignalThread() noexcept {
 #endif
 }
 
+/// Wait for the first faulting thread to report, with a watchdog before signal termination.
 [[noreturn]] void waitForReporter(int signal) noexcept {
     // A second fault must not reset the process-wide disposition while the
     // original thread is writing/symbolizing its report. Avoid repeated nested
@@ -136,6 +142,8 @@ uintptr_t currentSignalThread() noexcept {
     terminateWithSignal(signal);
 }
 
+/// Claim fatal-signal reporting, emit process identity and a best-effort trace, then
+/// preserve signal termination.
 void reportSignal(int signal) noexcept {
     uintptr_t const thread = currentSignalThread();
     uintptr_t expected = 0;
@@ -193,6 +201,8 @@ struct StackTraceHandler::State {
     SignalActions previous{};
     std::array<bool, detail::kFatalSignals.size()> installed{};
 
+    /// Acquire process-wide handler ownership and cache identity information outside
+    /// signal context.
     explicit State(unsigned int localityId) {
         // Resolve the backend before handling a fault, outside signal context.
         (void) boost::stacktrace::to_string(boost::stacktrace::stacktrace(0, 1));
@@ -214,6 +224,8 @@ struct StackTraceHandler::State {
         detail::reportingThread.store(0);
     }
 
+    /// Install fatal-signal handlers, preserving prior dispositions and using an
+    /// alternate stack when available.
     void install() {
         struct sigaction action{};
         action.sa_handler = detail::reportSignal;
@@ -229,6 +241,8 @@ struct StackTraceHandler::State {
         }
     }
 
+    /// Restore handlers still owned by this instance and release process-wide
+    /// ownership.
     ~State() {
         for (size_t i = detail::kFatalSignals.size(); i > 0; --i) {
             auto const index = i - 1;
@@ -250,6 +264,7 @@ struct StackTraceHandler::State {};
 StackTraceHandler::StackTraceHandler() = default;
 StackTraceHandler::~StackTraceHandler() = default;
 
+/// Publish a persistent filename that signal reporting can read without acquiring a lock.
 void setStackTraceOutputPath(std::string const& filename) {
     std::lock_guard<std::mutex> lock(detail::stackTracePathMutex);
     if (filename != detail::stackTracePath.load()) {
@@ -258,14 +273,17 @@ void setStackTraceOutputPath(std::string const& filename) {
     }
 }
 
+/// Return the currently published stack-trace output filename.
 std::string stackTraceOutputPath() {
     return detail::stackTracePath.load();
 }
 
+/// Capture and symbolize up to 64 stack frames for ordinary diagnostic reporting.
 std::string stackTrace() {
     return boost::stacktrace::to_string(boost::stacktrace::stacktrace(0, 64));
 }
 
+/// Install process-wide stack-trace reporting once for this handler instance.
 void StackTraceHandler::install(unsigned int localityId) {
 #if !defined(_MSC_VER)
     if (!state_) {

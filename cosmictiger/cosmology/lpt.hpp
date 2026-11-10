@@ -27,10 +27,13 @@ inline uint64_t mixModeBits(uint64_t value) {
     return value ^ (value >> 31);
 }
 
+/// Identify the self-conjugate Nyquist index of an even-sized Fourier axis.
 inline bool isNyquist(int64_t index, int64_t size) {
     return size % 2 == 0 && index == size / 2;
 }
 
+/// Generate a deterministic complex Gaussian mode with Hermitian symmetry; suppress the
+/// zero and Nyquist modes.
 inline std::complex<float> gaussianMode(int64_t x, int64_t y, int64_t z, int64_t size) {
     if ((x == 0 && y == 0 && z == 0) || isNyquist(x, size) || isNyquist(y, size) ||
         isNyquist(z, size)) {
@@ -55,6 +58,7 @@ inline std::complex<float> gaussianMode(int64_t x, int64_t y, int64_t z, int64_t
     return conjugate ? std::conj(result) : result;
 }
 
+/// Return the phase-dependent initial lattice offset for ordinary or close-packed sampling.
 inline double latticeOffset(int phase, bool closePack) {
     if (!closePack) {
         return 0.5 * phase;
@@ -62,11 +66,14 @@ inline double latticeOffset(int phase, bool closePack) {
     return 0.25 + 0.5 * (phase % 2) + 0.25 * (phase / 2);
 }
 
+/// Recover the nearest lattice index from a normalized position and wrap it periodically.
 inline int64_t latticeNode(double position, int64_t size, double offset) {
     int64_t const node = std::llround(position * size - offset);
     return (node + size) % size;
 }
 
+/// Return the Fourier phase factor for translating the particle lattice by the supplied
+/// cell offset.
 inline std::complex<float> latticeShift(
     int64_t x, int64_t y, int64_t z, int64_t size, double offset) {
     auto const signedMode = [size](

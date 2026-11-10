@@ -119,31 +119,40 @@ public:
         typename Vector<Particle const*>::const_iterator iterator_;
 
     public:
+        /// Wrap an iterator over borrowed particle pointers.
         explicit Iterator(typename Vector<Particle const*>::const_iterator iterator)
           : iterator_(iterator) {}
+        /// Dereference the borrowed particle pointed to by this iterator.
         Particle const& operator*() const {
             return **iterator_;
         }
+        /// Advance to the next borrowed particle and return this iterator.
         Iterator& operator++() {
             ++iterator_;
             return *this;
         }
+        /// Compare positions within the borrowed particle-pointer sequence.
         bool operator!=(Iterator const& other) const {
             return iterator_ != other.iterator_;
         }
     };
+    /// Return the number of particles referenced by this nonowning view.
     size_t size() const {
         return particles_.size();
     }
+    /// Report whether the nonowning particle view has no entries.
     bool empty() const {
         return particles_.empty();
     }
+    /// Append a borrowed particle reference without copying the particle record.
     void push_back(Particle const& particle) {
         particles_.push_back(&particle);
     }
+    /// Return an iterator over the first borrowed particle.
     Iterator begin() const {
         return Iterator(particles_.begin());
     }
+    /// Return the past-the-end iterator for the borrowed particle sequence.
     Iterator end() const {
         return Iterator(particles_.end());
     }
@@ -159,22 +168,26 @@ struct ViewParticles {
 
 namespace detail {
 
+/// Report a failed Silo operation with the affected output object name.
 void checkViewWrite(int result, char const* name) {
     if (result < 0) {
         THROW_ERROR("Cannot write converted particle Silo object %s\n", name);
     }
 }
 
+/// Write a null-terminated metadata string to the current Silo directory.
 void writeViewText(DBfile* db, char const* name, char const* value) {
     int const size = std::strlen(value) + 1;
     checkViewWrite(DBWrite(db, name, value, &size, 1, DB_CHAR), name);
 }
 
+/// Write one double-valued metadata item to the current Silo directory.
 void writeViewScalar(DBfile* db, char const* name, double value) {
     int const size = 1;
     checkViewWrite(DBWrite(db, name, &value, &size, 1, DB_DOUBLE), name);
 }
 
+/// Write one integer-valued metadata item to the current Silo directory.
 void writeViewInteger(DBfile* db, char const* name, int value) {
     int const size = 1;
     checkViewWrite(DBWrite(db, name, &value, &size, 1, DB_INT), name);
@@ -195,6 +208,8 @@ void writeViewClock(DBfile* db, double time, int cycle) {
     writeViewText(db, "time_convention", codeClock ? "elapsed_code_time" : "cosmological_age");
 }
 
+/// Write original arguments and resolved public option values as structured Silo provenance
+/// metadata.
 void writeViewCommandLine(DBfile* db) {
     checkViewWrite(DBMkDir(db, "cli"), "cli");
     checkViewWrite(DBSetDir(db, "cli"), "cli");
@@ -249,6 +264,8 @@ class ViewUnitConversion {
     bool cosmological_;
     bool lab_;
 
+    /// Convert a physical quantity to the selected cosmological display convention or
+    /// its native physical value.
     template <typename Quantity>
     double displayValue(Quantity const& quantity) const {
         return cosmological_ ? units::toCosmologicalValue(quantity, context_) :
@@ -256,6 +273,8 @@ class ViewUnitConversion {
     }
 
 public:
+    /// Retain the scale factor, unit system, and spatial frame used for particle output
+    /// conversion.
     ViewUnitConversion(double a, bool cosmological, bool lab)
       : scales_(
             getOptions().units.lengthCm, getOptions().units.massG, getOptions().units.timeSeconds)
@@ -263,6 +282,8 @@ public:
       , cosmological_(cosmological)
       , lab_(lab) {}
 
+    /// Convert a stored position to the selected comoving or proper length without
+    /// prematurely discarding fixed-point bits.
     double position(Position const& value) const {
         // Keep every fixed-point bit until the explicit physical-output boundary.
         units::ComovingPosition<Position> const position(value);
@@ -270,17 +291,21 @@ public:
                       displayValue(units::toComovingLength(position, scales_));
     }
 
+    /// Convert a stored length to the selected comoving or proper output length.
     double length(double value) const {
         units::StoredLength const length(value);
         return lab_ ? displayValue(units::toProperLength(length, scales_, context_)) :
                       displayValue(units::toComovingLength(length, scales_));
     }
 
+    /// Convert stored velocity to peculiar velocity in the selected output units.
     double velocity(double value) const {
         return displayValue(
             units::toPeculiarVelocity(units::StoredVelocity(value), scales_, context_));
     }
 
+    /// Convert stored density to the selected frame and units, accounting for the
+    /// build's spatial dimension.
     double density(double value) const {
         if constexpr (kSpatialDimensions < 3) {
             return value * getOptions().units.massG /
@@ -291,6 +316,8 @@ public:
                       displayValue(units::toComovingDensity(density, scales_));
     }
 
+    /// Convert canonical physical entropy units without an additional scale-factor or
+    /// frame transformation.
     double entropy(double value) const {
         double energyScale = scales_.specificEnergyScale().value();
         double densityScale = scales_.densityScale().value() *
@@ -305,11 +332,14 @@ public:
             std::pow(densityScale, 1.0 - getOptions().hydro.heatCapacityRatio);
     }
 
+    /// Convert a stored inverse-time quantity to the selected output units.
     double frequency(double value) const {
         auto const frequency = value * scales_.frequencyScale();
         return cosmological_ ? units::toCosmologicalValue(frequency, context_) : frequency.value();
     }
 
+    /// Convert stored particle mass to the selected physical or cosmological mass
+    /// units.
     double mass(double value) const {
         auto const mass = units::toMass(units::StoredMass(value), scales_);
         return cosmological_ ? units::toCosmologicalValue(mass, context_) : mass.value();
@@ -326,6 +356,7 @@ struct ViewDirectoryMetadata {
     std::vector<std::string> gasVariables;
     std::vector<std::string> darkMatterVariables;
     std::vector<std::string> starVariables;
+    /// Archive this record in the field order required by distributed transport.
     template <typename Archive>
     void serialize(Archive& archive, unsigned) {
         archive & path & gas & darkMatter & stars & gasVariables & darkMatterVariables &
@@ -333,17 +364,20 @@ struct ViewDirectoryMetadata {
     }
 };
 
+/// Return the current Silo directory path with error checking.
 std::string viewDirectory(DBfile* db) {
     char path[4096];
     checkViewWrite(DBGetDir(db, path), "current directory");
     return path;
 }
 
+/// Create and enter the named species directory in the Silo file.
 void enterViewSpecies(DBfile* db, char const* species) {
     checkViewWrite(DBMkDir(db, species), species);
     checkViewWrite(DBSetDir(db, species), species);
 }
 
+/// Format an expression constant with locale-independent, round-trip double precision.
 std::string viewExpressionNumber(double value) {
     char buffer[64];
     auto const result = std::to_chars(buffer, buffer + sizeof(buffer), value,
@@ -377,6 +411,8 @@ void writeViewExpression(
     writeViewText(db, (name + "_unit").c_str(), unit);
 }
 
+/// Write derived Silo particle expressions with the selected species, unit, and frame
+/// conventions.
 void writeParticleExpressions(
     DBfile* db, bool gas, double mass, double a, bool converted, bool cosmological, bool lab) {
     ViewUnitConversion const conversion(a, cosmological, lab);
@@ -461,6 +497,8 @@ void writeParticleExpressions(
     }
 }
 
+/// Write derived Silo particle expressions with the selected species, unit, and frame
+/// conventions.
 void writeParticleExpressions(DBfile* db, ViewParticles const& particles, double a,
     bool converted = false, bool cosmological = false, bool lab = false) {
     auto const write = [&](char const* species, bool gas, double mass) {
@@ -482,6 +520,8 @@ void writeParticleExpressions(DBfile* db, ViewParticles const& particles, double
 #endif
 }
 
+/// Write borrowed particle positions as a checked-size Silo point mesh and record its
+/// species metadata.
 template <typename Particle, typename Position>
 void writeParticlePointmesh(DBfile* db, ViewDirectoryMetadata& metadata, char const* mesh,
     ParticleSelection<Particle> const& particles, Position position, DBoptlist* options) {
@@ -514,6 +554,8 @@ void writeParticlePointmesh(DBfile* db, ViewDirectoryMetadata& metadata, char co
     }
 }
 
+/// Evaluate and write one particle field with units/time metadata and register it for
+/// master-file assembly.
 template <typename Particle, typename Value>
 void writeViewField(DBfile* db, ViewDirectoryMetadata& metadata, char const* name, char const* mesh,
     ParticleSelection<Particle> const& particles, char const* unitName, Value value) {
@@ -549,6 +591,7 @@ void writeViewField(DBfile* db, ViewDirectoryMetadata& metadata, char const* nam
     DBFreeOptlist(options);
 }
 
+/// Write persistent particle identities as exact 32-bit limbs plus formation-time metadata.
 template <typename Particle>
 void writeStarFormationFields(DBfile* db, ViewDirectoryMetadata& metadata, char const* mesh,
     char const* prefix, ParticleSelection<Particle> const& particles) {
@@ -566,6 +609,8 @@ void writeStarFormationFields(DBfile* db, ViewDirectoryMetadata& metadata, char 
         [](Particle const& particle) { return particle.formationTime; });
 }
 
+/// Write a species point mesh, converted velocities, rungs, and optional star-formation
+/// identity fields.
 template <typename Particle>
 void writeViewSpecies(DBfile* db, ViewDirectoryMetadata& metadata, char const* species,
     ParticleSelection<Particle> const& particles, ViewUnitConversion const& conversion,
@@ -601,6 +646,7 @@ void writeViewSpecies(DBfile* db, ViewDirectoryMetadata& metadata, char const* s
 }
 
 #if COSMICTIGER_WITH_SPH
+/// Write the stored bulk-viscosity coefficient as a dimensionless gas field.
 void writeViscosityField(
     DBfile* db, ViewDirectoryMetadata& metadata, ParticleSelection<SphParticleInfo> const& gas) {
     writeViewField(db, metadata, "bulkViscosityCoefficient", "mesh", gas, "1",
@@ -608,6 +654,7 @@ void writeViscosityField(
 }
 
 #if COSMICTIGER_ENABLE_STAR_FORMATION
+/// Write gas cold fraction, hot temperature, and stored specific star-formation rate.
 void writeStarFormationGasFields(
     DBfile* db, ViewDirectoryMetadata& metadata, ParticleSelection<SphParticleInfo> const& gas) {
     if (!getOptions().starFormation.enabled) {
@@ -625,6 +672,8 @@ void writeStarFormationGasFields(
 #endif
 
 #if COSMICTIGER_ENABLE_CHEMISTRY
+/// Write equilibrium species and temperature diagnostics and document their instantaneous
+/// interpretation.
 void writeChemistryFields(
     DBfile* db, ViewDirectoryMetadata& metadata, ParticleSelection<SphParticleInfo> const& gas) {
     if (!getOptions().chemistry.enabled) {
@@ -650,6 +699,7 @@ void writeChemistryFields(
 #endif
 
 #endif
+/// Write all present species and gas fields in the selected physical units and frame.
 void writeConvertedView(DBfile* db, ViewDirectoryMetadata& metadata, ViewParticles const& particles,
     double a, double time, bool cosmological, bool lab, int cycle) {
     metadata.time = time;
@@ -730,6 +780,8 @@ void writeConvertedView(DBfile* db, ViewDirectoryMetadata& metadata, ViewParticl
 
 std::mutex siloViewMutex;
 
+/// Snapshot local owned particles by species and derive enabled gas
+/// chemistry/star-formation output fields.
 ViewSnapshot collectViewParticles(double a) {
     ViewSnapshot snapshot;
 #if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_STAR_FORMATION
@@ -829,6 +881,8 @@ std::vector<Result> consumeViewFutures(
     return results;
 }
 
+/// Submit an output action to all localities and consume all futures before propagating
+/// submission failures.
 template <typename Action, typename Result, typename... Arguments>
 auto onViewLocalities(Arguments const&... arguments) {
     std::vector<hpx::future<Result>> futures;
@@ -845,6 +899,7 @@ auto onViewLocalities(Arguments const&... arguments) {
 
 struct ViewLeafMetadata {
     std::vector<std::vector<ViewDirectoryMetadata>> boxes;
+    /// Archive this record in the field order required by distributed transport.
     template <typename Archive>
     void serialize(Archive& archive, unsigned) {
         archive & boxes;
@@ -857,6 +912,7 @@ struct ViewFrame {
     bool lab = false;
 };
 
+/// Resolve the requested unit systems and spatial frames into output directory descriptors.
 std::vector<ViewFrame> particleViewFrames() {
     if (getOptions().output.units == "code") {
         return {{"", false, false}};
@@ -877,6 +933,8 @@ std::vector<ViewFrame> particleViewFrames() {
     return frames;
 }
 
+/// Create missing Silo path components and enter the requested directory from the file
+/// root.
 void enterViewDirectory(DBfile* db, std::string const& path) {
     checkViewWrite(DBSetDir(db, "/"), "/");
     size_t begin = 0;
@@ -904,6 +962,7 @@ void enterViewDirectory(DBfile* db, std::string const& path) {
     }
 }
 
+/// Construct the master Silo filename for a view box and output cycle.
 std::filesystem::path particleMasterPath(size_t box, int cycle) {
     return std::filesystem::path(getOptions().output.directory) /
         ("view." + std::to_string(box) + "." + std::to_string(cycle) + ".silo");
@@ -911,6 +970,7 @@ std::filesystem::path particleMasterPath(size_t box, int cycle) {
 
 using ViewFile = std::unique_ptr<DBfile, decltype(&DBClose)>;
 
+/// Create a new non-clobbering Silo particle file and write its command-line provenance.
 ViewFile createParticleViewFile(std::filesystem::path const& path) {
     ViewFile file(
         DBCreateReal(path.c_str(), DB_NOCLOBBER, DB_LOCAL, "Distributed particle output", DB_PDB),
@@ -922,6 +982,8 @@ ViewFile createParticleViewFile(std::filesystem::path const& path) {
     return file;
 }
 
+/// Describe persistent identities, formation times, gas state, and force-field conventions
+/// in the output.
 void writeParticleMetadata(DBfile* db) {
     if (getOptions().starFormation.enabled) {
         writeViewText(db, "particle_id_convention",
@@ -950,6 +1012,7 @@ void writeParticleMetadata(DBfile* db) {
 #endif
 }
 
+/// Write species meshes and enabled fields in native simulation storage units.
 void writeCodeParticleView(DBfile* db, ViewDirectoryMetadata& metadata,
     ViewParticles const& particles, double a, double time, int cycle) {
     metadata.time = time;
@@ -1042,6 +1105,8 @@ void writeCodeParticleView(DBfile* db, ViewDirectoryMetadata& metadata,
     writeParticleExpressions(db, particles, a);
 }
 
+/// Write this locality's immutable view leaves for each box and frame and return their
+/// field metadata.
 ViewLeafMetadata writeParticleLeaf(Vector<Range<double>> const& boxes, int cycle, double a,
     double time, std::string const& generation) {
     auto const snapshot = collectViewParticles(a);
@@ -1098,6 +1163,8 @@ HPX_PLAIN_ACTION(detail::writeParticleLeaf, WriteParticleLeafAction);
 
 namespace detail {
 
+/// Assemble multimesh references to completed leaves and atomically publish the closed
+/// master file.
 void writeParticleMaster(size_t box, int cycle, double a, double time,
     std::vector<ViewLeafMetadata> const& leaves, std::string const& generation) {
     auto const filename = particleMasterPath(box, cycle);
@@ -1198,6 +1265,8 @@ void writeParticleMaster(size_t box, int cycle, double a, double time,
     std::filesystem::rename(temporary, filename);
 }
 
+/// Create a unique output generation, write all locality leaves, and publish each view's
+/// master file.
 void writeDistributedParticleViews(int cycle, double a, double time) {
     static std::atomic<uint64_t> sequence{0};
     auto const ticks = std::chrono::system_clock::now().time_since_epoch().count();
@@ -1224,6 +1293,8 @@ void writeDistributedParticleViews(int cycle, double a, double time) {
 
 }    // namespace detail
 
+/// Honor the output cadence, determine the displayed time, and write configured distributed
+/// particle views.
 void viewOutputViews(int cycle, double a, bool force, double physicalYears) {
     if (!getOptions().output.silo || viewBoxes.empty() ||
         (!force && cycle % getOptions().output.siloInterval != 0)) {
@@ -1244,6 +1315,8 @@ void viewOutputViews(int cycle, double a, bool force, double physicalYears) {
     detail::writeDistributedParticleViews(cycle, a, time);
 }
 
+/// Validate output settings, prepare directories, and construct the requested spatial view
+/// boxes.
 void viewConfigure() {
     viewBoxes.clear();
     auto const& opts = getOptions();
@@ -1286,6 +1359,8 @@ void viewConfigure() {
 }
 
 #if COSMICTIGER_WITH_GRAVITY
+/// Reduce mass-weighted sky pixels across localities and write the indexed binary HEALPix
+/// map.
 Vector<float> outputView(int number, double time) {
     Vector<hpx::future<void>> futs;
     Vector<hpx::future<Vector<float>>> valFuts;

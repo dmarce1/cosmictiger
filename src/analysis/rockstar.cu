@@ -18,11 +18,13 @@ namespace detail {
 
 class RockstarBlocksLease {
 public:
+    /// Reserve the requested block count in the shared ROCKSTAR GPU occupancy tracker.
     explicit RockstarBlocksLease(int count)
       : count_(count) {
         blocksUsed += count_;
     }
 
+    /// Release this launch's reservation from the GPU occupancy tracker.
     ~RockstarBlocksLease() {
         blocksUsed -= count_;
     }
@@ -36,10 +38,12 @@ private:
 
 }    // namespace detail
 
+/// Report whether recorded ROCKSTAR block use is below the device multiprocessor count.
 bool rockstarCudaFree() {
     return blocksUsed < cudaSmpCount();
 }
 
+/// Evaluate leaf neighbor linking distances on CUDA and wait for the launch to finish.
 void rockstarAssignLinklenCuda(DeviceVector<RockstarTree> const& nodes,
     DeviceVector<int> const& leaves, DeviceVector<RockstarParticle>& parts, float linkingLength,
     bool phase) {
@@ -54,6 +58,7 @@ void rockstarAssignLinklenCuda(DeviceVector<RockstarTree> const& nodes,
     stream.wait();
 }
 
+/// Assign unique initial labels and iterate CUDA connectivity propagation to convergence.
 void rockstarFindSubgroupsCuda(DeviceVector<RockstarTree>& nodes, DeviceVector<int> const& leaves,
     DeviceVector<RockstarParticle>& parts, float linkingLength, int& nextId) {
     if (leaves.size() == 0) {
@@ -80,11 +85,13 @@ void rockstarFindSubgroupsCuda(DeviceVector<RockstarTree>& nodes, DeviceVector<i
 }
 
 struct AtomicRockstarLabelReader {
+    /// Read a subgroup label atomically while other device threads may lower it.
     __device__ int operator()(int const* label) const {
         return atomicAdd(const_cast<int*>(label), 0);
     }
 };
 
+/// Propagate minimum connected labels through leaf neighborhoods and count changed leaves.
 __global__ void rockstarFindSubgroupsKernel(RockstarTree* nodes, int const* leaves,
     RockstarParticle* parts, float linkingLength, int* numberOfChangedLeaves) {
     int const tid = threadIdx.x;
@@ -109,6 +116,8 @@ __global__ void rockstarFindSubgroupsKernel(RockstarTree* nodes, int const* leav
     }
 }
 
+/// Update nearest-neighbor distances for each leaf using the selected position/phase-space
+/// metric.
 __global__ void rockstarAssignLinklenKernel(RockstarTree const* nodes, int const* leaves,
     RockstarParticle* parts, float linkingLength, bool phase) {
     int const& tid = threadIdx.x;

@@ -55,30 +55,39 @@ struct numeric_limits<Float16> {
     static constexpr bool traps = false;
     static constexpr bool tinyness_before = false;
 
+    /// Return the smallest positive normal binary16 value.
     static constexpr Float16 min() noexcept {
         return {0x0400};
     }
+    /// Return the most negative finite binary16 value.
     static constexpr Float16 lowest() noexcept {
         return {0xfbff};
     }
+    /// Return the largest finite binary16 value.
     static constexpr Float16 max() noexcept {
         return {0x7bff};
     }
+    /// Return the spacing between one and the next representable binary16 value.
     static constexpr Float16 epsilon() noexcept {
         return {0x1400};
     }
+    /// Return the half-unit rounding-error bound for round-to-nearest conversion.
     static constexpr Float16 round_error() noexcept {
         return {0x3800};
     }
+    /// Return the positive binary16 infinity encoding.
     static constexpr Float16 infinity() noexcept {
         return {0x7c00};
     }
+    /// Return a quiet binary16 NaN encoding.
     static constexpr Float16 quiet_NaN() noexcept {
         return {0x7e00};
     }
+    /// Return a signaling binary16 NaN encoding.
     static constexpr Float16 signaling_NaN() noexcept {
         return {0x7d00};
     }
+    /// Return the smallest positive binary16 subnormal value.
     static constexpr Float16 denorm_min() noexcept {
         return {0x0001};
     }

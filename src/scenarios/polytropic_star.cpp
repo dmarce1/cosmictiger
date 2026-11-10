@@ -35,14 +35,17 @@ namespace detail {
     constexpr double kPolytropicIndex = 1.5;
     constexpr double kMaximumRadius = 3.65375 / kRadiusScale;
 
+    /// Evaluate the Lane-Emden polytropic power.
     static inline double powN(double y, double n) {
         return std::pow(y, n);
     }
 
+    /// Return the first Lane-Emden variable derivative from its stored slope.
     static inline double fy(double, double z, double) {
         return z;
     }
 
+    /// Evaluate the Lane-Emden slope derivative with the regular central limit.
     static inline double fz(double y, double z, double r, double n) {
         if (r != 0.0) {
             return -(powN(y, n) + 2.0 * z / r);
@@ -50,11 +53,14 @@ namespace detail {
         return -1.0 / 3.0;
     }
 
+    /// Evaluate the radial enclosed-mass derivative from the Lane-Emden density.
     static inline double fm(double theta, double, double r, double n) {
         constexpr static double kFourPi = double(4) * std::numbers::pi;
         return kFourPi * powN(theta, n) * r * r;
     }
 
+    /// Integrate the Lane-Emden system with RK4 to a radius or the first zero and
+    /// return density and enclosed mass.
     static double laneEmden(double r0, double dr, double n, double& menc) {
         double dy1, dz1, y, z, r, dy2, dz2, dy3, dz3, dy4, dz4, y0, z0;
         double dm1, m, dm2, dm3, dm4, m0;
@@ -122,6 +128,8 @@ namespace detail {
         return pow(y, n);
     }
 
+    /// Evaluate the configured polytropic density profile, treating the center
+    /// explicitly.
     static double polytropicDensity(double radius) {
         if (radius == 0.0) {
             return kCentralDensity;
@@ -130,6 +138,8 @@ namespace detail {
         return kCentralDensity * laneEmden(radius, radius / 100.0, kPolytropicIndex, enclosedMass);
     }
 
+    /// Compare sampled gas density with the Lane-Emden profile and report its weighted
+    /// error.
     static void finishPolytropicStar(double) {
         int const nsample = 1000;
         double l2 = 0.0;
@@ -154,6 +164,8 @@ namespace detail {
 
 }    // namespace detail
 
+/// Construct relaxed gas shells for the self-gravitating polytrope and schedule damped then
+/// free evolution.
 ScenarioPlan initializePolytropicStar() {
     ParticleInteger totalNumberOfParticles = getOptions().run.gasParticleCount;
     double const r0 = detail::kRadiusScale;

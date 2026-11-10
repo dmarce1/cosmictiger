@@ -67,6 +67,7 @@ struct SphParentTreeCensus {
 
     SphParentTreeCensus& operator+=(SphParentTreeCensus const& other);
 
+    /// Archive this record in the field order required by distributed transport.
     template <class Archive>
     void serialize(Archive&& archive, unsigned) {
         archive & leafCount;
@@ -83,6 +84,7 @@ struct SphParentNodeRecord {
     Pair<int> rankRange{0, 1};
     int depth = 0;
 
+    /// Archive this record in the field order required by distributed transport.
     template <class Archive>
     void serialize(Archive&& archive, unsigned) {
         archive & key;

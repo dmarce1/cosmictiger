@@ -18,15 +18,18 @@ struct Operations {
     FlopCount doublePrecision = 0;
 };
 
+/// Combine SPH operation counts by precision; bare counts contribute to single precision.
 CUDA_EXPORT inline Operations operator+(Operations left, Operations right) {
     Operations sum;
     sum.singlePrecision = left.singlePrecision + right.singlePrecision;
     sum.doublePrecision = left.doublePrecision + right.doublePrecision;
     return sum;
 }
+/// Combine SPH operation counts by precision; bare counts contribute to single precision.
 CUDA_EXPORT inline Operations operator+(FlopCount left, Operations right) {
     return Operations{left, 0} + right;
 }
+/// Combine SPH operation counts by precision; bare counts contribute to single precision.
 CUDA_EXPORT inline Operations operator+(Operations left, FlopCount right) {
     return left + Operations{right, 0};
 }
@@ -35,26 +38,33 @@ struct Counter {
     FlopCounter<> singlePrecision;
     FlopCounter<> doublePrecision;
 
+    /// Initialize a single-precision operation counter with zero double-precision work.
     CUDA_EXPORT Counter(FlopCount single = 0)
       : singlePrecision(single) {}
 
+    /// Accumulate SPH operations in their supplied precision categories.
     CUDA_EXPORT Counter& operator+=(FlopCount count) {
         singlePrecision += count;
         return *this;
     }
+    /// Accumulate SPH operations in their supplied precision categories.
     CUDA_EXPORT Counter& operator+=(Operations count) {
         singlePrecision += count.singlePrecision;
         doublePrecision += count.doublePrecision;
         return *this;
     }
+    /// Return the sum of single- and double-precision operations.
     CUDA_EXPORT operator FlopCount() const {
         return FlopCount(singlePrecision) + FlopCount(doublePrecision);
     }
+    /// Convert SPH counters to the common precision-separated operation record.
     CUDA_EXPORT FlopCounts counts() const {
         return {FlopCount(singlePrecision), FlopCount(doublePrecision), 0};
     }
 };
 
+/// Return the arithmetic estimate for constructing a fixed position on the current
+/// host/device path.
 CUDA_EXPORT constexpr FlopCount positionConstructionFlops() {
 #ifdef __CUDA_ARCH__
     return 1;
@@ -87,6 +97,7 @@ CUDA_EXPORT constexpr FlopCount entropyConversionFlops(float adiabaticIndex) {
     return adiabaticIndex == 5.0f / 3.0f ? 7 : 9;
 }
 
+/// Count the multiply/add operations in de Casteljau evaluation at the given degree.
 CUDA_EXPORT inline FlopCount bernsteinFlops(int degree) {
     return FlopCount(3) * degree * (degree + 1) / 2;
 }
@@ -167,6 +178,8 @@ CUDA_EXPORT inline Operations densityKernelOperations(
     return result;
 }
 
+/// Split softened-force arithmetic and table conversions into single- and double-precision
+/// categories.
 template <class Real, class TableReal>
 CUDA_EXPORT inline Operations forceKernelOperations(
     radial_kernel::KernelTable<TableReal> const& kernel, Real const& q) {

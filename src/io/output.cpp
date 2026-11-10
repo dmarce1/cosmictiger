@@ -24,6 +24,7 @@
 
 namespace detail {
 
+/// Turn a negative Silo status into an operation-specific output exception.
 void checkOutputWrite(int status, char const* operation) {
     if (status < 0) {
         throw std::runtime_error(std::string("Silo output failed: ") + operation);
@@ -33,6 +34,7 @@ void checkOutputWrite(int status, char const* operation) {
 using OutputFile = std::unique_ptr<DBfile, decltype(&DBClose)>;
 using OutputOptions = std::unique_ptr<DBoptlist, decltype(&DBFreeOptlist)>;
 
+/// Create an owned Silo output file and fail if creation is unsuccessful.
 OutputFile openOutputFile(std::string const& filename, char const* description) {
     OutputFile file(
         DBCreateReal(filename.c_str(), DB_CLOBBER, DB_LOCAL, description, DB_PDB), &DBClose);
@@ -44,6 +46,8 @@ OutputFile openOutputFile(std::string const& filename, char const* description) 
 
 }    // namespace detail
 
+/// Resolve a filename under the configured output directory and create needed parent
+/// directories.
 std::string outputPath(std::string const& filename) {
     auto const& options = getOptions();
     std::filesystem::path const requested(filename);
@@ -69,6 +73,8 @@ Vector<float> outputGetSlice();
 
 HPX_PLAIN_ACTION(outputGetSlice, OutputGetSliceAction);
 
+/// Write particle positions, velocities, and rungs as a Silo point mesh with checked
+/// operations.
 void outputParticles(std::string const filename, Vector<OutputParticle> const& parts) {
     auto file = detail::openOutputFile(filename, "Meshless");
     auto* db = file.get();
@@ -108,6 +114,7 @@ void outputParticles(std::string const filename, Vector<OutputParticle> const& p
     detail::checkOutputWrite(DBClose(file.release()), "close particle output");
 }
 
+/// Gather marked tracer particles and write their indexed Silo output file.
 void outputTracers(int number) {
     std::string const filename = outputPath("tracers." + std::to_string(number) + ".silo");
     auto const particles = []() {
@@ -118,6 +125,7 @@ void outputTracers(int number) {
     outputParticles(filename, particles);
 }
 
+/// Gather the projected slice and write its grid and intensity field to Silo.
 void outputSlice(int number, double time) {
     constexpr int kNdim = 2;
     auto pixels = []() {
@@ -167,6 +175,8 @@ void outputSlice(int number, double time) {
     detail::checkOutputWrite(DBClose(file.release()), "close slice output");
 }
 
+/// Accumulate mass into the configured planar slice and reduce pixel values across
+/// localities.
 Vector<float> outputGetSlice() {
     Vector<hpx::future<Vector<float>>> futs;
     int const res = getOptions().analysis.sliceResolution;

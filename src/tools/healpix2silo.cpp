@@ -18,6 +18,7 @@
 
 namespace detail {
 
+/// Read the requested binary element count and reject truncated HEALPix input.
 template <class T>
 void readValues(FILE* input, T* values, size_t count) {
     if (std::fread(values, sizeof(T), count, input) != count) {
@@ -25,12 +26,15 @@ void readValues(FILE* input, T* values, size_t count) {
     }
 }
 
+/// Translate a negative Silo status into a conversion-specific exception.
 void checkSilo(int status, char const* operation) {
     if (status < 0) {
         throw std::runtime_error(std::string("Silo conversion failed: ") + operation);
     }
 }
 
+/// Invert the map projection to longitude/latitude and report whether the point lies within
+/// the map boundary.
 bool cartToSph(double x, double y, double& latitude, double& longitude) {
     double const theta = std::asin(y);
     double const argument = (2.0 * theta + std::sin(2.0 * theta)) / std::numbers::pi;
@@ -39,6 +43,8 @@ bool cartToSph(double x, double y, double& latitude, double& longitude) {
     return longitude >= -std::numbers::pi && longitude <= std::numbers::pi;
 }
 
+/// Parse filenames, read the HEALPix map, and write its projected Silo grid and intensity
+/// field.
 int convert(int argc, char** argv) {
     std::string infile, outfile;
     namespace po = boost::program_options;
@@ -147,6 +153,7 @@ int convert(int argc, char** argv) {
 
 }    // namespace detail
 
+/// Run HEALPix-to-Silo conversion and report exceptions with a failure exit code.
 int main(int argc, char** argv) {
     try {
         return detail::convert(argc, argv);

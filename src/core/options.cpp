@@ -77,6 +77,8 @@ static bool displayOptions = false;
     throw std::invalid_argument(message);
 }
 
+/// Parse the entire input as an unsigned 64-bit seed, rejecting invalid or out-of-range
+/// text.
 std::uint64_t parseStarFormationSeed(std::string const& input) {
     std::uint64_t value = 0;
     auto const result = std::from_chars(input.data(), input.data() + input.size(), value);
@@ -87,6 +89,7 @@ std::uint64_t parseStarFormationSeed(std::string const& input) {
     return value;
 }
 
+/// Resolve a kernel family and degree and validate it for gravity or density evaluation.
 radial_kernel::KernelSpec kernelSpec(std::string const& family, int degree, bool hydro = false) {
     radial_kernel::Family kind;
     if (family == "spline") {
@@ -108,22 +111,26 @@ radial_kernel::KernelSpec kernelSpec(std::string const& family, int degree, bool
     return spec;
 }
 
+/// Test IEEE exponent bits for finiteness so validation remains effective under fast-math.
 bool isFiniteOption(double value) {
     // Keep option validation effective when the solver is built with -ffast-math.
     constexpr std::uint64_t kExponentMask = UINT64_C(0x7ff0000000000000);
     return (std::bit_cast<std::uint64_t>(value) & kExponentMask) != kExponentMask;
 }
 
+/// Check that a finite double lies within the representable float magnitude range.
 bool isFiniteFloatOption(double value) {
     constexpr double kLargestFloat = std::numeric_limits<float>::max();
     return isFiniteOption(value) && value >= -kLargestFloat && value <= kLargestFloat;
 }
 
+/// Require a positive normal float value so device flush-to-zero cannot erase it.
 bool isPositiveFloatOption(double value) {
     // Device fast math flushes subnormal floats, so require a positive normal.
     return isFiniteFloatOption(value) && value >= std::numeric_limits<float>::min();
 }
 
+/// Reject negative, nonfinite, or unusable single-precision conduction coefficients.
 void validateConduction(Options const& opts) {
     if (!isFiniteOption(opts.hydro.conductionCoefficient) ||
         opts.hydro.conductionCoefficient < 0.0) {
@@ -136,6 +143,7 @@ void validateConduction(Options const& opts) {
     }
 }
 
+/// Validate viscosity bounds against binary16 storage and enforce their ordering.
 void validateViscosityStorage(Options const& opts) {
     constexpr double kMinimumHalfCoefficient = 0x1p-24;
     constexpr double kMaximumHalfCoefficient = 65504.0;
@@ -156,6 +164,7 @@ void validateViscosityStorage(Options const& opts) {
     }
 }
 
+/// Reject halo or lightcone options when the build lacks their analysis support.
 void validateRockstar(Options const& opts) {
 #if !COSMICTIGER_ENABLE_ROCKSTAR
     if (opts.analysis.groups || opts.analysis.groupsCuda || opts.lightcone.enabled ||
@@ -166,6 +175,7 @@ void validateRockstar(Options const& opts) {
 #endif
 }
 
+/// Reject unimplemented CUDA options and backends unavailable in this build.
 void validateCudaBackends(Options const& opts) {
     if (opts.sort.cuda) {
         throw std::invalid_argument("sort.cuda=true is not implemented; use sort.cuda=false");
@@ -207,12 +217,14 @@ void validateCudaBackends(Options const& opts) {
 #endif
 }
 
+/// Require the implemented SPH hydrodynamics method.
 void validateHydroMethod(Options const& opts) {
     if (opts.hydro.method != "sph") {
         throw std::invalid_argument("hydro.method must be sph");
     }
 }
 
+/// Reject nonfinite or nonzero curvature because the simulation requires a flat cosmology.
 void validateFlatCosmology(Options const& opts) {
     if (!isFiniteOption(opts.cosmology.omegaK) || opts.cosmology.omegaK != 0.0) {
         throw std::invalid_argument(
@@ -222,6 +234,7 @@ void validateFlatCosmology(Options const& opts) {
     }
 }
 
+/// Check that equilibrium cooling has compatible hydrodynamics and physical parameters.
 void validateCooling(Options const& opts) {
     if (!opts.chemistry.enabled) {
         return;
@@ -244,6 +257,8 @@ void validateCooling(Options const& opts) {
     }
 }
 
+/// Check the build features, coupled physics, and parameter bounds required by star
+/// formation.
 void validateStarFormation(Options const& opts) {
     auto const& settings = opts.starFormation;
     if (!settings.enabled) {
@@ -283,6 +298,7 @@ void validateStarFormation(Options const& opts) {
 
 }    // namespace detail
 
+/// Print one resolved option using its value type when option display is enabled.
 void show(char const* name, bool opt) {
     if (!detail::displayOptions) {
         return;
@@ -290,6 +306,7 @@ void show(char const* name, bool opt) {
     std::cout << std::format("{:<38s}: {:c}\n", name, opt ? 'T' : 'F') << std::flush;
 }
 
+/// Print one resolved option using its value type when option display is enabled.
 void show(char const* name, int opt) {
     if (!detail::displayOptions) {
         return;
@@ -297,6 +314,7 @@ void show(char const* name, int opt) {
     std::cout << std::format("{:<38s}: {:d}\n", name, opt) << std::flush;
 }
 
+/// Print one resolved option using its value type when option display is enabled.
 void show(char const* name, size_t opt) {
     if (!detail::displayOptions) {
         return;
@@ -304,6 +322,7 @@ void show(char const* name, size_t opt) {
     std::cout << std::format("{:<38s}: {:d}\n", name, opt) << std::flush;
 }
 
+/// Print one resolved option using its value type when option display is enabled.
 void show(char const* name, double opt) {
     if (!detail::displayOptions) {
         return;
@@ -311,6 +330,7 @@ void show(char const* name, double opt) {
     std::cout << std::format("{:<38s}: {:e}\n", name, opt) << std::flush;
 }
 
+/// Print one resolved option using its value type when option display is enabled.
 void show(char const* name, std::string opt) {
     if (!detail::displayOptions) {
         return;
@@ -322,10 +342,12 @@ Options globalOpts;
 
 HPX_PLAIN_ACTION(setOptions, SetOptionsAction);
 
+/// Return the process-local resolved simulation options.
 Options const& getOptions() {
     return globalOpts;
 }
 
+/// Validate and propagate resolved options, updating dependent kernels and output settings.
 void setOptions(Options const& requested) {
     Options opts = requested;
     scenarios::parseKelvinHelmholtzPacking(
@@ -411,6 +433,7 @@ void setOptions(Options const& requested) {
     }
 }
 
+/// Copy the original command line for later output provenance.
 void recordCommandLineArguments(int argc, char* argv[]) {
     detail::commandLineArguments.clear();
     for (int i = 0; i < argc; i++) {
@@ -418,10 +441,13 @@ void recordCommandLineArguments(int argc, char* argv[]) {
     }
 }
 
+/// Return the stored original command-line arguments.
 std::vector<std::string> const& getCommandLineArguments() {
     return detail::commandLineArguments;
 }
 
+/// Build public option metadata, undoing internal unit normalization while retaining
+/// runtime overrides.
 std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
     // Undo storage normalization without undoing current runtime overrides or caps.
     // Public effective radius is 2 sigma in mean box particle spacings.
@@ -595,6 +621,7 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
 
 namespace detail {
 
+/// Display effective option values using the same public conversions as output metadata.
 void showResolvedOptions(
     Options const& opts, hpx::program_options::options_description const& commandOpts) {
     // Reuse output metadata's resolved public values, including unit conversions, both
@@ -639,6 +666,8 @@ void showResolvedOptions(
 
 }    // namespace detail
 
+/// Parse command-line and configuration values, resolve defaults, validate options, and
+/// configure output views.
 bool processOptions(int argc, char* argv[]) {
     Options opts{};
     double gravityEffectiveRadius = 0.01876988456953534;

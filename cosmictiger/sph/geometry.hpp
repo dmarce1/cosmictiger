@@ -56,6 +56,8 @@ CUDA_EXPORT inline Real inverseVolume(Real ih) {
     }
 }
 
+/// Return the inverse smoothing-length factor for a density-kernel gradient in the
+/// configured spatial dimension.
 template <class Real>
 CUDA_EXPORT inline Real inverseGradientScale(Real ih) {
     if constexpr (kSpatialDimensions == 3) {

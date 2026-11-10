@@ -38,13 +38,17 @@ struct Equilibrium {
     double specificStarFormationRate{};
 };
 namespace detail {
+    /// Test whether the supplied model value is neither NaN nor infinite.
     CUDA_EXPORT inline bool finite(double value) {
         return value == value && ::fabs(value) <= std::numeric_limits<double>::max();
     }
+    /// Return a quiet NaN to signal an invalid model value.
     CUDA_EXPORT inline double invalid() {
         return std::numeric_limits<double>::quiet_NaN();
     }
 }    // namespace detail
+/// Validate phase energies, feedback fraction, evaporation, timescale, and the supported
+/// adiabatic index.
 CUDA_EXPORT inline bool validParameters(Parameters const& parameters) {
     return detail::finite(parameters.supernovaMassFraction) &&
         parameters.supernovaMassFraction > 0.0 && parameters.supernovaMassFraction < 1.0 &&

@@ -31,6 +31,7 @@ std::mutex flopShardsMutex;
 std::vector<std::unique_ptr<CpuFlopShard>> flopShards;
 std::chrono::steady_clock::time_point flopStart = std::chrono::steady_clock::now();
 
+/// Return this OS thread's counter shard, registering it on first use.
 CpuFlopShard& cpuFlopShard() {
     thread_local CpuFlopShard* shard = []() {
         auto entry = std::make_unique<CpuFlopShard>();
@@ -47,6 +48,7 @@ CpuFlopShard& cpuFlopShard() {
 HPX_PLAIN_ACTION(resetFlops, ResetFlopsAction);
 HPX_PLAIN_ACTION(readFlopCounts, ReadFlopCountsAction);
 
+/// Reset CPU and GPU operation counts across the locality tree and restart elapsed timing.
 void resetFlops() {
     Vector<hpx::future<void>> futures;
     for (auto const& child : hpxChildren()) {
@@ -67,6 +69,7 @@ void resetFlops() {
     detail::flopStart = std::chrono::steady_clock::now();
 }
 
+/// Collect precision-specific CPU and GPU operation counts across the locality tree.
 FlopCounts readFlopCounts() {
     Vector<hpx::future<FlopCounts>> futures;
     for (auto const& child : hpxChildren()) {
@@ -87,10 +90,12 @@ FlopCounts readFlopCounts() {
     return result;
 }
 
+/// Return the total distributed operation count across precision categories.
 FlopCount readFlops() {
     return readFlopCounts().total();
 }
 
+/// Divide distributed operation counts by elapsed time since the last reset.
 FlopRates flopRatesPerSecond() {
     // Freeze the elapsed time before collecting remote counters so reporting
     // latency does not lower the rate. A read does not restart the clock.
@@ -107,10 +112,12 @@ FlopRates flopRatesPerSecond() {
     return rates;
 }
 
+/// Return the aggregate operation rate across precision categories.
 double flopsPerSecond() {
     return flopRatesPerSecond().total();
 }
 
+/// Add operations to this thread's precision bucket when counting is compiled in.
 void addCpuFlops(FlopCount count, FlopPrecision precision) {
 #ifdef COUNT_FLOPS
     if (count != 0) {
@@ -126,10 +133,13 @@ void addCpuFlops(FlopCount count, FlopPrecision precision) {
 }
 
 #ifndef USE_CUDA
+/// Provide the no-op GPU counter reset for a build without CUDA.
 void resetGpuFlops() {}
+/// Return zero GPU counts for a build without CUDA.
 FlopCounts getGpuFlopCounts() {
     return {};
 }
+/// Return the sum of GPU operation-count categories.
 FlopCount getGpuFlops() {
     return getGpuFlopCounts().total();
 }

@@ -39,6 +39,8 @@ static size_t gasOpeningCount = 0;
 static size_t gasOpeningParticleCount = 0;
 static Vector<GasOpeningImpulse> gasOpeningImpulses;
 
+/// Take reusable interaction lists from the thread-local pool, creating a set when
+/// necessary.
 KickLists kickAcquireLists() {
     if (localLists.empty()) {
         localLists.push(KickLists());
@@ -48,6 +50,8 @@ KickLists kickAcquireLists() {
     return std::move(lists);
 }
 
+/// Clear interaction-list lengths and return their allocated storage to the thread-local
+/// pool.
 void kickReleaseLists(KickLists&& lists) {
     lists.cclist.resize(0);
     lists.cplist.resize(0);
@@ -57,6 +61,7 @@ void kickReleaseLists(KickLists&& lists) {
     localLists.push(std::move(lists));
 }
 
+/// Test whether every source in the checklist belongs to a single-locality tree node.
 bool kickSourcesAreSingleRank(Vector<TreeId> const& checklist) {
     for (auto const& source : checklist) {
         if (!treeGetNode(source)->isLocal()) {
@@ -68,6 +73,7 @@ bool kickSourcesAreSingleRank(Vector<TreeId> const& checklist) {
 
 }    // namespace detail
 
+/// Select the compiled FMM order and invoke its typed tree-walk implementation.
 KickReturn kickWalkDispatch(KickParameters params, ExpansionBuffer l, Vector3<Position> pos,
     TreeId self, Vector<TreeId> direct, std::shared_ptr<KickWorkspace> workspace,
     KickContext const& context) {
@@ -82,15 +88,19 @@ HPX_PLAIN_ACTION(gravitySealDeferredGasOpening, GravitySealDeferredGasOpeningAct
 HPX_PLAIN_ACTION(gravityFinishDeferredGasOpening, GravityFinishDeferredGasOpeningAction);
 HPX_PLAIN_ACTION(gravityDiscardDeferredGasOpening, GravityDiscardDeferredGasOpeningAction);
 
+/// Report whether gas opening-kick increments are currently being collected.
 bool gravityGasOpeningDeferred() {
     return detail::gasOpeningState == detail::GasOpeningState::Collecting;
 }
 
+/// Expose the gas-indexed increment buffer while deferred collection is active.
 Vector3<float>* gravityDeferredGasOpeningData() {
     ALWAYS_ASSERT(gravityGasOpeningDeferred());
     return detail::gasOpeningIncrements;
 }
 
+/// Allocate zeroed gas opening-kick buffers and begin deferred collection across
+/// localities.
 void gravityBeginDeferredGasOpening() {
     ALWAYS_ASSERT(detail::gasOpeningState == detail::GasOpeningState::Disabled);
     Vector<hpx::future<void>> futures;
@@ -124,6 +134,7 @@ void gravityBeginDeferredGasOpening() {
     }
 }
 
+/// Convert collected gas increments to stable base-particle impulses before gas reordering.
 void gravitySealDeferredGasOpening() {
     ALWAYS_ASSERT(gravityGasOpeningDeferred());
     Vector<hpx::future<void>> futures;
@@ -158,6 +169,8 @@ void gravitySealDeferredGasOpening() {
     }
 }
 
+/// Apply sealed opening impulses after the coincident hydro event and return their kick
+/// diagnostics.
 KickReturn gravityFinishDeferredGasOpening() {
     ALWAYS_ASSERT(detail::gasOpeningState == detail::GasOpeningState::Sealed);
     ALWAYS_ASSERT(detail::gasOpeningParticleCount == size_t(particlesOwnedSize()));
@@ -204,6 +217,8 @@ KickReturn gravityFinishDeferredGasOpening() {
     return result;
 }
 
+/// Release deferred opening state throughout the locality tree without applying its
+/// impulses.
 void gravityDiscardDeferredGasOpening() {
     Vector<hpx::future<void>> futures;
     for (auto const& child : hpxChildren()) {

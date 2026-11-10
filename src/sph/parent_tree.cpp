@@ -55,6 +55,8 @@ std::vector<T> joinParentTreeFutures(std::vector<hpx::future<T>>& futures) {
     return results;
 }
 
+/// Join all child operations and rethrow the first failure only after every future has been
+/// consumed.
 void joinParentTreeFutures(std::vector<hpx::future<void>>& futures) {
     std::exception_ptr failure;
     for (auto& future : futures) {
@@ -73,6 +75,8 @@ void joinParentTreeFutures(std::vector<hpx::future<void>>& futures) {
 
 }    // namespace detail
 
+/// Partition a rank interval into dimension-aware parent-tree children with nonempty rank
+/// groups.
 std::vector<SphParentChild> sphParentChildren(std::uint64_t key, Pair<int> rankRange) {
     std::vector<SphParentChild> children;
     int const arity = sphParentArity(rankRange.second - rankRange.first);
@@ -98,6 +102,7 @@ std::vector<SphParentChild> sphParentChildren(std::uint64_t key, Pair<int> rankR
     return children;
 }
 
+/// Compute the binary domain-tree key assigned to a rank.
 std::uint64_t sphDomainLeafKey(int rank, int rankCount) {
     std::uint64_t key = 1;
     Pair<int> rankRange(0, rankCount);
@@ -133,12 +138,14 @@ void collectLocalityChildren(
 
 }    // namespace detail
 
+/// Return the locality children induced by the dimension-aware parent-tree topology.
 std::vector<int> sphParentLocalityChildren(int rank, int rankCount) {
     std::vector<int> children;
     detail::collectLocalityChildren(1, Pair<int>(0, rankCount), rank, children);
     return children;
 }
 
+/// Return cached HPX child-locality IDs used by SPH collective operations.
 Vector<hpx::id_type> const& sphCollectiveChildren() {
     // The topology depends only on the rank count, fixed for a run.
     static Vector<hpx::id_type> const children = [] {
@@ -151,6 +158,7 @@ Vector<hpx::id_type> const& sphCollectiveChildren() {
     return children;
 }
 
+/// Merge tree census counts, maximum depth, rank sum, and consistency flags.
 SphParentTreeCensus& SphParentTreeCensus::operator+=(SphParentTreeCensus const& other) {
     leafCount += other.leafCount;
     nodeCount += other.nodeCount;
@@ -160,9 +168,12 @@ SphParentTreeCensus& SphParentTreeCensus::operator+=(SphParentTreeCensus const& 
     return *this;
 }
 
+/// Retain the node's rank interval, key, and depth for distributed parent-tree
+/// construction.
 SphParentNode::SphParentNode(SphParentNodeRecord const& record)
   : record_(record) {}
 
+/// Create child components recursively or register this locality's unique parent-tree leaf.
 void SphParentNode::build() {
     auto const children = sphParentChildren(record_.key, record_.rankRange);
     if (children.empty()) {
@@ -192,6 +203,8 @@ void SphParentNode::build() {
     detail::joinParentTreeFutures(built);
 }
 
+/// Release descendants and clear the local leaf registration before dropping managed child
+/// IDs.
 void SphParentNode::release() {
     std::vector<hpx::future<void>> released;
     released.reserve(children_.size());
@@ -207,6 +220,7 @@ void SphParentNode::release() {
     }
 }
 
+/// Recursively count and validate component ownership, topology, and leaf registration.
 SphParentTreeCensus SphParentNode::census() const {
     SphParentTreeCensus result;
     result.nodeCount = 1;
@@ -238,6 +252,7 @@ SphParentTreeCensus SphParentNode::census() const {
     return result;
 }
 
+/// Replace the distributed parent tree from rank zero using the current locality count.
 void sphParentTreeCreate() {
     if (hpxRank() != 0) {
         throw std::logic_error("SPH parent tree: create runs on rank 0");
@@ -251,6 +266,7 @@ void sphParentTreeCreate() {
     hpx::async<SphParentNode::BuildAction>(detail::parentTreeRoot).get();
 }
 
+/// Release the distributed parent tree if one exists.
 void sphParentTreeDestroy() {
     if (!detail::parentTreeRoot) {
         return;
@@ -259,10 +275,12 @@ void sphParentTreeDestroy() {
     detail::parentTreeRoot = hpx::invalid_id;
 }
 
+/// Report whether this process holds the parent-tree root ID.
 bool sphParentTreeExists() {
     return bool(detail::parentTreeRoot);
 }
 
+/// Return a distributed topology census, requiring an existing root.
 SphParentTreeCensus sphParentTreeCensus() {
     if (!detail::parentTreeRoot) {
         throw std::logic_error("SPH parent tree: census without a tree");
@@ -270,6 +288,7 @@ SphParentTreeCensus sphParentTreeCensus() {
     return hpx::async<SphParentNode::CensusAction>(detail::parentTreeRoot).get();
 }
 
+/// Return the registered local leaf record, or null when no leaf is registered.
 SphParentNodeRecord const* sphParentTreeLocalLeaf() {
     std::lock_guard<MutexType> lock(detail::localLeafMutex);
     return detail::localLeaf ? &*detail::localLeaf : nullptr;

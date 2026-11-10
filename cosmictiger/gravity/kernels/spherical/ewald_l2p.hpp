@@ -16,6 +16,7 @@ class EwaldL2P {
 public:
     static constexpr int kFlops_ = detail::L2P<degree>::kFlops_ + 8;
     static constexpr int kConventionalFlops_ = detail::L2P<degree>::kConventionalFlops_ + 14;
+    /// Accumulate the local field including the isotropic trace term of the periodic correction.
     template <typename Real, typename Field, typename Source>
     CUDA_EXPORT static void add(
         Field& field, Source const& source, Real sourceTrace, Real x, Real y, Real z) {

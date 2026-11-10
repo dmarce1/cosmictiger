@@ -18,6 +18,7 @@ struct CosmicParameters {
     double neff, y, theta, hubble;
 };
 
+/// Evaluate the flat radiation–matter–Lambda Hubble rate at scale factor a.
 inline double hubbleFunction(double a, double littleh, double omegaM, double omegaR) {
     return littleh * cosmic_constants::kH0 *
         sqrt(omegaR / (a * a * a * a) + omegaM / (a * a * a) + (1 - omegaR - omegaM));
@@ -66,6 +67,7 @@ class Cosmos {
     double hValue_;
 
 public:
+    /// Initialize a flat background and zero its elapsed physical and conformal clocks.
     Cosmos(
         double omegaC, double omegaB, double omegaGam, double omegaNu, double hArg, double aArg) {
         hValue_ = constants::kH0 * hArg;
@@ -75,6 +77,8 @@ public:
         a_ = aArg;
         t_ = tau_ = 0.0;
     }
+    /// Integrate scale factor and physical time over a positive conformal interval
+    /// using substepped three-stage updates.
     double advance(double dtau0) {
         double const beta[3] = {1.0, 0.25, 2.0 / 3.0};
 
@@ -101,9 +105,11 @@ public:
         }
         return t_;
     }
+    /// Return the current background scale factor.
     double scale() const {
         return a_;
     }
+    /// Return the elapsed physical time accumulated by this background.
     double time() const {
         return t_;
     }

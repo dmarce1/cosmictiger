@@ -12,6 +12,8 @@
 
 namespace gadget4 {
 namespace detail {
+    /// Inspect exponent bits to reject infinities and NaNs even under fast-math
+    /// compilation.
     CUDA_EXPORT inline bool finite(double value) {
         // Fast-math must not remove invalid-input checks.
         union Bits {
@@ -20,9 +22,12 @@ namespace detail {
         } representation{value};
         return (representation.bits & UINT64_C(0x7ff0000000000000)) != UINT64_C(0x7ff0000000000000);
     }
+    /// Return the larger of two values without a host-only library dependency.
     CUDA_EXPORT inline double maximum(double first, double second) {
         return first < second ? second : first;
     }
+    /// Check that the rate table exists and the redshift is finite and physically valid
+    /// for comoving evolution.
     CUDA_EXPORT inline bool validParameters(Parameters const& parameters) {
         if (parameters.rates == nullptr || !finite(parameters.redshift) ||
             (parameters.comoving && parameters.redshift <= -1.0)) {
@@ -30,16 +35,22 @@ namespace detail {
         }
         return true;
     }
+    /// Require finite positive energy/density and a finite nonnegative electron
+    /// abundance.
     CUDA_EXPORT inline bool validState(double energy, double density, double electrons) {
         return finite(energy) && energy > 0.0 && finite(density) && density > 0.0 &&
             finite(electrons) && electrons >= 0.0;
     }
+    /// Update temperature, electron fraction, and mean molecular weight in an
+    /// equilibrium gas state.
     CUDA_EXPORT inline void finishGas(GasState& gas, double temperature, double electrons) {
         gas.temperature = temperature;
         gas.electronFraction = electrons;
         gas.meanMolecularWeight =
             (1.0 + 4.0 * kHeliumNumberRatio) / (1.0 + kHeliumNumberRatio + electrons);
     }
+    /// Linearly interpolate all cooling coefficients between adjacent log-temperature
+    /// table rows; callers must supply an interior coordinate.
     CUDA_EXPORT inline RateRow interpolate(Parameters const& parameters, double logTemperature) {
         double const coordinate =
             (logTemperature - kMinimumLogTemperature) / kLogTemperatureSpacing;
@@ -71,6 +82,8 @@ namespace detail {
             lowerWeight * lower.heliumIonIonization + upperWeight * upper.heliumIonIonization;
         return result;
     }
+    /// Compute equilibrium hydrogen/helium fractions at a log-temperature, including
+    /// neutral and fully ionized limits.
     CUDA_EXPORT inline Status findAbundances(
         double logTemperature, Parameters const& parameters, double& electrons, GasState& gas) {
         if (!finite(logTemperature)) {
@@ -114,6 +127,8 @@ namespace detail {
         finishGas(gas, std::pow(10.0, logTemperature), electrons);
         return finite(electrons) ? Status::Success : Status::NonConvergence;
     }
+    /// Iterate the equilibrium electron abundance and temperature consistent with
+    /// specific energy; return nonconvergence on failure.
     CUDA_EXPORT inline Status convertEnergy(double energy, double density,
         Parameters const& parameters, double& electrons, double& temperature) {
         double molecularWeight =
@@ -149,6 +164,8 @@ namespace detail {
         }
         return Status::NonConvergence;
     }
+    /// Compute the net rate per squared hydrogen number density, including Compton
+    /// exchange for comoving gas.
     CUDA_EXPORT inline Status rateAtTemperature(double logTemperature, double density,
         Parameters const& parameters, double& electrons, double& netRate) {
         if (logTemperature <= kMinimumLogTemperature) {
@@ -194,6 +211,8 @@ namespace detail {
         netRate = 0.0 - loss;
         return finite(netRate) ? Status::Success : Status::NonConvergence;
     }
+    /// Solve the equilibrium temperature and then evaluate the net cooling/heating
+    /// rate.
     CUDA_EXPORT inline Status rateFromEnergy(double energy, double density,
         Parameters const& parameters, double& electrons, double& netRate) {
         double temperature;
@@ -205,6 +224,7 @@ namespace detail {
     }
 }    // namespace detail
 
+/// Validate inputs and publish equilibrium gas abundances only when the solve succeeds.
 CUDA_EXPORT inline Status equilibriumAtTemperature(double temperature, double density,
     Parameters const& parameters, double& electronFraction, GasState& gas) {
     if (!detail::validState(temperature, density, electronFraction) ||
@@ -222,6 +242,8 @@ CUDA_EXPORT inline Status equilibriumAtTemperature(double temperature, double de
     return status;
 }
 
+/// Convert specific energy in erg/g to equilibrium temperature in kelvin, updating outputs
+/// only on success.
 CUDA_EXPORT inline Status temperatureFromEnergy(double specificEnergy, double density,
     Parameters const& parameters, double& electronFraction, double& temperature) {
     if (!detail::validState(specificEnergy, density, electronFraction) ||
@@ -239,6 +261,8 @@ CUDA_EXPORT inline Status temperatureFromEnergy(double specificEnergy, double de
     return status;
 }
 
+/// Return the net cooling/heating coefficient and equilibrium electron fraction, committing
+/// outputs only on success.
 CUDA_EXPORT inline Status coolingRate(double specificEnergy, double density,
     Parameters const& parameters, double& electronFraction, double& netRatePerHydrogenSquared) {
     if (!detail::validState(specificEnergy, density, electronFraction) ||
@@ -256,6 +280,8 @@ CUDA_EXPORT inline Status coolingRate(double specificEnergy, double density,
     return status;
 }
 
+/// Return the cooling time in seconds, or zero for a noncooling state; propagate
+/// invalid-input or convergence status.
 CUDA_EXPORT inline Status coolingTime(double specificEnergy, double density,
     Parameters const& parameters, double& electronFraction, double& seconds) {
     double electrons = electronFraction;
@@ -278,6 +304,8 @@ CUDA_EXPORT inline Status coolingTime(double specificEnergy, double density,
     return Status::Success;
 }
 
+/// Solve the implicit thermal-energy update by bracketing and bisection over the supplied
+/// interval in seconds.
 CUDA_EXPORT inline Status doCooling(double specificEnergy, double density, double interval,
     Parameters const& parameters, double& electronFraction, double& newSpecificEnergy) {
     if (!detail::validState(specificEnergy, density, electronFraction) ||
@@ -358,6 +386,8 @@ CUDA_EXPORT inline Status doCooling(double specificEnergy, double density, doubl
     return Status::NonConvergence;
 }
 
+/// Advance one gas state with the configured energy floor and return its updated state and
+/// status.
 CUDA_EXPORT inline Result advance(Input const& input, Parameters const& parameters) {
     Result result;
     result.electronFraction = input.electronFraction;

@@ -71,6 +71,7 @@ struct SolveRequest {
     double eta = 0.0;
     KickParameters parameters;
 
+    /// Archive this record in the field order required by distributed transport.
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
         archive & generation & meshSize & activeParticles & totalParticles & doPotential &
@@ -92,6 +93,7 @@ struct CellData {
     std::vector<double> coefficients;
     double radialTrace = 0;
 
+    /// Archive this record in the field order required by distributed transport.
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
         archive & key & coefficients & radialTrace;
@@ -103,6 +105,7 @@ struct CellParticles {
     uint64_t key = 0;
     std::vector<PmmmNearParticle> particles;
 
+    /// Archive this record in the field order required by distributed transport.
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
         archive & key & particles;
@@ -152,10 +155,13 @@ struct MeshCache {
     std::vector<int> slabOwner;
     std::vector<ContractionTerm> terms;
 
+    /// Return the number of real mesh cells in this locality's FFT slab.
     size_t cellCount() const {
         return size_t(localSize) * meshSize * meshSize;
     }
 
+    /// Convert a global cell key to a local slab offset, rejecting cells owned by
+    /// another slab.
     size_t cellIndex(uint64_t key) const {
         uint64_t const first = uint64_t(localBegin) * meshSize * meshSize;
         if (key < first || key - first >= cellCount()) {
@@ -236,6 +242,7 @@ void clearGhosts();
 void deposit();
 CellData rootMoments(size_t cellIndex, TreeCreateReturn const& root);
 void depositCells(std::vector<CellData> cells);
+/// Test whether this solve can reuse owned near-FMM roots for mesh moment deposition.
 inline bool reuseOwnedRoots() {
     return getOptions().gravity.pmmmNearMethod == "fmm" && !state.request.farOnly &&
         !frozenNearRequest(state.request);
@@ -259,6 +266,8 @@ void destroy();
 void solve(SolveRequest request);
 void receiveGhostCell(size_t index);
 
+/// Run local preparation and establish collective success before entering the next MPI
+/// phase.
 template <class Function>
 void prepareCollectively(Function function) {
     std::exception_ptr failure;
@@ -283,6 +292,8 @@ void prepareCollectively(Function function) {
     }
 }
 
+/// Distribute indices dynamically over bounded HPX tasks and join all work before
+/// propagating errors.
 template <class Function>
 void parallelFor(size_t count, char const* taskName, Function function) {
     size_t const workers = std::min(count, std::max(size_t(1), hpx::get_os_thread_count()));

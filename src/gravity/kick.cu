@@ -30,6 +30,7 @@ KickReturn cudaExecuteKicks(KickParameters params, Position* devX, Position* dev
     });
 }
 
+/// Return the CUDA arena layout for the selected runtime FMM order.
 CudaKickArenaLayout const& kickArenaLayout() {
     return fmmDispatch([](auto order) -> CudaKickArenaLayout const& {
         return kickArenaLayoutImpl<order.value>();
@@ -88,6 +89,7 @@ __managed__ double idirect;
 __managed__ double numberOfProcessedSinkParticles;
 __managed__ bool useGravityCounters = false;
 
+/// Clear this GPU's interaction and processed-particle counters when CUDA is active.
 void resetGravityCountersLocal() {
     if (!cudaEnabled()) {
         return;
@@ -95,6 +97,7 @@ void resetGravityCountersLocal() {
     iclose = idirect = numberOfProcessedSinkParticles = 0;
 }
 
+/// Enable or disable local device interaction counting when CUDA is active.
 void setGravityCounterUseLocal(bool code) {
     if (!cudaEnabled()) {
         return;
@@ -102,6 +105,8 @@ void setGravityCounterUseLocal(bool code) {
     useGravityCounters = code;
 }
 
+/// Return this GPU's close, direct, and processed-particle totals, or zeros without CUDA
+/// use.
 Array<double, 3> gravityCounterTotalsLocal() {
     Array<double, 3> totals{};
     if (!cudaEnabled()) {

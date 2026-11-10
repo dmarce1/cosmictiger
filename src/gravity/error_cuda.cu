@@ -24,6 +24,7 @@ constexpr size_t kGravityErrorSourcesPerBlock = 1024;
 constexpr size_t kGravityErrorSourceBatch = 65536;
 constexpr size_t kGravityErrorSinkBatch = 128;
 
+/// Compute compensated direct-force partial sums for each sink and source block.
 __global__ void gravityErrorReferenceKernel(GravityErrorPosition const* sinks,
     GravityErrorSource const* sources, size_t sourceCount,
     radial_kernel::KernelTable<double> const* kernel, double smoothingLength,
@@ -67,6 +68,8 @@ __global__ void gravityErrorReferenceKernel(GravityErrorPosition const* sinks,
 struct GravityErrorDeviceDeleter {
     int device;
 
+    /// Free a reference-force device allocation on its owning GPU and restore the
+    /// previous device.
     void operator()(void* pointer) const noexcept {
         int previousDevice = device;
         bool const restoreDevice = ::cudaGetDevice(&previousDevice) == cudaSuccess;
@@ -78,6 +81,7 @@ struct GravityErrorDeviceDeleter {
     }
 };
 
+/// Allocate a checked-size device buffer with a deleter that retains its device ownership.
 template <class Value>
 std::unique_ptr<Value, GravityErrorDeviceDeleter> allocateGravityErrorBuffer(
     size_t count, int device) {
@@ -93,6 +97,8 @@ std::unique_ptr<Value, GravityErrorDeviceDeleter> allocateGravityErrorBuffer(
     return {pointer, GravityErrorDeviceDeleter{device}};
 }
 
+/// Evaluate direct reference forces in bounded CUDA batches and combine their compensated
+/// partial sums.
 std::vector<GravityErrorForce> gravityErrorDirectCuda(std::span<GravityErrorPosition const> sinks,
     size_t sourceCount, GravityErrorSourceLoader const& loadSources,
     radial_kernel::KernelTable<double> const& kernel, double smoothingLength,

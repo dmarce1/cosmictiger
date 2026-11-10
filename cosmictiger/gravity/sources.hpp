@@ -33,6 +33,8 @@ void fmmRegisterSourceView(FmmParticleStore store, FmmSourceView view);
 ParticleInteger fmmSourcePartition(FmmParticleStore store, FmmSourceView const& sources,
     Pair<ParticleInteger> range, Position split, int dimension);
 
+/// Read an explicit source mass or derive it from owned storage/species, using unit masses
+/// in dark-matter-only runs.
 inline float fmmSourceMass(FmmSourceView const& sources, ParticleInteger index) {
     if (sources.masses != nullptr) {
         return sources.masses[index];

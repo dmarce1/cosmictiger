@@ -30,6 +30,8 @@ using ListType = DeviceVector<DeviceVector<LightconeEntry>>;
 __managed__ ListType* listPtr;
 #endif
 
+/// Drift selected particles with periodic position updates, optional damping, and lightcone
+/// crossing capture.
 __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __restrict__ const y,
     Position* __restrict__ const z, ParticleVector<float>* const vels, char const* const rungs,
     char const* const types, ParticleInteger count, int rung, double a, double dt, double tau0,
@@ -186,6 +188,8 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
     }
 }
 
+/// Launch the CUDA particle drift and flush any generated lightcone entries after
+/// completion.
 void cudaDrift(
     int rung, double a, double dt, double tau0, double tau1, double tauMax, double drag) {
 #if !defined(COSMICTIGER_ENABLE_ROCKSTAR) || COSMICTIGER_ENABLE_ROCKSTAR

@@ -10,6 +10,8 @@
 
 #include <cosmictiger/math/kernel.hpp>
 
+/// Validate and build the selected gravity and density kernel tables, optionally uploading
+/// them to CUDA.
 void setKernelSelections(
     radial_kernel::KernelSpec gravity, radial_kernel::KernelSpec hydro, bool useCuda) {
     if (!radial_kernel::isValid(gravity) ||

@@ -45,6 +45,7 @@ void freePinnedMemory(void* pointer) noexcept;
 #define CUDA_MALLOC(a, b) cudaMalloc2(a, b, __FILE__, __LINE__)
 
 /* error checker from https://forums.developer.nvidia.com/t/cufft-error-handling/29231 */
+/// Return the symbolic name of a cuFFT result code for diagnostics.
 static char const* cudaGetErrorEnum(cufftResult error) {
     switch (error) {
     case CUFFT_SUCCESS:
@@ -81,6 +82,8 @@ static char const* cudaGetErrorEnum(cufftResult error) {
     return "->unknown<-";
 }
 
+/// Report a cuFFT failure with its source location, reset the device, and trigger the
+/// project assertion.
 inline void cudaFftCheck(cufftResult err, char const* file, int const line) {
     if (CUFFT_SUCCESS != err) {
         fprintf(stderr, "CUFFT error in file '%s', line %d\nerror %d: %s\nterminating!\n", file,
@@ -97,6 +100,8 @@ void cudaSetDevice();
 #ifdef __CUDA_ARCH__
 #if __CUDA_ARCH__ < 600
 /**** TAKEN FROM THE CUDA DOCUMENTATION *****/
+/// Provide double atomic addition on older CUDA architectures with a compare-and-swap loop;
+/// return the previous value.
 inline __device__ double atomicAdd(double* address, double val) {
     unsigned long long int* address_as_ull = (unsigned long long int*) address;
     unsigned long long int old = *address_as_ull, assumed;
@@ -124,9 +129,13 @@ public:
     using is_always_equal = std::true_type;
 
     PinnedAllocator() = default;
+    /// Construct an interchangeable stateless pinned-memory allocator from another
+    /// element type.
     template <typename U>
     PinnedAllocator(PinnedAllocator<U> const&) noexcept {}
 
+    /// Allocate count elements in pinned host memory, rejecting byte-count overflow;
+    /// zero count returns null.
     T* allocate(size_t count) {
         if (count > std::numeric_limits<size_t>::max() / sizeof(T)) {
             throw std::bad_array_new_length();
@@ -137,10 +146,13 @@ public:
         return static_cast<T*>(allocatePinnedMemory(count * sizeof(T)));
     }
 
+    /// Release a pinned host allocation through the runtime-aware memory backend.
     void deallocate(T* pointer, size_t) noexcept {
         freePinnedMemory(pointer);
     }
 
+    /// Report that stateless pinned allocators can deallocate one another's
+    /// allocations.
     template <typename U>
     bool operator==(PinnedAllocator<U> const&) const noexcept {
         return true;
@@ -158,6 +170,8 @@ int cudaGetDevice();
 
 void cudaAllocate(void** ptr, size_t size, char const* file, int line);
 
+/// Forward a typed allocation request, measured in bytes, to the checked CUDA memory
+/// backend.
 template <class T>
 void cudaMalloc2(T** ptr, size_t size, char const* file, int line) {
     cudaAllocate((void**) ptr, size, file, line);
@@ -166,6 +180,7 @@ void cudaMalloc2(T** ptr, size_t size, char const* file, int line) {
 /*********************************************************************************/
 // From https://localcoder.org/how-do-i-use-atomicmax-on-floating-point-values-in-cuda
 #ifdef __CUDACC__
+/// Atomically replace a device float with its maximum and return the previous value.
 __device__ static float atomicMax(float* address, float val) {
     int* addressAsI = (int*) address;
     int old = *addressAsI, assumed;
@@ -176,6 +191,7 @@ __device__ static float atomicMax(float* address, float val) {
     } while (assumed != old);
     return __int_as_float(old);
 }
+/// Atomically replace a device float with its minimum and return the previous value.
 __device__ static float atomicMin(float* address, float val) {
     int* addressAsI = (int*) address;
     int old = *addressAsI, assumed;

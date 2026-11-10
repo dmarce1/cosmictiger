@@ -128,6 +128,8 @@ inline void kickOpenOrDefer(bool openLargerCell, TreeNode const* sink, TreeNode 
 
 }    // namespace detail
 
+/// Traverse sink/source trees at a fixed FMM order, dispatch accepted interactions, and
+/// accumulate particle kicks or GPU batch work.
 template <int order>
 KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> pos, TreeId self,
     Vector<TreeId> dchecklist, std::shared_ptr<KickWorkspace> cudaWorkspace,

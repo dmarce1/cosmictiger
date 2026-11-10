@@ -25,6 +25,7 @@ using CudaMemoryAtomic = cuda::atomic_ref<CudaMemoryInteger, cuda::thread_scope_
 // Host allocation provenance must remain available without touching the runtime.
 CudaMemory* hostMemory = nullptr;
 
+/// Translate a failed CUDA allocation operation into a descriptive runtime exception.
 void checkCudaMemoryAllocation(cudaError_t status, char const* operation) {
     if (status != cudaSuccess) {
         throw std::runtime_error(std::string(operation) + ": " + cudaGetErrorString(status));
@@ -33,6 +34,8 @@ void checkCudaMemoryAllocation(cudaError_t status, char const* operation) {
 
 }    // namespace detail
 
+/// Publish a released allocation into its size-bin queue using sequence-number
+/// synchronization.
 CUDA_EXPORT
 void CudaMemory::push(int bin, char* ptr) {
     detail::CudaMemoryAtomic input(qin_[bin]);
@@ -64,6 +67,8 @@ void CudaMemory::push(int bin, char* ptr) {
     }
 }
 
+/// Take an available allocation from a size-bin queue, returning null if the next slot is
+/// unavailable.
 CUDA_EXPORT
 char* CudaMemory::pop(int bin) {
     detail::CudaMemoryAtomic output(qout_[bin]);
@@ -90,6 +95,8 @@ char* CudaMemory::pop(int bin) {
     }
 }
 
+/// Reserve aligned space from the pool heap and record its size bin, returning null on
+/// exhaustion.
 CUDA_EXPORT
 char* CudaMemory::createNewAllocation(int bin) {
     size_t const bytes = (size_t(1) << bin) + kCudaPoolHeaderSize;
@@ -110,6 +117,8 @@ char* CudaMemory::createNewAllocation(int bin) {
     }
 }
 
+/// Reuse a size-bin allocation or reserve a new one; return null when the pool cannot
+/// satisfy the request.
 CUDA_EXPORT
 void* CudaMemory::allocate(size_t sz) {
     size_t const maximumSize = size_t(1) << (kCudaMemoryBinCount - 1);
@@ -133,6 +142,7 @@ void* CudaMemory::allocate(size_t sz) {
     return createNewAllocation(bin);
 }
 
+/// Mark an allocation as released and publish it back to its size-bin queue.
 CUDA_EXPORT void CudaMemory::free(void* ptr) {
     if (ptr == nullptr) {
         return;
@@ -152,12 +162,14 @@ CUDA_EXPORT void CudaMemory::free(void* ptr) {
     push(int(bin), static_cast<char*>(ptr));
 }
 
+/// Test whether a pointer lies inside this pool's heap address range.
 CUDA_EXPORT bool CudaMemory::owns(void const* ptr) const {
     auto const address = reinterpret_cast<uintptr_t>(ptr);
     auto const beginning = reinterpret_cast<uintptr_t>(heapBegin_);
     return address >= beginning && address - beginning < heapSize_;
 }
 
+/// Allocate the managed pool heap and initialize its free queues.
 CudaMemory::CudaMemory(size_t heapSize)
   : heapBegin_(nullptr)
   , next_(0)
@@ -167,6 +179,8 @@ CudaMemory::CudaMemory(size_t heapSize)
     reset();
 }
 
+/// Reset the heap cursor and all queue generations; outstanding allocations must no longer
+/// be in use.
 void CudaMemory::reset() {
     next_ = 0;
     for (int i = 0; i < kCudaMemoryBinCount; i++) {
@@ -179,6 +193,7 @@ void CudaMemory::reset() {
     }
 }
 
+/// Release the managed heap and report any CUDA deallocation error.
 CudaMemory::~CudaMemory() {
     cudaError_t const status = cudaFree(heapBegin_);
     if (status != cudaSuccess) {
@@ -188,6 +203,7 @@ CudaMemory::~CudaMemory() {
 
 __managed__ CudaMemory* memory;
 
+/// Allocate from the shared CUDA pool, using host allocation when CUDA is disabled.
 CUDA_EXPORT void* cudaAllocate(size_t sz) {
 #ifndef __CUDA_ARCH__
     if (!cudaEnabled()) {
@@ -215,6 +231,7 @@ CUDA_EXPORT void* cudaAllocate(size_t sz) {
     return pointer;
 }
 
+/// Return pool allocations to their bin, or free non-pool host allocations by provenance.
 CUDA_EXPORT void cudaRelease(void* ptr) {
     if (ptr == nullptr) {
         return;
@@ -232,6 +249,7 @@ CUDA_EXPORT void cudaRelease(void* ptr) {
     pool->free(ptr);
 }
 
+/// Construct the shared managed-memory pool and publish its host and device pointers.
 void cudaMemoryInitialize(size_t heapSize) {
     CudaMemory* allocation = nullptr;
     detail::checkCudaMemoryAllocation(

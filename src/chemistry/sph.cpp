@@ -21,6 +21,7 @@
 #include <cosmictiger/sph/particles.hpp>
 
 namespace detail {
+/// Convert stored specific energy to the physical units required by the cooling solver.
 double coolingPhysicalEnergy(float energy, double scaleFactor) {
     auto const& options = getOptions();
     return units::toPhysicalSpecificEnergy(units::StoredSpecificEnergy(energy),
@@ -29,6 +30,7 @@ double coolingPhysicalEnergy(float energy, double scaleFactor) {
         .quantity()
         .value();
 }
+/// Convert stored density to proper physical density at the supplied scale factor.
 double coolingPhysicalDensity(float density, double scaleFactor) {
     auto const& options = getOptions();
     return units::toProperDensity(units::StoredDensity(density), units::scalesFromOptions(options),
@@ -36,6 +38,8 @@ double coolingPhysicalDensity(float density, double scaleFactor) {
         .quantity()
         .value();
 }
+/// Convert physical cooling energy to stored float units, rejecting nonpositive or
+/// unrepresentable values.
 float coolingStoredEnergy(double energy, double scaleFactor) {
     auto const& options = getOptions();
     double const result = units::toStoredSpecificEnergy(
@@ -49,6 +53,8 @@ float coolingStoredEnergy(double energy, double scaleFactor) {
     }
     return static_cast<float>(result);
 }
+/// Dispatch the cooling batch and require every result to succeed before returning any
+/// prepared update.
 std::vector<gadget4::Result> integrateCoolingBatch(std::vector<gadget4::Input> const& inputs,
     gadget4::Parameters const& parameters,
     std::vector<SphChemistryBatchInput> const& sourceInputs) {
@@ -103,11 +109,14 @@ struct PendingCoolingUpdate {
 std::vector<PendingCoolingUpdate> pendingCooling;
 }    // namespace detail
 
+/// Construct equilibrium-cooling parameters from the current run options and scale factor.
 gadget4::Parameters sphCoolingParameters(double scaleFactor) {
     auto const& options = getOptions();
     return gadget4::makeParameters(
         scaleFactor, options.run.scenario == "cosmology", options.chemistry.minimumSpecificEnergy);
 }
+/// Convert stored gas states to physical units, advance cooling, and convert successful
+/// results back.
 std::vector<SphChemistryBatchResult> sphChemistryAdvanceBatch(
     std::vector<SphChemistryBatchInput> const& inputs, double scaleFactor) {
     if (!(scaleFactor > 0.0) || !gadget4::detail::finite(scaleFactor)) {
@@ -136,6 +145,8 @@ std::vector<SphChemistryBatchResult> sphChemistryAdvanceBatch(
     }
     return results;
 }
+/// Initialize a gas particle's electron fraction and enforce its initial thermal energy
+/// floor.
 void sphChemistryInitializeParticle(long long index, double scaleFactor) {
     auto const& options = getOptions();
     sphParticlesElectronFractions[index] = 1.0f;
@@ -154,6 +165,8 @@ void sphChemistryInitializeParticle(long long index, double scaleFactor) {
             std::max(energy, options.chemistry.minimumSpecificEnergy), scaleFactor));
 }
 
+/// Convert a positive completed conformal interval to physical seconds at the supplied
+/// scale.
 double sphChemistryPhysicalInterval(double interval, double scaleFactor) {
     if (!(interval > 0.0) || !gadget4::detail::finite(interval)) {
         throw std::invalid_argument("Cooling requires a positive completed interval");
@@ -174,6 +187,8 @@ HPX_PLAIN_ACTION(sphCoolingPrepare, SphCoolingPrepareAction);
 HPX_PLAIN_ACTION(sphCoolingCommit, SphCoolingCommitAction);
 HPX_PLAIN_ACTION(sphCoolingDiscard, SphCoolingDiscardAction);
 
+/// Prepare selected cooling updates across the locality tree, discarding all prepared state
+/// on failure.
 double sphCoolingPrepare(
     int minimumRung, double scaleFactor, double baseTimestep, double explicitTimestep) {
     std::vector<hpx::future<double>> remote;
@@ -217,6 +232,7 @@ double sphCoolingPrepare(
     }
     return heating;
 }
+/// Commit prepared cooling updates throughout the locality tree.
 void sphCoolingCommit() {
     std::vector<hpx::future<void>> remote;
     for (auto const& child : hpxChildren()) {
@@ -227,6 +243,7 @@ void sphCoolingCommit() {
         future.get();
     }
 }
+/// Clear all prepared cooling updates without modifying live thermodynamic state.
 void sphCoolingDiscard() {
     std::vector<hpx::future<void>> remote;
     for (auto const& child : hpxChildren()) {
@@ -237,6 +254,8 @@ void sphCoolingDiscard() {
         future.get();
     }
 }
+/// Compute and stage entropy/electron updates for explicit gas slots and intervals; return
+/// their heating.
 double sphCoolingPrepareLocal(std::vector<ParticleInteger> const& indices,
     std::vector<double> const& intervals, double scaleFactor) {
     detail::pendingCooling.clear();
@@ -289,6 +308,7 @@ double sphCoolingPrepareLocal(std::vector<ParticleInteger> const& indices,
     detail::pendingCooling = std::move(prepared);
     return heating;
 }
+/// Install the staged entropy and electron fractions, then clear local pending updates.
 void sphCoolingCommitLocal() {
     for (auto const& update : detail::pendingCooling) {
         sphParticlesEntropies[update.gas] = update.entropy;
@@ -296,6 +316,8 @@ void sphCoolingCommitLocal() {
     }
     detail::pendingCooling.clear();
 }
+/// Prepare and commit a completed cooling interval and return its integrated heating
+/// contribution.
 double sphChemistryClose(
     int minimumRung, double scaleFactor, double, double baseTimestep, double explicitTimestep) {
     double const heating =
@@ -303,12 +325,15 @@ double sphChemistryClose(
     sphCoolingCommit();
     return heating;
 }
+/// Return the cooling model and option values used to check restart compatibility.
 std::array<double, 6> sphChemistryCheckpointParameters() {
     auto const& options = getOptions();
     return {6.0, gadget4::kHydrogenMassFraction, gadget4::kGamma,
         options.chemistry.initializationTemperature, options.chemistry.minimumSpecificEnergy,
         options.run.scenario == "cosmology" ? 1.0 : 0.0};
 }
+/// Derive equilibrium species fractions, temperature, and molecular weight for particle
+/// output.
 std::array<float, 9> sphChemistryOutput(
     float electronFraction, float storedEnergy, float storedDensity, double scaleFactor) {
     auto const parameters = sphCoolingParameters(scaleFactor);
@@ -330,6 +355,7 @@ std::array<float, 9> sphChemistryOutput(
         float(temperature), float(gas.meanMolecularWeight), float(gadget4::kGamma)};
 }
 HPX_PLAIN_ACTION(sphChemistryPressureIntegral, SphChemistryPressureIntegralAction);
+/// Sum the gas pressure-energy contribution across localities at the supplied scale factor.
 double sphChemistryPressureIntegral(double scaleFactor) {
     std::vector<hpx::future<double>> remote;
     for (auto const& child : hpxChildren()) {

@@ -39,6 +39,8 @@ class SharedNeighborBuffer {
     int size_;
 
 public:
+    /// Initialize an empty shared-memory neighbor buffer collectively across the CUDA
+    /// block.
     __device__ SharedNeighborBuffer() {
         if (threadIdx.x == 0) {
             data_ = sharedValues_;
@@ -50,10 +52,13 @@ public:
     SharedNeighborBuffer(SharedNeighborBuffer const&) = delete;
     SharedNeighborBuffer& operator=(SharedNeighborBuffer const&) = delete;
 
+    /// Return the current number of buffered neighbor values.
     __device__ int size() const {
         return size_;
     }
 
+    /// Resize collectively, spilling to device storage when shared capacity is exceeded
+    /// and returning to shared storage on reset.
     __device__ void resize(int newSize) {
         __syncthreads();
         ALWAYS_ASSERT(newSize >= 0);
@@ -80,10 +85,12 @@ public:
         __syncthreads();
     }
 
+    /// Access a neighbor value in the current shared or overflow storage.
     __device__ Value& operator[](int index) {
         return data_[index];
     }
 
+    /// Access a neighbor value in the current shared or overflow storage.
     __device__ Value const& operator[](int index) const {
         return data_[index];
     }

@@ -17,6 +17,7 @@ struct ParticleGhost {
     char rung = 0;
     float mass = 1.0f;
 
+    /// Archive this record in the field order required by distributed transport.
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
         archive & position & type & rung & mass;

@@ -22,30 +22,38 @@
 struct SphParticleFlags {
     uint8_t bits = 0;
 
+    /// Read the packed smoothing-solve convergence flag.
     CUDA_EXPORT bool converged() const {
         return (bits & 1U) != 0;
     }
 
+    /// Read the packed neighbor-induced activity flag.
     CUDA_EXPORT bool semiactive() const {
         return (bits & 2U) != 0;
     }
 
+    /// Decode the timestep-rung proposal from the upper flag bits.
     CUDA_EXPORT int proposedRung() const {
         return bits >> 2;
     }
 
+    /// Test whether the encoded rung proposal lies below the supported maximum.
     CUDA_EXPORT bool valid() const {
         return proposedRung() < kMaxRung;
     }
 
+    /// Update the convergence bit while preserving the other particle flags.
     CUDA_EXPORT void setConverged(bool value) {
         bits = uint8_t((bits & ~1U) | uint8_t(value));
     }
 
+    /// Update the semiactive bit while preserving the other particle flags.
     CUDA_EXPORT void setSemiactive(bool value) {
         bits = uint8_t((bits & ~2U) | (uint8_t(value) << 1));
     }
 
+    /// Validate and store a rung proposal while preserving convergence and activity
+    /// bits.
     CUDA_EXPORT void setProposedRung(int rung) {
         ALWAYS_ASSERT(rung >= 0 && rung < kMaxRung);
         bits = uint8_t((bits & 3U) | (uint8_t(rung) << 2));

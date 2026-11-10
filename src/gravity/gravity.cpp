@@ -160,6 +160,7 @@ HPX_PLAIN_ACTION(resetGravityCounters, ResetGravityCountersAction);
 HPX_PLAIN_ACTION(setGravityCounterUse, SetGravityCounterUseAction);
 HPX_PLAIN_ACTION(gravityCounterTotals, GravityCounterTotalsAction);
 
+/// Reset enabled gravity interaction counters across the locality tree.
 void resetGravityCounters() {
     Vector<hpx::future<void>> pending;
     for (auto const& child : hpxChildren()) {
@@ -171,6 +172,7 @@ void resetGravityCounters() {
     }
 }
 
+/// Propagate whether gravity interaction counters should collect work.
 void setGravityCounterUse(bool enabled) {
     Vector<hpx::future<void>> pending;
     for (auto const& child : hpxChildren()) {
@@ -182,6 +184,7 @@ void setGravityCounterUse(bool enabled) {
     }
 }
 
+/// Sum close, direct, and processed-sink counters across the locality tree.
 static Array<double, 3> gravityCounterTotals() {
     Vector<hpx::future<Array<double, 3>>> pending;
     for (auto const& child : hpxChildren()) {
@@ -197,14 +200,18 @@ static Array<double, 3> gravityCounterTotals() {
     return totals;
 }
 
+/// Return average close and direct interaction counts per processed sink.
 void getGravityCounters(double& close, double& direct) {
     auto const totals = gravityCounterTotals();
     close = totals[2] > 0.0 ? totals[0] / totals[2] : 0.0;
     direct = totals[2] > 0.0 ? totals[1] / totals[2] : 0.0;
 }
 #else
+/// Provide a no-op reset when gravity interaction counting is unavailable.
 void resetGravityCounters() {}
+/// Ignore counter enablement when gravity interaction counting is unavailable.
 void setGravityCounterUse(bool) {}
+/// Return zero averages when gravity interaction counting is unavailable.
 void getGravityCounters(double& close, double& direct) {
     close = direct = 0.0;
 }

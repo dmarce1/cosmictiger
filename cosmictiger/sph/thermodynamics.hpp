@@ -73,9 +73,13 @@ struct PreparedThermalState {
 };
 
 namespace detail {
+    /// Classify a thermal float by its exponent bits, preserving checks under fast
+    /// math.
     inline bool finiteThermalValue(float value) {
         return (std::bit_cast<uint32_t>(value) & UINT32_C(0x7f800000)) != UINT32_C(0x7f800000);
     }
+    /// Require a finite positive normal float suitable for persistent thermodynamic
+    /// storage.
     inline float thermalStorageValue(float value) {
         // Sources must remain usable under the application's fast-math build;
         // subnormal storage is not reliable when the processor flushes it to zero.

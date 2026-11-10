@@ -19,39 +19,54 @@ namespace detail {
     public:
         static constexpr int kDegree_ = degree;
         static constexpr int kCount_ = (degree + 1) * (degree + 1);
+        /// Map harmonic degree and signed azimuthal index to the packed real
+        /// coefficient slot.
         CUDA_EXPORT static constexpr int index(int n, int m) {
             return n * (n + 1) + m;
         }
+        /// Access the packed harmonic component; negative m selects the imaginary
+        /// part of |m|.
         CUDA_EXPORT Real& operator()(int n, int m) {
             return coefficients_[index(n, m)];
         }
+        /// Access the packed harmonic component; negative m selects the imaginary
+        /// part of |m|.
         CUDA_EXPORT Real const& operator()(int n, int m) const {
             return coefficients_[index(n, m)];
         }
+        /// Access the real harmonic component for a nonnegative azimuthal index.
         CUDA_EXPORT Real& real(int n, int m) {
             return (*this)(n, m);
         }
+        /// Access the real harmonic component for a nonnegative azimuthal index.
         CUDA_EXPORT Real const& real(int n, int m) const {
             return (*this)(n, m);
         }
+        /// Access the imaginary harmonic component for a positive azimuthal index.
         CUDA_EXPORT Real& imaginary(int n, int m) {
             return (*this)(n, -m);
         }
+        /// Access the imaginary harmonic component for a positive azimuthal index.
         CUDA_EXPORT Real const& imaginary(int n, int m) const {
             return (*this)(n, -m);
         }
+        /// Access a coefficient by its packed storage index.
         CUDA_EXPORT Real& operator[](int i) {
             return coefficients_[i];
         }
+        /// Access a coefficient by its packed storage index.
         CUDA_EXPORT Real const& operator[](int i) const {
             return coefficients_[i];
         }
+        /// Expose the contiguous packed harmonic coefficients.
         CUDA_EXPORT Real* data() {
             return coefficients_;
         }
+        /// Expose the contiguous packed harmonic coefficients.
         CUDA_EXPORT Real const* data() const {
             return coefficients_;
         }
+        /// Fill every packed harmonic coefficient with the supplied value.
         CUDA_EXPORT Coefficients& operator=(Real const& value) {
             for (int i = 0; i < kCount_; i++) {
                 coefficients_[i] = value;

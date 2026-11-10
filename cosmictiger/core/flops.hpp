@@ -28,11 +28,14 @@ struct FlopCounts {
     FlopCount doublePrecision = 0;
     FlopCount unclassified = 0;
 
+    /// Sum single-precision, double-precision, and unclassified operation counts.
     CUDA_EXPORT
     constexpr FlopCount total() const {
         return singlePrecision + doublePrecision + unclassified;
     }
 
+    /// Accumulate operation counts, honoring the counter's compile-time enablement when
+    /// applicable.
     CUDA_EXPORT
     constexpr FlopCounts& operator+=(FlopCounts const& other) {
         singlePrecision += other.singlePrecision;
@@ -41,6 +44,7 @@ struct FlopCounts {
         return *this;
     }
 
+    /// Archive this record in the field order required by distributed transport.
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
         archive & singlePrecision & doublePrecision & unclassified;
@@ -70,6 +74,7 @@ struct FlopRates {
     double doublePrecision = 0.0;
     double unclassified = 0.0;
 
+    /// Sum single-precision, double-precision, and unclassified operation counts.
     double total() const {
         return singlePrecision + doublePrecision + unclassified;
     }
@@ -86,6 +91,7 @@ class FlopCounter {
     Count count_{};
 
 public:
+    /// Replace the stored count when this counter is enabled at compile time.
     CUDA_EXPORT
     inline FlopCounter& operator=(Count count) {
         if constexpr (enabled) {
@@ -93,10 +99,13 @@ public:
         }
         return *this;
     }
+    /// Initialize an operation counter from the supplied count.
     CUDA_EXPORT
     inline FlopCounter(Count count = {}) {
         *this = count;
     }
+    /// Accumulate operation counts, honoring the counter's compile-time enablement when
+    /// applicable.
     CUDA_EXPORT
     inline FlopCounter& operator+=(Count count) {
         if constexpr (enabled) {
@@ -104,6 +113,7 @@ public:
         }
         return *this;
     }
+    /// Subtract operations when this counter is enabled at compile time.
     CUDA_EXPORT
     inline FlopCounter& operator-=(Count count) {
         if constexpr (enabled) {
@@ -111,6 +121,7 @@ public:
         }
         return *this;
     }
+    /// Return the counter's currently stored value.
     CUDA_EXPORT
     inline operator Count() const {
         return count_;
@@ -131,6 +142,7 @@ FlopCount getGpuFlops();
 // Scalar submissions must identify the arithmetic precision. Mixed routines
 // submit separate audited batches; unclassified is reserved for diagnostics.
 void addCpuFlops(FlopCount count, FlopPrecision precision);
+/// Record CPU operations in their single, double, and unclassified precision categories.
 inline void addCpuFlops(FlopCounts const& counts) {
     addCpuFlops(counts.singlePrecision, FlopPrecision::Single);
     addCpuFlops(counts.doublePrecision, FlopPrecision::Double);
@@ -140,6 +152,7 @@ inline void addCpuFlops(FlopCounts const& counts) {
 }
 #ifdef __CUDACC__
 __device__ void addGpuFlops(FlopCount count, FlopPrecision precision);
+/// Record GPU operations in their single, double, and unclassified precision categories.
 __device__ inline void addGpuFlops(FlopCounts const& counts) {
     addGpuFlops(counts.singlePrecision, FlopPrecision::Single);
     addGpuFlops(counts.doublePrecision, FlopPrecision::Double);

@@ -27,6 +27,7 @@ struct CudaPollingState {
     bool shuttingDown = false;
 };
 
+/// Return the process-wide polling control object, retained for late stream destruction.
 CudaPollingState& cudaPollingState() {
     // The pre-shutdown hook owns teardown; keep this small control object valid
     // for late stream destructors and avoid static destruction ordering.
@@ -34,6 +35,8 @@ CudaPollingState& cudaPollingState() {
     return *state;
 }
 
+/// Mark runtime shutdown and release its polling owner while pending waits retain their
+/// references.
 void stopCudaStreamRuntime() {
     auto& state = cudaPollingState();
     std::shared_ptr<hpx::cuda::experimental::enable_user_polling> polling;
@@ -46,6 +49,7 @@ void stopCudaStreamRuntime() {
     polling.reset();
 }
 
+/// Initialize HPX CUDA event polling once on an HPX worker and register shutdown cleanup.
 void initializeCudaStreamRuntime() {
     if (hpx::threads::get_self_ptr() == nullptr) {
         return;
@@ -73,10 +77,13 @@ void initializeCudaStreamRuntime() {
     }
 }
 
+/// Report whether the HPX event pool has been initialized and therefore forbids device
+/// reset.
 bool cudaStreamEventsInitialized() noexcept {
     return cudaPollingState().eventsInitialized.load(std::memory_order_acquire);
 }
 
+/// Retain the current HPX CUDA polling owner, or return empty outside an HPX worker.
 std::shared_ptr<hpx::cuda::experimental::enable_user_polling> cudaStreamPolling() {
     if (hpx::threads::get_self_ptr() == nullptr) {
         return {};
@@ -94,6 +101,7 @@ struct CudaStream::Impl {
     mutable bool pending = false;
     mutable bool launchCheckPending = false;
 
+    /// Create a stream target on the selected device and initialize HPX event polling.
     explicit Impl(int selectedDevice)
       : device(selectedDevice)
       , target(std::make_unique<hpx::cuda::experimental::target>(selectedDevice)) {
@@ -101,6 +109,8 @@ struct CudaStream::Impl {
         detail::initializeCudaStreamRuntime();
     }
 
+    /// Drain pending work before destroying the stream target, then restore the
+    /// previous device.
     ~Impl() noexcept {
         int previousDevice = device;
         bool const restoreDevice = cudaGetDevice(&previousDevice) == cudaSuccess;
@@ -113,12 +123,15 @@ struct CudaStream::Impl {
         }
     }
 
+    /// Select the stream's device, mark work pending, and return its native CUDA
+    /// handle.
     cudaStream_t handle() const {
         hpx::cuda::experimental::check_cuda_error(cudaSetDevice(device));
         pending = true;
         return target->native_handle().get_stream();
     }
 
+    /// Make a best-effort nonthrowing wait for submitted stream work during cleanup.
     void drain() noexcept {
         if (!pending) {
             return;
@@ -149,32 +162,39 @@ struct CudaStream::Impl {
     }
 };
 
+/// Create an owned CUDA stream target for the requested device.
 CudaStream::CudaStream(int device)
   : implementation_(std::make_unique<Impl>(device)) {}
 
 CudaStream::~CudaStream() noexcept = default;
 
+/// Expose the stream for kernel submission and mark its launch status as unchecked.
 cudaStream_t CudaStream::nativeHandle() const {
     implementation_->launchCheckPending = true;
     return implementation_->handle();
 }
 
+/// Enqueue a memory copy on this stream and report immediate CUDA errors.
 void CudaStream::copyAsync(
     void* destination, void const* source, size_t bytes, cudaMemcpyKind kind) {
     hpx::cuda::experimental::check_cuda_error(
         cudaMemcpyAsync(destination, source, bytes, kind, implementation_->handle()));
 }
 
+/// Check and clear the most recent CUDA launch error for a submitted kernel.
 void CudaStream::checkLaunch() {
     implementation_->launchCheckPending = false;
     hpx::cuda::experimental::check_cuda_error(cudaGetLastError());
 }
 
+/// Enqueue managed-memory prefetch to the requested device on this stream.
 void CudaStream::prefetchAsync(void const* pointer, size_t bytes, int destinationDevice) {
     hpx::cuda::experimental::check_cuda_error(
         cudaPrefetchMemoryAsync(pointer, bytes, destinationDevice, implementation_->handle()));
 }
 
+/// Wait for submitted work through HPX events or synchronization, restoring the caller's
+/// device afterward.
 void CudaStream::wait() {
     if (!implementation_->pending) {
         return;

@@ -40,6 +40,8 @@ CUDA_EXPORT inline uint8_t encodeFactor(float f) {
     return static_cast<uint8_t>(double(f) * 255.0 + 0.5);
 }
 
+/// Decode the byte shear limiter to [0,1], using double division to preserve both
+/// endpoints.
 CUDA_EXPORT inline float decodeFactor(uint8_t q) {
     // A float reciprocal under fast-math can map 255 slightly above one.
     // Decode in double before rounding to float to preserve both endpoints.

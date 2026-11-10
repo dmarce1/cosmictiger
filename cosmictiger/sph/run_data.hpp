@@ -83,10 +83,13 @@ struct SphRunData {
         return sph_geometry::loadSpatialVector(
             sourcePositionX, sourcePositionY, sourcePositionZ, index);
     }
+    /// Gather the source's active velocity components into one spatial vector.
     CUDA_EXPORT sph_geometry::SpatialVector<float> sourceVelocity(ParticleInteger index) const {
         return sph_geometry::loadSpatialVector(
             sourceVelocityX, sourceVelocityY, sourceVelocityZ, index);
     }
+    /// Gather the sink's active gravity-acceleration components into one spatial
+    /// vector.
     CUDA_EXPORT sph_geometry::SpatialVector<float> sinkGravityAcceleration(
         ParticleInteger index) const {
         return sph_geometry::loadSpatialVector(

@@ -8,6 +8,8 @@
 
 namespace detail {
 
+/// Lazily tabulate symmetry-reduced periodic force corrections while enforcing axis and
+/// equal-component symmetry.
 std::vector<Vector3<double>> const& gravityReferenceCorrectionTable() {
     static auto const values = [] {
         std::vector<Vector3<double>> table(kGravityReferenceTableSize);

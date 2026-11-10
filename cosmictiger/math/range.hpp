@@ -21,6 +21,7 @@
 #include <cosmictiger/math/simd_math.hpp>
 #include <cosmictiger/math/vector3.hpp>
 
+/// Cyclically permute three coordinates from (x,y,z) to (y,z,x).
 template <class T>
 inline Array<T, kDimensions> shiftUp(Array<T, kDimensions> i) {
     Array<T, kDimensions> j;
@@ -30,6 +31,7 @@ inline Array<T, kDimensions> shiftUp(Array<T, kDimensions> i) {
     return j;
 }
 
+/// Cyclically permute three coordinates from (x,y,z) to (z,x,y).
 template <class T>
 inline Array<T, kDimensions> shiftDown(Array<T, kDimensions> i) {
     Array<T, kDimensions> j;
@@ -44,6 +46,7 @@ struct Range {
     Array<T, n> begin;
     Array<T, n> end;
 
+    /// Return coordinatewise overlap bounds; disjoint boxes produce an empty range.
     CUDA_EXPORT
     inline Range<T, n> intersection(Range<T, n> const& other) const {
         Range<T, n> iValue;
@@ -58,6 +61,8 @@ struct Range {
         }
         return iValue;
     }
+    /// Find overlap with the current box or its adjacent unit-period images along each
+    /// axis.
     CUDA_EXPORT
     inline Range periodicIntersection(Range const& other) const {
         Range iValue;
@@ -90,6 +95,8 @@ struct Range {
 #endif
         return iValue;
     }
+    /// Test for positive-volume overlap through adjacent unit-period images, optionally
+    /// counting shift operations.
     CUDA_EXPORT
     inline bool periodicIntersects(Range const& other, FlopCounter<>* flops = nullptr) const {
         Range iValue;
@@ -152,6 +159,7 @@ struct Range {
         return true;
     }
 
+    /// Test whether the range has zero volume, including inverted bounds.
     inline bool empty() const {
         return volume() == T(0);
     }
@@ -162,6 +170,7 @@ struct Range {
     Range& operator=(Range const&) = default;
     Range& operator=(Range&&) = default;
 
+    /// Return a copy translated by the supplied coordinate displacement.
     inline Range shift(Array<T, n> const& s) const {
         Range r = *this;
         for (int dim = 0; dim < n; dim++) {
@@ -171,6 +180,7 @@ struct Range {
         return r;
     }
 
+    /// Return a copy translated by the supplied coordinate displacement.
     inline Range shift(Vector3<T> const& s) const
         requires(n == 3)
     {
@@ -181,6 +191,7 @@ struct Range {
         return shift(components);
     }
 
+    /// Construct an origin-based box with the supplied side length in every dimension.
     Range(T const& sz) {
         for (int dim = 0; dim < n; dim++) {
             begin[dim] = T(0);
@@ -188,6 +199,7 @@ struct Range {
         }
     }
 
+    /// Test whether this box encloses both endpoints of the other box along every axis.
     CUDA_EXPORT
     inline bool contains(Range<T, n> const& box) const {
         bool rc = true;
@@ -204,6 +216,8 @@ struct Range {
         return rc;
     }
 
+    /// Test membership using half-open bounds: lower endpoints included, upper
+    /// endpoints excluded.
     CUDA_EXPORT
     inline bool contains(Array<T, n> const& p) const {
         for (int dim = 0; dim < n; dim++) {
@@ -214,6 +228,8 @@ struct Range {
         return true;
     }
 
+    /// Test membership using half-open bounds: lower endpoints included, upper
+    /// endpoints excluded.
     CUDA_EXPORT
     inline bool contains(Vector3<T> const& p) const
         requires(n == 3)
@@ -225,6 +241,7 @@ struct Range {
         return contains(components);
     }
 
+    /// Test half-open point membership in the box or its adjacent unit-period images.
     inline bool periodicContains(Array<T, n> const& p) const {
         for (int dim = 0; dim < n; dim++) {
             if (p[dim] < begin[dim] || p[dim] >= end[dim]) {
@@ -238,6 +255,7 @@ struct Range {
         return true;
     }
 
+    /// Test half-open point membership in the box or its adjacent unit-period images.
     inline bool periodicContains(Vector3<T> const& p) const
         requires(n == 3)
     {
@@ -248,6 +266,7 @@ struct Range {
         return periodicContains(components);
     }
 
+    /// Format each axis's lower and upper bounds for diagnostics.
     inline std::string toString() const {
         std::string str;
         for (int dim = 0; dim < n; dim++) {
@@ -258,6 +277,7 @@ struct Range {
         return str;
     }
 
+    /// Return the first axis with the largest extent.
     inline int longestDim() const {
         int maxDim = 0;
         T maxSpan = end[0] - begin[0];
@@ -271,6 +291,7 @@ struct Range {
         return maxDim;
     }
 
+    /// Return the last axis with the smallest extent.
     inline int shortestDim() const {
         int minDim = 0;
         T minSpan = end[0] - begin[0];
@@ -284,6 +305,7 @@ struct Range {
         return minDim;
     }
 
+    /// Bisect the first longest axis and return the two resulting boxes.
     inline std::pair<Range<T, n>, Range<T, n>> split() const {
         auto left = *this;
         auto right = *this;
@@ -301,6 +323,7 @@ struct Range {
         return std::make_pair(left, right);
     }
 
+    /// Cyclically permute three coordinates from (x,y,z) to (y,z,x).
     Range<T, n> shiftUp() const {
         Range<T, n> rc;
         rc.begin = ::shiftUp(begin);
@@ -308,6 +331,7 @@ struct Range {
         return rc;
     }
 
+    /// Cyclically permute three coordinates from (x,y,z) to (z,x,y).
     Range<T, n> shiftDown() const {
         Range<T, n> rc;
         rc.begin = ::shiftDown(begin);
@@ -315,6 +339,8 @@ struct Range {
         return rc;
     }
 
+    /// Flatten a three-dimensional coordinate relative to the box origin, with z
+    /// varying fastest.
     CUDA_EXPORT
     inline T index(T xi, T yi, T zi) const {
         auto const spanz = end[2] - begin[2];
@@ -322,11 +348,15 @@ struct Range {
         return spanz * (spany * (xi - begin[0]) + (yi - begin[1])) + (zi - begin[2]);
     }
 
+    /// Flatten a three-dimensional coordinate relative to the box origin, with z
+    /// varying fastest.
     CUDA_EXPORT
     inline T index(Array<T, n> const& i) const {
         return index(i.data());
     }
 
+    /// Flatten a three-dimensional coordinate relative to the box origin, with z
+    /// varying fastest.
     CUDA_EXPORT
     inline T index(T const* i) const {
         auto const spanz = end[2] - begin[2];
@@ -334,6 +364,7 @@ struct Range {
         return spanz * (spany * (i[0] - begin[0]) + (i[1] - begin[1])) + (i[2] - begin[2]);
     }
 
+    /// Return a copy with the two selected coordinate axes exchanged.
     inline Range<T, n> transpose(int dim1, int dim2) const {
         auto rc = *this;
         std::swap(rc.begin[dim1], rc.begin[dim2]);
@@ -341,6 +372,7 @@ struct Range {
         return rc;
     }
 
+    /// Multiply axis extents, returning zero when any extent is negative.
     CUDA_EXPORT
     inline T volume() const {
         T vol = T(1);
@@ -354,6 +386,7 @@ struct Range {
         return vol;
     }
 
+    /// Archive `begin`, `end` in transport order.
     template <class A>
     void serialize(A&& arc, unsigned) {
         for (int dim = 0; dim < n; dim++) {
@@ -362,6 +395,7 @@ struct Range {
         }
     }
 
+    /// Expand both ends of every axis by dx.
     CUDA_EXPORT
     inline Range<T, n> pad(T dx = T(1)) const {
         Range<T, n> r;
@@ -373,6 +407,7 @@ struct Range {
     }
 };
 
+/// Construct the unit box with bounds zero and one on every axis.
 template <class T, int n = kDimensions>
 inline Range<T, n> unitBox() {
     Range<T, n> r;
@@ -385,6 +420,7 @@ inline Range<T, n> unitBox() {
 
 #include <cosmictiger/math/position.hpp>
 
+/// Construct position-storage bounds from zero to the largest representable coordinate.
 inline Range<Position> fixed32UnitBox() {
     Range<Position> r;
     for (int dim = 0; dim < kDimensions; dim++) {
@@ -394,6 +430,7 @@ inline Range<Position> fixed32UnitBox() {
     return r;
 }
 
+/// Convert double box endpoints into the configured fixed-point position representation.
 inline Range<Position> rngdbl2rngfixed32(Range<double> const& other) {
     Range<Position> rc;
     for (int dim = 0; dim < kDimensions; dim++) {
@@ -406,29 +443,36 @@ inline Range<Position> rngdbl2rngfixed32(Range<double> const& other) {
 using RangeFixed = Fixed<int, 29>;
 
 struct Fixed32Range : public Range<RangeFixed> {
+    /// Default-construct a fixed-coordinate range without assigning its endpoints.
     Fixed32Range() {}
+    /// Copy both endpoint arrays from the supplied fixed-coordinate box.
     CUDA_EXPORT
     Fixed32Range& operator=(Fixed32Range const& other) {
         begin = other.begin;
         end = other.end;
         return *this;
     }
+    /// Copy both endpoint arrays from the supplied fixed-coordinate box.
     CUDA_EXPORT
     Fixed32Range& operator=(Fixed32Range&& other) {
         begin = other.begin;
         end = other.end;
         return *this;
     }
+    /// Construct a fixed-coordinate box by copying both endpoint arrays.
     CUDA_EXPORT
     Fixed32Range(Fixed32Range const& other) {
         begin = other.begin;
         end = other.end;
     }
+    /// Construct a fixed-coordinate box by copying both endpoint arrays.
     CUDA_EXPORT
     Fixed32Range(Fixed32Range&& other) {
         begin = other.begin;
         end = other.end;
     }
+    /// Test point membership across adjacent periodic images with one fixed-point tick
+    /// of boundary tolerance.
     CUDA_EXPORT
     bool contains(Vector3<Position> const& pt, FlopCounter<>* flops = nullptr) const {
         for (int i = -1; i <= 1; i++) {
@@ -465,12 +509,15 @@ struct Fixed32Range : public Range<RangeFixed> {
         }
         return false;
     }
+    /// Archive this record in the field order required by distributed transport.
     template <class A>
     void serialize(A&& arc, unsigned i) {
         Range<RangeFixed>::serialize(arc, i);
     }
 };
 
+/// Return the signed minimum-image separation between a range endpoint and a particle
+/// coordinate.
 CUDA_EXPORT
 inline float distance(RangeFixed a, Position b) {
     if constexpr (kPositionBits == 64) {
@@ -484,11 +531,15 @@ inline float distance(RangeFixed a, Position b) {
     return f;
 }
 
+/// Return the signed minimum-image separation between a range endpoint and a particle
+/// coordinate.
 CUDA_EXPORT
 inline float distance(Position b, RangeFixed a) {
     return -distance(a, b);
 }
 
+/// Return the squared minimum periodic distance from a particle to the box, preserving
+/// fixed-coordinate boundary precision.
 CUDA_EXPORT inline float boxDistanceSquared(Fixed32Range const& box, Vector3<Position> const& x) {
     float d2 = 0.0f;
     for (int dim = 0; dim < kDimensions; dim++) {
@@ -510,12 +561,16 @@ CUDA_EXPORT inline float boxDistanceSquared(Fixed32Range const& box, Vector3<Pos
     return d2;
 }
 
+/// Test whether the minimum periodic box distance is strictly smaller than the sphere
+/// radius.
 CUDA_EXPORT inline bool boxIntersectsSphere(
     Fixed32Range const& box, Vector3<Position> const& x, float r) {
     return boxDistanceSquared(box, x) < sqr(r);
 }
 
 #ifndef __CUDACC__
+/// Return the squared minimum periodic distance from a particle to the box, preserving
+/// fixed-coordinate boundary precision.
 inline SimdFloat boxDistanceSquared(Range<SimdDouble8> const& box, Vector3<SimdPosition> const& x) {
     if constexpr (kPositionBits == 64) {
         // The SIMD box endpoints originate in RangeFixed. Reuse the integer
@@ -552,6 +607,8 @@ inline SimdFloat boxDistanceSquared(Range<SimdDouble8> const& box, Vector3<SimdP
     return d2;
 }
 
+/// Test whether the minimum periodic box distance is strictly smaller than the sphere
+/// radius.
 inline auto boxIntersectsSphere(
     Range<SimdDouble8> const& box, Vector3<SimdPosition> const& x, SimdFloat r) {
     return boxDistanceSquared(box, x) < sqr(r);

@@ -32,6 +32,8 @@ constexpr FlopCount treePositionConversionExtraFlops(double coordinate) {
 
 }    // namespace detail
 
+/// Construct a tree node and its children using the supplied source, geometry, and dispatch
+/// policy.
 TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& policy) {
     auto params = request.params;
     auto const key = request.key;

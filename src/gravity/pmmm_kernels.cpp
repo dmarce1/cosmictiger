@@ -21,12 +21,14 @@
 namespace pmmm {
 namespace detail {
 
+    /// Reject a mesh expansion order outside the compiled FMM range.
     void checkOrder(int order) {
         if (order < kFmmMinOrder || order > kFmmMaxOrder) {
             throw std::invalid_argument("PMMM order is outside the compiled FMM order range");
         }
     }
 
+    /// Map spherical degree and signed mode to packed coefficient storage.
     int index(int degree, int mode) {
         return degree * (degree + 1) + mode;
     }
@@ -40,6 +42,8 @@ namespace detail {
         int imaginarySign;
     };
 
+    /// Resolve packed real/imaginary slots and conjugation signs for a signed spherical
+    /// mode.
     HarmonicParts harmonicParts(int degree, int mode) {
         int const magnitude = std::abs(mode);
         int const parity = mode < 0 && magnitude % 2 != 0 ? -1 : 1;
@@ -53,6 +57,8 @@ namespace detail {
 
 }    // namespace detail
 
+/// Build and combine the nonzero packed-real terms of the spherical multipole-to-local
+/// contraction.
 std::vector<ContractionTerm> contractionTerms(int order) {
     detail::checkOrder(order);
     int const localDegree = fmmLocalDegree(order);
@@ -95,6 +101,8 @@ std::vector<ContractionTerm> contractionTerms(int order) {
     return terms;
 }
 
+/// Accumulate one particle's spherical source moments and return the generated arithmetic
+/// count.
 FlopCount addMoments(int order, double* moments, double mass, Vector3<double> const& offset) {
     detail::checkOrder(order);
     FlopCount count = 0;
@@ -107,6 +115,8 @@ FlopCount addMoments(int order, double* moments, double mass, Vector3<double> co
     return count;
 }
 
+/// Evaluate and rescale periodic Green coefficients, selecting the near correction or full
+/// far interaction.
 FlopCount green(int order, double* coefficients, Vector3<double> const& boxOffset, double cellWidth,
     bool near) {
     detail::checkOrder(order);
@@ -150,6 +160,8 @@ FlopCount green(int order, double* coefficients, Vector3<double> const& boxOffse
     return count;
 }
 
+/// Replace the particle field with a local Ewald expansion evaluation and convert its
+/// gradient from cell units.
 FlopCount evaluate(int order, std::array<double, 4>& field, double const* coefficients,
     double localTrace, Vector3<double> const& cellOffset, double cellWidth) {
     detail::checkOrder(order);

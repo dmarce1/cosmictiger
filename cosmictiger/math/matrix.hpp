@@ -88,8 +88,10 @@ class Matrix {
 
 public:
     using ValueType = T;
+    /// Initialize every dense matrix entry to zero.
     CUDA_EXPORT constexpr Matrix()
       : Matrix(T(0)) {}
+    /// Fill every dense matrix entry with the supplied scalar.
     CUDA_EXPORT constexpr explicit Matrix(T const& value) {
         for (int i = 0; i < rowCount; ++i) {
             for (int j = 0; j < columnCount; ++j) {
@@ -97,6 +99,8 @@ public:
             }
         }
     }
+    /// Copy initializer rows into a zero-filled matrix, ignoring entries beyond its
+    /// dimensions.
     CUDA_EXPORT constexpr Matrix(std::initializer_list<std::initializer_list<T>> values)
       : Matrix() {
         int i = 0;
@@ -114,6 +118,7 @@ public:
             ++i;
         }
     }
+    /// Convert corresponding entries from a compatible matrix representation.
     template <FixedMatrix Other>
         requires(
             detail::Traits<Other>::kRows == rowCount && detail::Traits<Other>::kCols == columnCount)
@@ -124,36 +129,49 @@ public:
             }
         }
     }
+    /// Return the compile-time row count.
     CUDA_EXPORT static constexpr int rows() {
         return rowCount;
     }
+    /// Return the compile-time column count.
     CUDA_EXPORT static constexpr int cols() {
         return columnCount;
     }
+    /// Return the matrix's compile-time row and column counts.
     CUDA_EXPORT static constexpr auto dims() {
         return std::pair{rowCount, columnCount};
     }
+    /// Return the number of stored independent entries.
     CUDA_EXPORT static constexpr int size() {
         return rowCount * columnCount;
     }
+    /// Access an entry by row and column; indices must lie within the matrix
+    /// dimensions.
     CUDA_EXPORT constexpr T& operator()(int i, int j) {
         return rows_[i][j];
     }
+    /// Access an entry by row and column; indices must lie within the matrix
+    /// dimensions.
     CUDA_EXPORT constexpr T const& operator()(int i, int j) const {
         return rows_[i][j];
     }
+    /// Access the indexed element; the index must lie within the logical bounds.
     CUDA_EXPORT constexpr Vector<T, columnCount>& operator[](int i) {
         return rows_[i];
     }
+    /// Access the indexed element; the index must lie within the logical bounds.
     CUDA_EXPORT constexpr Vector<T, columnCount> const& operator[](int i) const {
         return rows_[i];
     }
+    /// Access the requested matrix row.
     CUDA_EXPORT constexpr auto& row(int i) {
         return rows_[i];
     }
+    /// Access the requested matrix row.
     CUDA_EXPORT constexpr auto const& row(int i) const {
         return rows_[i];
     }
+    /// Return the requested matrix column as a vector.
     CUDA_EXPORT constexpr Vector<T, rowCount> col(int j) const {
         Vector<T, rowCount> result{};
         for (int i = 0; i < rowCount; ++i) {
@@ -161,6 +179,7 @@ public:
         }
         return result;
     }
+    /// Add corresponding independent entries in place.
     template <FixedMatrix Other>
         requires(
             detail::Traits<Other>::kRows == rowCount && detail::Traits<Other>::kCols == columnCount)
@@ -172,6 +191,7 @@ public:
         }
         return *this;
     }
+    /// Subtract corresponding independent entries in place.
     template <FixedMatrix Other>
         requires(
             detail::Traits<Other>::kRows == rowCount && detail::Traits<Other>::kCols == columnCount)
@@ -183,6 +203,8 @@ public:
         }
         return *this;
     }
+    /// Scale independent entries in place, preserving an argument that aliases matrix
+    /// storage.
     CUDA_EXPORT constexpr Matrix& operator*=(T const& scalar) {
         T const value = scalar;
         for (int i = 0; i < rowCount; ++i) {
@@ -190,6 +212,8 @@ public:
         }
         return *this;
     }
+    /// Divide independent entries in place, preserving an argument that aliases matrix
+    /// storage.
     CUDA_EXPORT constexpr Matrix& operator/=(T const& scalar) {
         T const value = scalar;
         for (int i = 0; i < rowCount; ++i) {
@@ -205,14 +229,17 @@ template <class T, int dimensions>
 class SymmetricMatrix {
     static_assert(dimensions > 0);
     T values_[(dimensions * (dimensions + 1)) / 2]{};
+    /// Map symmetric row/column coordinates to the packed lower-triangle storage index.
     CUDA_EXPORT static constexpr int index(int i, int j) {
         return i >= j ? i * (i + 1) / 2 + j : j * (j + 1) / 2 + i;
     }
 
 public:
     using ValueType = T;
+    /// Initialize all independent symmetric entries to zero.
     CUDA_EXPORT constexpr SymmetricMatrix()
       : SymmetricMatrix(T(0)) {}
+    /// Fill all independent symmetric entries with the supplied scalar.
     CUDA_EXPORT constexpr explicit SymmetricMatrix(T const& value) {
         for (auto& entry : values_) {
             entry = value;
@@ -229,24 +256,33 @@ public:
             }
         }
     }
+    /// Return the compile-time row count.
     CUDA_EXPORT static constexpr int rows() {
         return dimensions;
     }
+    /// Return the compile-time column count.
     CUDA_EXPORT static constexpr int cols() {
         return dimensions;
     }
+    /// Return the matrix's compile-time row and column counts.
     CUDA_EXPORT static constexpr auto dims() {
         return std::pair{dimensions, dimensions};
     }
+    /// Return the number of stored independent entries.
     CUDA_EXPORT static constexpr int size() {
         return dimensions * (dimensions + 1) / 2;
     }
+    /// Access an entry by row and column; indices must lie within the matrix
+    /// dimensions.
     CUDA_EXPORT constexpr T& operator()(int i, int j) {
         return values_[index(i, j)];
     }
+    /// Access an entry by row and column; indices must lie within the matrix
+    /// dimensions.
     CUDA_EXPORT constexpr T const& operator()(int i, int j) const {
         return values_[index(i, j)];
     }
+    /// Materialize the requested row from packed symmetric storage.
     CUDA_EXPORT constexpr Vector<T, dimensions> row(int i) const {
         Vector<T, dimensions> result{};
         for (int j = 0; j < dimensions; ++j) {
@@ -254,21 +290,26 @@ public:
         }
         return result;
     }
+    /// Return the requested matrix column as a vector.
     CUDA_EXPORT constexpr auto col(int i) const {
         return row(i);
     }
+    /// Add corresponding independent entries in place.
     CUDA_EXPORT constexpr SymmetricMatrix& operator+=(SymmetricMatrix const& other) {
         for (int i = 0; i < size(); ++i) {
             values_[i] += other.values_[i];
         }
         return *this;
     }
+    /// Subtract corresponding independent entries in place.
     CUDA_EXPORT constexpr SymmetricMatrix& operator-=(SymmetricMatrix const& other) {
         for (int i = 0; i < size(); ++i) {
             values_[i] -= other.values_[i];
         }
         return *this;
     }
+    /// Scale independent entries in place, preserving an argument that aliases matrix
+    /// storage.
     CUDA_EXPORT constexpr SymmetricMatrix& operator*=(T const& scalar) {
         T const value = scalar;
         for (auto& entry : values_) {
@@ -276,6 +317,8 @@ public:
         }
         return *this;
     }
+    /// Divide independent entries in place, preserving an argument that aliases matrix
+    /// storage.
     CUDA_EXPORT constexpr SymmetricMatrix& operator/=(T const& scalar) {
         T const value = scalar;
         for (auto& entry : values_) {
@@ -292,13 +335,17 @@ class DiagonalMatrix {
 
 public:
     using ValueType = T;
+    /// Initialize all diagonal entries to zero.
     CUDA_EXPORT constexpr DiagonalMatrix()
       : DiagonalMatrix(T(0)) {}
+    /// Fill the diagonal with the supplied scalar; off-diagonal entries remain implicit
+    /// zero.
     CUDA_EXPORT constexpr explicit DiagonalMatrix(T const& value) {
         for (auto& entry : values_) {
             entry = value;
         }
     }
+    /// Copy initializer values to a zero-filled diagonal, ignoring excess values.
     CUDA_EXPORT constexpr DiagonalMatrix(std::initializer_list<T> values)
       : DiagonalMatrix() {
         int i = 0;
@@ -309,51 +356,65 @@ public:
             values_[i++] = value;
         }
     }
+    /// Construct the diagonal by converting vector components.
     template <class U, class Derived>
     CUDA_EXPORT constexpr explicit DiagonalMatrix(Vector<U, dimensions, Derived> const& values) {
         for (int i = 0; i < dimensions; ++i) {
             values_[i] = T(values[i]);
         }
     }
+    /// Return the compile-time row count.
     CUDA_EXPORT static constexpr int rows() {
         return dimensions;
     }
+    /// Return the compile-time column count.
     CUDA_EXPORT static constexpr int cols() {
         return dimensions;
     }
+    /// Return the matrix's compile-time row and column counts.
     CUDA_EXPORT static constexpr auto dims() {
         return std::pair{dimensions, dimensions};
     }
+    /// Return the number of stored independent entries.
     CUDA_EXPORT static constexpr int size() {
         return dimensions;
     }
+    /// Return the stored diagonal entry or an implicit zero off the diagonal.
     CUDA_EXPORT constexpr T operator()(int i, int j) const {
         return i == j ? values_[i] : T(0);
     }
+    /// Access the indexed diagonal entry.
     CUDA_EXPORT constexpr T& diagonal(int i) {
         return values_[i];
     }
+    /// Access the indexed diagonal entry.
     CUDA_EXPORT constexpr T const& diagonal(int i) const {
         return values_[i];
     }
+    /// Access the indexed element; the index must lie within the logical bounds.
     CUDA_EXPORT constexpr T& operator[](int i) {
         return values_[i];
     }
+    /// Access the indexed element; the index must lie within the logical bounds.
     CUDA_EXPORT constexpr T const& operator[](int i) const {
         return values_[i];
     }
+    /// Add corresponding independent entries in place.
     CUDA_EXPORT constexpr DiagonalMatrix& operator+=(DiagonalMatrix const& other) {
         for (int i = 0; i < dimensions; ++i) {
             values_[i] += other.values_[i];
         }
         return *this;
     }
+    /// Subtract corresponding independent entries in place.
     CUDA_EXPORT constexpr DiagonalMatrix& operator-=(DiagonalMatrix const& other) {
         for (int i = 0; i < dimensions; ++i) {
             values_[i] -= other.values_[i];
         }
         return *this;
     }
+    /// Scale independent entries in place, preserving an argument that aliases matrix
+    /// storage.
     CUDA_EXPORT constexpr DiagonalMatrix& operator*=(T const& scalar) {
         T const value = scalar;
         for (auto& entry : values_) {
@@ -361,6 +422,8 @@ public:
         }
         return *this;
     }
+    /// Divide independent entries in place, preserving an argument that aliases matrix
+    /// storage.
     CUDA_EXPORT constexpr DiagonalMatrix& operator/=(T const& scalar) {
         T const value = scalar;
         for (auto& entry : values_) {
@@ -370,20 +433,25 @@ public:
     }
 };
 
+/// Construct a diagonal identity matrix with unit diagonal entries.
 template <class T, int dimensions>
 CUDA_EXPORT constexpr auto identityMatrix() {
     return DiagonalMatrix<T, dimensions>(T(1));
 }
 
+/// Return an unchanged copy for unary plus.
 template <FixedMatrix A>
 CUDA_EXPORT constexpr auto operator+(A const& a) {
     return a;
 }
+/// Return a copy with every entry negated.
 template <FixedMatrix A>
 CUDA_EXPORT constexpr auto operator-(A a) {
     return a *= typename A::ValueType(-1);
 }
 
+/// Add matrices componentwise, preserving diagonal or symmetric storage when both operands
+/// permit it.
 template <FixedMatrix A, FixedMatrix B>
     requires(detail::Traits<A>::kRows == detail::Traits<B>::kRows &&
         detail::Traits<A>::kCols == detail::Traits<B>::kCols)
@@ -415,25 +483,31 @@ CUDA_EXPORT constexpr auto operator+(A const& a, B const& b) {
         return result;
     }
 }
+/// Subtract matrices componentwise.
 template <FixedMatrix A, FixedMatrix B>
     requires(detail::Traits<A>::kRows == detail::Traits<B>::kRows &&
         detail::Traits<A>::kCols == detail::Traits<B>::kCols)
 CUDA_EXPORT constexpr auto operator-(A const& a, B const& b) {
     return a + (-b);
 }
+/// Multiply by a scalar while preserving the matrix representation.
 template <FixedMatrix A>
 CUDA_EXPORT constexpr A operator*(A a, typename A::ValueType const& value) {
     return a *= value;
 }
+/// Multiply by a scalar while preserving the matrix representation.
 template <FixedMatrix A>
 CUDA_EXPORT constexpr A operator*(typename A::ValueType const& value, A a) {
     return a *= value;
 }
+/// Divide by a scalar while preserving the matrix representation.
 template <FixedMatrix A>
 CUDA_EXPORT constexpr A operator/(A a, typename A::ValueType const& value) {
     return a /= value;
 }
 
+/// Compute the matrix product, specializing diagonal operands and promoting the result
+/// scalar type.
 template <FixedMatrix A, FixedMatrix B>
     requires(detail::Traits<A>::kCols == detail::Traits<B>::kRows)
 CUDA_EXPORT constexpr auto operator*(A const& a, B const& b) {
@@ -466,6 +540,7 @@ CUDA_EXPORT constexpr auto operator*(A const& a, B const& b) {
         return result;
     }
 }
+/// Multiply the matrix by a column vector.
 template <FixedMatrix A, class T, int dimensions, class Derived>
     requires(A::cols() == dimensions)
 CUDA_EXPORT constexpr auto operator*(A const& a, Vector<T, dimensions, Derived> const& vector) {
@@ -484,6 +559,7 @@ CUDA_EXPORT constexpr auto operator*(A const& a, Vector<T, dimensions, Derived> 
     }
     return result;
 }
+/// Multiply a row vector by the matrix.
 template <class T, int dimensions, class Derived, FixedMatrix A>
     requires(A::rows() == dimensions)
 CUDA_EXPORT constexpr auto operator*(Vector<T, dimensions, Derived> const& vector, A const& a) {
@@ -503,6 +579,7 @@ CUDA_EXPORT constexpr auto operator*(Vector<T, dimensions, Derived> const& vecto
     return result;
 }
 
+/// Exchange rows and columns; symmetric representations can be copied unchanged.
 template <FixedMatrix A>
 CUDA_EXPORT constexpr auto transpose(A const& a) {
     if constexpr (detail::Traits<A>::kSymmetric) {
@@ -517,6 +594,7 @@ CUDA_EXPORT constexpr auto transpose(A const& a) {
         return result;
     }
 }
+/// Form the dense matrix whose entries are products of components of the two vectors.
 template <class T, int rows, class D, class U, int cols, class E>
 CUDA_EXPORT constexpr auto outerProduct(Vector<T, rows, D> const& a, Vector<U, cols, E> const& b) {
     Matrix<decltype(a[0] * b[0]), rows, cols> result;
@@ -527,6 +605,7 @@ CUDA_EXPORT constexpr auto outerProduct(Vector<T, rows, D> const& a, Vector<U, c
     }
     return result;
 }
+/// Form a vector's outer product with itself in packed symmetric storage.
 template <class T, int dimensions, class Derived>
 CUDA_EXPORT constexpr auto symmetricOuterProduct(Vector<T, dimensions, Derived> const& a) {
     SymmetricMatrix<T, dimensions> result;
@@ -537,6 +616,7 @@ CUDA_EXPORT constexpr auto symmetricOuterProduct(Vector<T, dimensions, Derived> 
     }
     return result;
 }
+/// Sum diagonal entries of a square matrix.
 template <FixedMatrix A>
     requires(A::rows() == A::cols())
 CUDA_EXPORT constexpr auto trace(A const& a) {
@@ -546,6 +626,8 @@ CUDA_EXPORT constexpr auto trace(A const& a) {
     }
     return result;
 }
+/// Sum the squares of all mathematical entries, counting both triangles of a symmetric
+/// matrix.
 template <FixedMatrix A>
 CUDA_EXPORT constexpr auto squaredNorm(A const& a) {
     using T = typename A::ValueType;
@@ -557,6 +639,8 @@ CUDA_EXPORT constexpr auto squaredNorm(A const& a) {
     }
     return result;
 }
+/// Compute the Frobenius norm, using scaled hypot accumulation for built-in floating-point
+/// types.
 template <FixedMatrix A>
 CUDA_EXPORT auto frobeniusNorm(A const& a) {
     using T = typename A::ValueType;
@@ -607,6 +691,8 @@ struct DefaultMatrixPolicy {
 
 namespace detail {
 
+    /// Classify finite scalars with bit-based float/double checks that survive
+    /// fast-math optimization.
     template <class T>
     CUDA_EXPORT constexpr bool matrixFinite(T value) {
         // Bit classification remains valid under -ffinite-math-only/-ffast-math.
@@ -619,20 +705,26 @@ namespace detail {
             return std::isfinite(value);
         }
     }
+    /// Return the scalar absolute value for matrix algorithms.
     template <class T>
     CUDA_EXPORT constexpr T matrixAbs(T value) {
         return value < T(0) ? -value : value;
     }
+    /// Return the larger of two scalars for matrix scaling and tolerance tests.
     template <class T>
     CUDA_EXPORT constexpr T matrixMax(T a, T b) {
         return a > b ? a : b;
     }
+    /// Resolve the automatic relative pivot threshold to dimension times machine
+    /// epsilon.
     template <class T, int dimensions>
     CUDA_EXPORT constexpr T relativeTolerance(MatrixOptions<T> const& options) {
         return options.relativePivotTolerance < T(0) ?
             T(dimensions) * std::numeric_limits<T>::epsilon() :
             options.relativePivotTolerance;
     }
+    /// Validate and normalize a matrix by its largest absolute entry, reporting
+    /// singular or nonfinite input.
     template <FixedMatrix A>
     CUDA_EXPORT auto scaledMatrix(A const& a, Matrix<typename A::ValueType, A::rows()>& scaled,
         typename A::ValueType& scale, size_t* arithmeticOperations = nullptr) {
@@ -663,6 +755,8 @@ namespace detail {
         }
         return MatrixStatus::Success;
     }
+    /// Evaluate a small dense determinant by explicit formulas or recursive cofactor
+    /// expansion.
     template <class T, int dimensions>
     CUDA_EXPORT constexpr T minorDeterminant(Matrix<T, dimensions> const& a) {
         if constexpr (dimensions == 1) {
@@ -691,6 +785,8 @@ namespace detail {
             return result;
         }
     }
+    /// Compute the signed determinant of the minor formed by deleting one row and
+    /// column.
     template <class T, int dimensions>
     CUDA_EXPORT constexpr T cofactor(Matrix<T, dimensions> const& a, int row, int column) {
         if constexpr (dimensions == 1) {
@@ -714,6 +810,7 @@ namespace detail {
             return (row + column) % 2 == 0 ? determinant : -determinant;
         }
     }
+    /// Form the transposed cofactor matrix, using compact storage for symmetric input.
     template <bool symmetric, class T, int dimensions>
     CUDA_EXPORT constexpr auto adjugate(Matrix<T, dimensions> const& a) {
         using Result =
@@ -740,6 +837,8 @@ namespace detail {
         }
         return result;
     }
+    /// Compute the scaled determinant and reject unsafe cofactor inversions using pivot
+    /// and determinant thresholds.
     template <class T, int dimensions, FixedMatrix Adj>
     CUDA_EXPORT MatrixStatus explicitFactors(Matrix<T, dimensions> const& a, T scale,
         Adj const& adj, T& determinant, MatrixOptions<T> const& options) {
@@ -769,6 +868,8 @@ namespace detail {
         return matrixAbs(determinant) <= determinantTolerance ? MatrixStatus::Singular :
                                                                 MatrixStatus::Success;
     }
+    /// Copy entries while respecting the destination's dense, symmetric, or diagonal
+    /// storage.
     template <FixedMatrix Out, FixedMatrix In>
     CUDA_EXPORT void assignMatrix(Out& out, In const& in) {
         for (int i = 0; i < Out::rows(); ++i) {
@@ -783,6 +884,7 @@ namespace detail {
             }
         }
     }
+    /// Require every mathematical matrix entry to be finite.
     template <FixedMatrix A>
     CUDA_EXPORT bool allFinite(A const& a) {
         for (int i = 0; i < A::rows(); ++i) {
@@ -794,6 +896,8 @@ namespace detail {
         }
         return true;
     }
+    /// Tighten cofactor thresholds so automatic dispatch falls back to pivoted
+    /// factorization before cancellation dominates.
     template <class T, int dimensions>
     CUDA_EXPORT MatrixOptions<T> automaticExplicitOptions(MatrixOptions<T> options) {
         // Cofactor cancellation grows before singularity. Let LU handle this
@@ -828,6 +932,8 @@ CUDA_EXPORT constexpr auto adjugate(A const& a) {
 }
 
 namespace detail {
+    /// Validate each independent diagonal equation against finite-value and
+    /// pivot-tolerance requirements.
     template <class T, int dimensions>
     CUDA_EXPORT MatrixStatus checkDiagonal(
         DiagonalMatrix<T, dimensions> const& a, MatrixOptions<T> const& options) {
@@ -1002,6 +1108,7 @@ CUDA_EXPORT MatrixStatus tryInverseExplicit(A const& a, Out& out,
     return MatrixStatus::Success;
 }
 
+/// Compute a scaled cofactor determinant and publish it only when validation succeeds.
 template <ScalarSquareMatrix A>
     requires(A::rows() <= 6)
 CUDA_EXPORT MatrixStatus tryDeterminantExplicit(A const& a, typename A::ValueType& determinant,
@@ -1040,6 +1147,8 @@ namespace detail {
         int swaps[dimensions]{};
         int parity = 1;
     };
+    /// Compute a partial-pivoted LU factorization, recording row swaps and rejecting
+    /// small or nonfinite pivots.
     template <ScalarSquareMatrix A>
     CUDA_EXPORT MatrixStatus factorPivoted(A const& a,
         PivotFactors<typename A::ValueType, A::rows()>& factors,
@@ -1104,6 +1213,8 @@ namespace detail {
         }
         return allFinite(lu) ? MatrixStatus::Success : MatrixStatus::NonFinite;
     }
+    /// Apply recorded row swaps and triangular solves to one or more right-hand sides;
+    /// report nonfinite results.
     template <class T, int dimensions, int rhsCount>
     CUDA_EXPORT MatrixStatus solveFactors(PivotFactors<T, dimensions> const& factors,
         Matrix<T, dimensions, rhsCount> const& rhs, Matrix<T, dimensions, rhsCount>& result,
@@ -1145,6 +1256,8 @@ namespace detail {
     }
 }    // namespace detail
 
+/// Solve through pivoted LU, using direct division for diagonal matrices; update output
+/// only on success.
 template <ScalarSquareMatrix A, int rhsCount>
 CUDA_EXPORT MatrixStatus trySolvePivoted(A const& a,
     Matrix<typename A::ValueType, A::rows(), rhsCount> const& rhs,
@@ -1166,6 +1279,8 @@ CUDA_EXPORT MatrixStatus trySolvePivoted(A const& a,
     }
     return status;
 }
+/// Solve against identity columns through pivoted LU, projecting both triangles for
+/// symmetric output.
 template <ScalarSquareMatrix A, FixedMatrix Out>
     requires(Out::rows() == A::rows() && Out::cols() == A::cols() &&
         std::is_same_v<typename A::ValueType, typename Out::ValueType> &&
@@ -1209,6 +1324,8 @@ CUDA_EXPORT MatrixStatus tryInversePivoted(A const& a, Out& out,
     }
     return status;
 }
+/// Form the signed product of LU pivots with separate mantissa/exponent tracking to avoid
+/// intermediate overflow.
 template <ScalarSquareMatrix A>
 CUDA_EXPORT MatrixStatus tryDeterminantPivoted(A const& a, typename A::ValueType& determinant,
     MatrixOptions<typename A::ValueType> const& options = {}) {
@@ -1241,6 +1358,8 @@ CUDA_EXPORT MatrixStatus tryDeterminantPivoted(A const& a, typename A::ValueType
     return MatrixStatus::Success;
 }
 
+/// Solve a small system through scaled cofactors and publish the result only when finite
+/// and admissible.
 template <ScalarSquareMatrix A, int rhsCount>
     requires(A::rows() <= 6)
 CUDA_EXPORT MatrixStatus trySolveExplicit(A const& a,
@@ -1320,6 +1439,7 @@ CUDA_EXPORT MatrixStatus tryInverse(A const& a, Out& out,
     }
     return status;
 }
+/// Try the policy-selected explicit determinant first, then use pivoted LU if necessary.
 template <class Policy = DefaultMatrixPolicy, ScalarSquareMatrix A>
 CUDA_EXPORT MatrixStatus tryDeterminant(A const& a, typename A::ValueType& determinant,
     MatrixOptions<typename A::ValueType> const& options = {}) {
@@ -1337,6 +1457,8 @@ CUDA_EXPORT MatrixStatus tryDeterminant(A const& a, typename A::ValueType& deter
     }
     return tryDeterminantPivoted(a, determinant, options);
 }
+/// Solve with the policy-selected explicit or pivoted method, publishing the solution only
+/// on success.
 template <class Policy = DefaultMatrixPolicy, ScalarSquareMatrix A, int rhsCount>
 CUDA_EXPORT MatrixStatus trySolve(A const& a,
     Matrix<typename A::ValueType, A::rows(), rhsCount> const& rhs,
@@ -1356,6 +1478,8 @@ CUDA_EXPORT MatrixStatus trySolve(A const& a,
     return trySolvePivoted(a, rhs, out, options);
 }
 
+/// Define vector-RHS solver overloads by adapting to the corresponding one-column matrix solve.
+/// The output vector is updated only when the underlying solve succeeds.
 #define COSMICTIGER_MATRIX_VECTOR_SOLVE(functionName)                 \
     template <ScalarSquareMatrix A, class Derived, class OutDerived>  \
     CUDA_EXPORT MatrixStatus functionName(A const& a,                 \
@@ -1379,6 +1503,8 @@ COSMICTIGER_MATRIX_VECTOR_SOLVE(trySolveExplicit)
 COSMICTIGER_MATRIX_VECTOR_SOLVE(trySolvePivoted)
 #undef COSMICTIGER_MATRIX_VECTOR_SOLVE
 
+/// Solve with the policy-selected explicit or pivoted method, publishing the solution only
+/// on success.
 template <class Policy = DefaultMatrixPolicy, ScalarSquareMatrix A, class Derived, class OutDerived>
 CUDA_EXPORT MatrixStatus trySolve(A const& a,
     Vector<typename A::ValueType, A::rows(), Derived> const& rhs,

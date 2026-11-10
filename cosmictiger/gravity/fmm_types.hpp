@@ -25,27 +25,35 @@ namespace cosmictiger::gravity {
 // Physical point result in normalized FMM units. Acceleration is -grad(potential).
 template <class Real>
 struct Field : Array<Real, kDimensions + 1> {
+    /// Access the potential component of the particle field.
     CUDA_EXPORT Real& potential() {
         return (*this)[0];
     }
+    /// Access the potential component of the particle field.
     CUDA_EXPORT Real const& potential() const {
         return (*this)[0];
     }
+    /// Access the x component of particle acceleration.
     CUDA_EXPORT Real& accelerationX() {
         return (*this)[1];
     }
+    /// Access the x component of particle acceleration.
     CUDA_EXPORT Real const& accelerationX() const {
         return (*this)[1];
     }
+    /// Access the y component of particle acceleration.
     CUDA_EXPORT Real& accelerationY() {
         return (*this)[2];
     }
+    /// Access the y component of particle acceleration.
     CUDA_EXPORT Real const& accelerationY() const {
         return (*this)[2];
     }
+    /// Access the z component of particle acceleration.
     CUDA_EXPORT Real& accelerationZ() {
         return (*this)[3];
     }
+    /// Access the z component of particle acceleration.
     CUDA_EXPORT Real const& accelerationZ() const {
         return (*this)[3];
     }
@@ -79,6 +87,8 @@ static_assert(std::is_standard_layout_v<FmmMultiPos<kFmmDefaultOrder>>);
 static_assert(sizeof(FmmMultiPos<7>) == fmmPositionedMultipoleBytes(7));
 static_assert(sizeof(FmmMultiPos<9>) == fmmPositionedMultipoleBytes(9));
 
+/// Check coefficient counts, transport sizes, alignment assumptions, and trivial
+/// typed-storage layout at compile time.
 template <int order>
 constexpr bool fmmTypedLayout() {
     using CartesianMultipole = cosmictiger::gravity::cartesian::Multipole<float, order>;
@@ -110,11 +120,13 @@ constexpr bool fmmTypedLayout() {
 static_assert(fmmTypedLayout<3>() && fmmTypedLayout<4>() && fmmTypedLayout<5>() &&
     fmmTypedLayout<6>() && fmmTypedLayout<7>() && fmmTypedLayout<8>() && fmmTypedLayout<9>());
 
+/// Interpret an aligned positioned-multipole record at its actual compile-time FMM order.
 template <int order>
 CUDA_EXPORT inline FmmMultiPos<order>& fmmMultiPos(MultipolePosition* record) {
     return *reinterpret_cast<FmmMultiPos<order>*>(record);
 }
 
+/// Interpret an aligned positioned-multipole record at its actual compile-time FMM order.
 template <int order>
 CUDA_EXPORT inline FmmMultiPos<order> const& fmmMultiPos(MultipolePosition const* record) {
     return *reinterpret_cast<FmmMultiPos<order> const*>(record);
@@ -126,23 +138,30 @@ CUDA_EXPORT inline FmmMultiPos<order> const& fmmMultiPos(MultipolePosition const
 struct ExpansionBuffer {
     Array<float, kFmmMaxLocalCoefficients> coefficients;
 
+    /// Access a coefficient by its packed storage index.
     CUDA_EXPORT float& operator[](int i) {
         return coefficients[i];
     }
+    /// Access a coefficient by its packed storage index.
     CUDA_EXPORT float const& operator[](int i) const {
         return coefficients[i];
     }
+    /// Clear the complete maximum-capacity coefficient buffer.
     CUDA_EXPORT void zero() {
         for (int i = 0; i < kFmmMaxLocalCoefficients; i++) {
             coefficients[i] = 0.0f;
         }
     }
+    /// View the coefficient prefix as a Cartesian local expansion of the supplied
+    /// order.
     template <int order>
     CUDA_EXPORT cosmictiger::gravity::cartesian::Expansion<float, order>& expansion() {
         return *reinterpret_cast<
             cosmictiger::gravity::cartesian::Expansion<float, order>*>(
             coefficients.data());
     }
+    /// View the coefficient prefix as a Cartesian local expansion of the supplied
+    /// order.
     template <int order>
     CUDA_EXPORT cosmictiger::gravity::cartesian::Expansion<float, order> const&
     expansion() const {
@@ -150,6 +169,7 @@ struct ExpansionBuffer {
             cosmictiger::gravity::cartesian::Expansion<float, order> const*>(
             coefficients.data());
     }
+    /// Copy the active coefficients from a typed expansion into the transport buffer.
     template <int order>
     CUDA_EXPORT void assign(
         cosmictiger::gravity::cartesian::Expansion<float, order> const& value) {
@@ -157,6 +177,7 @@ struct ExpansionBuffer {
             coefficients[i] = value[i];
         }
     }
+    /// Archive `coefficients` in transport order.
     template <class A>
     void serialize(A&& arc, unsigned) {
         fmmDispatch([&](auto orderTag) {
@@ -173,23 +194,30 @@ static_assert(sizeof(ExpansionBuffer) == sizeof(float) * kFmmMaxLocalCoefficient
 struct MultipoleBuffer {
     Array<float, kFmmMaxMultipoleCoefficients> coefficients;
 
+    /// Access a coefficient by its packed storage index.
     CUDA_EXPORT float& operator[](int i) {
         return coefficients[i];
     }
+    /// Access a coefficient by its packed storage index.
     CUDA_EXPORT float const& operator[](int i) const {
         return coefficients[i];
     }
+    /// Clear the complete maximum-capacity coefficient buffer.
     CUDA_EXPORT void zero() {
         for (int i = 0; i < kFmmMaxMultipoleCoefficients; i++) {
             coefficients[i] = 0.0f;
         }
     }
+    /// View the coefficient prefix as a Cartesian source multipole of the supplied
+    /// order.
     template <int order>
     CUDA_EXPORT cosmictiger::gravity::cartesian::Multipole<float, order>& multipole() {
         return *reinterpret_cast<
             cosmictiger::gravity::cartesian::Multipole<float, order>*>(
             coefficients.data());
     }
+    /// View the coefficient prefix as a Cartesian source multipole of the supplied
+    /// order.
     template <int order>
     CUDA_EXPORT cosmictiger::gravity::cartesian::Multipole<float, order> const&
     multipole() const {
@@ -197,6 +225,7 @@ struct MultipoleBuffer {
             cosmictiger::gravity::cartesian::Multipole<float, order> const*>(
             coefficients.data());
     }
+    /// Copy the active coefficients from a typed expansion into the transport buffer.
     template <int order>
     CUDA_EXPORT void assign(
         cosmictiger::gravity::cartesian::Multipole<float, order> const& value) {
@@ -204,6 +233,7 @@ struct MultipoleBuffer {
             coefficients[i] = value[i];
         }
     }
+    /// Archive `coefficients` in transport order.
     template <class A>
     void serialize(A&& arc, unsigned) {
         fmmDispatch([&](auto orderTag) {

@@ -38,6 +38,7 @@ HPX_PLAIN_ACTION(sphParticlesSelectMidpointRungs, SphParticlesSelectMidpointRung
 HPX_PLAIN_ACTION(sphSeedRungProposals, SphSeedRungProposalsAction);
 HPX_PLAIN_ACTION(sphCommitBalancedRungs, SphCommitBalancedRungsAction);
 
+/// Seed each gas particle's proposed rung from its current rung before neighbor balancing.
 void sphSeedRungProposals() {
     ALWAYS_ASSERT(!detail::rungBalanceActive);
     Vector<hpx::future<void>> children;
@@ -52,6 +53,7 @@ void sphSeedRungProposals() {
     }
 }
 
+/// Install balanced gas rung proposals and return the global maximum rung.
 int sphCommitBalancedRungs() {
     ALWAYS_ASSERT(!detail::rungBalanceActive);
     Vector<hpx::future<int>> children;
@@ -76,14 +78,18 @@ SphRungBalanceReturn sphFinishRungCandidates(bool publish);
 HPX_PLAIN_ACTION(sphPrepareRungCandidates, SphPrepareRungCandidatesAction);
 HPX_PLAIN_ACTION(sphFinishRungCandidates, SphFinishRungCandidatesAction);
 
+/// Report whether rung-candidate balancing storage is active.
 bool sphRungBalanceActive() {
     return detail::rungBalanceActive;
 }
 
+/// Expose the base-particle-indexed candidate rung buffer for the current balance pass.
 char* sphRungCandidatesData() {
     return detail::rungCandidates;
 }
 
+/// Allocate candidate storage when requested and snapshot gas candidates for a synchronous
+/// balance pass.
 void sphPrepareRungCandidates(bool initialize) {
     Vector<hpx::future<void>> children;
     for (auto const& child : sphCollectiveChildren()) {
@@ -111,10 +117,12 @@ void sphPrepareRungCandidates(bool initialize) {
     }
 }
 
+/// Report whether candidate snapshots are available for neighbor reads.
 bool sphRungCandidatesActive() {
     return detail::rungBalanceActive;
 }
 
+/// Copy a validated range from the current local gas rung snapshot.
 Vector<char> sphFetchRungCandidates(Pair<ParticleInteger> range) {
     ALWAYS_ASSERT(detail::rungBalanceActive && range.first >= 0 &&
         range.second <= detail::rungSnapshot.size());
@@ -122,6 +130,7 @@ Vector<char> sphFetchRungCandidates(Pair<ParticleInteger> range) {
         detail::rungSnapshot.begin() + range.first, detail::rungSnapshot.begin() + range.second);
 }
 
+/// Read candidate rungs from the local snapshot or staged remote ghost fields.
 void sphReadRungCandidates(ParticleGlobalRange range, char* rungs, ParticleInteger offset) {
     if (range.range.first == range.range.second) {
         return;
@@ -137,6 +146,8 @@ void sphReadRungCandidates(ParticleGlobalRange range, char* rungs, ParticleInteg
     }
 }
 
+/// Publish candidate proposals and reduce changes, or release candidate storage when ending
+/// the balance.
 SphRungBalanceReturn sphFinishRungCandidates(bool publish) {
     Vector<hpx::future<SphRungBalanceReturn>> children;
     for (auto const& child : sphCollectiveChildren()) {
@@ -165,6 +176,8 @@ SphRungBalanceReturn sphFinishRungCandidates(bool publish) {
     return result;
 }
 
+/// Iterate neighbor rung closure to a bounded fixed point and clean up candidate state on
+/// failure.
 SphRungBalanceReturn sphBalanceRungs(TreeId root, float scaleFactor, bool cuda) {
     ALWAYS_ASSERT(hpxRank() == 0 && sphTreeAllValid());
     SphTreeNeighborParameters neighbors;
@@ -206,15 +219,18 @@ SphRungBalanceReturn sphBalanceRungs(TreeId root, float scaleFactor, bool cuda) 
     }
 }
 
+/// Report whether the resolved hydro options select the SPH midpoint event scheme.
 bool sphMidpointEnabled() {
     auto const& options = getOptions();
     return options.hydro.enabled && options.hydro.method == "sph";
 }
 
+/// Report whether a midpoint source snapshot event is currently active.
 bool sphMidpointEventActive() {
     return detail::midpointEventActive;
 }
 
+/// Propagate midpoint-event activity through the SPH collective topology.
 void sphMidpointSetEventActive(bool active) {
     Vector<hpx::future<void>> children;
     for (auto const& child : sphCollectiveChildren()) {
@@ -227,15 +243,18 @@ void sphMidpointSetEventActive(bool active) {
     }
 }
 
+/// Require an idle midpoint integrator and mark the event active on all localities.
 void sphMidpointBeginEvent() {
     ALWAYS_ASSERT(sphMidpointEnabled() && !detail::midpointEventActive);
     sphMidpointSetEventActive(true);
 }
 
+/// Clear midpoint-event activity on all localities.
 void sphMidpointEndEvent() {
     sphMidpointSetEventActive(false);
 }
 
+/// Count gas particles on the exact requested rung, or all gas for a negative rung.
 size_t sphMidpointTargetCount(int exactRung) {
     Vector<hpx::future<size_t>> children;
     for (auto const& child : sphCollectiveChildren()) {
@@ -252,6 +271,8 @@ size_t sphMidpointTargetCount(int exactRung) {
     return count;
 }
 
+/// Choose next gas rungs from hydro bounds and allowed coarsening, returning the global
+/// maximum.
 int sphParticlesSelectMidpointRungs(int minimumRung) {
     ALWAYS_ASSERT(sphMidpointEnabled() && minimumRung >= 0);
     Vector<hpx::future<int>> children;

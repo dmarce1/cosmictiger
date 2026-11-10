@@ -46,6 +46,7 @@
 
 namespace primordial {
 namespace detail {
+    /// Test IEEE exponent bits for finiteness independently of fast-math assumptions.
     bool isFiniteRecombination(double value) {
         static_assert(std::numeric_limits<double>::is_iec559);
         constexpr std::uint64_t kExponentMask = UINT64_C(0x7ff0000000000000);
@@ -87,9 +88,12 @@ namespace detail {
         (8.0 / 3.0) * kThomson / (kElectronMass * kSpeedOfLight) * kRadiation;
     constexpr double kInitialScaleFactor = 1.0 / 10001.0;
 
+    /// Return the square of the supplied scalar.
     double square(double value) {
         return value * value;
     }
+    /// Evaluate the line escape probability with a small-optical-depth expansion near
+    /// zero.
     double escapeProbability(double opticalDepth) {
         return opticalDepth > 1.0e-8 ? -std::expm1(-opticalDepth) / opticalDepth :
                                        1.0 - opticalDepth * 0.5;
@@ -113,6 +117,8 @@ namespace detail {
         double hydrogenDensityToday;
         double hydrogenSahaEnd;
 
+        /// Evaluate the temperature-dependent Saha ratio with an exponent cap to
+        /// avoid overflow.
         double sahaRatio(double scaleFactor, double wavenumber, double degeneracy) const {
             double const temperature = parameters.cmbTemperature / scaleFactor;
             double const logarithm = std::log(degeneracy / hydrogenDensityToday) +
@@ -120,21 +126,28 @@ namespace detail {
                 kEnergyToKelvin * wavenumber / temperature;
             return std::exp(std::min(690.0, logarithm));
         }
+        /// Compute the equilibrium hydrogen ionized fraction using a numerically
+        /// stable quadratic solution.
         double hydrogenSaha(double scaleFactor) const {
             double const ratio = sahaRatio(scaleFactor, kHydrogenIonization, 1.0);
             return ratio > 1.0 ? 2.0 / (1.0 + std::sqrt(1.0 + 4.0 / ratio)) :
                                  positiveRoot(1.0, ratio, ratio);
         }
+        /// Compute the equilibrium singly ionized helium fraction with fully
+        /// ionized hydrogen.
         double heliumSaha(double scaleFactor) const {
             double const ratio = sahaRatio(scaleFactor, kHeliumIonization, 4.0);
             // (1+fHe*x)*x/(1-x) = ratio, H is fully ionized here.
             return positiveRoot(heliumRatio, 1.0 + ratio, ratio);
         }
+        /// Compute the equilibrium doubly ionized helium fraction with hydrogen and
+        /// first helium ionization present.
         double heliumDoubleSaha(double scaleFactor) const {
             double const ratio = sahaRatio(scaleFactor, kHeliumPlusIonization, 1.0);
             // (1+fHe+fHe*x)*x/(1-x) = ratio.
             return positiveRoot(heliumRatio, 1.0 + heliumRatio + ratio, ratio);
         }
+        /// Evaluate the flat background Hubble rate at the supplied scale factor.
         double hubble(double scaleFactor) const {
             double const inverse = 1.0 / scaleFactor;
             double const omegaMatter = parameters.omegaB + parameters.omegaC;
@@ -143,6 +156,8 @@ namespace detail {
                 std::sqrt(parameters.omegaRadiation * square(square(inverse)) +
                     omegaMatter * inverse * square(inverse) + omegaLambda);
         }
+        /// Evaluate hydrogen, helium, and gas-temperature evolution with respect to
+        /// logarithmic scale factor.
         RecombinationVector derivative(double logScaleFactor, RecombinationVector const& state,
             bool hydrogenEquilibrium) const {
             double const scaleFactor = std::exp(logScaleFactor);
@@ -255,6 +270,8 @@ namespace detail {
         }
     };
 
+    /// Bisect in logarithmic scale to find where the selected equilibrium ionized
+    /// fraction falls to 0.99.
     double findSahaEnd(RecombinationModel const& model, bool hydrogen) {
         double lower = std::log(kInitialScaleFactor);
         double upper = std::log(0.01);
@@ -271,6 +288,8 @@ namespace detail {
         return std::exp(0.5 * (lower + upper));
     }
 
+    /// Solve the three-variable Newton correction using the prescribed absolute pivot
+    /// floor.
     bool solveLinear(RecombinationMatrix const& matrix, RecombinationVector const& rhs,
         RecombinationVector& result) {
         // Preserve the Newton solver's absolute pivot floor. Its variables have
@@ -278,6 +297,8 @@ namespace detail {
         return math::trySolve(matrix, rhs, result, {0.0, 1.0e-200}) == math::MatrixStatus::Success;
     }
 
+    /// Solve one implicit recombination stage with bounded states and damped Newton
+    /// corrections.
     bool implicitStage(RecombinationModel const& model, RecombinationOptions const& options,
         double time, double diagonalStep, RecombinationVector const& base, bool hydrogenEquilibrium,
         RecombinationVector& result) {
@@ -348,6 +369,7 @@ namespace detail {
         return false;
     }
 
+    /// Advance recombination with the three-stage, third-order L-stable SDIRK method.
     bool integrateStep(RecombinationModel const& model, RecombinationOptions const& options,
         double time, double step, RecombinationVector const& initial, bool hydrogenEquilibrium,
         RecombinationVector& result) {
@@ -380,6 +402,8 @@ namespace detail {
             model, options, time + step, kGamma * step, base, hydrogenEquilibrium, result);
     }
 
+    /// Form a weighted harmonic interpolation slope, setting it to zero across sign
+    /// changes.
     double monotoneSlope(double leftStep, double rightStep, double leftSlope, double rightSlope) {
         if (leftSlope * rightSlope <= 0.0) {
             return 0.0;
@@ -390,6 +414,8 @@ namespace detail {
     }
 }    // namespace detail
 
+/// Validate parameters, integrate homogeneous recombination, and build monotone
+/// interpolation slopes.
 RecombinationHistory::RecombinationHistory(
     RecombinationParameters parameters, RecombinationOptions options)
   : parameters_(parameters)
@@ -515,6 +541,8 @@ RecombinationHistory::RecombinationHistory(
     }
 }
 
+/// Return ion fractions and gas temperature, using Saha equilibrium before the integrated
+/// history applies.
 std::array<double, 4> RecombinationHistory::sample(double scaleFactor) const {
     if (!detail::isFiniteRecombination(scaleFactor) || scaleFactor <= 0.0 ||
         scaleFactor >
@@ -576,31 +604,41 @@ std::array<double, 4> RecombinationHistory::sample(double scaleFactor) const {
     return {state[0], state[1], 0.0, state[2] * radiationTemperature};
 }
 
+/// Return free electrons per hydrogen nucleus, including both helium ionization stages.
 double RecombinationHistory::electronFraction(double scaleFactor) const {
     auto const value = sample(scaleFactor);
     return value[0] + heliumRatio_ * (value[1] + 2.0 * value[2]);
 }
+/// Return the sampled physical gas temperature.
 double RecombinationHistory::gasTemperature(double scaleFactor) const {
     return sample(scaleFactor)[3];
 }
+/// Return the sampled fraction of ionized hydrogen.
 double RecombinationHistory::hydrogenIonizedFraction(double scaleFactor) const {
     return sample(scaleFactor)[0];
 }
+/// Return the sampled fraction of singly ionized helium.
 double RecombinationHistory::heliumSinglyIonizedFraction(double scaleFactor) const {
     return sample(scaleFactor)[1];
 }
+/// Return the sampled fraction of doubly ionized helium.
 double RecombinationHistory::heliumDoublyIonizedFraction(double scaleFactor) const {
     return sample(scaleFactor)[2];
 }
+/// Return the nominal starting scale of the recombination integration.
 double RecombinationHistory::minScaleFactor() const {
     return detail::kInitialScaleFactor;
 }
+/// Return the largest scale factor covered by this history.
 double RecombinationHistory::maxScaleFactor() const {
     return options_.maxScaleFactor;
 }
+/// Return the helium-to-hydrogen nuclei number ratio.
 double RecombinationHistory::heliumToHydrogenNumberRatio() const {
     return heliumRatio_;
 }
+/// Return the proper hydrogen number density in inverse cubic centimeters after validating
+/// the scale.
 double RecombinationHistory::hydrogenNumberDensity(double scaleFactor) const {
     sample(scaleFactor);
     double const result =
@@ -610,6 +648,8 @@ double RecombinationHistory::hydrogenNumberDensity(double scaleFactor) const {
     }
     return result;
 }
+/// Return thermal pressure per hydrogen nucleus in electron-volts, including ions and
+/// electrons.
 double RecombinationHistory::pressurePerHydrogen(double scaleFactor) const {
     return (1.0 + heliumRatio_ + electronFraction(scaleFactor)) *
         static_cast<double>(kBoltzmannEv) * gasTemperature(scaleFactor);

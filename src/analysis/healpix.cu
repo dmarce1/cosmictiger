@@ -37,6 +37,7 @@
 
 __managed__ int x2pix[128], y2pix[128];
 
+/// Initialize the bit-interleaving lookup tables used by device nested HEALPix indexing.
 void healpixInit() {
     /* =======================================================================
      * subroutine mk_xy2pix
@@ -74,6 +75,7 @@ void healpixInit() {
     }
 }
 
+/// Map a direction vector to its nested HEALPix pixel at the requested resolution.
 __device__ void vec2pixNest(long const nside, double* vec, long* ipix) {
     /* =======================================================================
      * subroutine vec2pix_nest(nside, vec, ipix)

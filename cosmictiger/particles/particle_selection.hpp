@@ -15,6 +15,8 @@
 
 namespace detail {
 
+/// Return a selected global particle index using quotient/remainder arithmetic;
+/// selectedCount must be positive.
 inline size_t evenlySpacedParticleIndex(size_t selected, size_t totalCount, size_t selectedCount) {
     size_t const stride = totalCount / selectedCount;
     size_t const remainder = totalCount % selectedCount;
@@ -24,6 +26,8 @@ inline size_t evenlySpacedParticleIndex(size_t selected, size_t totalCount, size
     return selected * stride + size_t(uint64_t(selected) * remainder / selectedCount);
 }
 
+/// Clear local flags and mark this locality's share of the evenly spaced global tracer
+/// selection.
 inline void setTracerFlags(
     char* flags, size_t localCount, size_t globalOffset, size_t totalCount, int requestedCount) {
     if (localCount == 0) {

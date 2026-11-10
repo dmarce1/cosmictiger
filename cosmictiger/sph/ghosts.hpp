@@ -115,6 +115,7 @@ struct SphGhostStatistics {
 
     SphGhostStatistics& operator+=(SphGhostStatistics const& other);
 
+    /// Archive this record in the field order required by distributed transport.
     template <class Archive>
     void serialize(Archive&& archive, unsigned) {
         archive & leaves;

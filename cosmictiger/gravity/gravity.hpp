@@ -29,6 +29,8 @@ struct ForceVectors {
     Vector<float> gy;
     Vector<float> gz;
     ForceVectors() = default;
+    /// Resize potential and all three acceleration output arrays for the requested sink
+    /// count.
     ForceVectors(int sz) {
         phi.resize(sz);
         gx.resize(sz);
@@ -61,6 +63,7 @@ void setGravityCounterUse(bool code);
 
 namespace detail {
 
+/// Count the arithmetic in Bernstein-polynomial evaluation at the supplied degree.
 CUDA_EXPORT inline FlopCount bernsteinFlops(int degree) {
     return FlopCount(3) * degree * (degree + 1) / 2;
 }
@@ -133,6 +136,8 @@ CUDA_EXPORT inline FlopCounts gravitySofteningOperations(
 
 }    // namespace detail
 
+/// Evaluate the selected softened force factor and optional potential, returning and
+/// optionally recording operation counts.
 template <class T>
 CUDA_EXPORT inline FlopCount gravitySofteningKernel(T& force, T& phi, T radiusSquared,
     T inverseSupport, T inverseSupportSquared, T inverseSupportCubed, bool doPhi,
@@ -153,6 +158,7 @@ CUDA_EXPORT inline FlopCount gravitySofteningKernel(T& force, T& phi, T radiusSq
     return detail::gravitySofteningFlops(kernel, q, doPhi);
 }
 
+/// Return the selected gravity kernel's dimensionless central potential magnitude.
 CUDA_EXPORT inline float selfPhi() {
     return selectedGravityKernel().centralPotential;
 }

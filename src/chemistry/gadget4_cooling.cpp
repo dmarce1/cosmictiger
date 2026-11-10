@@ -10,6 +10,8 @@
 
 namespace gadget4 {
 namespace detail {
+    /// Preserve each input state in the result while marking every entry with a
+    /// dispatch failure status.
     void failedBatch(Input const* inputs, Result* results, size_t count, Status status) {
         if (inputs != nullptr && results != nullptr) {
             for (size_t index = 0; index < count; ++index) {
@@ -21,6 +23,8 @@ namespace detail {
     }
 }    // namespace detail
 
+/// Tabulate the GADGET-4-selected cooling, ionization, and recombination rate fits on the
+/// temperature grid.
 RateTable buildRateTable() {
     RateTable table{};
     // Cen (1992) fits and guards as selected by GADGET-4 MakeRateTable.
@@ -65,11 +69,14 @@ RateTable buildRateTable() {
     return table;
 }
 
+/// Return the lazily initialized immutable host cooling-rate table.
 RateTable const& hostRateTable() {
     static RateTable const table = buildRateTable();
     return table;
 }
 
+/// Validate the scale and energy floor and construct cooling parameters referencing the
+/// host rate table.
 Parameters makeParameters(double scaleFactor, bool comoving, double minimumSpecificEnergy) {
     if (!detail::finite(minimumSpecificEnergy) || minimumSpecificEnergy < 0.0 ||
         !detail::finite(scaleFactor) || scaleFactor <= 0.0) {
@@ -83,6 +90,7 @@ Parameters makeParameters(double scaleFactor, bool comoving, double minimumSpeci
     return parameters;
 }
 
+/// Return a readable description of a cooling result status.
 char const* statusName(Status status) {
     switch (status) {
     case Status::Success:
@@ -99,6 +107,8 @@ char const* statusName(Status status) {
     return "unknown status";
 }
 
+/// Advance independent cooling inputs on a bounded set of host threads and report dispatch
+/// success.
 bool integrateBatchCpu(Input const* inputs, Result* results, size_t count,
     Parameters const& parameters, unsigned workers) {
     if (count == 0) {
@@ -138,6 +148,7 @@ bool integrateBatchCpu(Input const* inputs, Result* results, size_t count,
 }
 
 #ifndef USE_CUDA
+/// Report that the CUDA rate table is unavailable in a build without CUDA.
 RateRow const* deviceRateTable(std::string* error, Status* status) {
     if (status != nullptr) {
         *status = Status::BackendUnavailable;
@@ -147,6 +158,7 @@ RateRow const* deviceRateTable(std::string* error, Status* status) {
     }
     return nullptr;
 }
+/// Mark a nonempty batch unavailable when the code was built without CUDA support.
 bool integrateBatchCuda(
     Input const* inputs, Result* results, size_t count, Parameters const&, std::string* error) {
     if (error != nullptr) {
@@ -163,6 +175,7 @@ bool integrateBatchCuda(
 }
 #endif
 
+/// Dispatch cooling to the selected CPU or CUDA backend and report backend failures.
 bool integrateBatch(Input const* inputs, Result* results, size_t count,
     Parameters const& parameters, Backend backend, unsigned workers, std::string* error) {
     if (error != nullptr) {

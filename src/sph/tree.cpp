@@ -88,14 +88,17 @@ static TreeId localRootId{-1, -1};
 static ParticleInteger retainedParticleCount = -1;
 static int retainedMinimumRung = kMaxRung;
 
+/// Mark retained gas-tree topology and geometry unusable until rebuilt.
 void sphTreeInvalidate() {
     treeValid = false;
 }
 
+/// Check the retained validity flag and gas-particle count.
 bool sphTreeIsValid() {
     return treeValid && retainedParticleCount == sphParticlesSize();
 }
 
+/// Require valid retained gas trees throughout the SPH collective topology.
 bool sphTreeAllValid() {
     std::vector<hpx::future<bool>> futures;
     for (auto const& child : sphCollectiveChildren()) {
@@ -110,6 +113,7 @@ bool sphTreeAllValid() {
 
 namespace detail {
 
+/// Merge nonempty subtree extrema of swept-to-partition volume ratios.
 void mergeSphVolumeRatios(SphTreeCreateReturn& result, double minimum, double maximum) {
     // Empty subtrees return zero; every occupied box has positive padded volume.
     if (maximum > 0.0) {
@@ -119,6 +123,8 @@ void mergeSphVolumeRatios(SphTreeCreateReturn& result, double minimum, double ma
     }
 }
 
+/// Measure a local occupied node's swept-box volume relative to its original partition
+/// volume.
 double sphTreeVolumeRatio(SphTreeNode const& node, sph_flops::Counter& flops) {
     if (!node.isLocal() || node.numberOfParticles() == 0) {
         return 0.0;
@@ -151,6 +157,7 @@ double sphTreeVolumeRatio(SphTreeNode const& node, sph_flops::Counter& flops) {
     return V_swept / V_partition;
 }
 
+/// Expand a bounding box to include another box component by component.
 void mergeSphBounds(Fixed32Range& target, Fixed32Range const& source) {
     for (int dim = 0; dim < kDimensions; ++dim) {
         target.begin[dim] = std::min(target.begin[dim], source.begin[dim]);
@@ -158,6 +165,8 @@ void mergeSphBounds(Fixed32Range& target, Fixed32Range const& source) {
     }
 }
 
+/// Conservatively expand position bounds over a signed drift interval, accounting for
+/// periodic seams.
 Fixed32Range sweptSphBounds(Fixed32Range const& positions, Vector3<double> const& v_minus,
     Vector3<double> const& v_plus, double D) {
     Fixed32Range result = positions;
@@ -200,6 +209,8 @@ Fixed32Range sweptSphBounds(Fixed32Range const& positions, Vector3<double> const
     return result;
 }
 
+/// Update affected leaf swept bounds from velocities and propagate their union to local
+/// ancestors.
 void updateLocalSphDriftBounds(TreeId id, double driftFactor, int rung) {
     auto& node = nodes[id.index];
     // Only particles active at the last build/refit can change rung before the
@@ -245,16 +256,19 @@ void updateLocalSphDriftBounds(TreeId id, double driftFactor, int rung) {
 
 }    // namespace detail
 
+/// Expand retained local-tree swept bounds when the topology and gas count remain valid.
 void sphTreeDriftBounds(double driftFactor, int rung) {
     if (treeValid && localRootId.index >= 0 && retainedParticleCount == sphParticlesSize()) {
         detail::updateLocalSphDriftBounds(localRootId, driftFactor, rung);
     }
 }
 
+/// Assign the range of staged neighbor IDs belonging to a local node.
 void sphTreeSetNeighborRange(TreeId id, Pair<int, int> rng) {
     nodes[id.index].neighborRange = rng;
 }
 
+/// Invalidate every local leaf's stored neighbor-list range.
 void sphTreeClearNeighborRanges() {
     for (int i = 0; i < leaflist.size(); i++) {
         nodes[leaflist[i]].neighborRange.first = -1;
@@ -262,10 +276,12 @@ void sphTreeClearNeighborRanges() {
     }
 }
 
+/// Return the number of local gas-tree leaves.
 int sphTreeLeaflistSize() {
     return leaflist.size();
 }
 
+/// Return the local TreeId for a leaf-list entry.
 TreeId const sphTreeGetLeaf(int i) {
     TreeId id;
     id.index = leaflist[i];
@@ -273,10 +289,12 @@ TreeId const sphTreeGetLeaf(int i) {
     return id;
 }
 
+/// Clear the active neighbor-ID list while retaining its allocation.
 void sphTreeFreeNeighborList() {
     neighborList.resize(0);
 }
 
+/// Append neighbor IDs under the list mutex and return their starting offset.
 int sphTreeAllocateNeighborList(Vector<TreeId> const& values) {
     std::lock_guard<MutexType> lock(neighborListMutex);
     if (values.size()) {
@@ -289,14 +307,17 @@ int sphTreeAllocateNeighborList(Vector<TreeId> const& values) {
     }
 }
 
+/// Read a neighbor TreeId from the shared list by offset.
 TreeId& sphTreeGetNeighbor(int i) {
     return neighborList[i];
 }
 
+/// Return the current gas-tree node-arena size.
 long long sphTreeNodesSize() {
     return nodes.size();
 }
 
+/// Reserve another block of gas-tree node indices, failing if the arena is exhausted.
 void SphTreeAllocator::reset() {
     int const treeCacheLineSize = getOptions().compute.treeCacheLineSize;
     next_ = (nextId += treeCacheLineSize);
@@ -306,6 +327,7 @@ void SphTreeAllocator::reset() {
     }
 }
 
+/// Register a thread-local node-block allocator for coordinated arena resets.
 SphTreeAllocator::SphTreeAllocator() {
     ready_ = false;
     while (allocatorMtx++ != 0) {
@@ -315,6 +337,7 @@ SphTreeAllocator::SphTreeAllocator() {
     allocatorMtx--;
 }
 
+/// Return the next gas-tree node index, reserving a new block when necessary.
 int SphTreeAllocator::allocate() {
     if (next_ == last_) {
         reset();
@@ -323,6 +346,7 @@ int SphTreeAllocator::allocate() {
     return next_++;
 }
 
+/// Remove this allocator from the shared registration list.
 SphTreeAllocator::~SphTreeAllocator() {
     while (allocatorMtx++ != 0) {
         allocatorMtx--;
@@ -337,6 +361,7 @@ SphTreeAllocator::~SphTreeAllocator() {
     allocatorMtx--;
 }
 
+/// Build a local subtree synchronously or with bounded asynchronous branching.
 hpx::future<SphTreeCreateReturn> sphTreeCreateFork(SphTreeCreateParameters params, size_t key,
     Pair<int, int> const& processRange, Pair<ParticleInteger> const& particleRange,
     Range<double> const& box, int const depth, bool const localRoot, bool threadme) {
@@ -381,6 +406,7 @@ hpx::future<SphTreeCreateReturn> sphTreeCreateFork(SphTreeCreateParameters param
     return rc;
 }
 
+/// Prepare reusable gas-tree arenas and reset allocator blocks throughout the SPH topology.
 static void sphTreeAllocateNodes() {
     sphTreeInvalidate();
     int const treeCacheLineSize = getOptions().compute.treeCacheLineSize;
@@ -471,6 +497,8 @@ static SphTreeCreateReturn sphTreeCreateLocalRoots(SphTreeCreateParameters param
     return result;
 }
 
+/// Create the distributed forest or a validated single-locality subtree at the requested
+/// depth.
 SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
     Pair<int, int> processRange, Pair<ParticleInteger> particleRange, Range<double> box, int depth,
     bool localRoot) {
@@ -494,6 +522,8 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
     return sphTreeBuild(params, key, processRange, particleRange, box, depth, localRoot);
 }
 
+/// Partition gas recursively and build local support bounds, active counts, and retained
+/// topology metadata.
 static SphTreeCreateReturn sphTreeBuild(SphTreeCreateParameters params, size_t key,
     Pair<int, int> processRange, Pair<ParticleInteger> particleRange, Range<double> box, int depth,
     bool localRoot) {
@@ -794,6 +824,7 @@ static SphTreeCreateReturn sphTreeBuild(SphTreeCreateParameters params, size_t k
     return rc;
 }
 
+/// Refit a retained local node's support and motion bounds without rebuilding its topology.
 static SphTreeCreateReturn sphTreeRefreshNode(
     TreeId id, SphTreeCreateParameters params, double driftFactor) {
     ALWAYS_ASSERT(id.proc == hpxRank());
@@ -945,6 +976,7 @@ static SphTreeCreateReturn sphTreeRefreshLocalRoots(
     return result;
 }
 
+/// Refit all local roots, requiring valid retained topology on every locality.
 SphTreeCreateReturn sphTreeRefresh(SphTreeCreateParameters params, double driftFactor) {
     if (!sphTreeAllValid() || retainedRoot.index < 0) {
         throw std::runtime_error("Cannot refresh an invalid SPH tree; rebuild it first");
@@ -952,6 +984,7 @@ SphTreeCreateReturn sphTreeRefresh(SphTreeCreateParameters params, double driftF
     return sphTreeRefreshLocalRoots(params, driftFactor);
 }
 
+/// Invalidate distributed gas trees and optionally release their node arenas.
 void sphTreeDestroy(bool freeSphTree) {
     sphTreeInvalidate();
     Vector<hpx::future<void>> futs;
@@ -965,18 +998,22 @@ void sphTreeDestroy(bool freeSphTree) {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
+/// Set the stored active-particle count of a local node.
 void sphTreeSetNumberOfActiveParticles(TreeId id, ParticleInteger i) {
     nodes[id.index].numberOfActiveParticles = i;
 }
 
+/// Set a local node's density-convergence flag.
 void sphTreeSetConverged(TreeId id, bool c) {
     nodes[id.index].converged = c;
 }
 
+/// Return this locality's retained gas-tree root ID.
 TreeId sphTreeLocalRoot() {
     return localRootId;
 }
 
+/// Return a local node or staged remote ghost leaf, rejecting unstaged remote access.
 SphTreeNode const* sphTreeGetNode(TreeId id) {
     if (id.proc == hpxRank()) {
         ASSERT(id.index >= 0);
@@ -995,6 +1032,7 @@ SphTreeNode const* sphTreeGetNode(TreeId id) {
         hpxRank(), id.proc, id.index);
 }
 
+/// Replace a local node's inner position and outer support bounds.
 void sphTreeSetBoxes(TreeId id, Fixed32Range const& ibox, Fixed32Range const& obox) {
     nodes[id.index].outerBox = obox;
     nodes[id.index].innerBox = ibox;

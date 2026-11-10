@@ -25,6 +25,7 @@ inline constexpr int kP2LFlops = 0;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 3) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 3)
 // FMM order 3.
+/// Accumulate Newtonian local coefficients from a point mass at the supplied displacement.
 template <class Real>
 CUDA_EXPORT void P2L(Expansion<Real, 3>& L, Real mass, Vector3<Real> const& distance) {
     using namespace math;
@@ -63,6 +64,7 @@ CUDA_EXPORT void P2L(Expansion<Real, 3>& L, Real mass, Vector3<Real> const& dist
     L.yz = fma((-broadcast<Real>(k1)), t31, L.yz);
     L.xz = fma((-broadcast<Real>(k1)), t33, L.xz);
 }
+/// Accumulate Newtonian local coefficients from a point mass at the supplied displacement.
 template <class Real>
 CUDA_EXPORT void P2L(Derivatives<Real, 3>& L, Real mass, Vector3<Real> const& distance) {
     using namespace math;
@@ -109,6 +111,7 @@ inline constexpr int kP2LFlops<2> = 34;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 4) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 4)
 // FMM order 4.
+/// Accumulate Newtonian local coefficients from a point mass at the supplied displacement.
 template <class Real>
 CUDA_EXPORT void P2L(Expansion<Real, 4>& L, Real mass, Vector3<Real> const& distance) {
     using namespace math;
@@ -168,6 +171,7 @@ CUDA_EXPORT void P2L(Expansion<Real, 4>& L, Real mass, Vector3<Real> const& dist
     L.xyz = fma(broadcast<Real>(k3), t54, L.xyz);
     L.xxz = fma((-t45), t50, L.xxz);
 }
+/// Accumulate Newtonian local coefficients from a point mass at the supplied displacement.
 template <class Real>
 CUDA_EXPORT void P2L(Derivatives<Real, 4>& L, Real mass, Vector3<Real> const& distance) {
     using namespace math;
@@ -235,6 +239,7 @@ inline constexpr int kP2LFlops<3> = 60;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 5) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 5)
 // FMM order 5.
+/// Accumulate Newtonian local coefficients from a point mass at the supplied displacement.
 template <class Real>
 CUDA_EXPORT void P2L(Expansion<Real, 5>& L, Real mass, Vector3<Real> const& distance) {
     using namespace math;
@@ -327,6 +332,7 @@ CUDA_EXPORT void P2L(Expansion<Real, 5>& L, Real mass, Vector3<Real> const& dist
     L.xxyz = fma(t88, t92, L.xxyz);
     L.xxxz = fma(t78, t90, L.xxxz);
 }
+/// Accumulate Newtonian local coefficients from a point mass at the supplied displacement.
 template <class Real>
 CUDA_EXPORT void P2L(Derivatives<Real, 5>& L, Real mass, Vector3<Real> const& distance) {
     using namespace math;
@@ -427,6 +433,7 @@ inline constexpr int kP2LFlops<4> = 102;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 6) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 6)
 // FMM order 6.
+/// Accumulate Newtonian local coefficients from a point mass at the supplied displacement.
 template <class Real>
 CUDA_EXPORT void P2L(Expansion<Real, 6>& L, Real mass, Vector3<Real> const& distance) {
     using namespace math;
@@ -559,6 +566,7 @@ CUDA_EXPORT void P2L(Expansion<Real, 6>& L, Real mass, Vector3<Real> const& dist
     L.xxxyz = fma((-t122), t138, L.xxxyz);
     L.xxxxz = fma(t128, t135, L.xxxxz);
 }
+/// Accumulate Newtonian local coefficients from a point mass at the supplied displacement.
 template <class Real>
 CUDA_EXPORT void P2L(Derivatives<Real, 6>& L, Real mass, Vector3<Real> const& distance) {
     using namespace math;
@@ -699,6 +707,7 @@ inline constexpr int kP2LFlops<5> = 155;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 7) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 7)
 // FMM order 7.
+/// Accumulate Newtonian local coefficients from a point mass at the supplied displacement.
 template <class Real>
 CUDA_EXPORT void P2L(Expansion<Real, 7>& L, Real mass, Vector3<Real> const& distance) {
     using namespace math;
@@ -882,6 +891,7 @@ CUDA_EXPORT void P2L(Expansion<Real, 7>& L, Real mass, Vector3<Real> const& dist
     L.xxxxyz = fma((-t185), t202, L.xxxxyz);
     L.xxxxxz = fma((-t191), t204, L.xxxxxz);
 }
+/// Accumulate Newtonian local coefficients from a point mass at the supplied displacement.
 template <class Real>
 CUDA_EXPORT void P2L(Derivatives<Real, 7>& L, Real mass, Vector3<Real> const& distance) {
     using namespace math;
@@ -1073,6 +1083,7 @@ inline constexpr int kP2LFlops<6> = 224;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 8) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 8)
 // FMM order 8.
+/// Accumulate Newtonian local coefficients from a point mass at the supplied displacement.
 template <class Real>
 CUDA_EXPORT void P2L(Expansion<Real, 8>& L, Real mass, Vector3<Real> const& distance) {
     using namespace math;
@@ -1328,6 +1339,7 @@ CUDA_EXPORT void P2L(Expansion<Real, 8>& L, Real mass, Vector3<Real> const& dist
     L.xxxxxyz = fma(t272, t292, L.xxxxxyz);
     L.xxxxxxz = fma((-t280), t289, L.xxxxxxz);
 }
+/// Accumulate Newtonian local coefficients from a point mass at the supplied displacement.
 template <class Real>
 CUDA_EXPORT void P2L(Derivatives<Real, 8>& L, Real mass, Vector3<Real> const& distance) {
     using namespace math;
@@ -1591,6 +1603,7 @@ inline constexpr int kP2LFlops<7> = 318;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 9) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 9)
 // FMM order 9.
+/// Accumulate Newtonian local coefficients from a point mass at the supplied displacement.
 template <class Real>
 CUDA_EXPORT void P2L(Expansion<Real, 9>& L, Real mass, Vector3<Real> const& distance) {
     using namespace math;
@@ -1937,6 +1950,7 @@ CUDA_EXPORT void P2L(Expansion<Real, 9>& L, Real mass, Vector3<Real> const& dist
     L.xxxxxxyz = fma(t386, t407, L.xxxxxxyz);
     L.xxxxxxxz = fma(t394, t409, L.xxxxxxxz);
 }
+/// Accumulate Newtonian local coefficients from a point mass at the supplied displacement.
 template <class Real>
 CUDA_EXPORT void P2L(Derivatives<Real, 9>& L, Real mass, Vector3<Real> const& distance) {
     using namespace math;

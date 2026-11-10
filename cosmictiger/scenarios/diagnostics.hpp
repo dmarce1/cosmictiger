@@ -13,6 +13,7 @@ struct DiagnosticSample {
     double pressure;
     double weight;
 
+    /// Archive this record in the field order required by distributed transport.
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
         archive & position & density & pressure & weight;
