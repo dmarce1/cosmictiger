@@ -93,18 +93,6 @@ CUDA_EXPORT void evaluateGreen(Green<Real, order>& target, Vector3<Real> const& 
 }
 
 template <class Real, int order>
-CUDA_EXPORT int M2L(Expansion<Real, order>& target, Multipole<Real, order> const& source,
-    Green<Real, order> const& green, bool doPotential = true) {
-    using namespace math;
-    Real const oldPotential = target[0];
-    detail::M2L(target, source, green);
-    if (!doPotential) {
-        target[0] = oldPotential;
-    }
-    return detail::kM2LDerivativeFlops<order - 1>;
-}
-
-template <class Real, int order>
 CUDA_EXPORT int M2P(gravity::Field<Real>& target, Multipole<Real, order> const& source,
     Vector3<Real> const& displacement, bool doPotential = true) {
     using namespace math;

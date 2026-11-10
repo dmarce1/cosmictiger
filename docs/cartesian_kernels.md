@@ -13,8 +13,8 @@ supports coefficient loops and the CUDA warp translation schedule.
 The transport buffer holds the maximum supported coefficient count and
 serializes exactly `order * order` coefficients for the active order.
 The generated Cartesian operators are order-specific free functions templated
-only on `Real`. `M2L` is overloaded for a center displacement or precomputed
-Green derivatives (`Derivatives<Real, order>` aliases the existing `Green` type).
+only on `Real`. `M2L` takes the target-minus-source center displacement and
+evaluates the free-space interaction directly.
 The FMM uses the generator imported from
 [`dmarce1/experimental`](https://github.com/dmarce1/experimental/tree/7ba8f1829fdede7348a1418b7cb36c0e7a955302)
 at commit `7ba8f1829fdede7348a1418b7cb36c0e7a955302`. Its Boost license is retained
@@ -37,10 +37,11 @@ Moments are positive raw Cartesian moments multiplied by `S^rank`, and local
 coefficients are derivatives of the negative potential divided by `S^(rank+1)`,
 where `S=1000` preserves the existing numerical normalization.
 
-The imported partial-contraction M2L is used directly for exterior cell-cell
+The imported partial-contraction M2L is used directly for near-field cell-cell
 interactions; particle-cell interactions use the generated M2P. Both retain
-source dipoles. CPU SIMD and CUDA use the same generated arithmetic. P2M, L2P, and contraction against precomputed harmonic Ewald
-derivatives were added to the imported rational-expression generator.
+source dipoles. CPU SIMD and CUDA use the same generated arithmetic. P2M and
+L2P were added to the imported rational-expression generator. The periodic
+far field uses a cached spherical Ewald Green filter and Fourier contraction.
 
 The ordinary kernel emitter uses explicit `fma` with a function-local `math` import
 for single-use products
@@ -78,33 +79,13 @@ every output below the top rank owns exactly one aligned lane group inside the
 warp, that packed indices and kinds fit their fields, and that padded entries
 are kind zero.
 
-## Constant background
+## Periodic background
 
-For the unit periodic box and potential convention `Phi=-1/r`, the Ewald
-correction has Laplacian `-4*pi`. Let `r` be the minimum-image displacement and
-`R` the unwrapped displacement between the same expansion centers. Interactions
-use the harmonic function
-
-```
-H(R) = Ewald(r) + (2*pi/3) |R|^2.
-```
-
-Scalar, gradient, and Hessian terms are changed together. The complete root
-expansion receives the opposite quadratic
-
-```
-B(x) = -(2*pi/3) [M |x-C|^2 - 2 D dot (x-C) + Q],
-D = sum m (y-C),
-Q = sum m |y-C|^2.
-```
-
-`M` and `D` come from the root multipole. When potential is requested, `Q` is
-summed once over the current source-particle range across localities. It is
-never stored in source multipoles. This preserves the potential gauge as well
-as the force. Local translations and evaluation use unwrapped coordinates so
-this root polynomial translates consistently across periodic faces. Cartesian
-local expansions are harmonic; the periodic background is handled separately
-from their coefficient arrays.
+PMMM builds its periodic Green filter in the spherical basis and applies the
+far-field contraction on the mesh. The completed mesh local is converted to a
+Cartesian trace-free local for tree descent. The uniform-background curvature
+is carried separately through local translation and point evaluation; it is
+not stored in Cartesian harmonic coefficients.
 
 ## Regeneration and validation
 
@@ -127,8 +108,8 @@ range. Cartesian operators live in `kernels/cartesian_tracefree/m2l.hpp`,
 the cooperative CUDA translation is in `l2l_warp.hpp`. Spherical operators are in
 `kernels/spherical_kernels.hpp` and `kernels/spherical_ewald_kernels.hpp`.
 `operation_counts.json` accompanies the headers.
-The same Python entry point uses `tools/cartesian/ewald.py` for the Ewald
-derivatives, so generation does not require compiling a separate C++ tool.
+The same Python entry point emits the spherical Ewald Green evaluator used to
+build the PMMM filter.
 The compatibility targets `generate_cartesian_kernels` and
 `cosmictiger_generated_kernels` invoke the same explicit regeneration command.
 This command always emits orders 3 through 9, regardless of the selected
@@ -142,9 +123,8 @@ nonzero dipoles, the truncated direct-particle remainder
 series, and SIMD lanes for every order in the selected compiled range,
 printing one pass line per order with the worst normalized discrepancy it saw.
 `cartesian_kernels_cuda` executes the same operations on the device in float and
-double, one launch per order. The complete `fmmWalk` regression compares
-periodic forces and absolute potentials with an independent Ewald sum at the
-runtime order, including periodic seams and excluded inactive particles.
+double, one launch per order. The PMMM gravity tests compare periodic forces
+and potentials with an independent Ewald sum.
 
 `cartesian_l2l_cuda` independently checks every coefficient and every lane after one
 and 17 translations, both potential modes, linear fields, and
@@ -155,25 +135,10 @@ The old CUDA generator omitted the last of 616 nonpotential terms,
 `Lzzzzzz * dz^4 / 24` in `Lzz`; the repeated-shift checks detect that
 translation error at local degree six.
 
-`cartesian_ewald_cpu` also compiles the CUDA-disabled Ewald initializer and checks its
-image list, self terms, normalization, periodic potential/gradient values, and
-cubic axis-permutation symmetry at every selected order, re-filling the
-tables through `setFmmOrder` and `EwaldConst::init`. The symmetry check includes
-every derivative rank through that order's local degree. Moving the Ewald
-emitter to Python removed signed-integer overflow in ten rank-eight projection
-coefficients; Fourier table
-generation also converts factors before multiplying to avoid the same overflow.
-Equal-destination terms now accumulate in a deterministic stable order, so
-floating-point results need not be bitwise identical to the former C++ emitter.
-
-The nearest-image radial terms use a 20-term series for
-`S_l(y) = integral_0^1 t^(2l) exp(-y t^2) dt` at the highest rank, followed by
-the downward recurrence `S_(l-1) = (exp(-y) + 2 y S_l) / (2l - 1)`.
-Here `y = alpha^2 r^2 <= 3` for wrapped separations. This avoids the
-catastrophic cancellation of the former upward recurrence at small separation.
-The float derivative regression compares every stored rank against double
-precision at ten separations, including the origin and box corner, for every
-selected order. The other periodic images retain their existing `erfc` recurrence.
+The spherical Ewald kernel tests check the generated Green coefficients at the
+origin, near the origin, along coordinate axes, and at general periodic
+separations. See [the spherical Ewald documentation](generated_spherical_ewald.md)
+for its recurrence, lattice cutoff, and validation.
 
 CPU runtime validation uses `--gravity.cuda=false`. It can run in either a
 CUDA-enabled application or a CPU-only build configured with

@@ -141,9 +141,10 @@ performed during generation.
 
 ## Traces and periodic fields
 
-Spherical Ewald is a lattice correction, so it uses a general harmonic
-contraction rather than the free-space axial shortcut. The periodic background is
-handled separately from the Cartesian trace-free coefficient arrays.
+The spherical Ewald lattice correction is built into the cached PMMM Green
+filter. PMMM contracts the filter and source moments in Fourier space; its
+general harmonic contraction cannot use the free-space axial shortcut. The
+periodic background is handled separately from the trace-free coefficient arrays.
 The formulas follow
 [Nitadori's PMMM paper, Appendix B](https://arxiv.org/html/1409.5981v2).
 See [the spherical API](generated_spherical.md) and

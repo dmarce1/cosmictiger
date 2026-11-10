@@ -361,16 +361,13 @@ void testOrder() {
             setLane(z, laneIndex, shifts[laneIndex][2] + 1.75);
         }
         spherical::Green<Real, degree + 1> green;
-        spherical::Expansion<Real, degree + 1> pointLocal, derivativeLocal, selectedLocal;
+        spherical::Expansion<Real, degree + 1> pointLocal, selectedLocal;
         clear(pointLocal);
-        clear(derivativeLocal);
         clear(selectedLocal);
         spherical::detail::Green<degree>::template evaluate<Real>(green, x, y, z);
         spherical::detail::P2L<degree>::template add<Real>(pointLocal, mass, x, y, z);
-        spherical::detail::M2LDerivatives<degree>::template add<Real>(
-            derivativeLocal, source, green);
         spherical::detail::M2L<degree>::template add<Real>(selectedLocal, source, x, y, z);
-        context = "Green/P2L/arbitrary M2L/selected M2L degree " + std::to_string(degree);
+        context = "Green/P2L/selected M2L degree " + std::to_string(degree);
         for (int laneIndex = 0; laneIndex < laneCount<Real>(); ++laneIndex) {
             Point point = shifts[laneIndex];
             point[2] = lane(z, laneIndex);
@@ -378,7 +375,6 @@ void testOrder() {
             compare(green, greens, laneIndex);
             compare(pointLocal, greens, laneIndex);
             Harmonics const expected = m2l(sourceOracle[laneIndex], greens, degree, degree);
-            compare(derivativeLocal, expected, laneIndex);
             compare(selectedLocal, expected, laneIndex);
         }
     }

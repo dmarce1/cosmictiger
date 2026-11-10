@@ -62,12 +62,13 @@ use the same policy. This is an accuracy choice, not a performance claim.
 
 ## Trace and moment contracts
 
-`EwaldM2L<degree>::add<Real>(local, localTrace, moments, sourceTrace,
-                                greens, greenTrace)`
-adds the general spherical contraction with source degree at most `degree-1`
-and combined degree at most `degree`. It preserves pre-existing destination
-values. Source moments use regular harmonics of **negative** source offset,
-matching the other generated spherical kernels.
+PMMM builds an Ewald Green table when a mesh plan is first used and caches its
+Fourier transform with that plan. For cells outside the near-field mask, it adds
+the primary free-space Green coefficients to the periodic correction. The
+solver then contracts the source moments and Green filter in Fourier space,
+using combined source and local degree at most `degree`. Source moments use
+regular harmonics of **negative** source offset, matching the other generated
+spherical kernels. No pointwise Ewald M2L kernel is used in this path.
 
 The radial source moment is maintained separately from harmonic storage. P2M
 adds `mass*(x*x+y*y+z*z)` to it. For M2M with displacement `d = oldCenter-newCenter`,
@@ -77,15 +78,15 @@ This formula follows from expanding the squared source offset after translation;
 the factors of two reflect the regular-harmonic dipole normalization. The base
 harmonic P2M/M2M APIs cannot reconstruct this independent radial moment.
 
-`sourceTrace` is the raw radial second moment `sum(mass*|offset|^2)`.
-It contributes when source degree two is retained (local degree >=3).
-`greenTrace` is `4*pi/3`; `localTrace` accumulates `greenTrace*sourceMass`.
-The positive trace variable represents the physical polynomial
-`-localTrace*|offset|^2/2`. Harmonic quadrupoles cannot encode that polynomial.
-The generated contraction also includes its potential correction from
-`sourceTrace` and its gradient correction from source dipoles, following
-Nitadori's equations 38–42. This is one specific isotropic periodic trace;
-it is not the full hierarchy of traces needed for Plummer softening.
+The raw radial second moment is `sum(mass*|offset|^2)`; it contributes when
+source degree two is retained (local degree >=3). `EwaldGreen` returns the
+trace factor `4*pi/3`. PMMM applies the radial-moment and source-dipole
+corrections after its Fourier contraction, and obtains the local trace from
+the total source mass. The positive trace variable represents the physical
+polynomial `-localTrace*|offset|^2/2`, which harmonic quadrupoles cannot
+encode. These corrections follow Nitadori's equations 38–42. This is one
+specific isotropic periodic trace; it is not the full hierarchy of traces
+needed for Plummer softening.
 
 `EwaldL2L<degree>::add<Real>(output, outputTrace, source, sourceTrace,
                                 x, y, z)`
@@ -103,8 +104,8 @@ into an axisymmetric interaction.
 
 ## Counting and validation
 
-The report separates central, per-real-pair, per-reciprocal-pair, total Green,
-and general-contraction costs. Addition, subtraction, multiplication, division,
+The report separates central, per-real-pair, per-reciprocal-pair, and total
+Green costs. Addition, subtraction, multiplication, division,
 and FMA each cost one; sqrt costs seven. Sign changes, conversions, assignments,
 integer lattice control, and comparisons do not count. Exp, erfc, sin, and cos
 calls are listed separately. Pairing and compensated accumulation are included.
@@ -116,8 +117,7 @@ instruction counts; float promotion does not alter the counted expression DAG.
 the selected compiled range, float and double, origin and near-origin,
 Cartesian axes, general positions, and box corners. It compares all coefficients to an independent complex
 recurrence, Gaussian quadrature central term, explicit finite gamma sums, and
-an unpaired, larger lattice. It also checks nonzero source dipoles and radial
-traces, destination accumulation, trace-aware translations and point evaluation,
+an unpaired, larger lattice. It also checks trace-aware translations and point evaluation,
 heterogeneous SIMD lanes, and exact executed-source arithmetic counts using an
 instrumented scalar. CUDA compilation and execution are separate validation
 layers; the host suite does not establish a CUDA runtime result.

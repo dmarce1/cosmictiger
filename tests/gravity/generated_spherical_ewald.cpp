@@ -166,14 +166,6 @@ std::vector<Complex> regular(int degree, Point p) {
     return result;
 }
 
-Complex get(std::vector<Complex> const& values, int n, int m) {
-    if (std::abs(m) > n) {
-        return 0;
-    }
-    auto const value = values[index(n, std::abs(m))];
-    return m >= 0 ? value : (m % 2 ? -1. : 1.) * std::conj(value);
-}
-
 std::array<std::array<double, 2>, 32> quadrature() {
     std::array<std::array<double, 2>, 32> result{};
     for (int node = 0; node < 32; ++node) {
@@ -306,49 +298,6 @@ void scalarCases() {
                     "Green harmonic");
             }
         }
-        Point const source{.013, -.009, .007};
-        auto const sourceHarmonics = regular(degree - 1, {-source[0], -source[1], -source[2]});
-        std::array<Real, degree * degree> moments{};
-        for (int n = 0; n < degree; ++n) {
-            for (int m = -n; m <= n; ++m) {
-                moments[index(n, m)] = Real(m >= 0 ? sourceHarmonics[index(n, m)].real() :
-                                                     sourceHarmonics[index(n, -m)].imag());
-            }
-        }
-        double const sourceTrace =
-            source[0] * source[0] + source[1] * source[1] + source[2] * source[2];
-        std::array<Real, kCount> local{};
-        local.fill(Real(.125));
-        Real localTrace = Real(.25);
-        EwaldM2L<degree>::template add<Real>(
-            local, localTrace, moments, Real(sourceTrace), greens, trace);
-        for (int n = 0; n <= degree; ++n) {
-            for (int m = 0; m <= n; ++m) {
-                Complex expected{};
-                for (int k = 0; k <= std::min(degree - n, degree - 1); ++k) {
-                    for (int l = -k; l <= k; ++l) {
-                        expected +=
-                            std::conj(get(sourceHarmonics, k, l)) * get(exact, n + k, m + l);
-                    }
-                }
-                if (n == 0 && degree >= 3) {
-                    expected -= .5 * (4 * kPi / 3) * sourceTrace;
-                }
-                if (n == 1 && m == 0) {
-                    expected += (4 * kPi / 3) * source[2];
-                }
-                if (n == 1 && m == 1) {
-                    expected += (4 * kPi / 3) * Complex(source[0], source[1]);
-                }
-                double const tolerance =
-                    std::max(epsilon * 10, 3e-9) * std::max(1., std::abs(expected));
-                near(local[index(n, m)], .125 + expected.real(), tolerance, "M2L real");
-                if (m) {
-                    near(local[index(n, -m)], .125 + expected.imag(), tolerance, "M2L imaginary");
-                }
-            }
-        }
-        near(localTrace, .25 + 4 * kPi / 3, epsilon, "M2L trace accumulation");
     }
     // Pure background tests isolate its signs and accumulation from harmonics.
     std::array<Real, kCount> zero{}, shifted{};
@@ -402,19 +351,13 @@ void typedTraceCases() {
 template <int degree>
 void countCase() {
     using namespace cosmictiger::gravity::spherical;
-    std::array<counted::Real, (degree + 1) * (degree + 1)> greens{}, local{};
-    std::array<counted::Real, degree * degree> source{};
-    counted::Real trace{}, localTrace{};
+    std::array<counted::Real, (degree + 1) * (degree + 1)> greens{};
+    counted::Real trace{};
     counted::operations = 0;
     EwaldGreen<degree>::template evaluate<counted::Real>(
         greens, trace, counted::Real(.2), counted::Real(-.1), counted::Real(.3));
     near(double(counted::operations), EwaldGreen<degree>::kFlops_, 0,
         "Ewald emitted arithmetic count");
-    counted::operations = 0;
-    EwaldM2L<degree>::template add<counted::Real>(
-        local, localTrace, source, counted::Real(.01), greens, trace);
-    near(double(counted::operations), EwaldM2L<degree>::kFlops_, 0,
-        "Ewald contraction arithmetic count");
 }
 
 template <int degree, typename Scalar>

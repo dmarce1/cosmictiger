@@ -126,11 +126,6 @@ namespace detail {
         spherical::EwaldL2L<kDegree>::template add<Real>(translated, translatedTrace, countedLocal,
             Real(0.2), Real(point[0]), Real(point[1]), Real(point[2]));
         EXPECT_EQ(spherical::EwaldL2L<kDegree>::kConventionalFlops_, Real::count());
-
-        Real::reset();
-        spherical::EwaldM2L<kDegree>::template add<Real>(
-            translated, translatedTrace, countedMoments, Real(0.1), countedLocal, Real(0.2));
-        EXPECT_EQ(spherical::EwaldM2L<kDegree>::kConventionalFlops_, Real::count());
     }
 
 }    // namespace detail

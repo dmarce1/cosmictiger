@@ -50,8 +50,7 @@ struct KernelLayout {
     static constexpr int kL2lOffset_ = kM2lOffset_ + kLocalHarmonicCount_;
     static constexpr int kM2pOffset_ = kL2lOffset_ + kLocalCount_;
     static constexpr int kL2pOffset_ = kM2pOffset_ + kFieldCount;
-    static constexpr int kEwaldM2lOffset_ = kL2pOffset_ + kFieldCount;
-    static constexpr int kResultCount_ = kEwaldM2lOffset_ + kLocalHarmonicCount_;
+    static constexpr int kResultCount_ = kL2pOffset_ + kFieldCount;
 };
 
 template <typename Real, int count>
@@ -85,7 +84,6 @@ CUDA_EXPORT void evaluateKernels(
     using Layout = KernelLayout<order>;
     using Multipole = cosmictiger::gravity::cartesian::tracefree::Multipole<Real, order>;
     using Expansion = cosmictiger::gravity::cartesian::tracefree::Expansion<Real, order>;
-    using Green = cosmictiger::gravity::cartesian::tracefree::Green<Real, order>;
     using Field = cosmictiger::gravity::Field<Real>;
     auto const& g = input.geometry;
     Vector3<Real> const separation{g[0], g[1], g[2]};
@@ -116,13 +114,6 @@ CUDA_EXPORT void evaluateKernels(
     Field l2p{};
     kernels::L2P(l2p, input.local, translation, g[8]);
     store(l2p, Layout::kL2pOffset_, kFieldCount);
-    Green derivatives{};
-    for (int i = 0; i < Layout::kLocalCount_; i++) {
-        derivatives[i] = input.local[i];
-    }
-    Expansion ewald{};
-    kernels::M2L(ewald, input.multipole, derivatives);
-    store(ewald, Layout::kEwaldM2lOffset_, Layout::kLocalHarmonicCount_);
 }
 
 template <typename Real, int order>

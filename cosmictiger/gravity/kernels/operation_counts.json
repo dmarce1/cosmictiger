@@ -19,20 +19,6 @@
     },
     {
       "arithmetic": {
-        "*": 4,
-        "+": 1,
-        "fma": 17
-      },
-      "accumulations": 4,
-      "fused_accumulations": 5,
-      "weighted_flops": 26,
-      "conventional_flops": 43,
-      "operator": "EwaldM2L",
-      "source_order": 1,
-      "order": 2
-    },
-    {
-      "arithmetic": {
         "*": 36,
         "+": 4,
         "-": 6,
@@ -44,21 +30,6 @@
       "conventional_flops": 128,
       "expansion_order": 3,
       "source_order": 2
-    },
-    {
-      "arithmetic": {
-        "*": 25,
-        "+": 5,
-        "-": 4,
-        "fma": 54
-      },
-      "accumulations": 9,
-      "fused_accumulations": 7,
-      "weighted_flops": 97,
-      "conventional_flops": 151,
-      "operator": "EwaldM2L",
-      "source_order": 2,
-      "order": 3
     },
     {
       "arithmetic": {
@@ -76,21 +47,6 @@
     },
     {
       "arithmetic": {
-        "*": 88,
-        "+": 15,
-        "-": 8,
-        "fma": 142
-      },
-      "accumulations": 16,
-      "fused_accumulations": 9,
-      "weighted_flops": 269,
-      "conventional_flops": 411,
-      "operator": "EwaldM2L",
-      "source_order": 3,
-      "order": 4
-    },
-    {
-      "arithmetic": {
         "*": 125,
         "+": 20,
         "-": 42,
@@ -102,21 +58,6 @@
       "conventional_flops": 571,
       "expansion_order": 5,
       "source_order": 4
-    },
-    {
-      "arithmetic": {
-        "*": 230,
-        "+": 33,
-        "-": 13,
-        "fma": 316
-      },
-      "accumulations": 25,
-      "fused_accumulations": 11,
-      "weighted_flops": 617,
-      "conventional_flops": 933,
-      "operator": "EwaldM2L",
-      "source_order": 4,
-      "order": 5
     },
     {
       "arithmetic": {
@@ -134,21 +75,6 @@
     },
     {
       "arithmetic": {
-        "*": 499,
-        "+": 61,
-        "-": 19,
-        "fma": 625
-      },
-      "accumulations": 36,
-      "fused_accumulations": 13,
-      "weighted_flops": 1240,
-      "conventional_flops": 1865,
-      "operator": "EwaldM2L",
-      "source_order": 5,
-      "order": 6
-    },
-    {
-      "arithmetic": {
         "*": 345,
         "+": 82,
         "-": 127,
@@ -163,21 +89,6 @@
     },
     {
       "arithmetic": {
-        "*": 959,
-        "+": 101,
-        "-": 26,
-        "fma": 1133
-      },
-      "accumulations": 49,
-      "fused_accumulations": 15,
-      "weighted_flops": 2268,
-      "conventional_flops": 3401,
-      "operator": "EwaldM2L",
-      "source_order": 6,
-      "order": 7
-    },
-    {
-      "arithmetic": {
         "*": 539,
         "+": 187,
         "-": 171,
@@ -189,21 +100,6 @@
       "conventional_flops": 3173,
       "expansion_order": 8,
       "source_order": 7
-    },
-    {
-      "arithmetic": {
-        "*": 1691,
-        "+": 155,
-        "-": 34,
-        "fma": 1921
-      },
-      "accumulations": 64,
-      "fused_accumulations": 17,
-      "weighted_flops": 3865,
-      "conventional_flops": 5786,
-      "operator": "EwaldM2L",
-      "source_order": 7,
-      "order": 8
     }
   ],
   "operators": [
@@ -937,18 +833,6 @@
           "conventional_flops": 28
         },
         {
-          "operator": "M2lDerivatives",
-          "degree": 2,
-          "variant": null,
-          "arithmetic": {
-            "multiply": 6,
-            "fma": 19,
-            "add": 4
-          },
-          "weighted_flops": 29,
-          "conventional_flops": 48
-        },
-        {
           "operator": "M2m",
           "degree": 1,
           "variant": 0,
@@ -1211,18 +1095,6 @@
           "conventional_flops": 50
         },
         {
-          "operator": "M2lDerivatives",
-          "degree": 3,
-          "variant": null,
-          "arithmetic": {
-            "multiply": 15,
-            "fma": 68,
-            "add": 9
-          },
-          "weighted_flops": 92,
-          "conventional_flops": 160
-        },
-        {
           "operator": "M2m",
           "degree": 2,
           "variant": 0,
@@ -1483,18 +1355,6 @@
           },
           "weighted_flops": 68,
           "conventional_flops": 79
-        },
-        {
-          "operator": "M2lDerivatives",
-          "degree": 4,
-          "variant": null,
-          "arithmetic": {
-            "multiply": 28,
-            "fma": 176,
-            "add": 16
-          },
-          "weighted_flops": 220,
-          "conventional_flops": 396
         },
         {
           "operator": "M2m",
@@ -1761,18 +1621,6 @@
           "conventional_flops": 115
         },
         {
-          "operator": "M2lDerivatives",
-          "degree": 5,
-          "variant": null,
-          "arithmetic": {
-            "multiply": 45,
-            "fma": 379,
-            "add": 25
-          },
-          "weighted_flops": 449,
-          "conventional_flops": 828
-        },
-        {
           "operator": "M2m",
           "degree": 4,
           "variant": 0,
@@ -2034,18 +1882,6 @@
           },
           "weighted_flops": 125,
           "conventional_flops": 156
-        },
-        {
-          "operator": "M2lDerivatives",
-          "degree": 6,
-          "variant": null,
-          "arithmetic": {
-            "multiply": 66,
-            "fma": 719,
-            "add": 36
-          },
-          "weighted_flops": 821,
-          "conventional_flops": 1540
         },
         {
           "operator": "M2m",
@@ -2312,18 +2148,6 @@
           "conventional_flops": 206
         },
         {
-          "operator": "M2lDerivatives",
-          "degree": 7,
-          "variant": null,
-          "arithmetic": {
-            "multiply": 91,
-            "fma": 1248,
-            "add": 49
-          },
-          "weighted_flops": 1388,
-          "conventional_flops": 2636
-        },
-        {
           "operator": "M2m",
           "degree": 6,
           "variant": 0,
@@ -2585,18 +2409,6 @@
           },
           "weighted_flops": 203,
           "conventional_flops": 262
-        },
-        {
-          "operator": "M2lDerivatives",
-          "degree": 8,
-          "variant": null,
-          "arithmetic": {
-            "multiply": 120,
-            "fma": 2024,
-            "add": 64
-          },
-          "weighted_flops": 2208,
-          "conventional_flops": 4232
         },
         {
           "operator": "M2m",
@@ -3268,19 +3080,16 @@
       "orders": {
         "3": {
           "local_degree": 2,
-          "source_degree": 1,
           "real_image_count": 924,
           "reciprocal_pair_count": 462,
           "central_weighted_flops": 330,
           "real_pair_weighted_flops": 167,
           "reciprocal_pair_weighted_flops": 80,
           "green_weighted_flops": 114444,
-          "contraction_weighted_flops": 35,
           "central_conventional_flops": 480,
           "real_pair_conventional_flops": 169,
           "reciprocal_pair_conventional_flops": 88,
           "green_conventional_flops": 119214,
-          "contraction_conventional_flops": 58,
           "special_function_calls": {
             "exp": 1387,
             "erfc": 924,
@@ -3291,19 +3100,16 @@
         },
         "4": {
           "local_degree": 3,
-          "source_degree": 2,
           "real_image_count": 924,
           "reciprocal_pair_count": 462,
           "central_weighted_flops": 461,
           "real_pair_weighted_flops": 278,
           "reciprocal_pair_weighted_flops": 143,
           "green_weighted_flops": 194963,
-          "contraction_weighted_flops": 100,
           "central_conventional_flops": 664,
           "real_pair_conventional_flops": 290,
           "reciprocal_pair_conventional_flops": 156,
           "green_conventional_flops": 206716,
-          "contraction_conventional_flops": 173,
           "special_function_calls": {
             "exp": 1387,
             "erfc": 924,
@@ -3314,19 +3120,16 @@
         },
         "5": {
           "local_degree": 4,
-          "source_degree": 3,
           "real_image_count": 924,
           "reciprocal_pair_count": 462,
           "central_weighted_flops": 603,
           "real_pair_weighted_flops": 421,
           "reciprocal_pair_weighted_flops": 225,
           "green_weighted_flops": 299055,
-          "contraction_weighted_flops": 228,
           "central_conventional_flops": 861,
           "real_pair_conventional_flops": 447,
           "reciprocal_pair_conventional_flops": 245,
           "green_conventional_flops": 320565,
-          "contraction_conventional_flops": 409,
           "special_function_calls": {
             "exp": 1387,
             "erfc": 924,
@@ -3337,19 +3140,16 @@
         },
         "6": {
           "local_degree": 5,
-          "source_degree": 4,
           "real_image_count": 924,
           "reciprocal_pair_count": 462,
           "central_weighted_flops": 756,
           "real_pair_weighted_flops": 596,
           "reciprocal_pair_weighted_flops": 326,
           "green_weighted_flops": 426720,
-          "contraction_weighted_flops": 457,
           "central_conventional_flops": 1071,
           "real_pair_conventional_flops": 640,
           "reciprocal_pair_conventional_flops": 355,
           "green_conventional_flops": 460761,
-          "contraction_conventional_flops": 841,
           "special_function_calls": {
             "exp": 1387,
             "erfc": 924,
@@ -3360,19 +3160,16 @@
         },
         "7": {
           "local_degree": 6,
-          "source_degree": 5,
           "real_image_count": 924,
           "reciprocal_pair_count": 462,
           "central_weighted_flops": 920,
           "real_pair_weighted_flops": 803,
           "reciprocal_pair_weighted_flops": 446,
           "green_weighted_flops": 577958,
-          "contraction_weighted_flops": 829,
           "central_conventional_flops": 1294,
           "real_pair_conventional_flops": 869,
           "reciprocal_pair_conventional_flops": 486,
           "green_conventional_flops": 627304,
-          "contraction_conventional_flops": 1553,
           "special_function_calls": {
             "exp": 1387,
             "erfc": 924,
@@ -3383,19 +3180,16 @@
         },
         "8": {
           "local_degree": 7,
-          "source_degree": 6,
           "real_image_count": 924,
           "reciprocal_pair_count": 462,
           "central_weighted_flops": 1095,
           "real_pair_weighted_flops": 1042,
           "reciprocal_pair_weighted_flops": 585,
           "green_weighted_flops": 752769,
-          "contraction_weighted_flops": 1396,
           "central_conventional_flops": 1530,
           "real_pair_conventional_flops": 1134,
           "reciprocal_pair_conventional_flops": 638,
           "green_conventional_flops": 820194,
-          "contraction_conventional_flops": 2649,
           "special_function_calls": {
             "exp": 1387,
             "erfc": 924,
@@ -3406,19 +3200,16 @@
         },
         "9": {
           "local_degree": 8,
-          "source_degree": 7,
           "real_image_count": 924,
           "reciprocal_pair_count": 462,
           "central_weighted_flops": 1281,
           "real_pair_weighted_flops": 1313,
           "reciprocal_pair_weighted_flops": 743,
           "green_weighted_flops": 951153,
-          "contraction_weighted_flops": 2216,
           "central_conventional_flops": 1779,
           "real_pair_conventional_flops": 1435,
           "reciprocal_pair_conventional_flops": 811,
           "green_conventional_flops": 1039431,
-          "contraction_conventional_flops": 4245,
           "special_function_calls": {
             "exp": 1387,
             "erfc": 924,
@@ -3627,20 +3418,6 @@
         },
         {
           "arithmetic": {
-            "*": 4,
-            "+": 1,
-            "fma": 17
-          },
-          "accumulations": 4,
-          "fused_accumulations": 5,
-          "weighted_flops": 26,
-          "conventional_flops": 43,
-          "operator": "EwaldM2L",
-          "source_order": 1,
-          "order": 2
-        },
-        {
-          "arithmetic": {
             "*": 36,
             "+": 4,
             "-": 6,
@@ -3652,21 +3429,6 @@
           "conventional_flops": 128,
           "expansion_order": 3,
           "source_order": 2
-        },
-        {
-          "arithmetic": {
-            "*": 25,
-            "+": 5,
-            "-": 4,
-            "fma": 54
-          },
-          "accumulations": 9,
-          "fused_accumulations": 7,
-          "weighted_flops": 97,
-          "conventional_flops": 151,
-          "operator": "EwaldM2L",
-          "source_order": 2,
-          "order": 3
         },
         {
           "arithmetic": {
@@ -3684,21 +3446,6 @@
         },
         {
           "arithmetic": {
-            "*": 88,
-            "+": 15,
-            "-": 8,
-            "fma": 142
-          },
-          "accumulations": 16,
-          "fused_accumulations": 9,
-          "weighted_flops": 269,
-          "conventional_flops": 411,
-          "operator": "EwaldM2L",
-          "source_order": 3,
-          "order": 4
-        },
-        {
-          "arithmetic": {
             "*": 125,
             "+": 20,
             "-": 42,
@@ -3710,21 +3457,6 @@
           "conventional_flops": 571,
           "expansion_order": 5,
           "source_order": 4
-        },
-        {
-          "arithmetic": {
-            "*": 230,
-            "+": 33,
-            "-": 13,
-            "fma": 316
-          },
-          "accumulations": 25,
-          "fused_accumulations": 11,
-          "weighted_flops": 617,
-          "conventional_flops": 933,
-          "operator": "EwaldM2L",
-          "source_order": 4,
-          "order": 5
         },
         {
           "arithmetic": {
@@ -3742,21 +3474,6 @@
         },
         {
           "arithmetic": {
-            "*": 499,
-            "+": 61,
-            "-": 19,
-            "fma": 625
-          },
-          "accumulations": 36,
-          "fused_accumulations": 13,
-          "weighted_flops": 1240,
-          "conventional_flops": 1865,
-          "operator": "EwaldM2L",
-          "source_order": 5,
-          "order": 6
-        },
-        {
-          "arithmetic": {
             "*": 345,
             "+": 82,
             "-": 127,
@@ -3771,21 +3488,6 @@
         },
         {
           "arithmetic": {
-            "*": 959,
-            "+": 101,
-            "-": 26,
-            "fma": 1133
-          },
-          "accumulations": 49,
-          "fused_accumulations": 15,
-          "weighted_flops": 2268,
-          "conventional_flops": 3401,
-          "operator": "EwaldM2L",
-          "source_order": 6,
-          "order": 7
-        },
-        {
-          "arithmetic": {
             "*": 539,
             "+": 187,
             "-": 171,
@@ -3797,21 +3499,6 @@
           "conventional_flops": 3173,
           "expansion_order": 8,
           "source_order": 7
-        },
-        {
-          "arithmetic": {
-            "*": 1691,
-            "+": 155,
-            "-": 34,
-            "fma": 1921
-          },
-          "accumulations": 64,
-          "fused_accumulations": 17,
-          "weighted_flops": 3865,
-          "conventional_flops": 5786,
-          "operator": "EwaldM2L",
-          "source_order": 7,
-          "order": 8
         }
       ],
       "operators": [

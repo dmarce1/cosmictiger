@@ -488,10 +488,8 @@ set(COSMICTIGER_GENERATED_FMM_FILES
     ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/l2l.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/l2p.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/green.hpp
-    ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/m2l_derivatives.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/ewald_common.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/ewald_green.hpp
-    ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/ewald_m2l.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/ewald_l2l.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/ewald_l2p.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/operation_counts.json)

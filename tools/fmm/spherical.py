@@ -447,7 +447,7 @@ def axialSingular(g,degree,inverseRadius):
 
 
 def operatorName(operation):
-    return {'Greens':'Green', 'M2lDerivatives':'M2LDerivatives'}.get(operation,operation.upper())
+    return {'Greens':'Green'}.get(operation,operation.upper())
 
 
 def generateVariant(operation,degree,variant):
@@ -510,8 +510,6 @@ def generateSimple(operation,degree):
         values = regular(g,degree,*[g.negate(v) for v in (x,y,z)])
     elif operation in ('P2l','Greens'):
         values = singular(g,degree,x,y,z)
-    elif operation == 'M2lDerivatives':
-        values = contraction(g,symbols(g,'source',degree-1),symbols(g,'derivatives',degree),degree-1,degree,degree)
     else:
         raise ValueError(operation)
     outputs = pack(values)
@@ -543,9 +541,9 @@ namespace cosmictiger::gravity::spherical::detail {
 
 
 def generate(minLocalDegree=2,maxLocalDegree=8):
-    operations = ('P2m','P2l','M2m','M2l','M2p','L2l','L2p','Greens','M2lDerivatives')
+    operations = ('P2m','P2l','M2m','M2l','M2p','L2l','L2p','Greens')
     filenames = {operation: 'spherical/' + {
-        'Greens': 'green', 'M2lDerivatives': 'm2l_derivatives'
+        'Greens': 'green'
     }.get(operation, operation.lower()) + '.hpp' for operation in operations}
     parts = {}
     for operation in operations:
@@ -557,7 +555,7 @@ def generate(minLocalDegree=2,maxLocalDegree=8):
     for localDegree in range(minLocalDegree,maxLocalDegree+1):
         guard = (f'#if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= {localDegree + 1}) && '
                  f'(!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= {localDegree + 1})')
-        for operation in ('P2m','P2l','Greens','M2lDerivatives'):
+        for operation in ('P2m','P2l','Greens'):
             degree = localDegree-1 if operation=='P2m' else localDegree
             code,stats = generateSimple(operation,degree)
             parts[operation].extend((guard, code, '#endif'))

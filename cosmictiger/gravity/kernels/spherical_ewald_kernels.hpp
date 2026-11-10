@@ -17,5 +17,4 @@
 #include <cosmictiger/gravity/kernels/spherical/ewald_green.hpp>
 #include <cosmictiger/gravity/kernels/spherical/ewald_l2l.hpp>
 #include <cosmictiger/gravity/kernels/spherical/ewald_l2p.hpp>
-#include <cosmictiger/gravity/kernels/spherical/ewald_m2l.hpp>
 #include <cosmictiger/gravity/kernels/spherical_kernels.hpp>

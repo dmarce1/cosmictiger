@@ -6,7 +6,7 @@
 
 // Symbol directory (typed real-spherical FMM operators):
 // M: source or destination multipole; L: source or destination local expansion.
-// G: free-space or periodic Green harmonics; R: source-target separation radius.
+// G: free-space Green harmonics; R: source-target separation radius.
 // The radial source moment is independent of the harmonic coefficients.
 // A completed periodic local may use an implicit known background curvature.
 
@@ -100,18 +100,6 @@ CUDA_EXPORT void evaluateGreen(Green<Real, order>& target, Vector3<Real> const& 
 }
 
 template <class Real, int order>
-CUDA_EXPORT int M2L(Expansion<Real, order>& target, Multipole<Real, order> const& source,
-    Green<Real, order> const& green, bool doPotential = true) {
-    using namespace math;
-    Real const oldPotential = target[0];
-    detail::M2LDerivatives<order - 1>::template add<Real>(target, source, green);
-    if (!doPotential) {
-        target[0] = oldPotential;
-    }
-    return detail::M2LDerivatives<order - 1>::kFlops_;
-}
-
-template <class Real, int order>
 CUDA_EXPORT int M2P(gravity::Field<Real>& target, Multipole<Real, order> const& source,
     Vector3<Real> const& displacement, bool doPotential = true) {
     using namespace math;
@@ -198,21 +186,6 @@ CUDA_EXPORT int evaluatePeriodicLocal(gravity::Field<Real>& target,
         target[0] = math::fma(curvature * broadcast<Real>(0.5) * z, z, target[0]);
     }
     return flops + (doPotential ? 5 : 2);
-}
-
-// The periodic Laplacian is independent of the harmonic coefficients.
-template <class Real, int order>
-CUDA_EXPORT int M2L(Expansion<Real, order>& target, Real& localTrace,
-    Multipole<Real, order> const& source, Real sourceTrace, Green<Real, order> const& green,
-    Real greenTrace, bool doPotential = true) {
-    using namespace math;
-    Real const oldPotential = target[0];
-    EwaldM2L<order - 1>::template add<Real>(
-        target, localTrace, source, sourceTrace, green, greenTrace);
-    if (!doPotential) {
-        target[0] = oldPotential;
-    }
-    return EwaldM2L<order - 1>::kFlops_;
 }
 
 template <class Real, int order>

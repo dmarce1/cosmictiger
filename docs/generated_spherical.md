@@ -58,7 +58,6 @@ the emitter.
 | `L2P<L>` | `add(field,source,x,y,z)` |
 | `P2L<L>` | `add(output,mass,x,y,z)` |
 | `Green<L>` | `evaluate(output,x,y,z)` (overwrites) |
-| `M2LDerivatives<L>` | `add(output,source,derivatives)` |
 
 Here `S=L-1`. M2M displacement is the old source center minus the new source
 center. L2L displacement is the new local center minus the old local center;
@@ -67,9 +66,12 @@ source center. M2L and Green functions use target center/point minus source
 center. Free-space singular kernels require nonzero separation. Translations
 accept zero displacement, either axis sign and heterogeneous SIMD lanes.
 
-`M2LDerivatives` contracts a general spherical Green array. A periodic
-uniform-background quadratic needs an additional scalar trace; use the Ewald
-API described in `generated_spherical_ewald.md` rather than dropping it.
+The PMMM far field uses the generated `Green` evaluator to add the primary
+free-space interaction outside its near-field mask. It builds and caches the
+periodic Ewald Green filter separately, then contracts source moments and that
+filter in Fourier space. The periodic uniform-background quadratic is handled
+outside the harmonic coefficient arrays, as described in
+`generated_spherical_ewald.md`.
 
 ## Rotation choices and costs
 
