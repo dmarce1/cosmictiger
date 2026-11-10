@@ -33,7 +33,8 @@ The C++ namespaces are `cosmictiger::gravity::cartesian` and
 and `Green` types. Cartesian provides the destination-first tree operators;
 the generated spherical free functions used by PMMM are `P2M`, `evaluateGreen`, and `L2P`,
 plus `evaluateEwaldGreen` and `ewaldL2P`. Field acceleration is minus the potential
-gradient. There are no implicit conversions between representations. Cartesian
+gradient. Explicit casts convert Cartesian multipoles to spherical multipoles and spherical
+expansions to Cartesian expansions at the same order and scalar type. Cartesian
 callers include `cartesian_tracefree_operators.hpp` and qualify
 `cartesian` (or use ADL with its types).
 
@@ -41,6 +42,14 @@ callers include `cartesian_tracefree_operators.hpp` and qualify
 have degree `order - 1`. The generated implementation functions take degrees.
 Types use PascalCase, functions and variables camelCase, and namespaces and
 filenames snake_case, with the standard FMM operator abbreviations retained.
+
+Numerical coefficients are declared at each kernel function's entry as `k0`,
+`k1`, and so on, using `Scalar = SimdScalar<Real>` so they remain scalar
+`constexpr` values for both scalar and SIMD instantiations. Literals use a
+leading sign, uppercase `E`, and 17 digits after the decimal point; exact
+rational coefficients are rounded in decimal before conversion to `Scalar`.
+Opposite signs share one nonnegative magnitude, with negation at the use site.
+Integer indices, template arguments, and loop bounds are not coefficients.
 
 ## Generate and verify
 
@@ -59,6 +68,8 @@ Generated headers and their operation report are checked in under
   contains one Cartesian operator per header, with `geometry.hpp` for radius work.
 - `spherical_kernels.hpp` and `spherical_ewald_kernels.hpp` contain the
   spherical kernels.
+- `basis_conversion.hpp` defines the explicit coefficient casts; both type headers
+  include these definitions. `spherical_types.hpp` is generated with its cast declarations.
 - `operation_counts.json` records the generated arithmetic counts and selections.
 
 The generator defaults to this source directory and emits both families for

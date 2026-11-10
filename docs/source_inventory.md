@@ -109,7 +109,7 @@ imply that an optional backend is enabled or that every declared path runs in pr
 | [cosmictiger/gravity/gravity.hpp](../cosmictiger/gravity/gravity.hpp) | Particle/cell force kernels, softening helpers, and gravity work counters. |
 | [cosmictiger/gravity/gravity_cpu.hpp](../cosmictiger/gravity/gravity_cpu.hpp) | CPU/SIMD cell-cell, cell-particle, and particle-cell FMM interactions. |
 | [cosmictiger/gravity/gravity_cuda.hpp](../cosmictiger/gravity/gravity_cuda.hpp) | Cooperative CUDA staging and direct particle/cell interaction kernels. |
-| [cosmictiger/gravity/kernels/basis_conversion.hpp](../cosmictiger/gravity/kernels/basis_conversion.hpp) | Generated Cartesian-source to spherical and spherical-local to Cartesian basis conversions. |
+| [cosmictiger/gravity/kernels/basis_conversion.hpp](../cosmictiger/gravity/kernels/basis_conversion.hpp) | Generated explicit Cartesian-multipole to spherical and spherical-expansion to Cartesian cast definitions. |
 | [cosmictiger/gravity/kernels/cartesian_tracefree/geometry.hpp](../cosmictiger/gravity/kernels/cartesian_tracefree/geometry.hpp) | Inverse-radius geometry helpers for Cartesian FMM operators. |
 | [cosmictiger/gravity/kernels/cartesian_tracefree/l2l.hpp](../cosmictiger/gravity/kernels/cartesian_tracefree/l2l.hpp) | Generated Cartesian trace-free kernels to translate a local expansion to a displaced center. |
 | [cosmictiger/gravity/kernels/cartesian_tracefree/l2l_warp.hpp](../cosmictiger/gravity/kernels/cartesian_tracefree/l2l_warp.hpp) | Generated warp-cooperative CUDA local-expansion translation. |

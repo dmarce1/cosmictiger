@@ -21,11 +21,15 @@ template <class Real>
 CUDA_EXPORT Real inverseRadius(Vector3<Real> const& distance) {
     using namespace math;
     Fma const fma{};
+    using Scalar = SimdScalar<Real>;
+    constexpr auto k0 = static_cast<Scalar>(+0.00000000000000000E+00);
+    constexpr auto k1 = static_cast<Scalar>(+1.00000000000000000E+00);
+    constexpr auto k2 = static_cast<Scalar>(+1.00000000000000000E-20);
     Real const dx = distance[0];
     Real const dy = distance[1];
     Real const dz = distance[2];
     Real const R = sqrt(fma(dx, dx, fma(dy, dy, dz * dz)));
-    return select(R > broadcast<Real>(0), broadcast<Real>(1), broadcast<Real>(0)) /
-        max(R, broadcast<Real>(1.0e-20));
+    return select(R > broadcast<Real>(k0), broadcast<Real>(k1), broadcast<Real>(k0)) /
+        max(R, broadcast<Real>(k2));
 }
 }    // namespace cosmictiger::gravity::cartesian::detail

@@ -57,6 +57,7 @@ inline CountingReal operator/(CountingReal a, CountingReal b) {
 inline bool operator==(CountingReal a, CountingReal b) { return a.value == b.value; }
 inline bool operator<(CountingReal a, CountingReal b) { return a.value < b.value; }
 inline bool operator>(CountingReal a, CountingReal b) { return a.value > b.value; }
+template <typename Real> using SimdScalar = typename Real::value_type;
 namespace math {
 template <typename Real, typename Value>
 Real broadcast(Value value) { return Real(value); }
@@ -126,12 +127,12 @@ def appendAvailabilityChecks(lines, report, minFmmOrder, maxFmmOrder):
         'template <int order> concept HasSourceConversion = requires(',
         '    cosmictiger::gravity::spherical::Multipole<CountingReal, order>& S,',
         '    cosmictiger::gravity::cartesian::Multipole<CountingReal, order> const& C) {',
-        '    cosmictiger::gravity::basis_conversion::sourceToSpherical(S, C);',
+        '    static_cast<cosmictiger::gravity::spherical::Multipole<CountingReal, order>>(C);',
         '};',
         'template <int order> concept HasLocalConversion = requires(',
         '    cosmictiger::gravity::cartesian::Expansion<CountingReal, order>& C,',
         '    cosmictiger::gravity::spherical::Expansion<CountingReal, order> const& L) {',
-        '    cosmictiger::gravity::basis_conversion::localToCartesian(C, L);',
+        '    static_cast<cosmictiger::gravity::cartesian::Expansion<CountingReal, order>>(L);',
         '};',
     ])
     for order in range(report['min_local_degree'] + 1, report['max_local_degree'] + 2):
@@ -231,7 +232,7 @@ def buildChecks(report, minFmmOrder, maxFmmOrder):
         name, order = kernel['operator'], kernel['fmm_order']
         constant = name[0].upper() + name[1:]
         sourceType, targetType = (
-            ('cartesian::Multipole', 'spherical::Multipole') if name == 'sourceToSpherical'
+            ('cartesian::Multipole', 'spherical::Multipole') if name == 'multipoleCast'
             else ('spherical::Expansion', 'cartesian::Expansion'))
         expected = kernel['weighted_flops']
         fused = kernel['arithmetic'].get('fma', 0)
@@ -243,7 +244,7 @@ def buildChecks(report, minFmmOrder, maxFmmOrder):
             f'        static_assert(basis_conversion::k{constant}Flops<{order}> == {expected});',
             f'        static_assert(basis_conversion::k{constant}ConventionalFlops<{order}> == {kernel["conventional_flops"]});',
             '        Real::operations = Real::fusedOperations = 0;',
-            f'        basis_conversion::{name}(target, source);',
+            f'        target = static_cast<{targetType}<Real, {order}>>(source);',
             f'        if (Real::operations != {expected} || Real::fusedOperations != {fused}) {{',
             f'            std::fprintf(stderr, "{name}<{order}> operation count mismatch\\n");',
             '            return 7;', '        }', '    }'])

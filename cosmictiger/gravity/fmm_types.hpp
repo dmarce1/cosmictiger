@@ -17,9 +17,8 @@
 #include <cosmictiger/math/position.hpp>
 #include <cosmictiger/math/vector3.hpp>
 
-// Order-dependent FMM value types. This header is light: it carries no
-// generated kernels, so order-agnostic code (tree nodes, work items, options)
-// can include it everywhere. The operators live in kernels/*_operators.hpp.
+// Order-dependent FMM value types and their inline basis casts. Tree operator
+// kernels live separately in kernels/*_operators.hpp.
 
 namespace cosmictiger::gravity {
 // Physical point result in normalized FMM units. Acceleration is -grad(potential).
@@ -63,8 +62,8 @@ static_assert(sizeof(Field<float>) == (kDimensions + 1) * sizeof(float));
 
 static_assert(sizeof(cosmictiger::gravity::cartesian::Multipole<float, 7>) ==
     4 * fmmMultipoleCoefficientCount(7));
-static_assert(sizeof(cosmictiger::gravity::cartesian::Expansion<float, 7>) ==
-    fmmLocalExpansionBytes(7));
+static_assert(
+    sizeof(cosmictiger::gravity::cartesian::Expansion<float, 7>) == fmmLocalExpansionBytes(7));
 
 // Positioned multipole record. The center comes first so order-agnostic tree
 // code reads it through MultipolePosition; the per-order view adds the moments.
@@ -156,23 +155,19 @@ struct ExpansionBuffer {
     /// order.
     template <int order>
     CUDA_EXPORT cosmictiger::gravity::cartesian::Expansion<float, order>& expansion() {
-        return *reinterpret_cast<
-            cosmictiger::gravity::cartesian::Expansion<float, order>*>(
+        return *reinterpret_cast<cosmictiger::gravity::cartesian::Expansion<float, order>*>(
             coefficients.data());
     }
     /// View the coefficient prefix as a Cartesian local expansion of the supplied
     /// order.
     template <int order>
-    CUDA_EXPORT cosmictiger::gravity::cartesian::Expansion<float, order> const&
-    expansion() const {
-        return *reinterpret_cast<
-            cosmictiger::gravity::cartesian::Expansion<float, order> const*>(
+    CUDA_EXPORT cosmictiger::gravity::cartesian::Expansion<float, order> const& expansion() const {
+        return *reinterpret_cast<cosmictiger::gravity::cartesian::Expansion<float, order> const*>(
             coefficients.data());
     }
     /// Copy the active coefficients from a typed expansion into the transport buffer.
     template <int order>
-    CUDA_EXPORT void assign(
-        cosmictiger::gravity::cartesian::Expansion<float, order> const& value) {
+    CUDA_EXPORT void assign(cosmictiger::gravity::cartesian::Expansion<float, order> const& value) {
         for (int i = 0; i < FmmOrder<order>::kLocalCoefficients_; i++) {
             coefficients[i] = value[i];
         }
@@ -212,23 +207,19 @@ struct MultipoleBuffer {
     /// order.
     template <int order>
     CUDA_EXPORT cosmictiger::gravity::cartesian::Multipole<float, order>& multipole() {
-        return *reinterpret_cast<
-            cosmictiger::gravity::cartesian::Multipole<float, order>*>(
+        return *reinterpret_cast<cosmictiger::gravity::cartesian::Multipole<float, order>*>(
             coefficients.data());
     }
     /// View the coefficient prefix as a Cartesian source multipole of the supplied
     /// order.
     template <int order>
-    CUDA_EXPORT cosmictiger::gravity::cartesian::Multipole<float, order> const&
-    multipole() const {
-        return *reinterpret_cast<
-            cosmictiger::gravity::cartesian::Multipole<float, order> const*>(
+    CUDA_EXPORT cosmictiger::gravity::cartesian::Multipole<float, order> const& multipole() const {
+        return *reinterpret_cast<cosmictiger::gravity::cartesian::Multipole<float, order> const*>(
             coefficients.data());
     }
     /// Copy the active coefficients from a typed expansion into the transport buffer.
     template <int order>
-    CUDA_EXPORT void assign(
-        cosmictiger::gravity::cartesian::Multipole<float, order> const& value) {
+    CUDA_EXPORT void assign(cosmictiger::gravity::cartesian::Multipole<float, order> const& value) {
         for (int i = 0; i < FmmOrder<order>::kMultipoleCoefficients_; i++) {
             coefficients[i] = value[i];
         }

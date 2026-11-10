@@ -71,9 +71,11 @@ CUDA_EXPORT int P2L(Expansion<Real, order>& target, Real mass, Vector3<Real> con
 template <class Real, int order>
 CUDA_EXPORT int M2M(Multipole<Real, order>& target, Multipole<Real, order> const& source,
     Vector3<Real> const& displacement) {
+    using Scalar = SimdScalar<Real>;
+    constexpr auto k0 = static_cast<Scalar>(+1.00000000000000000E+00);
     using namespace math;
     ASSERT(&target != &source);
-    detail::M2M(target, source, displacement, broadcast<Real>(1));
+    detail::M2M(target, source, displacement, broadcast<Real>(k0));
     return detail::kM2MFlops<order - 2>;
 }
 
@@ -94,9 +96,12 @@ CUDA_EXPORT int M2L(Expansion<Real, order>& target, Multipole<Real, order> const
 /// Replace the coefficients with the unit-mass Newtonian Green expansion.
 template <class Real, int order>
 CUDA_EXPORT void evaluateGreen(Green<Real, order>& target, Vector3<Real> const& displacement) {
+    using Scalar = SimdScalar<Real>;
+    constexpr auto k0 = static_cast<Scalar>(+0.00000000000000000E+00);
+    constexpr auto k1 = static_cast<Scalar>(+1.00000000000000000E+00);
     using namespace math;
-    target = broadcast<Real>(0);
-    detail::P2L(target, broadcast<Real>(1), displacement);
+    target = broadcast<Real>(k0);
+    detail::P2L(target, broadcast<Real>(k1), displacement);
 }
 
 /// Accumulate multipole potential and acceleration, optionally preserving potential.
@@ -116,10 +121,12 @@ CUDA_EXPORT int M2P(gravity::Field<Real>& target, Multipole<Real, order> const& 
 template <class Real, int order>
 CUDA_EXPORT int L2L(Expansion<Real, order>& target, Expansion<Real, order> const& source,
     Vector3<Real> const& displacement, bool doPotential = true) {
+    using Scalar = SimdScalar<Real>;
+    constexpr auto k0 = static_cast<Scalar>(+1.00000000000000000E+00);
     using namespace math;
     ASSERT(&target != &source);
     Real const oldPotential = target[0];
-    detail::L2L(target, source, displacement, broadcast<Real>(1));
+    detail::L2L(target, source, displacement, broadcast<Real>(k0));
     if (!doPotential) {
         target[0] = oldPotential;
     }
@@ -131,9 +138,11 @@ CUDA_EXPORT int L2L(Expansion<Real, order>& target, Expansion<Real, order> const
 template <class Real, int order>
 CUDA_EXPORT int L2P(gravity::Field<Real>& target, Expansion<Real, order> const& source,
     Vector3<Real> const& displacement, bool doPotential = true) {
+    using Scalar = SimdScalar<Real>;
+    constexpr auto k0 = static_cast<Scalar>(+1.00000000000000000E+00);
     using namespace math;
     Real const oldPotential = target[0];
-    detail::L2P(target, source, displacement, broadcast<Real>(1));
+    detail::L2P(target, source, displacement, broadcast<Real>(k0));
     if (!doPotential) {
         target[0] = oldPotential;
     }

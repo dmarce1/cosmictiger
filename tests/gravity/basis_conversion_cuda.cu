@@ -17,24 +17,22 @@
 #include <cosmictiger/gravity/fmm/tree_local.hpp>
 
 // Compile only: nvcc -dc -std=c++20 -arch=sm_86 -I. \
-//   -DFMM_MIN_ORDER=3 -DFMM_MAX_ORDER=9 -DCOSMICTIGER_DIMENSION_COUNT=3 \
+//   -DORDER=7 -DFMM_MIN_ORDER=3 -DFMM_MAX_ORDER=9 -DCOSMICTIGER_DIMENSION_COUNT=3 \
 //   tests/gravity/basis_conversion_cuda.cu -o /tmp/basis_conversion_cuda.o
 namespace detail {
 template <class Real, int order>
 __device__ void convert(Real const* input, Real* output) {
     namespace gravity = cosmictiger::gravity;
     gravity::cartesian::Multipole<Real, order> source;
-    gravity::spherical::Multipole<Real, order> sphericalSource;
     gravity::spherical::Expansion<Real, order> local;
-    gravity::cartesian::Expansion<Real, order> cartesianLocal;
     for (int i = 0; i < source.size(); ++i) {
         source[i] = input[i];
     }
     for (int i = 0; i < local.kCount_; ++i) {
         local[i] = input[i];
     }
-    gravity::basis_conversion::sourceToSpherical(sphericalSource, source);
-    gravity::basis_conversion::localToCartesian(cartesianLocal, local);
+    auto const sphericalSource = static_cast<gravity::spherical::Multipole<Real, order>>(source);
+    auto const cartesianLocal = static_cast<gravity::cartesian::Expansion<Real, order>>(local);
     for (int i = 0; i < sphericalSource.kCount_; ++i) {
         output[i] = sphericalSource[i];
     }

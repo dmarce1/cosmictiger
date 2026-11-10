@@ -462,6 +462,7 @@ set_source_files_properties(src/particles/domain.cpp tests/mesh_domains.cpp PROP
 # Ordinary builds use the source headers.
 set(COSMICTIGER_GENERATED_FMM_DIR ${PROJECT_SOURCE_DIR}/cosmictiger/gravity/kernels)
 set(COSMICTIGER_GENERATED_FMM_FILES
+    ${COSMICTIGER_GENERATED_FMM_DIR}/spherical_types.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/basis_conversion.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree_config.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree_types.hpp
@@ -1711,6 +1712,10 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             --output-dir ${COSMICTIGER_GENERATED_FMM_DIR} --min-order 2 --max-order 8)
         set_tests_properties(generated_fmm_current PROPERTIES
             TIMEOUT 180 PROCESSORS 1 LABELS "fmm;generator")
+        add_test(NAME generated_fmm_constants COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tests/test_fmm_constants.py)
+        set_tests_properties(generated_fmm_constants PROPERTIES
+            TIMEOUT 30 PROCESSORS 1 LABELS "fmm;generator")
         add_test(NAME generated_fmm_flops COMMAND ${Python3_EXECUTABLE}
             ${PROJECT_SOURCE_DIR}/tests/gravity/check_generated_fmm_flops.py
             --generated-dir ${COSMICTIGER_GENERATED_FMM_DIR}

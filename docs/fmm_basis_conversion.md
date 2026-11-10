@@ -1,22 +1,24 @@
 # Cartesian/spherical basis conversions
 
-These are the two maps needed at the tree/FFT boundaries. They are generated
-in `tools/fmm/basis_conversion.py` and exposed in
-`cosmictiger/gravity/kernels/basis_conversion.hpp`, namespace
-`cosmictiger::gravity::basis_conversion`:
+The two maps needed at the tree/FFT boundaries are explicit conversion
+operators on Cartesian multipoles and spherical expansions. Their generated
+arithmetic lives directly in the cast definitions in
+`cosmictiger/gravity/kernels/basis_conversion.hpp`. Including either coefficient
+type header also makes its cast available:
 
 ```cpp
-sourceToSpherical(sphericalSource, cartesianSource);
-localToCartesian(cartesianLocal, sphericalLocal);
+auto sphericalSource = static_cast<spherical::Multipole<Real, order>>(cartesianSource);
+auto cartesianLocal = static_cast<cartesian::Expansion<Real, order>>(sphericalLocal);
 ```
 
-Both overwrite their destination, preserve every dipole component, and require
-the same scalar type, FMM order, center and coordinate units on both sides.
-The source degree is q-2; the local degree is q-1, for q=3..9. There is no
-runtime allocation, factorial evaluation or dense matrix multiplication.
-Float, double and CPU SIMD are supported; the functions are host/device.
-These functions do not move centers, rescale coordinates or add background
-terms. The latter operations remain separately testable at the caller boundary.
+Both return new coefficient objects, preserve every dipole component, and
+require the same scalar type, FMM order, center and coordinate units on both
+sides. The source degree is q-2; the local degree is q-1, for q=3..9. There is
+no runtime allocation, factorial evaluation or dense matrix multiplication.
+Float, double and CPU SIMD are supported; the casts are host/device. They do
+not move centers, rescale coordinates or add background terms. Those operations
+remain separately testable at the caller boundary. The reverse conversions
+and implicit cross-basis conversions are not provided.
 
 ## Conventions
 

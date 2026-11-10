@@ -9,6 +9,7 @@ See docs/fmm_basis_conversion.md for the two distinct dual conventions.
 All polynomial projection and verification take place during generation.
 """
 from fractions import Fraction as Q
+from pathlib import Path
 from functools import lru_cache, reduce
 from math import gcd, lcm
 
@@ -140,17 +141,40 @@ def emit(name, order, rows, targetType, sourceType):
     code, arithmetic, weighted = graph.emit(roots)
     conventional = weighted + arithmetic.get('fma', 0)
     constant = name[0].upper() + name[1:]
-    lines = [f'template <> inline constexpr int k{constant}Flops<{order}> = {weighted};',
+    sourceNamespace, sourceClass = sourceType.split('::')
+    lines = [f'namespace cosmictiger::gravity::basis_conversion {{',
+             f'template <> inline constexpr int k{constant}Flops<{order}> = {weighted};',
              f'template <> inline constexpr int k{constant}ConventionalFlops<{order}> = {conventional};',
-             '/// Assign the equivalent coefficients in the destination basis without changing spatial scale.',
-             'template <class Real>',
-             f'CUDA_EXPORT void {name}({targetType}<Real, {order}>& target,',
-             f'    {sourceType}<Real, {order}> const& source) {{', *code]
+             '}', f'namespace cosmictiger::gravity::{sourceNamespace} {{',
+             '/// Return the equivalent coefficients in the destination basis at the same spatial scale.',
+             'template <class Real, int order>',
+             f'CUDA_EXPORT {sourceClass}<Real, order>::operator {targetType}<Real, order>() const',
+             f'    requires (order == {order}) {{',
+             f'    {targetType}<Real, order> target{{}};',
+             '    auto const& source = *this;', *code]
     for slot, root in zip(sorted(rows), roots):
         lines.append(f'    target[{slot}] = {graph.expression(root)};')
-    lines += ['}', '']
+    lines += ['    return target;', '}', '}', '']
     return '\n'.join(lines), dict(operator=name, fmm_order=order, arithmetic=arithmetic,
         weighted_flops=weighted, conventional_flops=conventional)
+
+
+def castDeclarations(targetType, minLocalDegree, maxLocalDegree):
+    lines = []
+    for degree in range(minLocalDegree, maxLocalDegree + 1):
+        order = degree + 1
+        lines += [f'#if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= {order}) && '
+                  f'(!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= {order})',
+                  '    /// Convert basis at the same center and coordinate scale.',
+                  f'    CUDA_EXPORT explicit operator {targetType}<Real, order>() const',
+                  f'        requires (order == {order});', '#endif']
+    return lines
+
+
+def generateSphericalTypes(minLocalDegree, maxLocalDegree):
+    template = Path(__file__).with_name('spherical_types.hpp.in').read_text()
+    return template.replace('@EXPANSION_CASTS@', '\n'.join(castDeclarations(
+        'cartesian::Expansion', minLocalDegree, maxLocalDegree)))
 
 
 def generate(minLocalDegree=2, maxLocalDegree=8):
@@ -158,19 +182,20 @@ def generate(minLocalDegree=2, maxLocalDegree=8):
              '#include <cosmictiger/gravity/kernels/cartesian_tracefree_types.hpp>',
              '#include <cosmictiger/gravity/kernels/spherical_types.hpp>',
              '#include <cosmictiger/math/simd_math.hpp>', '',
-             '// Derived same-center, same-units maps. Outputs are overwritten.',
+             '// Derived same-center, same-units casts. Return new coefficient objects.',
              '// Sₙₘ = (-1)ⁿ Σα [r^α] Uₙₘ Cα (sources).',
              '// Cα = α! [r^α] Σₙ (Lₙ₀ Uₙ₀ + 2 Re Σₘ>₀ Lₙₘ conjugate(Uₙₘ)) (locals).',
              '// Symbol directory: C is a Cartesian STF moment or local derivative;',
              '// S is a packed spherical source; L is a spherical local; U is a regular harmonic.',
              '// See docs/fmm_basis_conversion.md for normalization and periodic contexts.',
              'namespace cosmictiger::gravity::basis_conversion {']
-    names = ('sourceToSpherical', 'localToCartesian')
+    names = ('multipoleCast', 'expansionCast')
     for name in names:
         constant = name[0].upper() + name[1:]
         lines += [f'template <int order> inline constexpr int k{constant}Flops = 0;',
                   f'template <int order> inline constexpr int k{constant}ConventionalFlops = 0;']
-    report = {'description': 'Exact sparse basis maps; overwrite outputs at the same center and units. '
+    lines += ['} // namespace cosmictiger::gravity::basis_conversion']
+    report = {'description': 'Exact sparse basis casts; return coefficients at the same center and units. '
               'No coordinate, potential or background scaling. Source dipoles always retained.',
               'cost_model': {'add': 1, 'subtract': 1, 'multiply': 1, 'fma': 1},
               'conventional_cost_model': {'add': 1, 'subtract': 1, 'multiply': 1, 'fma': 2},
@@ -180,13 +205,14 @@ def generate(minLocalDegree=2, maxLocalDegree=8):
         lines += [f'#if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= {order}) && '
                   f'(!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= {order})']
         for name, rows, target, source in (
-                ('sourceToSpherical', sourceRows(degree - 1), 'spherical::Multipole',
+                ('multipoleCast', sourceRows(degree - 1), 'spherical::Multipole',
                  'cartesian::Multipole'),
-                ('localToCartesian', localRows(degree), 'cartesian::Expansion',
+                ('expansionCast', localRows(degree), 'cartesian::Expansion',
                  'spherical::Expansion')):
             code, counts = emit(name, order, rows, target, source)
             lines.append(code)
             report['kernels'].append(counts)
         lines += ['#endif']
-    lines += ['} // namespace cosmictiger::gravity::basis_conversion', '']
-    return {'basis_conversion.hpp': '\n'.join(lines)}, report
+    lines += ['']
+    return {'basis_conversion.hpp': '\n'.join(lines),
+            'spherical_types.hpp': generateSphericalTypes(minLocalDegree, maxLocalDegree)}, report

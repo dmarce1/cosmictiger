@@ -1540,7 +1540,7 @@
       }
     },
     "basisConversion": {
-      "description": "Exact sparse basis maps; overwrite outputs at the same center and units. No coordinate, potential or background scaling. Source dipoles always retained.",
+      "description": "Exact sparse basis casts; return coefficients at the same center and units. No coordinate, potential or background scaling. Source dipoles always retained.",
       "cost_model": {
         "add": 1,
         "subtract": 1,
@@ -1555,7 +1555,7 @@
       },
       "kernels": [
         {
-          "operator": "sourceToSpherical",
+          "operator": "multipoleCast",
           "fmm_order": 3,
           "arithmetic": {
             "multiply": 2
@@ -1564,7 +1564,7 @@
           "conventional_flops": 2
         },
         {
-          "operator": "localToCartesian",
+          "operator": "expansionCast",
           "fmm_order": 3,
           "arithmetic": {
             "add": 1,
@@ -1575,7 +1575,7 @@
           "conventional_flops": 5
         },
         {
-          "operator": "sourceToSpherical",
+          "operator": "multipoleCast",
           "fmm_order": 4,
           "arithmetic": {
             "multiply": 7,
@@ -1586,7 +1586,7 @@
           "conventional_flops": 9
         },
         {
-          "operator": "localToCartesian",
+          "operator": "expansionCast",
           "fmm_order": 4,
           "arithmetic": {
             "add": 4,
@@ -1598,7 +1598,7 @@
           "conventional_flops": 20
         },
         {
-          "operator": "sourceToSpherical",
+          "operator": "multipoleCast",
           "fmm_order": 5,
           "arithmetic": {
             "multiply": 15,
@@ -1610,7 +1610,7 @@
           "conventional_flops": 24
         },
         {
-          "operator": "localToCartesian",
+          "operator": "expansionCast",
           "fmm_order": 5,
           "arithmetic": {
             "add": 8,
@@ -1622,7 +1622,7 @@
           "conventional_flops": 47
         },
         {
-          "operator": "sourceToSpherical",
+          "operator": "multipoleCast",
           "fmm_order": 6,
           "arithmetic": {
             "multiply": 25,
@@ -1634,7 +1634,7 @@
           "conventional_flops": 48
         },
         {
-          "operator": "localToCartesian",
+          "operator": "expansionCast",
           "fmm_order": 6,
           "arithmetic": {
             "add": 13,
@@ -1646,7 +1646,7 @@
           "conventional_flops": 91
         },
         {
-          "operator": "sourceToSpherical",
+          "operator": "multipoleCast",
           "fmm_order": 7,
           "arithmetic": {
             "multiply": 38,
@@ -1658,7 +1658,7 @@
           "conventional_flops": 90
         },
         {
-          "operator": "localToCartesian",
+          "operator": "expansionCast",
           "fmm_order": 7,
           "arithmetic": {
             "add": 20,
@@ -1670,7 +1670,7 @@
           "conventional_flops": 156
         },
         {
-          "operator": "sourceToSpherical",
+          "operator": "multipoleCast",
           "fmm_order": 8,
           "arithmetic": {
             "multiply": 54,
@@ -1682,7 +1682,7 @@
           "conventional_flops": 152
         },
         {
-          "operator": "localToCartesian",
+          "operator": "expansionCast",
           "fmm_order": 8,
           "arithmetic": {
             "add": 29,
@@ -1694,7 +1694,7 @@
           "conventional_flops": 246
         },
         {
-          "operator": "sourceToSpherical",
+          "operator": "multipoleCast",
           "fmm_order": 9,
           "arithmetic": {
             "multiply": 73,
@@ -1706,7 +1706,7 @@
           "conventional_flops": 238
         },
         {
-          "operator": "localToCartesian",
+          "operator": "expansionCast",
           "fmm_order": 9,
           "arithmetic": {
             "add": 37,

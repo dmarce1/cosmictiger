@@ -211,7 +211,7 @@ def generateWarpL2l(order, algebra):
         code += [f'                Real const basisValue{word} = __shfl_sync(kMask, basis{word}, basisIndex & 31);'
                  for word in range(basisWords)]
         code += [f'                Real const basisValue = {basisSelect};',
-                 '                Real const weight = math::broadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;',
+                 '                Real const weight = (kind == 0 ? math::broadcast<Real>(0) : (kind == 2 ? -math::broadcast<Real>(1) : math::broadcast<Real>(1))) * basisValue;',
                  '                partial = math::fma(weight, sourceValue, partial);', '            }']
         largestWidth = max(output[2] for _, output in groups)
         for shift in (1 << bit for bit in reversed(range(largestWidth.bit_length() - 1))):

@@ -26,7 +26,7 @@ CUDA_EXPORT int fromMesh(cartesian::Expansion<double, order>& target, double con
         harmonic[i] = source[i];
     }
     harmonic.real(2, 0) += 2 * meshBackground;
-    basis_conversion::localToCartesian(target, harmonic);
+    target = static_cast<cartesian::Expansion<double, order>>(harmonic);
     double const κ = kScaleFactor;
     double const ratio = meshSize / κ;
     double factor = 1 / κ;
@@ -36,7 +36,7 @@ CUDA_EXPORT int fromMesh(cartesian::Expansion<double, order>& target, double con
         }
         factor *= ratio;
     }
-    return basis_conversion::kLocalToCartesianConventionalFlops<order> + order * order + order + 4;
+    return basis_conversion::kExpansionCastConventionalFlops<order> + order * order + order + 4;
 }
 
 /// Convert the mesh isotropic-background coefficient to tree-coordinate curvature using

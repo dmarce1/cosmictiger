@@ -306,7 +306,6 @@ FlopCount treeSourceToMesh(double* output, SourceMultipoleBuffer const& source,
     namespace cartesian = cosmictiger::gravity::cartesian;
     namespace conversion = cosmictiger::gravity::basis_conversion;
     cartesian::Multipole<double, order> input{}, shifted{};
-    cosmictiger::gravity::spherical::Multipole<double, order> spherical;
     for (int i = 0; i < input.size(); ++i) {
         input[i] = source[i];
     }
@@ -318,7 +317,8 @@ FlopCount treeSourceToMesh(double* output, SourceMultipoleBuffer const& source,
             unwrappedDoubleDistance(sourceCenter[dim], meshCenter[dim]) + meshCenterCorrection[dim];
     }
     cartesian::M2M(shifted, input, fmmScaleDisplacement(displacement));
-    conversion::sourceToSpherical(spherical, shifted);
+    auto const spherical =
+        static_cast<cosmictiger::gravity::spherical::Multipole<double, order>>(shifted);
     // Derived boundary conversion (docs/fmm_basis_conversion.md):
     // Sₙ(mesh) = (κh)⁻ⁿ Aₙ Cₙ(tree), h=1/meshSize, κ=kScaleFactor.
     // Symbol directory: S is a spherical moment; C is a Cartesian STF moment;
@@ -335,7 +335,7 @@ FlopCount treeSourceToMesh(double* output, SourceMultipoleBuffer const& source,
         }
     }
     return cartesian::detail::kM2MFlops<order - 2> +
-        conversion::kSourceToSphericalConventionalFlops<order> + 12 + input.size() + order - 2;
+        conversion::kMultipoleCastConventionalFlops<order> + 12 + input.size() + order - 2;
 }
 
 #endif

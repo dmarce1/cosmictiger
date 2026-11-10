@@ -10,6 +10,7 @@ polynomial times a positive lower-gamma series, never singular subtraction.
 """
 from __future__ import annotations
 
+from fractions import Fraction
 from math import factorial, gamma, pi
 
 
@@ -22,7 +23,10 @@ def index(n, m):
 
 
 def scalar(value):
-    return f"math::broadcast<Real>({float(value):.17g})"
+    # Preserve exact integer coefficients; retain the complete binary value of
+    # transcendental/working coefficients until the shared decimal formatter.
+    value = Fraction(value)
+    return f"math::broadcast<Real>({value.numerator}.0 / {value.denominator}.0)"
 
 
 def regular(degree):

@@ -29,7 +29,6 @@ void cosmictigerAssert(char const*, bool condition, char const*, int) {
 namespace detail {
 namespace cartesian = cosmictiger::gravity::cartesian;
 namespace spherical = cosmictiger::gravity::spherical;
-namespace conversion = cosmictiger::gravity::basis_conversion;
 using Point = Vector3<double>;
 using Complex = std::complex<long double>;
 constexpr int kOrder = BASIS_CONVERSION_TEST_ORDER;
@@ -149,6 +148,14 @@ template <class Real>
 void basisChecks() {
     using Cl = cartesian::Expansion<Real, kOrder>;
     using Sl = spherical::Expansion<Real, kOrder>;
+    using Cm = cartesian::Multipole<Real, kOrder>;
+    using Sm = spherical::Multipole<Real, kOrder>;
+    static_assert(std::is_constructible_v<Cl, Sl const&>);
+    static_assert(std::is_constructible_v<Sm, Cm const&>);
+    static_assert(!std::is_convertible_v<Sl, Cl>);
+    static_assert(!std::is_convertible_v<Cm, Sm>);
+    static_assert(!std::is_constructible_v<Sl, Cl const&>);
+    static_assert(!std::is_constructible_v<Cm, Sm const&>);
     using Field = cosmictiger::gravity::Field<Real>;
     std::array<Point, 3> const samples{{{.37, -.29, .43}, {-.41, .19, -.31}, {0, 0, .53}}};
     context = "every local component against a closed polynomial";
@@ -161,7 +168,7 @@ void basisChecks() {
             }
             Cl c;
             clear(c, 17);
-            conversion::localToCartesian(c, s);
+            c = static_cast<Cl>(s);
             for (auto const& p : samples) {
                 Field cf;
                 clear(cf);
@@ -191,7 +198,7 @@ void cloudCheck(std::array<Point, 4> const& positions) {
     for (size_t i = 0; i < positions.size(); ++i) {
         cartesian::P2M(c, math::broadcast<Real>(masses[i]), point<Real>(positions[i]));
     }
-    conversion::sourceToSpherical(s, c);
+    s = static_cast<spherical::Multipole<Real, kOrder>>(c);
     for (int n = 0; n <= kOrder - 2; ++n) {
         double rankScale = 1e-100;
         std::array<Complex, kOrder> expected{};
@@ -243,7 +250,7 @@ void sourceScalingCheck() {
             cartesian::P2M(cm, .7 + .3 * i, Point{κ * h * u[0], κ * h * u[1], κ * h * u[2]});
             spherical::detail::P2M<kOrder - 2, double>(direct, .7 + .3 * i, u[0], u[1], u[2]);
         }
-        conversion::sourceToSpherical(sm, cm);
+        sm = static_cast<spherical::Multipole<double, kOrder>>(cm);
         for (int n = 0; n <= kOrder - 2; ++n) {
             double scale = 1e-100;
             for (int m = -n; m <= n; ++m) {

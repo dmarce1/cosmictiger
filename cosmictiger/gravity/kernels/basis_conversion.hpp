@@ -13,7 +13,7 @@
 #include <cosmictiger/gravity/kernels/spherical_types.hpp>
 #include <cosmictiger/math/simd_math.hpp>
 
-// Derived same-center, same-units maps. Outputs are overwritten.
+// Derived same-center, same-units casts. Return new coefficient objects.
 // Sₙₘ = (-1)ⁿ Σα [r^α] Uₙₘ Cα (sources).
 // Cα = α! [r^α] Σₙ (Lₙ₀ Uₙ₀ + 2 Re Σₘ>₀ Lₙₘ conjugate(Uₙₘ)) (locals).
 // Symbol directory: C is a Cartesian STF moment or local derivative;
@@ -21,46 +21,65 @@
 // See docs/fmm_basis_conversion.md for normalization and periodic contexts.
 namespace cosmictiger::gravity::basis_conversion {
 template <int order>
-inline constexpr int kSourceToSphericalFlops = 0;
+inline constexpr int kMultipoleCastFlops = 0;
 template <int order>
-inline constexpr int kSourceToSphericalConventionalFlops = 0;
+inline constexpr int kMultipoleCastConventionalFlops = 0;
 template <int order>
-inline constexpr int kLocalToCartesianFlops = 0;
+inline constexpr int kExpansionCastFlops = 0;
 template <int order>
-inline constexpr int kLocalToCartesianConventionalFlops = 0;
+inline constexpr int kExpansionCastConventionalFlops = 0;
+}    // namespace cosmictiger::gravity::basis_conversion
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 3) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 3)
+namespace cosmictiger::gravity::basis_conversion {
 template <>
-inline constexpr int kSourceToSphericalFlops<3> = 2;
+inline constexpr int kMultipoleCastFlops<3> = 2;
 template <>
-inline constexpr int kSourceToSphericalConventionalFlops<3> = 2;
-/// Assign the equivalent coefficients in the destination basis without changing spatial scale.
-template <class Real>
-CUDA_EXPORT void sourceToSpherical(
-    spherical::Multipole<Real, 3>& target, cartesian::Multipole<Real, 3> const& source) {
+inline constexpr int kMultipoleCastConventionalFlops<3> = 2;
+}    // namespace cosmictiger::gravity::basis_conversion
+namespace cosmictiger::gravity::cartesian {
+/// Return the equivalent coefficients in the destination basis at the same spatial scale.
+template <class Real, int order>
+CUDA_EXPORT Multipole<Real, order>::operator spherical::Multipole<Real, order>() const
+    requires(order == 3)
+{
     using namespace math;
-    Real const t5 = source[1] * broadcast<Real>(-1.0 / 2.0);
-    Real const t10 = broadcast<Real>(-1.0 / 2.0) * source[2];
+    using Scalar = SimdScalar<Real>;
+    constexpr auto k0 = static_cast<Scalar>(+5.00000000000000000E-01);
+    spherical::Multipole<Real, order> target{};
+    auto const& source = *this;
+    Real const t5 = source[1] * -broadcast<Real>(k0);
+    Real const t10 = -broadcast<Real>(k0) * source[2];
     target[0] = source[0];
     target[1] = t5;
     target[2] = (-source[3]);
     target[3] = t10;
+    return target;
 }
+}    // namespace cosmictiger::gravity::cartesian
 
+namespace cosmictiger::gravity::basis_conversion {
 template <>
-inline constexpr int kLocalToCartesianFlops<3> = 5;
+inline constexpr int kExpansionCastFlops<3> = 5;
 template <>
-inline constexpr int kLocalToCartesianConventionalFlops<3> = 5;
-/// Assign the equivalent coefficients in the destination basis without changing spatial scale.
-template <class Real>
-CUDA_EXPORT void localToCartesian(
-    cartesian::Expansion<Real, 3>& target, spherical::Expansion<Real, 3> const& source) {
+inline constexpr int kExpansionCastConventionalFlops<3> = 5;
+}    // namespace cosmictiger::gravity::basis_conversion
+namespace cosmictiger::gravity::spherical {
+/// Return the equivalent coefficients in the destination basis at the same spatial scale.
+template <class Real, int order>
+CUDA_EXPORT Expansion<Real, order>::operator cartesian::Expansion<Real, order>() const
+    requires(order == 3)
+{
     using namespace math;
+    using Scalar = SimdScalar<Real>;
+    constexpr auto k0 = static_cast<Scalar>(+5.00000000000000000E-01);
+    cartesian::Expansion<Real, order> target{};
+    auto const& source = *this;
     Real const t8 = source[6] + source[8];
-    Real const t10 = t8 * broadcast<Real>(-1.0 / 2.0);
-    Real const t13 = source[4] * broadcast<Real>(1.0 / 2.0);
+    Real const t10 = t8 * -broadcast<Real>(k0);
+    Real const t13 = source[4] * broadcast<Real>(k0);
     Real const t16 = source[8] - source[6];
-    Real const t17 = broadcast<Real>(1.0 / 2.0) * t16;
+    Real const t17 = broadcast<Real>(k0) * t16;
     target[0] = source[0];
     target[1] = source[1];
     target[2] = source[3];
@@ -70,30 +89,43 @@ CUDA_EXPORT void localToCartesian(
     target[6] = t17;
     target[7] = source[5];
     target[8] = source[7];
+    return target;
 }
+}    // namespace cosmictiger::gravity::spherical
 
 #endif
 
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 4) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 4)
+namespace cosmictiger::gravity::basis_conversion {
 template <>
-inline constexpr int kSourceToSphericalFlops<4> = 9;
+inline constexpr int kMultipoleCastFlops<4> = 9;
 template <>
-inline constexpr int kSourceToSphericalConventionalFlops<4> = 9;
-/// Assign the equivalent coefficients in the destination basis without changing spatial scale.
-template <class Real>
-CUDA_EXPORT void sourceToSpherical(
-    spherical::Multipole<Real, 4>& target, cartesian::Multipole<Real, 4> const& source) {
+inline constexpr int kMultipoleCastConventionalFlops<4> = 9;
+}    // namespace cosmictiger::gravity::basis_conversion
+namespace cosmictiger::gravity::cartesian {
+/// Return the equivalent coefficients in the destination basis at the same spatial scale.
+template <class Real, int order>
+CUDA_EXPORT Multipole<Real, order>::operator spherical::Multipole<Real, order>() const
+    requires(order == 4)
+{
     using namespace math;
-    Real const t5 = source[1] * broadcast<Real>(-1.0 / 2.0);
-    Real const t10 = broadcast<Real>(-1.0 / 2.0) * source[2];
-    Real const t13 = source[5] * broadcast<Real>(1.0 / 4.0);
-    Real const t16 = source[7] * broadcast<Real>(1.0 / 2.0);
+    using Scalar = SimdScalar<Real>;
+    constexpr auto k0 = static_cast<Scalar>(+5.00000000000000000E-01);
+    constexpr auto k1 = static_cast<Scalar>(+2.50000000000000000E-01);
+    constexpr auto k2 = static_cast<Scalar>(+7.50000000000000000E-01);
+    constexpr auto k3 = static_cast<Scalar>(+1.25000000000000000E-01);
+    spherical::Multipole<Real, order> target{};
+    auto const& source = *this;
+    Real const t5 = source[1] * -broadcast<Real>(k0);
+    Real const t10 = -broadcast<Real>(k0) * source[2];
+    Real const t13 = source[5] * broadcast<Real>(k1);
+    Real const t16 = source[7] * broadcast<Real>(k0);
     Real const t19 = source[4] + source[6];
-    Real const t21 = t19 * broadcast<Real>(-3.0 / 4.0);
-    Real const t23 = broadcast<Real>(1.0 / 2.0) * source[8];
+    Real const t21 = t19 * -broadcast<Real>(k2);
+    Real const t23 = broadcast<Real>(k0) * source[8];
     Real const t25 = source[6] - source[4];
-    Real const t27 = t25 * broadcast<Real>(1.0 / 8.0);
+    Real const t27 = t25 * broadcast<Real>(k3);
     target[0] = source[0];
     target[1] = t5;
     target[2] = (-source[3]);
@@ -103,37 +135,49 @@ CUDA_EXPORT void sourceToSpherical(
     target[6] = t21;
     target[7] = t23;
     target[8] = t27;
+    return target;
 }
+}    // namespace cosmictiger::gravity::cartesian
 
+namespace cosmictiger::gravity::basis_conversion {
 template <>
-inline constexpr int kLocalToCartesianFlops<4> = 19;
+inline constexpr int kExpansionCastFlops<4> = 19;
 template <>
-inline constexpr int kLocalToCartesianConventionalFlops<4> = 20;
-/// Assign the equivalent coefficients in the destination basis without changing spatial scale.
-template <class Real>
-CUDA_EXPORT void localToCartesian(
-    cartesian::Expansion<Real, 4>& target, spherical::Expansion<Real, 4> const& source) {
+inline constexpr int kExpansionCastConventionalFlops<4> = 20;
+}    // namespace cosmictiger::gravity::basis_conversion
+namespace cosmictiger::gravity::spherical {
+/// Return the equivalent coefficients in the destination basis at the same spatial scale.
+template <class Real, int order>
+CUDA_EXPORT Expansion<Real, order>::operator cartesian::Expansion<Real, order>() const
+    requires(order == 4)
+{
     using namespace math;
     Fma const fma{};
+    using Scalar = SimdScalar<Real>;
+    constexpr auto k0 = static_cast<Scalar>(+5.00000000000000000E-01);
+    constexpr auto k1 = static_cast<Scalar>(+3.00000000000000000E+00);
+    constexpr auto k2 = static_cast<Scalar>(+2.50000000000000000E-01);
+    cartesian::Expansion<Real, order> target{};
+    auto const& source = *this;
     Real const t8 = source[6] + source[8];
-    Real const t10 = t8 * broadcast<Real>(-1.0 / 2.0);
-    Real const t13 = source[4] * broadcast<Real>(1.0 / 2.0);
+    Real const t10 = t8 * -broadcast<Real>(k0);
+    Real const t13 = source[4] * broadcast<Real>(k0);
     Real const t16 = source[8] - source[6];
-    Real const t17 = broadcast<Real>(1.0 / 2.0) * t16;
-    Real const t23 = fma(broadcast<Real>(3.0 / 1.0), source[11], source[9]);
-    Real const t25 = t23 * broadcast<Real>(-1.0 / 4.0);
+    Real const t17 = broadcast<Real>(k0) * t16;
+    Real const t23 = fma(broadcast<Real>(k1), source[11], source[9]);
+    Real const t25 = t23 * -broadcast<Real>(k2);
     Real const t28 = source[13] + source[15];
-    Real const t29 = broadcast<Real>(-1.0 / 4.0) * t28;
+    Real const t29 = -broadcast<Real>(k2) * t28;
     Real const t31 = source[9] - source[11];
-    Real const t33 = t31 * broadcast<Real>(1.0 / 4.0);
-    Real const t35 = source[13] * broadcast<Real>(-3.0 / 1.0);
+    Real const t33 = t31 * broadcast<Real>(k2);
+    Real const t35 = source[13] * -broadcast<Real>(k1);
     Real const t36 = source[15] + t35;
-    Real const t37 = broadcast<Real>(1.0 / 4.0) * t36;
+    Real const t37 = broadcast<Real>(k2) * t36;
     Real const t40 = source[12] + source[14];
-    Real const t41 = broadcast<Real>(-1.0 / 2.0) * t40;
-    Real const t43 = broadcast<Real>(1.0 / 2.0) * source[10];
+    Real const t41 = -broadcast<Real>(k0) * t40;
+    Real const t43 = broadcast<Real>(k0) * source[10];
     Real const t45 = source[14] - source[12];
-    Real const t46 = broadcast<Real>(1.0 / 2.0) * t45;
+    Real const t46 = broadcast<Real>(k0) * t45;
     target[0] = source[0];
     target[1] = source[1];
     target[2] = source[3];
@@ -150,45 +194,62 @@ CUDA_EXPORT void localToCartesian(
     target[13] = t41;
     target[14] = t43;
     target[15] = t46;
+    return target;
 }
+}    // namespace cosmictiger::gravity::spherical
 
 #endif
 
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 5) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 5)
+namespace cosmictiger::gravity::basis_conversion {
 template <>
-inline constexpr int kSourceToSphericalFlops<5> = 23;
+inline constexpr int kMultipoleCastFlops<5> = 23;
 template <>
-inline constexpr int kSourceToSphericalConventionalFlops<5> = 24;
-/// Assign the equivalent coefficients in the destination basis without changing spatial scale.
-template <class Real>
-CUDA_EXPORT void sourceToSpherical(
-    spherical::Multipole<Real, 5>& target, cartesian::Multipole<Real, 5> const& source) {
+inline constexpr int kMultipoleCastConventionalFlops<5> = 24;
+}    // namespace cosmictiger::gravity::basis_conversion
+namespace cosmictiger::gravity::cartesian {
+/// Return the equivalent coefficients in the destination basis at the same spatial scale.
+template <class Real, int order>
+CUDA_EXPORT Multipole<Real, order>::operator spherical::Multipole<Real, order>() const
+    requires(order == 5)
+{
     using namespace math;
     Fma const fma{};
-    Real const t5 = source[1] * broadcast<Real>(-1.0 / 2.0);
-    Real const t10 = broadcast<Real>(-1.0 / 2.0) * source[2];
-    Real const t13 = source[5] * broadcast<Real>(1.0 / 4.0);
-    Real const t16 = source[7] * broadcast<Real>(1.0 / 2.0);
+    using Scalar = SimdScalar<Real>;
+    constexpr auto k0 = static_cast<Scalar>(+5.00000000000000000E-01);
+    constexpr auto k1 = static_cast<Scalar>(+2.50000000000000000E-01);
+    constexpr auto k2 = static_cast<Scalar>(+7.50000000000000000E-01);
+    constexpr auto k3 = static_cast<Scalar>(+1.25000000000000000E-01);
+    constexpr auto k4 = static_cast<Scalar>(+3.00000000000000000E+00);
+    constexpr auto k5 = static_cast<Scalar>(+2.08333333333333333E-02);
+    constexpr auto k6 = static_cast<Scalar>(+3.12500000000000000E-01);
+    constexpr auto k7 = static_cast<Scalar>(+4.16666666666666667E-01);
+    spherical::Multipole<Real, order> target{};
+    auto const& source = *this;
+    Real const t5 = source[1] * -broadcast<Real>(k0);
+    Real const t10 = -broadcast<Real>(k0) * source[2];
+    Real const t13 = source[5] * broadcast<Real>(k1);
+    Real const t16 = source[7] * broadcast<Real>(k0);
     Real const t19 = source[4] + source[6];
-    Real const t21 = t19 * broadcast<Real>(-3.0 / 4.0);
-    Real const t23 = broadcast<Real>(1.0 / 2.0) * source[8];
+    Real const t21 = t19 * -broadcast<Real>(k2);
+    Real const t23 = broadcast<Real>(k0) * source[8];
     Real const t25 = source[6] - source[4];
-    Real const t27 = t25 * broadcast<Real>(1.0 / 8.0);
-    Real const t31 = fma(broadcast<Real>(-3.0 / 1.0), source[11], source[9]);
-    Real const t33 = t31 * broadcast<Real>(1.0 / 48.0);
-    Real const t36 = source[14] * broadcast<Real>(-1.0 / 4.0);
+    Real const t27 = t25 * broadcast<Real>(k3);
+    Real const t31 = fma(-broadcast<Real>(k4), source[11], source[9]);
+    Real const t33 = t31 * broadcast<Real>(k5);
+    Real const t36 = source[14] * -broadcast<Real>(k1);
     Real const t37 = source[9] + source[11];
-    Real const t39 = t37 * broadcast<Real>(5.0 / 16.0);
+    Real const t39 = t37 * broadcast<Real>(k6);
     Real const t42 = source[13] + source[15];
-    Real const t44 = t42 * broadcast<Real>(5.0 / 12.0);
+    Real const t44 = t42 * broadcast<Real>(k7);
     Real const t47 = source[10] + source[12];
-    Real const t48 = broadcast<Real>(5.0 / 16.0) * t47;
+    Real const t48 = broadcast<Real>(k6) * t47;
     Real const t50 = source[13] - source[15];
-    Real const t51 = broadcast<Real>(1.0 / 8.0) * t50;
-    Real const t53 = source[10] * broadcast<Real>(3.0 / 1.0);
+    Real const t51 = broadcast<Real>(k3) * t50;
+    Real const t53 = source[10] * broadcast<Real>(k4);
     Real const t55 = t53 - source[12];
-    Real const t56 = broadcast<Real>(1.0 / 48.0) * t55;
+    Real const t56 = broadcast<Real>(k5) * t55;
     target[0] = source[0];
     target[1] = t5;
     target[2] = (-source[3]);
@@ -205,59 +266,74 @@ CUDA_EXPORT void sourceToSpherical(
     target[13] = t48;
     target[14] = t51;
     target[15] = t56;
+    return target;
 }
+}    // namespace cosmictiger::gravity::cartesian
 
+namespace cosmictiger::gravity::basis_conversion {
 template <>
-inline constexpr int kLocalToCartesianFlops<5> = 41;
+inline constexpr int kExpansionCastFlops<5> = 41;
 template <>
-inline constexpr int kLocalToCartesianConventionalFlops<5> = 47;
-/// Assign the equivalent coefficients in the destination basis without changing spatial scale.
-template <class Real>
-CUDA_EXPORT void localToCartesian(
-    cartesian::Expansion<Real, 5>& target, spherical::Expansion<Real, 5> const& source) {
+inline constexpr int kExpansionCastConventionalFlops<5> = 47;
+}    // namespace cosmictiger::gravity::basis_conversion
+namespace cosmictiger::gravity::spherical {
+/// Return the equivalent coefficients in the destination basis at the same spatial scale.
+template <class Real, int order>
+CUDA_EXPORT Expansion<Real, order>::operator cartesian::Expansion<Real, order>() const
+    requires(order == 5)
+{
     using namespace math;
     Fma const fma{};
+    using Scalar = SimdScalar<Real>;
+    constexpr auto k0 = static_cast<Scalar>(+5.00000000000000000E-01);
+    constexpr auto k1 = static_cast<Scalar>(+3.00000000000000000E+00);
+    constexpr auto k2 = static_cast<Scalar>(+2.50000000000000000E-01);
+    constexpr auto k3 = static_cast<Scalar>(+4.00000000000000000E+00);
+    constexpr auto k4 = static_cast<Scalar>(+1.25000000000000000E-01);
+    constexpr auto k5 = static_cast<Scalar>(+2.00000000000000000E+00);
+    cartesian::Expansion<Real, order> target{};
+    auto const& source = *this;
     Real const t8 = source[6] + source[8];
-    Real const t10 = t8 * broadcast<Real>(-1.0 / 2.0);
-    Real const t13 = source[4] * broadcast<Real>(1.0 / 2.0);
+    Real const t10 = t8 * -broadcast<Real>(k0);
+    Real const t13 = source[4] * broadcast<Real>(k0);
     Real const t16 = source[8] - source[6];
-    Real const t17 = broadcast<Real>(1.0 / 2.0) * t16;
-    Real const t23 = fma(broadcast<Real>(3.0 / 1.0), source[11], source[9]);
-    Real const t25 = t23 * broadcast<Real>(-1.0 / 4.0);
+    Real const t17 = broadcast<Real>(k0) * t16;
+    Real const t23 = fma(broadcast<Real>(k1), source[11], source[9]);
+    Real const t25 = t23 * -broadcast<Real>(k2);
     Real const t28 = source[13] + source[15];
-    Real const t29 = broadcast<Real>(-1.0 / 4.0) * t28;
+    Real const t29 = -broadcast<Real>(k2) * t28;
     Real const t31 = source[9] - source[11];
-    Real const t33 = t31 * broadcast<Real>(1.0 / 4.0);
-    Real const t35 = source[13] * broadcast<Real>(-3.0 / 1.0);
+    Real const t33 = t31 * broadcast<Real>(k2);
+    Real const t35 = source[13] * -broadcast<Real>(k1);
     Real const t36 = source[15] + t35;
-    Real const t37 = broadcast<Real>(1.0 / 4.0) * t36;
+    Real const t37 = broadcast<Real>(k2) * t36;
     Real const t40 = source[12] + source[14];
-    Real const t41 = broadcast<Real>(-1.0 / 2.0) * t40;
-    Real const t43 = broadcast<Real>(1.0 / 2.0) * source[10];
+    Real const t41 = -broadcast<Real>(k0) * t40;
+    Real const t43 = broadcast<Real>(k0) * source[10];
     Real const t45 = source[14] - source[12];
-    Real const t46 = broadcast<Real>(1.0 / 2.0) * t45;
-    Real const t48 = broadcast<Real>(3.0 / 1.0) * source[20];
-    Real const t51 = fma(broadcast<Real>(4.0 / 1.0), source[22], t48);
+    Real const t46 = broadcast<Real>(k0) * t45;
+    Real const t48 = broadcast<Real>(k1) * source[20];
+    Real const t51 = fma(broadcast<Real>(k3), source[22], t48);
     Real const t53 = t51 + source[24];
-    Real const t55 = t53 * broadcast<Real>(1.0 / 8.0);
-    Real const t59 = fma(broadcast<Real>(2.0 / 1.0), source[18], source[16]);
-    Real const t61 = t59 * broadcast<Real>(-1.0 / 8.0);
+    Real const t55 = t53 * broadcast<Real>(k4);
+    Real const t59 = fma(broadcast<Real>(k5), source[18], source[16]);
+    Real const t61 = t59 * -broadcast<Real>(k4);
     Real const t63 = source[20] - source[24];
-    Real const t64 = broadcast<Real>(1.0 / 8.0) * t63;
-    Real const t66 = fma(source[18], broadcast<Real>(-2.0 / 1.0), source[16]);
-    Real const t67 = broadcast<Real>(1.0 / 8.0) * t66;
-    Real const t69 = fma(source[22], broadcast<Real>(-4.0 / 1.0), t48);
+    Real const t64 = broadcast<Real>(k4) * t63;
+    Real const t66 = fma(source[18], -broadcast<Real>(k5), source[16]);
+    Real const t67 = broadcast<Real>(k4) * t66;
+    Real const t69 = fma(source[22], -broadcast<Real>(k3), t48);
     Real const t70 = source[24] + t69;
-    Real const t71 = broadcast<Real>(1.0 / 8.0) * t70;
-    Real const t74 = fma(broadcast<Real>(3.0 / 1.0), source[19], source[17]);
-    Real const t75 = broadcast<Real>(-1.0 / 4.0) * t74;
+    Real const t71 = broadcast<Real>(k4) * t70;
+    Real const t74 = fma(broadcast<Real>(k1), source[19], source[17]);
+    Real const t75 = -broadcast<Real>(k2) * t74;
     Real const t78 = source[21] + source[23];
-    Real const t79 = broadcast<Real>(-1.0 / 4.0) * t78;
+    Real const t79 = -broadcast<Real>(k2) * t78;
     Real const t81 = source[17] - source[19];
-    Real const t82 = broadcast<Real>(1.0 / 4.0) * t81;
-    Real const t83 = broadcast<Real>(-3.0 / 1.0) * source[21];
+    Real const t82 = broadcast<Real>(k2) * t81;
+    Real const t83 = -broadcast<Real>(k1) * source[21];
     Real const t84 = source[23] + t83;
-    Real const t85 = broadcast<Real>(1.0 / 4.0) * t84;
+    Real const t85 = broadcast<Real>(k2) * t84;
     target[0] = source[0];
     target[1] = source[1];
     target[2] = source[3];
@@ -283,66 +359,90 @@ CUDA_EXPORT void localToCartesian(
     target[22] = t79;
     target[23] = t82;
     target[24] = t85;
+    return target;
 }
+}    // namespace cosmictiger::gravity::spherical
 
 #endif
 
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 6) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 6)
+namespace cosmictiger::gravity::basis_conversion {
 template <>
-inline constexpr int kSourceToSphericalFlops<6> = 44;
+inline constexpr int kMultipoleCastFlops<6> = 44;
 template <>
-inline constexpr int kSourceToSphericalConventionalFlops<6> = 48;
-/// Assign the equivalent coefficients in the destination basis without changing spatial scale.
-template <class Real>
-CUDA_EXPORT void sourceToSpherical(
-    spherical::Multipole<Real, 6>& target, cartesian::Multipole<Real, 6> const& source) {
+inline constexpr int kMultipoleCastConventionalFlops<6> = 48;
+}    // namespace cosmictiger::gravity::basis_conversion
+namespace cosmictiger::gravity::cartesian {
+/// Return the equivalent coefficients in the destination basis at the same spatial scale.
+template <class Real, int order>
+CUDA_EXPORT Multipole<Real, order>::operator spherical::Multipole<Real, order>() const
+    requires(order == 6)
+{
     using namespace math;
     Fma const fma{};
-    Real const t5 = source[1] * broadcast<Real>(-1.0 / 2.0);
-    Real const t10 = broadcast<Real>(-1.0 / 2.0) * source[2];
-    Real const t13 = source[5] * broadcast<Real>(1.0 / 4.0);
-    Real const t16 = source[7] * broadcast<Real>(1.0 / 2.0);
+    using Scalar = SimdScalar<Real>;
+    constexpr auto k0 = static_cast<Scalar>(+5.00000000000000000E-01);
+    constexpr auto k1 = static_cast<Scalar>(+2.50000000000000000E-01);
+    constexpr auto k2 = static_cast<Scalar>(+7.50000000000000000E-01);
+    constexpr auto k3 = static_cast<Scalar>(+1.25000000000000000E-01);
+    constexpr auto k4 = static_cast<Scalar>(+3.00000000000000000E+00);
+    constexpr auto k5 = static_cast<Scalar>(+2.08333333333333333E-02);
+    constexpr auto k6 = static_cast<Scalar>(+3.12500000000000000E-01);
+    constexpr auto k7 = static_cast<Scalar>(+4.16666666666666667E-01);
+    constexpr auto k8 = static_cast<Scalar>(+1.04166666666666667E-02);
+    constexpr auto k9 = static_cast<Scalar>(+1.45833333333333333E-01);
+    constexpr auto k10 = static_cast<Scalar>(+2.00000000000000000E+00);
+    constexpr auto k11 = static_cast<Scalar>(+1.82291666666666667E-01);
+    constexpr auto k12 = static_cast<Scalar>(+7.29166666666666667E-02);
+    constexpr auto k13 = static_cast<Scalar>(+6.00000000000000000E+00);
+    constexpr auto k14 = static_cast<Scalar>(+2.60416666666666667E-03);
+    spherical::Multipole<Real, order> target{};
+    auto const& source = *this;
+    Real const t5 = source[1] * -broadcast<Real>(k0);
+    Real const t10 = -broadcast<Real>(k0) * source[2];
+    Real const t13 = source[5] * broadcast<Real>(k1);
+    Real const t16 = source[7] * broadcast<Real>(k0);
     Real const t19 = source[4] + source[6];
-    Real const t21 = t19 * broadcast<Real>(-3.0 / 4.0);
-    Real const t23 = broadcast<Real>(1.0 / 2.0) * source[8];
+    Real const t21 = t19 * -broadcast<Real>(k2);
+    Real const t23 = broadcast<Real>(k0) * source[8];
     Real const t25 = source[6] - source[4];
-    Real const t27 = t25 * broadcast<Real>(1.0 / 8.0);
-    Real const t31 = fma(broadcast<Real>(-3.0 / 1.0), source[11], source[9]);
-    Real const t33 = t31 * broadcast<Real>(1.0 / 48.0);
-    Real const t36 = source[14] * broadcast<Real>(-1.0 / 4.0);
+    Real const t27 = t25 * broadcast<Real>(k3);
+    Real const t31 = fma(-broadcast<Real>(k4), source[11], source[9]);
+    Real const t33 = t31 * broadcast<Real>(k5);
+    Real const t36 = source[14] * -broadcast<Real>(k1);
     Real const t37 = source[9] + source[11];
-    Real const t39 = t37 * broadcast<Real>(5.0 / 16.0);
+    Real const t39 = t37 * broadcast<Real>(k6);
     Real const t42 = source[13] + source[15];
-    Real const t44 = t42 * broadcast<Real>(5.0 / 12.0);
+    Real const t44 = t42 * broadcast<Real>(k7);
     Real const t47 = source[10] + source[12];
-    Real const t48 = broadcast<Real>(5.0 / 16.0) * t47;
+    Real const t48 = broadcast<Real>(k6) * t47;
     Real const t50 = source[13] - source[15];
-    Real const t51 = broadcast<Real>(1.0 / 8.0) * t50;
-    Real const t53 = source[10] * broadcast<Real>(3.0 / 1.0);
+    Real const t51 = broadcast<Real>(k3) * t50;
+    Real const t53 = source[10] * broadcast<Real>(k4);
     Real const t55 = t53 - source[12];
-    Real const t56 = broadcast<Real>(1.0 / 48.0) * t55;
+    Real const t56 = broadcast<Real>(k5) * t55;
     Real const t60 = source[19] - source[17];
-    Real const t62 = t60 * broadcast<Real>(1.0 / 96.0);
-    Real const t66 = fma(broadcast<Real>(3.0 / 1.0), source[23], (-source[21]));
-    Real const t67 = broadcast<Real>(1.0 / 48.0) * t66;
+    Real const t62 = t60 * broadcast<Real>(k8);
+    Real const t66 = fma(broadcast<Real>(k4), source[23], (-source[21]));
+    Real const t67 = broadcast<Real>(k5) * t66;
     Real const t68 = source[17] + source[19];
-    Real const t70 = t68 * broadcast<Real>(-7.0 / 48.0);
+    Real const t70 = t68 * -broadcast<Real>(k9);
     Real const t71 = source[21] + source[23];
-    Real const t72 = broadcast<Real>(-7.0 / 48.0) * t71;
-    Real const t76 = fma(broadcast<Real>(2.0 / 1.0), source[18], source[16]);
+    Real const t72 = -broadcast<Real>(k9) * t71;
+    Real const t76 = fma(broadcast<Real>(k10), source[18], source[16]);
     Real const t78 = t76 + source[20];
-    Real const t80 = t78 * broadcast<Real>(35.0 / 192.0);
+    Real const t80 = t78 * broadcast<Real>(k11);
     Real const t83 = source[22] + source[24];
-    Real const t84 = broadcast<Real>(-7.0 / 48.0) * t83;
+    Real const t84 = -broadcast<Real>(k9) * t83;
     Real const t86 = source[16] - source[20];
-    Real const t88 = t86 * broadcast<Real>(7.0 / 96.0);
-    Real const t89 = broadcast<Real>(-3.0 / 1.0) * source[22];
+    Real const t88 = t86 * broadcast<Real>(k12);
+    Real const t89 = -broadcast<Real>(k4) * source[22];
     Real const t90 = source[24] + t89;
-    Real const t91 = broadcast<Real>(1.0 / 48.0) * t90;
-    Real const t93 = fma(source[18], broadcast<Real>(-6.0 / 1.0), source[16]);
+    Real const t91 = broadcast<Real>(k5) * t90;
+    Real const t93 = fma(source[18], -broadcast<Real>(k13), source[16]);
     Real const t94 = source[20] + t93;
-    Real const t96 = t94 * broadcast<Real>(1.0 / 384.0);
+    Real const t96 = t94 * broadcast<Real>(k14);
     target[0] = source[0];
     target[1] = t5;
     target[2] = (-source[3]);
@@ -368,92 +468,110 @@ CUDA_EXPORT void sourceToSpherical(
     target[22] = t88;
     target[23] = t91;
     target[24] = t96;
+    return target;
 }
+}    // namespace cosmictiger::gravity::cartesian
 
+namespace cosmictiger::gravity::basis_conversion {
 template <>
-inline constexpr int kLocalToCartesianFlops<6> = 74;
+inline constexpr int kExpansionCastFlops<6> = 74;
 template <>
-inline constexpr int kLocalToCartesianConventionalFlops<6> = 91;
-/// Assign the equivalent coefficients in the destination basis without changing spatial scale.
-template <class Real>
-CUDA_EXPORT void localToCartesian(
-    cartesian::Expansion<Real, 6>& target, spherical::Expansion<Real, 6> const& source) {
+inline constexpr int kExpansionCastConventionalFlops<6> = 91;
+}    // namespace cosmictiger::gravity::basis_conversion
+namespace cosmictiger::gravity::spherical {
+/// Return the equivalent coefficients in the destination basis at the same spatial scale.
+template <class Real, int order>
+CUDA_EXPORT Expansion<Real, order>::operator cartesian::Expansion<Real, order>() const
+    requires(order == 6)
+{
     using namespace math;
     Fma const fma{};
+    using Scalar = SimdScalar<Real>;
+    constexpr auto k0 = static_cast<Scalar>(+5.00000000000000000E-01);
+    constexpr auto k1 = static_cast<Scalar>(+3.00000000000000000E+00);
+    constexpr auto k2 = static_cast<Scalar>(+2.50000000000000000E-01);
+    constexpr auto k3 = static_cast<Scalar>(+4.00000000000000000E+00);
+    constexpr auto k4 = static_cast<Scalar>(+1.25000000000000000E-01);
+    constexpr auto k5 = static_cast<Scalar>(+2.00000000000000000E+00);
+    constexpr auto k6 = static_cast<Scalar>(+5.00000000000000000E+00);
+    constexpr auto k7 = static_cast<Scalar>(+1.00000000000000000E+01);
+    constexpr auto k8 = static_cast<Scalar>(+6.25000000000000000E-02);
+    cartesian::Expansion<Real, order> target{};
+    auto const& source = *this;
     Real const t8 = source[6] + source[8];
-    Real const t10 = t8 * broadcast<Real>(-1.0 / 2.0);
-    Real const t13 = source[4] * broadcast<Real>(1.0 / 2.0);
+    Real const t10 = t8 * -broadcast<Real>(k0);
+    Real const t13 = source[4] * broadcast<Real>(k0);
     Real const t16 = source[8] - source[6];
-    Real const t17 = broadcast<Real>(1.0 / 2.0) * t16;
-    Real const t23 = fma(broadcast<Real>(3.0 / 1.0), source[11], source[9]);
-    Real const t25 = t23 * broadcast<Real>(-1.0 / 4.0);
+    Real const t17 = broadcast<Real>(k0) * t16;
+    Real const t23 = fma(broadcast<Real>(k1), source[11], source[9]);
+    Real const t25 = t23 * -broadcast<Real>(k2);
     Real const t28 = source[13] + source[15];
-    Real const t29 = broadcast<Real>(-1.0 / 4.0) * t28;
+    Real const t29 = -broadcast<Real>(k2) * t28;
     Real const t31 = source[9] - source[11];
-    Real const t33 = t31 * broadcast<Real>(1.0 / 4.0);
-    Real const t35 = source[13] * broadcast<Real>(-3.0 / 1.0);
+    Real const t33 = t31 * broadcast<Real>(k2);
+    Real const t35 = source[13] * -broadcast<Real>(k1);
     Real const t36 = source[15] + t35;
-    Real const t37 = broadcast<Real>(1.0 / 4.0) * t36;
+    Real const t37 = broadcast<Real>(k2) * t36;
     Real const t40 = source[12] + source[14];
-    Real const t41 = broadcast<Real>(-1.0 / 2.0) * t40;
-    Real const t43 = broadcast<Real>(1.0 / 2.0) * source[10];
+    Real const t41 = -broadcast<Real>(k0) * t40;
+    Real const t43 = broadcast<Real>(k0) * source[10];
     Real const t45 = source[14] - source[12];
-    Real const t46 = broadcast<Real>(1.0 / 2.0) * t45;
-    Real const t48 = broadcast<Real>(3.0 / 1.0) * source[20];
-    Real const t51 = fma(broadcast<Real>(4.0 / 1.0), source[22], t48);
+    Real const t46 = broadcast<Real>(k0) * t45;
+    Real const t48 = broadcast<Real>(k1) * source[20];
+    Real const t51 = fma(broadcast<Real>(k3), source[22], t48);
     Real const t53 = t51 + source[24];
-    Real const t55 = t53 * broadcast<Real>(1.0 / 8.0);
-    Real const t59 = fma(broadcast<Real>(2.0 / 1.0), source[18], source[16]);
-    Real const t61 = t59 * broadcast<Real>(-1.0 / 8.0);
+    Real const t55 = t53 * broadcast<Real>(k4);
+    Real const t59 = fma(broadcast<Real>(k5), source[18], source[16]);
+    Real const t61 = t59 * -broadcast<Real>(k4);
     Real const t63 = source[20] - source[24];
-    Real const t64 = broadcast<Real>(1.0 / 8.0) * t63;
-    Real const t66 = fma(source[18], broadcast<Real>(-2.0 / 1.0), source[16]);
-    Real const t67 = broadcast<Real>(1.0 / 8.0) * t66;
-    Real const t69 = fma(source[22], broadcast<Real>(-4.0 / 1.0), t48);
+    Real const t64 = broadcast<Real>(k4) * t63;
+    Real const t66 = fma(source[18], -broadcast<Real>(k5), source[16]);
+    Real const t67 = broadcast<Real>(k4) * t66;
+    Real const t69 = fma(source[22], -broadcast<Real>(k3), t48);
     Real const t70 = source[24] + t69;
-    Real const t71 = broadcast<Real>(1.0 / 8.0) * t70;
-    Real const t74 = fma(broadcast<Real>(3.0 / 1.0), source[19], source[17]);
-    Real const t75 = broadcast<Real>(-1.0 / 4.0) * t74;
+    Real const t71 = broadcast<Real>(k4) * t70;
+    Real const t74 = fma(broadcast<Real>(k1), source[19], source[17]);
+    Real const t75 = -broadcast<Real>(k2) * t74;
     Real const t78 = source[21] + source[23];
-    Real const t79 = broadcast<Real>(-1.0 / 4.0) * t78;
+    Real const t79 = -broadcast<Real>(k2) * t78;
     Real const t81 = source[17] - source[19];
-    Real const t82 = broadcast<Real>(1.0 / 4.0) * t81;
-    Real const t83 = broadcast<Real>(-3.0 / 1.0) * source[21];
+    Real const t82 = broadcast<Real>(k2) * t81;
+    Real const t83 = -broadcast<Real>(k1) * source[21];
     Real const t84 = source[23] + t83;
-    Real const t85 = broadcast<Real>(1.0 / 4.0) * t84;
-    Real const t89 = fma(broadcast<Real>(5.0 / 1.0), source[27], source[25]);
-    Real const t92 = fma(broadcast<Real>(10.0 / 1.0), source[29], t89);
-    Real const t94 = t92 * broadcast<Real>(1.0 / 16.0);
-    Real const t96 = broadcast<Real>(2.0 / 1.0) * source[31];
-    Real const t98 = fma(broadcast<Real>(3.0 / 1.0), source[33], t96);
+    Real const t85 = broadcast<Real>(k2) * t84;
+    Real const t89 = fma(broadcast<Real>(k6), source[27], source[25]);
+    Real const t92 = fma(broadcast<Real>(k7), source[29], t89);
+    Real const t94 = t92 * broadcast<Real>(k8);
+    Real const t96 = broadcast<Real>(k5) * source[31];
+    Real const t98 = fma(broadcast<Real>(k1), source[33], t96);
     Real const t100 = t98 + source[35];
-    Real const t101 = broadcast<Real>(1.0 / 16.0) * t100;
+    Real const t101 = broadcast<Real>(k8) * t100;
     Real const t104 = (-source[27]) - source[25];
-    Real const t105 = fma(broadcast<Real>(2.0 / 1.0), source[29], t104);
-    Real const t106 = broadcast<Real>(1.0 / 16.0) * t105;
+    Real const t105 = fma(broadcast<Real>(k5), source[29], t104);
+    Real const t106 = broadcast<Real>(k8) * t105;
     Real const t107 = t96 + source[33];
     Real const t109 = t107 - source[35];
-    Real const t110 = broadcast<Real>(1.0 / 16.0) * t109;
-    Real const t111 = fma(broadcast<Real>(-3.0 / 1.0), source[27], source[25]);
-    Real const t112 = fma(broadcast<Real>(2.0 / 1.0), source[29], t111);
-    Real const t113 = broadcast<Real>(1.0 / 16.0) * t112;
-    Real const t114 = broadcast<Real>(10.0 / 1.0) * source[31];
-    Real const t116 = fma(source[33], broadcast<Real>(-5.0 / 1.0), t114);
+    Real const t110 = broadcast<Real>(k8) * t109;
+    Real const t111 = fma(-broadcast<Real>(k1), source[27], source[25]);
+    Real const t112 = fma(broadcast<Real>(k5), source[29], t111);
+    Real const t113 = broadcast<Real>(k8) * t112;
+    Real const t114 = broadcast<Real>(k7) * source[31];
+    Real const t116 = fma(source[33], -broadcast<Real>(k6), t114);
     Real const t117 = source[35] + t116;
-    Real const t118 = broadcast<Real>(1.0 / 16.0) * t117;
-    Real const t120 = broadcast<Real>(3.0 / 1.0) * source[30];
-    Real const t122 = fma(broadcast<Real>(4.0 / 1.0), source[32], t120);
+    Real const t118 = broadcast<Real>(k8) * t117;
+    Real const t120 = broadcast<Real>(k1) * source[30];
+    Real const t122 = fma(broadcast<Real>(k3), source[32], t120);
     Real const t124 = t122 + source[34];
-    Real const t125 = broadcast<Real>(1.0 / 8.0) * t124;
-    Real const t128 = fma(broadcast<Real>(2.0 / 1.0), source[28], source[26]);
-    Real const t129 = broadcast<Real>(-1.0 / 8.0) * t128;
+    Real const t125 = broadcast<Real>(k4) * t124;
+    Real const t128 = fma(broadcast<Real>(k5), source[28], source[26]);
+    Real const t129 = -broadcast<Real>(k4) * t128;
     Real const t131 = source[30] - source[34];
-    Real const t132 = broadcast<Real>(1.0 / 8.0) * t131;
-    Real const t133 = fma(broadcast<Real>(-2.0 / 1.0), source[28], source[26]);
-    Real const t134 = broadcast<Real>(1.0 / 8.0) * t133;
-    Real const t135 = fma(broadcast<Real>(-4.0 / 1.0), source[32], t120);
+    Real const t132 = broadcast<Real>(k4) * t131;
+    Real const t133 = fma(-broadcast<Real>(k5), source[28], source[26]);
+    Real const t134 = broadcast<Real>(k4) * t133;
+    Real const t135 = fma(-broadcast<Real>(k3), source[32], t120);
     Real const t136 = source[34] + t135;
-    Real const t137 = broadcast<Real>(1.0 / 8.0) * t136;
+    Real const t137 = broadcast<Real>(k4) * t136;
     target[0] = source[0];
     target[1] = source[1];
     target[2] = source[3];
@@ -490,98 +608,130 @@ CUDA_EXPORT void localToCartesian(
     target[33] = t132;
     target[34] = t134;
     target[35] = t137;
+    return target;
 }
+}    // namespace cosmictiger::gravity::spherical
 
 #endif
 
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 7) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 7)
+namespace cosmictiger::gravity::basis_conversion {
 template <>
-inline constexpr int kSourceToSphericalFlops<7> = 76;
+inline constexpr int kMultipoleCastFlops<7> = 76;
 template <>
-inline constexpr int kSourceToSphericalConventionalFlops<7> = 90;
-/// Assign the equivalent coefficients in the destination basis without changing spatial scale.
-template <class Real>
-CUDA_EXPORT void sourceToSpherical(
-    spherical::Multipole<Real, 7>& target, cartesian::Multipole<Real, 7> const& source) {
+inline constexpr int kMultipoleCastConventionalFlops<7> = 90;
+}    // namespace cosmictiger::gravity::basis_conversion
+namespace cosmictiger::gravity::cartesian {
+/// Return the equivalent coefficients in the destination basis at the same spatial scale.
+template <class Real, int order>
+CUDA_EXPORT Multipole<Real, order>::operator spherical::Multipole<Real, order>() const
+    requires(order == 7)
+{
     using namespace math;
     Fma const fma{};
-    Real const t5 = source[1] * broadcast<Real>(-1.0 / 2.0);
-    Real const t10 = broadcast<Real>(-1.0 / 2.0) * source[2];
-    Real const t13 = source[5] * broadcast<Real>(1.0 / 4.0);
-    Real const t16 = source[7] * broadcast<Real>(1.0 / 2.0);
+    using Scalar = SimdScalar<Real>;
+    constexpr auto k0 = static_cast<Scalar>(+5.00000000000000000E-01);
+    constexpr auto k1 = static_cast<Scalar>(+2.50000000000000000E-01);
+    constexpr auto k2 = static_cast<Scalar>(+7.50000000000000000E-01);
+    constexpr auto k3 = static_cast<Scalar>(+1.25000000000000000E-01);
+    constexpr auto k4 = static_cast<Scalar>(+3.00000000000000000E+00);
+    constexpr auto k5 = static_cast<Scalar>(+2.08333333333333333E-02);
+    constexpr auto k6 = static_cast<Scalar>(+3.12500000000000000E-01);
+    constexpr auto k7 = static_cast<Scalar>(+4.16666666666666667E-01);
+    constexpr auto k8 = static_cast<Scalar>(+1.04166666666666667E-02);
+    constexpr auto k9 = static_cast<Scalar>(+1.45833333333333333E-01);
+    constexpr auto k10 = static_cast<Scalar>(+2.00000000000000000E+00);
+    constexpr auto k11 = static_cast<Scalar>(+1.82291666666666667E-01);
+    constexpr auto k12 = static_cast<Scalar>(+7.29166666666666667E-02);
+    constexpr auto k13 = static_cast<Scalar>(+6.00000000000000000E+00);
+    constexpr auto k14 = static_cast<Scalar>(+2.60416666666666667E-03);
+    constexpr auto k15 = static_cast<Scalar>(+1.00000000000000000E+01);
+    constexpr auto k16 = static_cast<Scalar>(+5.00000000000000000E+00);
+    constexpr auto k17 = static_cast<Scalar>(+2.60416666666666667E-04);
+    constexpr auto k18 = static_cast<Scalar>(+1.17187500000000000E-02);
+    constexpr auto k19 = static_cast<Scalar>(+6.25000000000000000E-02);
+    constexpr auto k20 = static_cast<Scalar>(+5.46875000000000000E-02);
+    constexpr auto k21 = static_cast<Scalar>(+6.56250000000000000E-02);
+    constexpr auto k22 = static_cast<Scalar>(+3.12500000000000000E-02);
+    spherical::Multipole<Real, order> target{};
+    auto const& source = *this;
+    Real const t5 = source[1] * -broadcast<Real>(k0);
+    Real const t10 = -broadcast<Real>(k0) * source[2];
+    Real const t13 = source[5] * broadcast<Real>(k1);
+    Real const t16 = source[7] * broadcast<Real>(k0);
     Real const t19 = source[4] + source[6];
-    Real const t21 = t19 * broadcast<Real>(-3.0 / 4.0);
-    Real const t23 = broadcast<Real>(1.0 / 2.0) * source[8];
+    Real const t21 = t19 * -broadcast<Real>(k2);
+    Real const t23 = broadcast<Real>(k0) * source[8];
     Real const t25 = source[6] - source[4];
-    Real const t27 = t25 * broadcast<Real>(1.0 / 8.0);
-    Real const t31 = fma(broadcast<Real>(-3.0 / 1.0), source[11], source[9]);
-    Real const t33 = t31 * broadcast<Real>(1.0 / 48.0);
-    Real const t36 = source[14] * broadcast<Real>(-1.0 / 4.0);
+    Real const t27 = t25 * broadcast<Real>(k3);
+    Real const t31 = fma(-broadcast<Real>(k4), source[11], source[9]);
+    Real const t33 = t31 * broadcast<Real>(k5);
+    Real const t36 = source[14] * -broadcast<Real>(k1);
     Real const t37 = source[9] + source[11];
-    Real const t39 = t37 * broadcast<Real>(5.0 / 16.0);
+    Real const t39 = t37 * broadcast<Real>(k6);
     Real const t42 = source[13] + source[15];
-    Real const t44 = t42 * broadcast<Real>(5.0 / 12.0);
+    Real const t44 = t42 * broadcast<Real>(k7);
     Real const t47 = source[10] + source[12];
-    Real const t48 = broadcast<Real>(5.0 / 16.0) * t47;
+    Real const t48 = broadcast<Real>(k6) * t47;
     Real const t50 = source[13] - source[15];
-    Real const t51 = broadcast<Real>(1.0 / 8.0) * t50;
-    Real const t53 = source[10] * broadcast<Real>(3.0 / 1.0);
+    Real const t51 = broadcast<Real>(k3) * t50;
+    Real const t53 = source[10] * broadcast<Real>(k4);
     Real const t55 = t53 - source[12];
-    Real const t56 = broadcast<Real>(1.0 / 48.0) * t55;
+    Real const t56 = broadcast<Real>(k5) * t55;
     Real const t60 = source[19] - source[17];
-    Real const t62 = t60 * broadcast<Real>(1.0 / 96.0);
-    Real const t66 = fma(broadcast<Real>(3.0 / 1.0), source[23], (-source[21]));
-    Real const t67 = broadcast<Real>(1.0 / 48.0) * t66;
+    Real const t62 = t60 * broadcast<Real>(k8);
+    Real const t66 = fma(broadcast<Real>(k4), source[23], (-source[21]));
+    Real const t67 = broadcast<Real>(k5) * t66;
     Real const t68 = source[17] + source[19];
-    Real const t70 = t68 * broadcast<Real>(-7.0 / 48.0);
+    Real const t70 = t68 * -broadcast<Real>(k9);
     Real const t71 = source[21] + source[23];
-    Real const t72 = broadcast<Real>(-7.0 / 48.0) * t71;
-    Real const t76 = fma(broadcast<Real>(2.0 / 1.0), source[18], source[16]);
+    Real const t72 = -broadcast<Real>(k9) * t71;
+    Real const t76 = fma(broadcast<Real>(k10), source[18], source[16]);
     Real const t78 = t76 + source[20];
-    Real const t80 = t78 * broadcast<Real>(35.0 / 192.0);
+    Real const t80 = t78 * broadcast<Real>(k11);
     Real const t83 = source[22] + source[24];
-    Real const t84 = broadcast<Real>(-7.0 / 48.0) * t83;
+    Real const t84 = -broadcast<Real>(k9) * t83;
     Real const t86 = source[16] - source[20];
-    Real const t88 = t86 * broadcast<Real>(7.0 / 96.0);
-    Real const t89 = broadcast<Real>(-3.0 / 1.0) * source[22];
+    Real const t88 = t86 * broadcast<Real>(k12);
+    Real const t89 = -broadcast<Real>(k4) * source[22];
     Real const t90 = source[24] + t89;
-    Real const t91 = broadcast<Real>(1.0 / 48.0) * t90;
-    Real const t93 = fma(source[18], broadcast<Real>(-6.0 / 1.0), source[16]);
+    Real const t91 = broadcast<Real>(k5) * t90;
+    Real const t93 = fma(source[18], -broadcast<Real>(k13), source[16]);
     Real const t94 = source[20] + t93;
-    Real const t96 = t94 * broadcast<Real>(1.0 / 384.0);
-    Real const t101 = fma(broadcast<Real>(10.0 / 1.0), source[27], (-source[25]));
-    Real const t104 = fma(broadcast<Real>(-5.0 / 1.0), source[29], t101);
-    Real const t106 = t104 * broadcast<Real>(1.0 / 3840.0);
+    Real const t96 = t94 * broadcast<Real>(k14);
+    Real const t101 = fma(broadcast<Real>(k15), source[27], (-source[25]));
+    Real const t104 = fma(-broadcast<Real>(k16), source[29], t101);
+    Real const t106 = t104 * broadcast<Real>(k17);
     Real const t110 = source[32] - source[34];
-    Real const t111 = broadcast<Real>(1.0 / 96.0) * t110;
-    Real const t112 = fma(broadcast<Real>(2.0 / 1.0), source[27], (-source[25]));
-    Real const t113 = fma(broadcast<Real>(3.0 / 1.0), source[29], t112);
-    Real const t115 = t113 * broadcast<Real>(3.0 / 256.0);
+    Real const t111 = broadcast<Real>(k8) * t110;
+    Real const t112 = fma(broadcast<Real>(k10), source[27], (-source[25]));
+    Real const t113 = fma(broadcast<Real>(k4), source[29], t112);
+    Real const t115 = t113 * broadcast<Real>(k18);
     Real const t116 = source[32] + source[34];
-    Real const t118 = t116 * broadcast<Real>(1.0 / 16.0);
-    Real const t119 = fma(broadcast<Real>(2.0 / 1.0), source[27], source[25]);
+    Real const t118 = t116 * broadcast<Real>(k19);
+    Real const t119 = fma(broadcast<Real>(k10), source[27], source[25]);
     Real const t120 = source[29] + t119;
-    Real const t122 = t120 * broadcast<Real>(-7.0 / 128.0);
-    Real const t125 = fma(broadcast<Real>(2.0 / 1.0), source[33], source[31]);
+    Real const t122 = t120 * -broadcast<Real>(k20);
+    Real const t125 = fma(broadcast<Real>(k10), source[33], source[31]);
     Real const t127 = t125 + source[35];
-    Real const t129 = t127 * broadcast<Real>(-21.0 / 320.0);
-    Real const t132 = fma(broadcast<Real>(2.0 / 1.0), source[28], source[26]);
+    Real const t129 = t127 * -broadcast<Real>(k21);
+    Real const t132 = fma(broadcast<Real>(k10), source[28], source[26]);
     Real const t134 = t132 + source[30];
-    Real const t135 = broadcast<Real>(-7.0 / 128.0) * t134;
+    Real const t135 = -broadcast<Real>(k20) * t134;
     Real const t137 = source[35] - source[31];
-    Real const t139 = t137 * broadcast<Real>(1.0 / 32.0);
-    Real const t140 = broadcast<Real>(-3.0 / 1.0) * source[26];
-    Real const t142 = fma(source[28], broadcast<Real>(-2.0 / 1.0), t140);
+    Real const t139 = t137 * broadcast<Real>(k22);
+    Real const t140 = -broadcast<Real>(k4) * source[26];
+    Real const t142 = fma(source[28], -broadcast<Real>(k10), t140);
     Real const t143 = source[30] + t142;
-    Real const t144 = broadcast<Real>(3.0 / 256.0) * t143;
-    Real const t146 = fma(source[33], broadcast<Real>(6.0 / 1.0), (-source[31]));
+    Real const t144 = broadcast<Real>(k18) * t143;
+    Real const t146 = fma(source[33], broadcast<Real>(k13), (-source[31]));
     Real const t148 = t146 - source[35];
-    Real const t149 = broadcast<Real>(1.0 / 384.0) * t148;
-    Real const t150 = broadcast<Real>(-5.0 / 1.0) * source[26];
-    Real const t151 = fma(broadcast<Real>(10.0 / 1.0), source[28], t150);
+    Real const t149 = broadcast<Real>(k14) * t148;
+    Real const t150 = -broadcast<Real>(k16) * source[26];
+    Real const t151 = fma(broadcast<Real>(k15), source[28], t150);
     Real const t153 = t151 - source[30];
-    Real const t154 = broadcast<Real>(1.0 / 3840.0) * t153;
+    Real const t154 = broadcast<Real>(k17) * t153;
     target[0] = source[0];
     target[1] = t5;
     target[2] = (-source[3]);
@@ -618,139 +768,160 @@ CUDA_EXPORT void sourceToSpherical(
     target[33] = t144;
     target[34] = t149;
     target[35] = t154;
+    return target;
 }
+}    // namespace cosmictiger::gravity::cartesian
 
+namespace cosmictiger::gravity::basis_conversion {
 template <>
-inline constexpr int kLocalToCartesianFlops<7> = 121;
+inline constexpr int kExpansionCastFlops<7> = 121;
 template <>
-inline constexpr int kLocalToCartesianConventionalFlops<7> = 156;
-/// Assign the equivalent coefficients in the destination basis without changing spatial scale.
-template <class Real>
-CUDA_EXPORT void localToCartesian(
-    cartesian::Expansion<Real, 7>& target, spherical::Expansion<Real, 7> const& source) {
+inline constexpr int kExpansionCastConventionalFlops<7> = 156;
+}    // namespace cosmictiger::gravity::basis_conversion
+namespace cosmictiger::gravity::spherical {
+/// Return the equivalent coefficients in the destination basis at the same spatial scale.
+template <class Real, int order>
+CUDA_EXPORT Expansion<Real, order>::operator cartesian::Expansion<Real, order>() const
+    requires(order == 7)
+{
     using namespace math;
     Fma const fma{};
+    using Scalar = SimdScalar<Real>;
+    constexpr auto k0 = static_cast<Scalar>(+5.00000000000000000E-01);
+    constexpr auto k1 = static_cast<Scalar>(+3.00000000000000000E+00);
+    constexpr auto k2 = static_cast<Scalar>(+2.50000000000000000E-01);
+    constexpr auto k3 = static_cast<Scalar>(+4.00000000000000000E+00);
+    constexpr auto k4 = static_cast<Scalar>(+1.25000000000000000E-01);
+    constexpr auto k5 = static_cast<Scalar>(+2.00000000000000000E+00);
+    constexpr auto k6 = static_cast<Scalar>(+5.00000000000000000E+00);
+    constexpr auto k7 = static_cast<Scalar>(+1.00000000000000000E+01);
+    constexpr auto k8 = static_cast<Scalar>(+6.25000000000000000E-02);
+    constexpr auto k9 = static_cast<Scalar>(+1.50000000000000000E+01);
+    constexpr auto k10 = static_cast<Scalar>(+6.00000000000000000E+00);
+    constexpr auto k11 = static_cast<Scalar>(+3.12500000000000000E-02);
+    cartesian::Expansion<Real, order> target{};
+    auto const& source = *this;
     Real const t8 = source[6] + source[8];
-    Real const t10 = t8 * broadcast<Real>(-1.0 / 2.0);
-    Real const t13 = source[4] * broadcast<Real>(1.0 / 2.0);
+    Real const t10 = t8 * -broadcast<Real>(k0);
+    Real const t13 = source[4] * broadcast<Real>(k0);
     Real const t16 = source[8] - source[6];
-    Real const t17 = broadcast<Real>(1.0 / 2.0) * t16;
-    Real const t23 = fma(broadcast<Real>(3.0 / 1.0), source[11], source[9]);
-    Real const t25 = t23 * broadcast<Real>(-1.0 / 4.0);
+    Real const t17 = broadcast<Real>(k0) * t16;
+    Real const t23 = fma(broadcast<Real>(k1), source[11], source[9]);
+    Real const t25 = t23 * -broadcast<Real>(k2);
     Real const t28 = source[13] + source[15];
-    Real const t29 = broadcast<Real>(-1.0 / 4.0) * t28;
+    Real const t29 = -broadcast<Real>(k2) * t28;
     Real const t31 = source[9] - source[11];
-    Real const t33 = t31 * broadcast<Real>(1.0 / 4.0);
-    Real const t35 = source[13] * broadcast<Real>(-3.0 / 1.0);
+    Real const t33 = t31 * broadcast<Real>(k2);
+    Real const t35 = source[13] * -broadcast<Real>(k1);
     Real const t36 = source[15] + t35;
-    Real const t37 = broadcast<Real>(1.0 / 4.0) * t36;
+    Real const t37 = broadcast<Real>(k2) * t36;
     Real const t40 = source[12] + source[14];
-    Real const t41 = broadcast<Real>(-1.0 / 2.0) * t40;
-    Real const t43 = broadcast<Real>(1.0 / 2.0) * source[10];
+    Real const t41 = -broadcast<Real>(k0) * t40;
+    Real const t43 = broadcast<Real>(k0) * source[10];
     Real const t45 = source[14] - source[12];
-    Real const t46 = broadcast<Real>(1.0 / 2.0) * t45;
-    Real const t48 = broadcast<Real>(3.0 / 1.0) * source[20];
-    Real const t51 = fma(broadcast<Real>(4.0 / 1.0), source[22], t48);
+    Real const t46 = broadcast<Real>(k0) * t45;
+    Real const t48 = broadcast<Real>(k1) * source[20];
+    Real const t51 = fma(broadcast<Real>(k3), source[22], t48);
     Real const t53 = t51 + source[24];
-    Real const t55 = t53 * broadcast<Real>(1.0 / 8.0);
-    Real const t59 = fma(broadcast<Real>(2.0 / 1.0), source[18], source[16]);
-    Real const t61 = t59 * broadcast<Real>(-1.0 / 8.0);
+    Real const t55 = t53 * broadcast<Real>(k4);
+    Real const t59 = fma(broadcast<Real>(k5), source[18], source[16]);
+    Real const t61 = t59 * -broadcast<Real>(k4);
     Real const t63 = source[20] - source[24];
-    Real const t64 = broadcast<Real>(1.0 / 8.0) * t63;
-    Real const t66 = fma(source[18], broadcast<Real>(-2.0 / 1.0), source[16]);
-    Real const t67 = broadcast<Real>(1.0 / 8.0) * t66;
-    Real const t69 = fma(source[22], broadcast<Real>(-4.0 / 1.0), t48);
+    Real const t64 = broadcast<Real>(k4) * t63;
+    Real const t66 = fma(source[18], -broadcast<Real>(k5), source[16]);
+    Real const t67 = broadcast<Real>(k4) * t66;
+    Real const t69 = fma(source[22], -broadcast<Real>(k3), t48);
     Real const t70 = source[24] + t69;
-    Real const t71 = broadcast<Real>(1.0 / 8.0) * t70;
-    Real const t74 = fma(broadcast<Real>(3.0 / 1.0), source[19], source[17]);
-    Real const t75 = broadcast<Real>(-1.0 / 4.0) * t74;
+    Real const t71 = broadcast<Real>(k4) * t70;
+    Real const t74 = fma(broadcast<Real>(k1), source[19], source[17]);
+    Real const t75 = -broadcast<Real>(k2) * t74;
     Real const t78 = source[21] + source[23];
-    Real const t79 = broadcast<Real>(-1.0 / 4.0) * t78;
+    Real const t79 = -broadcast<Real>(k2) * t78;
     Real const t81 = source[17] - source[19];
-    Real const t82 = broadcast<Real>(1.0 / 4.0) * t81;
-    Real const t83 = broadcast<Real>(-3.0 / 1.0) * source[21];
+    Real const t82 = broadcast<Real>(k2) * t81;
+    Real const t83 = -broadcast<Real>(k1) * source[21];
     Real const t84 = source[23] + t83;
-    Real const t85 = broadcast<Real>(1.0 / 4.0) * t84;
-    Real const t89 = fma(broadcast<Real>(5.0 / 1.0), source[27], source[25]);
-    Real const t92 = fma(broadcast<Real>(10.0 / 1.0), source[29], t89);
-    Real const t94 = t92 * broadcast<Real>(1.0 / 16.0);
-    Real const t96 = broadcast<Real>(2.0 / 1.0) * source[31];
-    Real const t98 = fma(broadcast<Real>(3.0 / 1.0), source[33], t96);
+    Real const t85 = broadcast<Real>(k2) * t84;
+    Real const t89 = fma(broadcast<Real>(k6), source[27], source[25]);
+    Real const t92 = fma(broadcast<Real>(k7), source[29], t89);
+    Real const t94 = t92 * broadcast<Real>(k8);
+    Real const t96 = broadcast<Real>(k5) * source[31];
+    Real const t98 = fma(broadcast<Real>(k1), source[33], t96);
     Real const t100 = t98 + source[35];
-    Real const t101 = broadcast<Real>(1.0 / 16.0) * t100;
+    Real const t101 = broadcast<Real>(k8) * t100;
     Real const t104 = (-source[27]) - source[25];
-    Real const t105 = fma(broadcast<Real>(2.0 / 1.0), source[29], t104);
-    Real const t106 = broadcast<Real>(1.0 / 16.0) * t105;
+    Real const t105 = fma(broadcast<Real>(k5), source[29], t104);
+    Real const t106 = broadcast<Real>(k8) * t105;
     Real const t107 = t96 + source[33];
     Real const t109 = t107 - source[35];
-    Real const t110 = broadcast<Real>(1.0 / 16.0) * t109;
-    Real const t111 = fma(broadcast<Real>(-3.0 / 1.0), source[27], source[25]);
-    Real const t112 = fma(broadcast<Real>(2.0 / 1.0), source[29], t111);
-    Real const t113 = broadcast<Real>(1.0 / 16.0) * t112;
-    Real const t114 = broadcast<Real>(10.0 / 1.0) * source[31];
-    Real const t116 = fma(source[33], broadcast<Real>(-5.0 / 1.0), t114);
+    Real const t110 = broadcast<Real>(k8) * t109;
+    Real const t111 = fma(-broadcast<Real>(k1), source[27], source[25]);
+    Real const t112 = fma(broadcast<Real>(k5), source[29], t111);
+    Real const t113 = broadcast<Real>(k8) * t112;
+    Real const t114 = broadcast<Real>(k7) * source[31];
+    Real const t116 = fma(source[33], -broadcast<Real>(k6), t114);
     Real const t117 = source[35] + t116;
-    Real const t118 = broadcast<Real>(1.0 / 16.0) * t117;
-    Real const t120 = broadcast<Real>(3.0 / 1.0) * source[30];
-    Real const t122 = fma(broadcast<Real>(4.0 / 1.0), source[32], t120);
+    Real const t118 = broadcast<Real>(k8) * t117;
+    Real const t120 = broadcast<Real>(k1) * source[30];
+    Real const t122 = fma(broadcast<Real>(k3), source[32], t120);
     Real const t124 = t122 + source[34];
-    Real const t125 = broadcast<Real>(1.0 / 8.0) * t124;
-    Real const t128 = fma(broadcast<Real>(2.0 / 1.0), source[28], source[26]);
-    Real const t129 = broadcast<Real>(-1.0 / 8.0) * t128;
+    Real const t125 = broadcast<Real>(k4) * t124;
+    Real const t128 = fma(broadcast<Real>(k5), source[28], source[26]);
+    Real const t129 = -broadcast<Real>(k4) * t128;
     Real const t131 = source[30] - source[34];
-    Real const t132 = broadcast<Real>(1.0 / 8.0) * t131;
-    Real const t133 = fma(broadcast<Real>(-2.0 / 1.0), source[28], source[26]);
-    Real const t134 = broadcast<Real>(1.0 / 8.0) * t133;
-    Real const t135 = fma(broadcast<Real>(-4.0 / 1.0), source[32], t120);
+    Real const t132 = broadcast<Real>(k4) * t131;
+    Real const t133 = fma(-broadcast<Real>(k5), source[28], source[26]);
+    Real const t134 = broadcast<Real>(k4) * t133;
+    Real const t135 = fma(-broadcast<Real>(k3), source[32], t120);
     Real const t136 = source[34] + t135;
-    Real const t137 = broadcast<Real>(1.0 / 8.0) * t136;
-    Real const t139 = broadcast<Real>(10.0 / 1.0) * source[42];
-    Real const t142 = fma(broadcast<Real>(15.0 / 1.0), source[44], t139);
-    Real const t145 = fma(broadcast<Real>(6.0 / 1.0), source[46], t142);
+    Real const t137 = broadcast<Real>(k4) * t136;
+    Real const t139 = broadcast<Real>(k7) * source[42];
+    Real const t142 = fma(broadcast<Real>(k9), source[44], t139);
+    Real const t145 = fma(broadcast<Real>(k10), source[46], t142);
     Real const t147 = t145 + source[48];
-    Real const t149 = t147 * broadcast<Real>(-1.0 / 32.0);
-    Real const t152 = fma(broadcast<Real>(4.0 / 1.0), source[38], source[36]);
-    Real const t154 = fma(broadcast<Real>(5.0 / 1.0), source[40], t152);
-    Real const t156 = t154 * broadcast<Real>(1.0 / 32.0);
-    Real const t157 = broadcast<Real>(-2.0 / 1.0) * source[42];
+    Real const t149 = t147 * -broadcast<Real>(k11);
+    Real const t152 = fma(broadcast<Real>(k3), source[38], source[36]);
+    Real const t154 = fma(broadcast<Real>(k6), source[40], t152);
+    Real const t156 = t154 * broadcast<Real>(k11);
+    Real const t157 = -broadcast<Real>(k5) * source[42];
     Real const t159 = t157 - source[44];
-    Real const t160 = fma(broadcast<Real>(2.0 / 1.0), source[46], t159);
+    Real const t160 = fma(broadcast<Real>(k5), source[46], t159);
     Real const t161 = source[48] + t160;
-    Real const t162 = broadcast<Real>(1.0 / 32.0) * t161;
-    Real const t164 = fma(broadcast<Real>(3.0 / 1.0), source[40], (-source[36]));
-    Real const t165 = broadcast<Real>(1.0 / 32.0) * t164;
+    Real const t162 = broadcast<Real>(k11) * t161;
+    Real const t164 = fma(broadcast<Real>(k1), source[40], (-source[36]));
+    Real const t165 = broadcast<Real>(k11) * t164;
     Real const t166 = source[44] + t157;
-    Real const t167 = fma(broadcast<Real>(2.0 / 1.0), source[46], t166);
+    Real const t167 = fma(broadcast<Real>(k5), source[46], t166);
     Real const t169 = t167 - source[48];
-    Real const t170 = broadcast<Real>(1.0 / 32.0) * t169;
-    Real const t171 = fma(broadcast<Real>(-4.0 / 1.0), source[38], source[36]);
-    Real const t172 = fma(broadcast<Real>(5.0 / 1.0), source[40], t171);
-    Real const t173 = broadcast<Real>(1.0 / 32.0) * t172;
-    Real const t175 = source[42] * broadcast<Real>(-10.0 / 1.0);
-    Real const t176 = fma(broadcast<Real>(15.0 / 1.0), source[44], t175);
-    Real const t178 = fma(source[46], broadcast<Real>(-6.0 / 1.0), t176);
+    Real const t170 = broadcast<Real>(k11) * t169;
+    Real const t171 = fma(-broadcast<Real>(k3), source[38], source[36]);
+    Real const t172 = fma(broadcast<Real>(k6), source[40], t171);
+    Real const t173 = broadcast<Real>(k11) * t172;
+    Real const t175 = source[42] * -broadcast<Real>(k7);
+    Real const t176 = fma(broadcast<Real>(k9), source[44], t175);
+    Real const t178 = fma(source[46], -broadcast<Real>(k10), t176);
     Real const t179 = source[48] + t178;
-    Real const t180 = broadcast<Real>(1.0 / 32.0) * t179;
-    Real const t183 = fma(broadcast<Real>(5.0 / 1.0), source[39], source[37]);
-    Real const t185 = fma(broadcast<Real>(10.0 / 1.0), source[41], t183);
-    Real const t186 = broadcast<Real>(1.0 / 16.0) * t185;
-    Real const t188 = broadcast<Real>(2.0 / 1.0) * source[43];
-    Real const t190 = fma(broadcast<Real>(3.0 / 1.0), source[45], t188);
+    Real const t180 = broadcast<Real>(k11) * t179;
+    Real const t183 = fma(broadcast<Real>(k6), source[39], source[37]);
+    Real const t185 = fma(broadcast<Real>(k7), source[41], t183);
+    Real const t186 = broadcast<Real>(k8) * t185;
+    Real const t188 = broadcast<Real>(k5) * source[43];
+    Real const t190 = fma(broadcast<Real>(k1), source[45], t188);
     Real const t192 = t190 + source[47];
-    Real const t193 = broadcast<Real>(1.0 / 16.0) * t192;
+    Real const t193 = broadcast<Real>(k8) * t192;
     Real const t196 = (-source[39]) - source[37];
-    Real const t197 = fma(broadcast<Real>(2.0 / 1.0), source[41], t196);
-    Real const t198 = broadcast<Real>(1.0 / 16.0) * t197;
+    Real const t197 = fma(broadcast<Real>(k5), source[41], t196);
+    Real const t198 = broadcast<Real>(k8) * t197;
     Real const t199 = t188 + source[45];
     Real const t201 = t199 - source[47];
-    Real const t202 = broadcast<Real>(1.0 / 16.0) * t201;
-    Real const t203 = fma(broadcast<Real>(-3.0 / 1.0), source[39], source[37]);
-    Real const t204 = fma(broadcast<Real>(2.0 / 1.0), source[41], t203);
-    Real const t205 = broadcast<Real>(1.0 / 16.0) * t204;
-    Real const t206 = broadcast<Real>(10.0 / 1.0) * source[43];
-    Real const t207 = fma(broadcast<Real>(-5.0 / 1.0), source[45], t206);
+    Real const t202 = broadcast<Real>(k8) * t201;
+    Real const t203 = fma(-broadcast<Real>(k1), source[39], source[37]);
+    Real const t204 = fma(broadcast<Real>(k5), source[41], t203);
+    Real const t205 = broadcast<Real>(k8) * t204;
+    Real const t206 = broadcast<Real>(k7) * source[43];
+    Real const t207 = fma(-broadcast<Real>(k6), source[45], t206);
     Real const t208 = source[47] + t207;
-    Real const t209 = broadcast<Real>(1.0 / 16.0) * t208;
+    Real const t209 = broadcast<Real>(k8) * t208;
     target[0] = source[0];
     target[1] = source[1];
     target[2] = source[3];
@@ -800,143 +971,185 @@ CUDA_EXPORT void localToCartesian(
     target[46] = t202;
     target[47] = t205;
     target[48] = t209;
+    return target;
 }
+}    // namespace cosmictiger::gravity::spherical
 
 #endif
 
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 8) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 8)
+namespace cosmictiger::gravity::basis_conversion {
 template <>
-inline constexpr int kSourceToSphericalFlops<8> = 121;
+inline constexpr int kMultipoleCastFlops<8> = 121;
 template <>
-inline constexpr int kSourceToSphericalConventionalFlops<8> = 152;
-/// Assign the equivalent coefficients in the destination basis without changing spatial scale.
-template <class Real>
-CUDA_EXPORT void sourceToSpherical(
-    spherical::Multipole<Real, 8>& target, cartesian::Multipole<Real, 8> const& source) {
+inline constexpr int kMultipoleCastConventionalFlops<8> = 152;
+}    // namespace cosmictiger::gravity::basis_conversion
+namespace cosmictiger::gravity::cartesian {
+/// Return the equivalent coefficients in the destination basis at the same spatial scale.
+template <class Real, int order>
+CUDA_EXPORT Multipole<Real, order>::operator spherical::Multipole<Real, order>() const
+    requires(order == 8)
+{
     using namespace math;
     Fma const fma{};
-    Real const t5 = source[1] * broadcast<Real>(-1.0 / 2.0);
-    Real const t10 = broadcast<Real>(-1.0 / 2.0) * source[2];
-    Real const t13 = source[5] * broadcast<Real>(1.0 / 4.0);
-    Real const t16 = source[7] * broadcast<Real>(1.0 / 2.0);
+    using Scalar = SimdScalar<Real>;
+    constexpr auto k0 = static_cast<Scalar>(+5.00000000000000000E-01);
+    constexpr auto k1 = static_cast<Scalar>(+2.50000000000000000E-01);
+    constexpr auto k2 = static_cast<Scalar>(+7.50000000000000000E-01);
+    constexpr auto k3 = static_cast<Scalar>(+1.25000000000000000E-01);
+    constexpr auto k4 = static_cast<Scalar>(+3.00000000000000000E+00);
+    constexpr auto k5 = static_cast<Scalar>(+2.08333333333333333E-02);
+    constexpr auto k6 = static_cast<Scalar>(+3.12500000000000000E-01);
+    constexpr auto k7 = static_cast<Scalar>(+4.16666666666666667E-01);
+    constexpr auto k8 = static_cast<Scalar>(+1.04166666666666667E-02);
+    constexpr auto k9 = static_cast<Scalar>(+1.45833333333333333E-01);
+    constexpr auto k10 = static_cast<Scalar>(+2.00000000000000000E+00);
+    constexpr auto k11 = static_cast<Scalar>(+1.82291666666666667E-01);
+    constexpr auto k12 = static_cast<Scalar>(+7.29166666666666667E-02);
+    constexpr auto k13 = static_cast<Scalar>(+6.00000000000000000E+00);
+    constexpr auto k14 = static_cast<Scalar>(+2.60416666666666667E-03);
+    constexpr auto k15 = static_cast<Scalar>(+1.00000000000000000E+01);
+    constexpr auto k16 = static_cast<Scalar>(+5.00000000000000000E+00);
+    constexpr auto k17 = static_cast<Scalar>(+2.60416666666666667E-04);
+    constexpr auto k18 = static_cast<Scalar>(+1.17187500000000000E-02);
+    constexpr auto k19 = static_cast<Scalar>(+6.25000000000000000E-02);
+    constexpr auto k20 = static_cast<Scalar>(+5.46875000000000000E-02);
+    constexpr auto k21 = static_cast<Scalar>(+6.56250000000000000E-02);
+    constexpr auto k22 = static_cast<Scalar>(+3.12500000000000000E-02);
+    constexpr auto k23 = static_cast<Scalar>(+4.34027777777777778E-05);
+    constexpr auto k24 = static_cast<Scalar>(+5.72916666666666667E-03);
+    constexpr auto k25 = static_cast<Scalar>(+4.77430555555555556E-03);
+    constexpr auto k26 = static_cast<Scalar>(+2.14843750000000000E-02);
+    constexpr auto k27 = static_cast<Scalar>(+1.71875000000000000E-02);
+    constexpr auto k28 = static_cast<Scalar>(+2.00520833333333333E-02);
+    constexpr auto k29 = static_cast<Scalar>(+1.07421875000000000E-02);
+    constexpr auto k30 = static_cast<Scalar>(+1.43229166666666667E-03);
+    constexpr auto k31 = static_cast<Scalar>(+1.50000000000000000E+01);
+    constexpr auto k32 = static_cast<Scalar>(+2.17013888888888889E-05);
+    spherical::Multipole<Real, order> target{};
+    auto const& source = *this;
+    Real const t5 = source[1] * -broadcast<Real>(k0);
+    Real const t10 = -broadcast<Real>(k0) * source[2];
+    Real const t13 = source[5] * broadcast<Real>(k1);
+    Real const t16 = source[7] * broadcast<Real>(k0);
     Real const t19 = source[4] + source[6];
-    Real const t21 = t19 * broadcast<Real>(-3.0 / 4.0);
-    Real const t23 = broadcast<Real>(1.0 / 2.0) * source[8];
+    Real const t21 = t19 * -broadcast<Real>(k2);
+    Real const t23 = broadcast<Real>(k0) * source[8];
     Real const t25 = source[6] - source[4];
-    Real const t27 = t25 * broadcast<Real>(1.0 / 8.0);
-    Real const t31 = fma(broadcast<Real>(-3.0 / 1.0), source[11], source[9]);
-    Real const t33 = t31 * broadcast<Real>(1.0 / 48.0);
-    Real const t36 = source[14] * broadcast<Real>(-1.0 / 4.0);
+    Real const t27 = t25 * broadcast<Real>(k3);
+    Real const t31 = fma(-broadcast<Real>(k4), source[11], source[9]);
+    Real const t33 = t31 * broadcast<Real>(k5);
+    Real const t36 = source[14] * -broadcast<Real>(k1);
     Real const t37 = source[9] + source[11];
-    Real const t39 = t37 * broadcast<Real>(5.0 / 16.0);
+    Real const t39 = t37 * broadcast<Real>(k6);
     Real const t42 = source[13] + source[15];
-    Real const t44 = t42 * broadcast<Real>(5.0 / 12.0);
+    Real const t44 = t42 * broadcast<Real>(k7);
     Real const t47 = source[10] + source[12];
-    Real const t48 = broadcast<Real>(5.0 / 16.0) * t47;
+    Real const t48 = broadcast<Real>(k6) * t47;
     Real const t50 = source[13] - source[15];
-    Real const t51 = broadcast<Real>(1.0 / 8.0) * t50;
-    Real const t53 = source[10] * broadcast<Real>(3.0 / 1.0);
+    Real const t51 = broadcast<Real>(k3) * t50;
+    Real const t53 = source[10] * broadcast<Real>(k4);
     Real const t55 = t53 - source[12];
-    Real const t56 = broadcast<Real>(1.0 / 48.0) * t55;
+    Real const t56 = broadcast<Real>(k5) * t55;
     Real const t60 = source[19] - source[17];
-    Real const t62 = t60 * broadcast<Real>(1.0 / 96.0);
-    Real const t66 = fma(broadcast<Real>(3.0 / 1.0), source[23], (-source[21]));
-    Real const t67 = broadcast<Real>(1.0 / 48.0) * t66;
+    Real const t62 = t60 * broadcast<Real>(k8);
+    Real const t66 = fma(broadcast<Real>(k4), source[23], (-source[21]));
+    Real const t67 = broadcast<Real>(k5) * t66;
     Real const t68 = source[17] + source[19];
-    Real const t70 = t68 * broadcast<Real>(-7.0 / 48.0);
+    Real const t70 = t68 * -broadcast<Real>(k9);
     Real const t71 = source[21] + source[23];
-    Real const t72 = broadcast<Real>(-7.0 / 48.0) * t71;
-    Real const t76 = fma(broadcast<Real>(2.0 / 1.0), source[18], source[16]);
+    Real const t72 = -broadcast<Real>(k9) * t71;
+    Real const t76 = fma(broadcast<Real>(k10), source[18], source[16]);
     Real const t78 = t76 + source[20];
-    Real const t80 = t78 * broadcast<Real>(35.0 / 192.0);
+    Real const t80 = t78 * broadcast<Real>(k11);
     Real const t83 = source[22] + source[24];
-    Real const t84 = broadcast<Real>(-7.0 / 48.0) * t83;
+    Real const t84 = -broadcast<Real>(k9) * t83;
     Real const t86 = source[16] - source[20];
-    Real const t88 = t86 * broadcast<Real>(7.0 / 96.0);
-    Real const t89 = broadcast<Real>(-3.0 / 1.0) * source[22];
+    Real const t88 = t86 * broadcast<Real>(k12);
+    Real const t89 = -broadcast<Real>(k4) * source[22];
     Real const t90 = source[24] + t89;
-    Real const t91 = broadcast<Real>(1.0 / 48.0) * t90;
-    Real const t93 = fma(source[18], broadcast<Real>(-6.0 / 1.0), source[16]);
+    Real const t91 = broadcast<Real>(k5) * t90;
+    Real const t93 = fma(source[18], -broadcast<Real>(k13), source[16]);
     Real const t94 = source[20] + t93;
-    Real const t96 = t94 * broadcast<Real>(1.0 / 384.0);
-    Real const t101 = fma(broadcast<Real>(10.0 / 1.0), source[27], (-source[25]));
-    Real const t104 = fma(broadcast<Real>(-5.0 / 1.0), source[29], t101);
-    Real const t106 = t104 * broadcast<Real>(1.0 / 3840.0);
+    Real const t96 = t94 * broadcast<Real>(k14);
+    Real const t101 = fma(broadcast<Real>(k15), source[27], (-source[25]));
+    Real const t104 = fma(-broadcast<Real>(k16), source[29], t101);
+    Real const t106 = t104 * broadcast<Real>(k17);
     Real const t110 = source[32] - source[34];
-    Real const t111 = broadcast<Real>(1.0 / 96.0) * t110;
-    Real const t112 = fma(broadcast<Real>(2.0 / 1.0), source[27], (-source[25]));
-    Real const t113 = fma(broadcast<Real>(3.0 / 1.0), source[29], t112);
-    Real const t115 = t113 * broadcast<Real>(3.0 / 256.0);
+    Real const t111 = broadcast<Real>(k8) * t110;
+    Real const t112 = fma(broadcast<Real>(k10), source[27], (-source[25]));
+    Real const t113 = fma(broadcast<Real>(k4), source[29], t112);
+    Real const t115 = t113 * broadcast<Real>(k18);
     Real const t116 = source[32] + source[34];
-    Real const t118 = t116 * broadcast<Real>(1.0 / 16.0);
-    Real const t119 = fma(broadcast<Real>(2.0 / 1.0), source[27], source[25]);
+    Real const t118 = t116 * broadcast<Real>(k19);
+    Real const t119 = fma(broadcast<Real>(k10), source[27], source[25]);
     Real const t120 = source[29] + t119;
-    Real const t122 = t120 * broadcast<Real>(-7.0 / 128.0);
-    Real const t125 = fma(broadcast<Real>(2.0 / 1.0), source[33], source[31]);
+    Real const t122 = t120 * -broadcast<Real>(k20);
+    Real const t125 = fma(broadcast<Real>(k10), source[33], source[31]);
     Real const t127 = t125 + source[35];
-    Real const t129 = t127 * broadcast<Real>(-21.0 / 320.0);
-    Real const t132 = fma(broadcast<Real>(2.0 / 1.0), source[28], source[26]);
+    Real const t129 = t127 * -broadcast<Real>(k21);
+    Real const t132 = fma(broadcast<Real>(k10), source[28], source[26]);
     Real const t134 = t132 + source[30];
-    Real const t135 = broadcast<Real>(-7.0 / 128.0) * t134;
+    Real const t135 = -broadcast<Real>(k20) * t134;
     Real const t137 = source[35] - source[31];
-    Real const t139 = t137 * broadcast<Real>(1.0 / 32.0);
-    Real const t140 = broadcast<Real>(-3.0 / 1.0) * source[26];
-    Real const t142 = fma(source[28], broadcast<Real>(-2.0 / 1.0), t140);
+    Real const t139 = t137 * broadcast<Real>(k22);
+    Real const t140 = -broadcast<Real>(k4) * source[26];
+    Real const t142 = fma(source[28], -broadcast<Real>(k10), t140);
     Real const t143 = source[30] + t142;
-    Real const t144 = broadcast<Real>(3.0 / 256.0) * t143;
-    Real const t146 = fma(source[33], broadcast<Real>(6.0 / 1.0), (-source[31]));
+    Real const t144 = broadcast<Real>(k18) * t143;
+    Real const t146 = fma(source[33], broadcast<Real>(k13), (-source[31]));
     Real const t148 = t146 - source[35];
-    Real const t149 = broadcast<Real>(1.0 / 384.0) * t148;
-    Real const t150 = broadcast<Real>(-5.0 / 1.0) * source[26];
-    Real const t151 = fma(broadcast<Real>(10.0 / 1.0), source[28], t150);
+    Real const t149 = broadcast<Real>(k14) * t148;
+    Real const t150 = -broadcast<Real>(k16) * source[26];
+    Real const t151 = fma(broadcast<Real>(k15), source[28], t150);
     Real const t153 = t151 - source[30];
-    Real const t154 = broadcast<Real>(1.0 / 3840.0) * t153;
-    Real const t156 = broadcast<Real>(3.0 / 1.0) * source[37];
-    Real const t159 = fma(broadcast<Real>(-10.0 / 1.0), source[39], t156);
-    Real const t161 = fma(broadcast<Real>(3.0 / 1.0), source[41], t159);
-    Real const t163 = t161 * broadcast<Real>(1.0 / 23040.0);
-    Real const t166 = fma(broadcast<Real>(-10.0 / 1.0), source[45], source[43]);
-    Real const t169 = fma(broadcast<Real>(5.0 / 1.0), source[47], t166);
-    Real const t170 = broadcast<Real>(1.0 / 3840.0) * t169;
+    Real const t154 = broadcast<Real>(k17) * t153;
+    Real const t156 = broadcast<Real>(k4) * source[37];
+    Real const t159 = fma(-broadcast<Real>(k15), source[39], t156);
+    Real const t161 = fma(broadcast<Real>(k4), source[41], t159);
+    Real const t163 = t161 * broadcast<Real>(k23);
+    Real const t166 = fma(-broadcast<Real>(k15), source[45], source[43]);
+    Real const t169 = fma(broadcast<Real>(k16), source[47], t166);
+    Real const t170 = broadcast<Real>(k17) * t169;
     Real const t172 = source[37] - source[41];
-    Real const t174 = t172 * broadcast<Real>(11.0 / 1920.0);
-    Real const t175 = fma(broadcast<Real>(-2.0 / 1.0), source[45], source[43]);
-    Real const t176 = fma(broadcast<Real>(-3.0 / 1.0), source[47], t175);
-    Real const t178 = t176 * broadcast<Real>(11.0 / 2304.0);
-    Real const t179 = fma(broadcast<Real>(2.0 / 1.0), source[39], source[37]);
+    Real const t174 = t172 * broadcast<Real>(k24);
+    Real const t175 = fma(-broadcast<Real>(k10), source[45], source[43]);
+    Real const t176 = fma(-broadcast<Real>(k4), source[47], t175);
+    Real const t178 = t176 * broadcast<Real>(k25);
+    Real const t179 = fma(broadcast<Real>(k10), source[39], source[37]);
     Real const t180 = source[41] + t179;
-    Real const t182 = t180 * broadcast<Real>(11.0 / 512.0);
-    Real const t183 = fma(broadcast<Real>(2.0 / 1.0), source[45], source[43]);
+    Real const t182 = t180 * broadcast<Real>(k26);
+    Real const t183 = fma(broadcast<Real>(k10), source[45], source[43]);
     Real const t184 = source[47] + t183;
-    Real const t186 = t184 * broadcast<Real>(11.0 / 640.0);
-    Real const t189 = fma(broadcast<Real>(3.0 / 1.0), source[38], source[36]);
-    Real const t191 = fma(broadcast<Real>(3.0 / 1.0), source[40], t189);
+    Real const t186 = t184 * broadcast<Real>(k27);
+    Real const t189 = fma(broadcast<Real>(k4), source[38], source[36]);
+    Real const t191 = fma(broadcast<Real>(k4), source[40], t189);
     Real const t193 = t191 + source[42];
-    Real const t195 = t193 * broadcast<Real>(-77.0 / 3840.0);
-    Real const t198 = fma(broadcast<Real>(2.0 / 1.0), source[46], source[44]);
+    Real const t195 = t193 * -broadcast<Real>(k28);
+    Real const t198 = fma(broadcast<Real>(k10), source[46], source[44]);
     Real const t200 = t198 + source[48];
-    Real const t201 = broadcast<Real>(11.0 / 640.0) * t200;
+    Real const t201 = broadcast<Real>(k27) * t200;
     Real const t204 = (-source[38]) - source[36];
     Real const t205 = source[40] + t204;
     Real const t206 = source[42] + t205;
-    Real const t208 = t206 * broadcast<Real>(11.0 / 1024.0);
-    Real const t209 = broadcast<Real>(3.0 / 1.0) * source[44];
-    Real const t210 = fma(broadcast<Real>(2.0 / 1.0), source[46], t209);
+    Real const t208 = t206 * broadcast<Real>(k29);
+    Real const t209 = broadcast<Real>(k4) * source[44];
+    Real const t210 = fma(broadcast<Real>(k10), source[46], t209);
     Real const t212 = t210 - source[48];
-    Real const t213 = broadcast<Real>(11.0 / 2304.0) * t212;
-    Real const t214 = fma(broadcast<Real>(5.0 / 1.0), source[38], (-source[36]));
-    Real const t215 = fma(broadcast<Real>(5.0 / 1.0), source[40], t214);
+    Real const t213 = broadcast<Real>(k25) * t212;
+    Real const t214 = fma(broadcast<Real>(k16), source[38], (-source[36]));
+    Real const t215 = fma(broadcast<Real>(k16), source[40], t214);
     Real const t217 = t215 - source[42];
-    Real const t219 = t217 * broadcast<Real>(11.0 / 7680.0);
-    Real const t220 = broadcast<Real>(5.0 / 1.0) * source[44];
-    Real const t221 = fma(broadcast<Real>(-10.0 / 1.0), source[46], t220);
+    Real const t219 = t217 * broadcast<Real>(k30);
+    Real const t220 = broadcast<Real>(k16) * source[44];
+    Real const t221 = fma(-broadcast<Real>(k15), source[46], t220);
     Real const t222 = source[48] + t221;
-    Real const t223 = broadcast<Real>(1.0 / 3840.0) * t222;
-    Real const t225 = fma(source[38], broadcast<Real>(15.0 / 1.0), (-source[36]));
-    Real const t227 = fma(source[40], broadcast<Real>(-15.0 / 1.0), t225);
+    Real const t223 = broadcast<Real>(k17) * t222;
+    Real const t225 = fma(source[38], broadcast<Real>(k31), (-source[36]));
+    Real const t227 = fma(source[40], -broadcast<Real>(k31), t225);
     Real const t228 = source[42] + t227;
-    Real const t230 = t228 * broadcast<Real>(1.0 / 46080.0);
+    Real const t230 = t228 * broadcast<Real>(k32);
     target[0] = source[0];
     target[1] = t5;
     target[2] = (-source[3]);
@@ -986,202 +1199,228 @@ CUDA_EXPORT void sourceToSpherical(
     target[46] = t219;
     target[47] = t223;
     target[48] = t230;
+    return target;
 }
+}    // namespace cosmictiger::gravity::cartesian
 
+namespace cosmictiger::gravity::basis_conversion {
 template <>
-inline constexpr int kLocalToCartesianFlops<8> = 184;
+inline constexpr int kExpansionCastFlops<8> = 184;
 template <>
-inline constexpr int kLocalToCartesianConventionalFlops<8> = 246;
-/// Assign the equivalent coefficients in the destination basis without changing spatial scale.
-template <class Real>
-CUDA_EXPORT void localToCartesian(
-    cartesian::Expansion<Real, 8>& target, spherical::Expansion<Real, 8> const& source) {
+inline constexpr int kExpansionCastConventionalFlops<8> = 246;
+}    // namespace cosmictiger::gravity::basis_conversion
+namespace cosmictiger::gravity::spherical {
+/// Return the equivalent coefficients in the destination basis at the same spatial scale.
+template <class Real, int order>
+CUDA_EXPORT Expansion<Real, order>::operator cartesian::Expansion<Real, order>() const
+    requires(order == 8)
+{
     using namespace math;
     Fma const fma{};
+    using Scalar = SimdScalar<Real>;
+    constexpr auto k0 = static_cast<Scalar>(+5.00000000000000000E-01);
+    constexpr auto k1 = static_cast<Scalar>(+3.00000000000000000E+00);
+    constexpr auto k2 = static_cast<Scalar>(+2.50000000000000000E-01);
+    constexpr auto k3 = static_cast<Scalar>(+4.00000000000000000E+00);
+    constexpr auto k4 = static_cast<Scalar>(+1.25000000000000000E-01);
+    constexpr auto k5 = static_cast<Scalar>(+2.00000000000000000E+00);
+    constexpr auto k6 = static_cast<Scalar>(+5.00000000000000000E+00);
+    constexpr auto k7 = static_cast<Scalar>(+1.00000000000000000E+01);
+    constexpr auto k8 = static_cast<Scalar>(+6.25000000000000000E-02);
+    constexpr auto k9 = static_cast<Scalar>(+1.50000000000000000E+01);
+    constexpr auto k10 = static_cast<Scalar>(+6.00000000000000000E+00);
+    constexpr auto k11 = static_cast<Scalar>(+3.12500000000000000E-02);
+    constexpr auto k12 = static_cast<Scalar>(+7.00000000000000000E+00);
+    constexpr auto k13 = static_cast<Scalar>(+2.10000000000000000E+01);
+    constexpr auto k14 = static_cast<Scalar>(+3.50000000000000000E+01);
+    constexpr auto k15 = static_cast<Scalar>(+1.56250000000000000E-02);
+    constexpr auto k16 = static_cast<Scalar>(+9.00000000000000000E+00);
+    cartesian::Expansion<Real, order> target{};
+    auto const& source = *this;
     Real const t8 = source[6] + source[8];
-    Real const t10 = t8 * broadcast<Real>(-1.0 / 2.0);
-    Real const t13 = source[4] * broadcast<Real>(1.0 / 2.0);
+    Real const t10 = t8 * -broadcast<Real>(k0);
+    Real const t13 = source[4] * broadcast<Real>(k0);
     Real const t16 = source[8] - source[6];
-    Real const t17 = broadcast<Real>(1.0 / 2.0) * t16;
-    Real const t23 = fma(broadcast<Real>(3.0 / 1.0), source[11], source[9]);
-    Real const t25 = t23 * broadcast<Real>(-1.0 / 4.0);
+    Real const t17 = broadcast<Real>(k0) * t16;
+    Real const t23 = fma(broadcast<Real>(k1), source[11], source[9]);
+    Real const t25 = t23 * -broadcast<Real>(k2);
     Real const t28 = source[13] + source[15];
-    Real const t29 = broadcast<Real>(-1.0 / 4.0) * t28;
+    Real const t29 = -broadcast<Real>(k2) * t28;
     Real const t31 = source[9] - source[11];
-    Real const t33 = t31 * broadcast<Real>(1.0 / 4.0);
-    Real const t35 = source[13] * broadcast<Real>(-3.0 / 1.0);
+    Real const t33 = t31 * broadcast<Real>(k2);
+    Real const t35 = source[13] * -broadcast<Real>(k1);
     Real const t36 = source[15] + t35;
-    Real const t37 = broadcast<Real>(1.0 / 4.0) * t36;
+    Real const t37 = broadcast<Real>(k2) * t36;
     Real const t40 = source[12] + source[14];
-    Real const t41 = broadcast<Real>(-1.0 / 2.0) * t40;
-    Real const t43 = broadcast<Real>(1.0 / 2.0) * source[10];
+    Real const t41 = -broadcast<Real>(k0) * t40;
+    Real const t43 = broadcast<Real>(k0) * source[10];
     Real const t45 = source[14] - source[12];
-    Real const t46 = broadcast<Real>(1.0 / 2.0) * t45;
-    Real const t48 = broadcast<Real>(3.0 / 1.0) * source[20];
-    Real const t51 = fma(broadcast<Real>(4.0 / 1.0), source[22], t48);
+    Real const t46 = broadcast<Real>(k0) * t45;
+    Real const t48 = broadcast<Real>(k1) * source[20];
+    Real const t51 = fma(broadcast<Real>(k3), source[22], t48);
     Real const t53 = t51 + source[24];
-    Real const t55 = t53 * broadcast<Real>(1.0 / 8.0);
-    Real const t59 = fma(broadcast<Real>(2.0 / 1.0), source[18], source[16]);
-    Real const t61 = t59 * broadcast<Real>(-1.0 / 8.0);
+    Real const t55 = t53 * broadcast<Real>(k4);
+    Real const t59 = fma(broadcast<Real>(k5), source[18], source[16]);
+    Real const t61 = t59 * -broadcast<Real>(k4);
     Real const t63 = source[20] - source[24];
-    Real const t64 = broadcast<Real>(1.0 / 8.0) * t63;
-    Real const t66 = fma(source[18], broadcast<Real>(-2.0 / 1.0), source[16]);
-    Real const t67 = broadcast<Real>(1.0 / 8.0) * t66;
-    Real const t69 = fma(source[22], broadcast<Real>(-4.0 / 1.0), t48);
+    Real const t64 = broadcast<Real>(k4) * t63;
+    Real const t66 = fma(source[18], -broadcast<Real>(k5), source[16]);
+    Real const t67 = broadcast<Real>(k4) * t66;
+    Real const t69 = fma(source[22], -broadcast<Real>(k3), t48);
     Real const t70 = source[24] + t69;
-    Real const t71 = broadcast<Real>(1.0 / 8.0) * t70;
-    Real const t74 = fma(broadcast<Real>(3.0 / 1.0), source[19], source[17]);
-    Real const t75 = broadcast<Real>(-1.0 / 4.0) * t74;
+    Real const t71 = broadcast<Real>(k4) * t70;
+    Real const t74 = fma(broadcast<Real>(k1), source[19], source[17]);
+    Real const t75 = -broadcast<Real>(k2) * t74;
     Real const t78 = source[21] + source[23];
-    Real const t79 = broadcast<Real>(-1.0 / 4.0) * t78;
+    Real const t79 = -broadcast<Real>(k2) * t78;
     Real const t81 = source[17] - source[19];
-    Real const t82 = broadcast<Real>(1.0 / 4.0) * t81;
-    Real const t83 = broadcast<Real>(-3.0 / 1.0) * source[21];
+    Real const t82 = broadcast<Real>(k2) * t81;
+    Real const t83 = -broadcast<Real>(k1) * source[21];
     Real const t84 = source[23] + t83;
-    Real const t85 = broadcast<Real>(1.0 / 4.0) * t84;
-    Real const t89 = fma(broadcast<Real>(5.0 / 1.0), source[27], source[25]);
-    Real const t92 = fma(broadcast<Real>(10.0 / 1.0), source[29], t89);
-    Real const t94 = t92 * broadcast<Real>(1.0 / 16.0);
-    Real const t96 = broadcast<Real>(2.0 / 1.0) * source[31];
-    Real const t98 = fma(broadcast<Real>(3.0 / 1.0), source[33], t96);
+    Real const t85 = broadcast<Real>(k2) * t84;
+    Real const t89 = fma(broadcast<Real>(k6), source[27], source[25]);
+    Real const t92 = fma(broadcast<Real>(k7), source[29], t89);
+    Real const t94 = t92 * broadcast<Real>(k8);
+    Real const t96 = broadcast<Real>(k5) * source[31];
+    Real const t98 = fma(broadcast<Real>(k1), source[33], t96);
     Real const t100 = t98 + source[35];
-    Real const t101 = broadcast<Real>(1.0 / 16.0) * t100;
+    Real const t101 = broadcast<Real>(k8) * t100;
     Real const t104 = (-source[27]) - source[25];
-    Real const t105 = fma(broadcast<Real>(2.0 / 1.0), source[29], t104);
-    Real const t106 = broadcast<Real>(1.0 / 16.0) * t105;
+    Real const t105 = fma(broadcast<Real>(k5), source[29], t104);
+    Real const t106 = broadcast<Real>(k8) * t105;
     Real const t107 = t96 + source[33];
     Real const t109 = t107 - source[35];
-    Real const t110 = broadcast<Real>(1.0 / 16.0) * t109;
-    Real const t111 = fma(broadcast<Real>(-3.0 / 1.0), source[27], source[25]);
-    Real const t112 = fma(broadcast<Real>(2.0 / 1.0), source[29], t111);
-    Real const t113 = broadcast<Real>(1.0 / 16.0) * t112;
-    Real const t114 = broadcast<Real>(10.0 / 1.0) * source[31];
-    Real const t116 = fma(source[33], broadcast<Real>(-5.0 / 1.0), t114);
+    Real const t110 = broadcast<Real>(k8) * t109;
+    Real const t111 = fma(-broadcast<Real>(k1), source[27], source[25]);
+    Real const t112 = fma(broadcast<Real>(k5), source[29], t111);
+    Real const t113 = broadcast<Real>(k8) * t112;
+    Real const t114 = broadcast<Real>(k7) * source[31];
+    Real const t116 = fma(source[33], -broadcast<Real>(k6), t114);
     Real const t117 = source[35] + t116;
-    Real const t118 = broadcast<Real>(1.0 / 16.0) * t117;
-    Real const t120 = broadcast<Real>(3.0 / 1.0) * source[30];
-    Real const t122 = fma(broadcast<Real>(4.0 / 1.0), source[32], t120);
+    Real const t118 = broadcast<Real>(k8) * t117;
+    Real const t120 = broadcast<Real>(k1) * source[30];
+    Real const t122 = fma(broadcast<Real>(k3), source[32], t120);
     Real const t124 = t122 + source[34];
-    Real const t125 = broadcast<Real>(1.0 / 8.0) * t124;
-    Real const t128 = fma(broadcast<Real>(2.0 / 1.0), source[28], source[26]);
-    Real const t129 = broadcast<Real>(-1.0 / 8.0) * t128;
+    Real const t125 = broadcast<Real>(k4) * t124;
+    Real const t128 = fma(broadcast<Real>(k5), source[28], source[26]);
+    Real const t129 = -broadcast<Real>(k4) * t128;
     Real const t131 = source[30] - source[34];
-    Real const t132 = broadcast<Real>(1.0 / 8.0) * t131;
-    Real const t133 = fma(broadcast<Real>(-2.0 / 1.0), source[28], source[26]);
-    Real const t134 = broadcast<Real>(1.0 / 8.0) * t133;
-    Real const t135 = fma(broadcast<Real>(-4.0 / 1.0), source[32], t120);
+    Real const t132 = broadcast<Real>(k4) * t131;
+    Real const t133 = fma(-broadcast<Real>(k5), source[28], source[26]);
+    Real const t134 = broadcast<Real>(k4) * t133;
+    Real const t135 = fma(-broadcast<Real>(k3), source[32], t120);
     Real const t136 = source[34] + t135;
-    Real const t137 = broadcast<Real>(1.0 / 8.0) * t136;
-    Real const t139 = broadcast<Real>(10.0 / 1.0) * source[42];
-    Real const t142 = fma(broadcast<Real>(15.0 / 1.0), source[44], t139);
-    Real const t145 = fma(broadcast<Real>(6.0 / 1.0), source[46], t142);
+    Real const t137 = broadcast<Real>(k4) * t136;
+    Real const t139 = broadcast<Real>(k7) * source[42];
+    Real const t142 = fma(broadcast<Real>(k9), source[44], t139);
+    Real const t145 = fma(broadcast<Real>(k10), source[46], t142);
     Real const t147 = t145 + source[48];
-    Real const t149 = t147 * broadcast<Real>(-1.0 / 32.0);
-    Real const t152 = fma(broadcast<Real>(4.0 / 1.0), source[38], source[36]);
-    Real const t154 = fma(broadcast<Real>(5.0 / 1.0), source[40], t152);
-    Real const t156 = t154 * broadcast<Real>(1.0 / 32.0);
-    Real const t157 = broadcast<Real>(-2.0 / 1.0) * source[42];
+    Real const t149 = t147 * -broadcast<Real>(k11);
+    Real const t152 = fma(broadcast<Real>(k3), source[38], source[36]);
+    Real const t154 = fma(broadcast<Real>(k6), source[40], t152);
+    Real const t156 = t154 * broadcast<Real>(k11);
+    Real const t157 = -broadcast<Real>(k5) * source[42];
     Real const t159 = t157 - source[44];
-    Real const t160 = fma(broadcast<Real>(2.0 / 1.0), source[46], t159);
+    Real const t160 = fma(broadcast<Real>(k5), source[46], t159);
     Real const t161 = source[48] + t160;
-    Real const t162 = broadcast<Real>(1.0 / 32.0) * t161;
-    Real const t164 = fma(broadcast<Real>(3.0 / 1.0), source[40], (-source[36]));
-    Real const t165 = broadcast<Real>(1.0 / 32.0) * t164;
+    Real const t162 = broadcast<Real>(k11) * t161;
+    Real const t164 = fma(broadcast<Real>(k1), source[40], (-source[36]));
+    Real const t165 = broadcast<Real>(k11) * t164;
     Real const t166 = source[44] + t157;
-    Real const t167 = fma(broadcast<Real>(2.0 / 1.0), source[46], t166);
+    Real const t167 = fma(broadcast<Real>(k5), source[46], t166);
     Real const t169 = t167 - source[48];
-    Real const t170 = broadcast<Real>(1.0 / 32.0) * t169;
-    Real const t171 = fma(broadcast<Real>(-4.0 / 1.0), source[38], source[36]);
-    Real const t172 = fma(broadcast<Real>(5.0 / 1.0), source[40], t171);
-    Real const t173 = broadcast<Real>(1.0 / 32.0) * t172;
-    Real const t175 = source[42] * broadcast<Real>(-10.0 / 1.0);
-    Real const t176 = fma(broadcast<Real>(15.0 / 1.0), source[44], t175);
-    Real const t178 = fma(source[46], broadcast<Real>(-6.0 / 1.0), t176);
+    Real const t170 = broadcast<Real>(k11) * t169;
+    Real const t171 = fma(-broadcast<Real>(k3), source[38], source[36]);
+    Real const t172 = fma(broadcast<Real>(k6), source[40], t171);
+    Real const t173 = broadcast<Real>(k11) * t172;
+    Real const t175 = source[42] * -broadcast<Real>(k7);
+    Real const t176 = fma(broadcast<Real>(k9), source[44], t175);
+    Real const t178 = fma(source[46], -broadcast<Real>(k10), t176);
     Real const t179 = source[48] + t178;
-    Real const t180 = broadcast<Real>(1.0 / 32.0) * t179;
-    Real const t183 = fma(broadcast<Real>(5.0 / 1.0), source[39], source[37]);
-    Real const t185 = fma(broadcast<Real>(10.0 / 1.0), source[41], t183);
-    Real const t186 = broadcast<Real>(1.0 / 16.0) * t185;
-    Real const t188 = broadcast<Real>(2.0 / 1.0) * source[43];
-    Real const t190 = fma(broadcast<Real>(3.0 / 1.0), source[45], t188);
+    Real const t180 = broadcast<Real>(k11) * t179;
+    Real const t183 = fma(broadcast<Real>(k6), source[39], source[37]);
+    Real const t185 = fma(broadcast<Real>(k7), source[41], t183);
+    Real const t186 = broadcast<Real>(k8) * t185;
+    Real const t188 = broadcast<Real>(k5) * source[43];
+    Real const t190 = fma(broadcast<Real>(k1), source[45], t188);
     Real const t192 = t190 + source[47];
-    Real const t193 = broadcast<Real>(1.0 / 16.0) * t192;
+    Real const t193 = broadcast<Real>(k8) * t192;
     Real const t196 = (-source[39]) - source[37];
-    Real const t197 = fma(broadcast<Real>(2.0 / 1.0), source[41], t196);
-    Real const t198 = broadcast<Real>(1.0 / 16.0) * t197;
+    Real const t197 = fma(broadcast<Real>(k5), source[41], t196);
+    Real const t198 = broadcast<Real>(k8) * t197;
     Real const t199 = t188 + source[45];
     Real const t201 = t199 - source[47];
-    Real const t202 = broadcast<Real>(1.0 / 16.0) * t201;
-    Real const t203 = fma(broadcast<Real>(-3.0 / 1.0), source[39], source[37]);
-    Real const t204 = fma(broadcast<Real>(2.0 / 1.0), source[41], t203);
-    Real const t205 = broadcast<Real>(1.0 / 16.0) * t204;
-    Real const t206 = broadcast<Real>(10.0 / 1.0) * source[43];
-    Real const t207 = fma(broadcast<Real>(-5.0 / 1.0), source[45], t206);
+    Real const t202 = broadcast<Real>(k8) * t201;
+    Real const t203 = fma(-broadcast<Real>(k1), source[39], source[37]);
+    Real const t204 = fma(broadcast<Real>(k5), source[41], t203);
+    Real const t205 = broadcast<Real>(k8) * t204;
+    Real const t206 = broadcast<Real>(k7) * source[43];
+    Real const t207 = fma(-broadcast<Real>(k6), source[45], t206);
     Real const t208 = source[47] + t207;
-    Real const t209 = broadcast<Real>(1.0 / 16.0) * t208;
-    Real const t213 = fma(broadcast<Real>(7.0 / 1.0), source[51], source[49]);
-    Real const t216 = fma(broadcast<Real>(21.0 / 1.0), source[53], t213);
-    Real const t219 = fma(broadcast<Real>(35.0 / 1.0), source[55], t216);
-    Real const t221 = t219 * broadcast<Real>(-1.0 / 64.0);
-    Real const t223 = broadcast<Real>(5.0 / 1.0) * source[57];
-    Real const t226 = fma(broadcast<Real>(9.0 / 1.0), source[59], t223);
-    Real const t228 = fma(broadcast<Real>(5.0 / 1.0), source[61], t226);
+    Real const t209 = broadcast<Real>(k8) * t208;
+    Real const t213 = fma(broadcast<Real>(k12), source[51], source[49]);
+    Real const t216 = fma(broadcast<Real>(k13), source[53], t213);
+    Real const t219 = fma(broadcast<Real>(k14), source[55], t216);
+    Real const t221 = t219 * -broadcast<Real>(k15);
+    Real const t223 = broadcast<Real>(k6) * source[57];
+    Real const t226 = fma(broadcast<Real>(k16), source[59], t223);
+    Real const t228 = fma(broadcast<Real>(k6), source[61], t226);
     Real const t230 = t228 + source[63];
-    Real const t231 = broadcast<Real>(-1.0 / 64.0) * t230;
-    Real const t232 = fma(broadcast<Real>(3.0 / 1.0), source[51], source[49]);
+    Real const t231 = -broadcast<Real>(k15) * t230;
+    Real const t232 = fma(broadcast<Real>(k1), source[51], source[49]);
     Real const t233 = source[53] + t232;
-    Real const t234 = fma(broadcast<Real>(-5.0 / 1.0), source[55], t233);
-    Real const t236 = t234 * broadcast<Real>(1.0 / 64.0);
-    Real const t237 = broadcast<Real>(-3.0 / 1.0) * source[57];
-    Real const t238 = fma(broadcast<Real>(-3.0 / 1.0), source[59], t237);
+    Real const t234 = fma(-broadcast<Real>(k6), source[55], t233);
+    Real const t236 = t234 * broadcast<Real>(k15);
+    Real const t237 = -broadcast<Real>(k1) * source[57];
+    Real const t238 = fma(-broadcast<Real>(k1), source[59], t237);
     Real const t239 = source[61] + t238;
     Real const t240 = source[63] + t239;
-    Real const t241 = broadcast<Real>(1.0 / 64.0) * t240;
+    Real const t241 = broadcast<Real>(k15) * t240;
     Real const t243 = source[51] - source[49];
-    Real const t244 = fma(broadcast<Real>(3.0 / 1.0), source[53], t243);
-    Real const t245 = fma(broadcast<Real>(-3.0 / 1.0), source[55], t244);
-    Real const t246 = broadcast<Real>(1.0 / 64.0) * t245;
-    Real const t247 = broadcast<Real>(-5.0 / 1.0) * source[57];
+    Real const t244 = fma(broadcast<Real>(k1), source[53], t243);
+    Real const t245 = fma(-broadcast<Real>(k1), source[55], t244);
+    Real const t246 = broadcast<Real>(k15) * t245;
+    Real const t247 = -broadcast<Real>(k6) * source[57];
     Real const t249 = t247 - source[59];
-    Real const t250 = fma(broadcast<Real>(3.0 / 1.0), source[61], t249);
+    Real const t250 = fma(broadcast<Real>(k1), source[61], t249);
     Real const t252 = t250 - source[63];
-    Real const t253 = broadcast<Real>(1.0 / 64.0) * t252;
-    Real const t254 = fma(broadcast<Real>(-5.0 / 1.0), source[51], source[49]);
-    Real const t255 = fma(source[53], broadcast<Real>(9.0 / 1.0), t254);
-    Real const t256 = fma(broadcast<Real>(-5.0 / 1.0), source[55], t255);
-    Real const t257 = broadcast<Real>(1.0 / 64.0) * t256;
-    Real const t259 = source[57] * broadcast<Real>(-35.0 / 1.0);
-    Real const t260 = fma(broadcast<Real>(21.0 / 1.0), source[59], t259);
-    Real const t262 = fma(source[61], broadcast<Real>(-7.0 / 1.0), t260);
+    Real const t253 = broadcast<Real>(k15) * t252;
+    Real const t254 = fma(-broadcast<Real>(k6), source[51], source[49]);
+    Real const t255 = fma(source[53], broadcast<Real>(k16), t254);
+    Real const t256 = fma(-broadcast<Real>(k6), source[55], t255);
+    Real const t257 = broadcast<Real>(k15) * t256;
+    Real const t259 = source[57] * -broadcast<Real>(k14);
+    Real const t260 = fma(broadcast<Real>(k13), source[59], t259);
+    Real const t262 = fma(source[61], -broadcast<Real>(k12), t260);
     Real const t263 = source[63] + t262;
-    Real const t264 = broadcast<Real>(1.0 / 64.0) * t263;
-    Real const t266 = broadcast<Real>(10.0 / 1.0) * source[56];
-    Real const t268 = fma(broadcast<Real>(15.0 / 1.0), source[58], t266);
-    Real const t270 = fma(broadcast<Real>(6.0 / 1.0), source[60], t268);
+    Real const t264 = broadcast<Real>(k15) * t263;
+    Real const t266 = broadcast<Real>(k7) * source[56];
+    Real const t268 = fma(broadcast<Real>(k9), source[58], t266);
+    Real const t270 = fma(broadcast<Real>(k10), source[60], t268);
     Real const t272 = t270 + source[62];
-    Real const t273 = broadcast<Real>(-1.0 / 32.0) * t272;
-    Real const t276 = fma(broadcast<Real>(4.0 / 1.0), source[52], source[50]);
-    Real const t278 = fma(broadcast<Real>(5.0 / 1.0), source[54], t276);
-    Real const t279 = broadcast<Real>(1.0 / 32.0) * t278;
-    Real const t280 = broadcast<Real>(-2.0 / 1.0) * source[56];
+    Real const t273 = -broadcast<Real>(k11) * t272;
+    Real const t276 = fma(broadcast<Real>(k3), source[52], source[50]);
+    Real const t278 = fma(broadcast<Real>(k6), source[54], t276);
+    Real const t279 = broadcast<Real>(k11) * t278;
+    Real const t280 = -broadcast<Real>(k5) * source[56];
     Real const t282 = t280 - source[58];
-    Real const t283 = fma(broadcast<Real>(2.0 / 1.0), source[60], t282);
+    Real const t283 = fma(broadcast<Real>(k5), source[60], t282);
     Real const t284 = source[62] + t283;
-    Real const t285 = broadcast<Real>(1.0 / 32.0) * t284;
-    Real const t287 = fma(broadcast<Real>(3.0 / 1.0), source[54], (-source[50]));
-    Real const t288 = broadcast<Real>(1.0 / 32.0) * t287;
+    Real const t285 = broadcast<Real>(k11) * t284;
+    Real const t287 = fma(broadcast<Real>(k1), source[54], (-source[50]));
+    Real const t288 = broadcast<Real>(k11) * t287;
     Real const t289 = source[58] + t280;
-    Real const t290 = fma(broadcast<Real>(2.0 / 1.0), source[60], t289);
+    Real const t290 = fma(broadcast<Real>(k5), source[60], t289);
     Real const t292 = t290 - source[62];
-    Real const t293 = broadcast<Real>(1.0 / 32.0) * t292;
-    Real const t294 = fma(broadcast<Real>(-4.0 / 1.0), source[52], source[50]);
-    Real const t295 = fma(broadcast<Real>(5.0 / 1.0), source[54], t294);
-    Real const t296 = broadcast<Real>(1.0 / 32.0) * t295;
-    Real const t297 = broadcast<Real>(-10.0 / 1.0) * source[56];
-    Real const t298 = fma(broadcast<Real>(15.0 / 1.0), source[58], t297);
-    Real const t299 = fma(broadcast<Real>(-6.0 / 1.0), source[60], t298);
+    Real const t293 = broadcast<Real>(k11) * t292;
+    Real const t294 = fma(-broadcast<Real>(k3), source[52], source[50]);
+    Real const t295 = fma(broadcast<Real>(k6), source[54], t294);
+    Real const t296 = broadcast<Real>(k11) * t295;
+    Real const t297 = -broadcast<Real>(k7) * source[56];
+    Real const t298 = fma(broadcast<Real>(k9), source[58], t297);
+    Real const t299 = fma(-broadcast<Real>(k10), source[60], t298);
     Real const t300 = source[62] + t299;
-    Real const t301 = broadcast<Real>(1.0 / 32.0) * t300;
+    Real const t301 = broadcast<Real>(k11) * t300;
     target[0] = source[0];
     target[1] = source[1];
     target[2] = source[3];
@@ -1246,203 +1485,258 @@ CUDA_EXPORT void localToCartesian(
     target[61] = t293;
     target[62] = t296;
     target[63] = t301;
+    return target;
 }
+}    // namespace cosmictiger::gravity::spherical
 
 #endif
 
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 9) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 9)
+namespace cosmictiger::gravity::basis_conversion {
 template <>
-inline constexpr int kSourceToSphericalFlops<9> = 181;
+inline constexpr int kMultipoleCastFlops<9> = 181;
 template <>
-inline constexpr int kSourceToSphericalConventionalFlops<9> = 238;
-/// Assign the equivalent coefficients in the destination basis without changing spatial scale.
-template <class Real>
-CUDA_EXPORT void sourceToSpherical(
-    spherical::Multipole<Real, 9>& target, cartesian::Multipole<Real, 9> const& source) {
+inline constexpr int kMultipoleCastConventionalFlops<9> = 238;
+}    // namespace cosmictiger::gravity::basis_conversion
+namespace cosmictiger::gravity::cartesian {
+/// Return the equivalent coefficients in the destination basis at the same spatial scale.
+template <class Real, int order>
+CUDA_EXPORT Multipole<Real, order>::operator spherical::Multipole<Real, order>() const
+    requires(order == 9)
+{
     using namespace math;
     Fma const fma{};
-    Real const t5 = source[1] * broadcast<Real>(-1.0 / 2.0);
-    Real const t10 = broadcast<Real>(-1.0 / 2.0) * source[2];
-    Real const t13 = source[5] * broadcast<Real>(1.0 / 4.0);
-    Real const t16 = source[7] * broadcast<Real>(1.0 / 2.0);
+    using Scalar = SimdScalar<Real>;
+    constexpr auto k0 = static_cast<Scalar>(+5.00000000000000000E-01);
+    constexpr auto k1 = static_cast<Scalar>(+2.50000000000000000E-01);
+    constexpr auto k2 = static_cast<Scalar>(+7.50000000000000000E-01);
+    constexpr auto k3 = static_cast<Scalar>(+1.25000000000000000E-01);
+    constexpr auto k4 = static_cast<Scalar>(+3.00000000000000000E+00);
+    constexpr auto k5 = static_cast<Scalar>(+2.08333333333333333E-02);
+    constexpr auto k6 = static_cast<Scalar>(+3.12500000000000000E-01);
+    constexpr auto k7 = static_cast<Scalar>(+4.16666666666666667E-01);
+    constexpr auto k8 = static_cast<Scalar>(+1.04166666666666667E-02);
+    constexpr auto k9 = static_cast<Scalar>(+1.45833333333333333E-01);
+    constexpr auto k10 = static_cast<Scalar>(+2.00000000000000000E+00);
+    constexpr auto k11 = static_cast<Scalar>(+1.82291666666666667E-01);
+    constexpr auto k12 = static_cast<Scalar>(+7.29166666666666667E-02);
+    constexpr auto k13 = static_cast<Scalar>(+6.00000000000000000E+00);
+    constexpr auto k14 = static_cast<Scalar>(+2.60416666666666667E-03);
+    constexpr auto k15 = static_cast<Scalar>(+1.00000000000000000E+01);
+    constexpr auto k16 = static_cast<Scalar>(+5.00000000000000000E+00);
+    constexpr auto k17 = static_cast<Scalar>(+2.60416666666666667E-04);
+    constexpr auto k18 = static_cast<Scalar>(+1.17187500000000000E-02);
+    constexpr auto k19 = static_cast<Scalar>(+6.25000000000000000E-02);
+    constexpr auto k20 = static_cast<Scalar>(+5.46875000000000000E-02);
+    constexpr auto k21 = static_cast<Scalar>(+6.56250000000000000E-02);
+    constexpr auto k22 = static_cast<Scalar>(+3.12500000000000000E-02);
+    constexpr auto k23 = static_cast<Scalar>(+4.34027777777777778E-05);
+    constexpr auto k24 = static_cast<Scalar>(+5.72916666666666667E-03);
+    constexpr auto k25 = static_cast<Scalar>(+4.77430555555555556E-03);
+    constexpr auto k26 = static_cast<Scalar>(+2.14843750000000000E-02);
+    constexpr auto k27 = static_cast<Scalar>(+1.71875000000000000E-02);
+    constexpr auto k28 = static_cast<Scalar>(+2.00520833333333333E-02);
+    constexpr auto k29 = static_cast<Scalar>(+1.07421875000000000E-02);
+    constexpr auto k30 = static_cast<Scalar>(+1.43229166666666667E-03);
+    constexpr auto k31 = static_cast<Scalar>(+1.50000000000000000E+01);
+    constexpr auto k32 = static_cast<Scalar>(+2.17013888888888889E-05);
+    constexpr auto k33 = static_cast<Scalar>(+2.10000000000000000E+01);
+    constexpr auto k34 = static_cast<Scalar>(+3.50000000000000000E+01);
+    constexpr auto k35 = static_cast<Scalar>(+7.00000000000000000E+00);
+    constexpr auto k36 = static_cast<Scalar>(+1.55009920634920635E-06);
+    constexpr auto k37 = static_cast<Scalar>(+9.00000000000000000E+00);
+    constexpr auto k38 = static_cast<Scalar>(+1.41059027777777778E-04);
+    constexpr auto k39 = static_cast<Scalar>(+2.25694444444444444E-03);
+    constexpr auto k40 = static_cast<Scalar>(+1.55164930555555556E-03);
+    constexpr auto k41 = static_cast<Scalar>(+6.20659722222222222E-03);
+    constexpr auto k42 = static_cast<Scalar>(+4.65494791666666667E-03);
+    constexpr auto k43 = static_cast<Scalar>(+5.31994047619047619E-03);
+    constexpr auto k44 = static_cast<Scalar>(+3.10329861111111111E-03);
+    constexpr auto k45 = static_cast<Scalar>(+5.64236111111111111E-04);
+    spherical::Multipole<Real, order> target{};
+    auto const& source = *this;
+    Real const t5 = source[1] * -broadcast<Real>(k0);
+    Real const t10 = -broadcast<Real>(k0) * source[2];
+    Real const t13 = source[5] * broadcast<Real>(k1);
+    Real const t16 = source[7] * broadcast<Real>(k0);
     Real const t19 = source[4] + source[6];
-    Real const t21 = t19 * broadcast<Real>(-3.0 / 4.0);
-    Real const t23 = broadcast<Real>(1.0 / 2.0) * source[8];
+    Real const t21 = t19 * -broadcast<Real>(k2);
+    Real const t23 = broadcast<Real>(k0) * source[8];
     Real const t25 = source[6] - source[4];
-    Real const t27 = t25 * broadcast<Real>(1.0 / 8.0);
-    Real const t31 = fma(broadcast<Real>(-3.0 / 1.0), source[11], source[9]);
-    Real const t33 = t31 * broadcast<Real>(1.0 / 48.0);
-    Real const t36 = source[14] * broadcast<Real>(-1.0 / 4.0);
+    Real const t27 = t25 * broadcast<Real>(k3);
+    Real const t31 = fma(-broadcast<Real>(k4), source[11], source[9]);
+    Real const t33 = t31 * broadcast<Real>(k5);
+    Real const t36 = source[14] * -broadcast<Real>(k1);
     Real const t37 = source[9] + source[11];
-    Real const t39 = t37 * broadcast<Real>(5.0 / 16.0);
+    Real const t39 = t37 * broadcast<Real>(k6);
     Real const t42 = source[13] + source[15];
-    Real const t44 = t42 * broadcast<Real>(5.0 / 12.0);
+    Real const t44 = t42 * broadcast<Real>(k7);
     Real const t47 = source[10] + source[12];
-    Real const t48 = broadcast<Real>(5.0 / 16.0) * t47;
+    Real const t48 = broadcast<Real>(k6) * t47;
     Real const t50 = source[13] - source[15];
-    Real const t51 = broadcast<Real>(1.0 / 8.0) * t50;
-    Real const t53 = source[10] * broadcast<Real>(3.0 / 1.0);
+    Real const t51 = broadcast<Real>(k3) * t50;
+    Real const t53 = source[10] * broadcast<Real>(k4);
     Real const t55 = t53 - source[12];
-    Real const t56 = broadcast<Real>(1.0 / 48.0) * t55;
+    Real const t56 = broadcast<Real>(k5) * t55;
     Real const t60 = source[19] - source[17];
-    Real const t62 = t60 * broadcast<Real>(1.0 / 96.0);
-    Real const t66 = fma(broadcast<Real>(3.0 / 1.0), source[23], (-source[21]));
-    Real const t67 = broadcast<Real>(1.0 / 48.0) * t66;
+    Real const t62 = t60 * broadcast<Real>(k8);
+    Real const t66 = fma(broadcast<Real>(k4), source[23], (-source[21]));
+    Real const t67 = broadcast<Real>(k5) * t66;
     Real const t68 = source[17] + source[19];
-    Real const t70 = t68 * broadcast<Real>(-7.0 / 48.0);
+    Real const t70 = t68 * -broadcast<Real>(k9);
     Real const t71 = source[21] + source[23];
-    Real const t72 = broadcast<Real>(-7.0 / 48.0) * t71;
-    Real const t76 = fma(broadcast<Real>(2.0 / 1.0), source[18], source[16]);
+    Real const t72 = -broadcast<Real>(k9) * t71;
+    Real const t76 = fma(broadcast<Real>(k10), source[18], source[16]);
     Real const t78 = t76 + source[20];
-    Real const t80 = t78 * broadcast<Real>(35.0 / 192.0);
+    Real const t80 = t78 * broadcast<Real>(k11);
     Real const t83 = source[22] + source[24];
-    Real const t84 = broadcast<Real>(-7.0 / 48.0) * t83;
+    Real const t84 = -broadcast<Real>(k9) * t83;
     Real const t86 = source[16] - source[20];
-    Real const t88 = t86 * broadcast<Real>(7.0 / 96.0);
-    Real const t89 = broadcast<Real>(-3.0 / 1.0) * source[22];
+    Real const t88 = t86 * broadcast<Real>(k12);
+    Real const t89 = -broadcast<Real>(k4) * source[22];
     Real const t90 = source[24] + t89;
-    Real const t91 = broadcast<Real>(1.0 / 48.0) * t90;
-    Real const t93 = fma(source[18], broadcast<Real>(-6.0 / 1.0), source[16]);
+    Real const t91 = broadcast<Real>(k5) * t90;
+    Real const t93 = fma(source[18], -broadcast<Real>(k13), source[16]);
     Real const t94 = source[20] + t93;
-    Real const t96 = t94 * broadcast<Real>(1.0 / 384.0);
-    Real const t101 = fma(broadcast<Real>(10.0 / 1.0), source[27], (-source[25]));
-    Real const t104 = fma(broadcast<Real>(-5.0 / 1.0), source[29], t101);
-    Real const t106 = t104 * broadcast<Real>(1.0 / 3840.0);
+    Real const t96 = t94 * broadcast<Real>(k14);
+    Real const t101 = fma(broadcast<Real>(k15), source[27], (-source[25]));
+    Real const t104 = fma(-broadcast<Real>(k16), source[29], t101);
+    Real const t106 = t104 * broadcast<Real>(k17);
     Real const t110 = source[32] - source[34];
-    Real const t111 = broadcast<Real>(1.0 / 96.0) * t110;
-    Real const t112 = fma(broadcast<Real>(2.0 / 1.0), source[27], (-source[25]));
-    Real const t113 = fma(broadcast<Real>(3.0 / 1.0), source[29], t112);
-    Real const t115 = t113 * broadcast<Real>(3.0 / 256.0);
+    Real const t111 = broadcast<Real>(k8) * t110;
+    Real const t112 = fma(broadcast<Real>(k10), source[27], (-source[25]));
+    Real const t113 = fma(broadcast<Real>(k4), source[29], t112);
+    Real const t115 = t113 * broadcast<Real>(k18);
     Real const t116 = source[32] + source[34];
-    Real const t118 = t116 * broadcast<Real>(1.0 / 16.0);
-    Real const t119 = fma(broadcast<Real>(2.0 / 1.0), source[27], source[25]);
+    Real const t118 = t116 * broadcast<Real>(k19);
+    Real const t119 = fma(broadcast<Real>(k10), source[27], source[25]);
     Real const t120 = source[29] + t119;
-    Real const t122 = t120 * broadcast<Real>(-7.0 / 128.0);
-    Real const t125 = fma(broadcast<Real>(2.0 / 1.0), source[33], source[31]);
+    Real const t122 = t120 * -broadcast<Real>(k20);
+    Real const t125 = fma(broadcast<Real>(k10), source[33], source[31]);
     Real const t127 = t125 + source[35];
-    Real const t129 = t127 * broadcast<Real>(-21.0 / 320.0);
-    Real const t132 = fma(broadcast<Real>(2.0 / 1.0), source[28], source[26]);
+    Real const t129 = t127 * -broadcast<Real>(k21);
+    Real const t132 = fma(broadcast<Real>(k10), source[28], source[26]);
     Real const t134 = t132 + source[30];
-    Real const t135 = broadcast<Real>(-7.0 / 128.0) * t134;
+    Real const t135 = -broadcast<Real>(k20) * t134;
     Real const t137 = source[35] - source[31];
-    Real const t139 = t137 * broadcast<Real>(1.0 / 32.0);
-    Real const t140 = broadcast<Real>(-3.0 / 1.0) * source[26];
-    Real const t142 = fma(source[28], broadcast<Real>(-2.0 / 1.0), t140);
+    Real const t139 = t137 * broadcast<Real>(k22);
+    Real const t140 = -broadcast<Real>(k4) * source[26];
+    Real const t142 = fma(source[28], -broadcast<Real>(k10), t140);
     Real const t143 = source[30] + t142;
-    Real const t144 = broadcast<Real>(3.0 / 256.0) * t143;
-    Real const t146 = fma(source[33], broadcast<Real>(6.0 / 1.0), (-source[31]));
+    Real const t144 = broadcast<Real>(k18) * t143;
+    Real const t146 = fma(source[33], broadcast<Real>(k13), (-source[31]));
     Real const t148 = t146 - source[35];
-    Real const t149 = broadcast<Real>(1.0 / 384.0) * t148;
-    Real const t150 = broadcast<Real>(-5.0 / 1.0) * source[26];
-    Real const t151 = fma(broadcast<Real>(10.0 / 1.0), source[28], t150);
+    Real const t149 = broadcast<Real>(k14) * t148;
+    Real const t150 = -broadcast<Real>(k16) * source[26];
+    Real const t151 = fma(broadcast<Real>(k15), source[28], t150);
     Real const t153 = t151 - source[30];
-    Real const t154 = broadcast<Real>(1.0 / 3840.0) * t153;
-    Real const t156 = broadcast<Real>(3.0 / 1.0) * source[37];
-    Real const t159 = fma(broadcast<Real>(-10.0 / 1.0), source[39], t156);
-    Real const t161 = fma(broadcast<Real>(3.0 / 1.0), source[41], t159);
-    Real const t163 = t161 * broadcast<Real>(1.0 / 23040.0);
-    Real const t166 = fma(broadcast<Real>(-10.0 / 1.0), source[45], source[43]);
-    Real const t169 = fma(broadcast<Real>(5.0 / 1.0), source[47], t166);
-    Real const t170 = broadcast<Real>(1.0 / 3840.0) * t169;
+    Real const t154 = broadcast<Real>(k17) * t153;
+    Real const t156 = broadcast<Real>(k4) * source[37];
+    Real const t159 = fma(-broadcast<Real>(k15), source[39], t156);
+    Real const t161 = fma(broadcast<Real>(k4), source[41], t159);
+    Real const t163 = t161 * broadcast<Real>(k23);
+    Real const t166 = fma(-broadcast<Real>(k15), source[45], source[43]);
+    Real const t169 = fma(broadcast<Real>(k16), source[47], t166);
+    Real const t170 = broadcast<Real>(k17) * t169;
     Real const t172 = source[37] - source[41];
-    Real const t174 = t172 * broadcast<Real>(11.0 / 1920.0);
-    Real const t175 = fma(broadcast<Real>(-2.0 / 1.0), source[45], source[43]);
-    Real const t176 = fma(broadcast<Real>(-3.0 / 1.0), source[47], t175);
-    Real const t178 = t176 * broadcast<Real>(11.0 / 2304.0);
-    Real const t179 = fma(broadcast<Real>(2.0 / 1.0), source[39], source[37]);
+    Real const t174 = t172 * broadcast<Real>(k24);
+    Real const t175 = fma(-broadcast<Real>(k10), source[45], source[43]);
+    Real const t176 = fma(-broadcast<Real>(k4), source[47], t175);
+    Real const t178 = t176 * broadcast<Real>(k25);
+    Real const t179 = fma(broadcast<Real>(k10), source[39], source[37]);
     Real const t180 = source[41] + t179;
-    Real const t182 = t180 * broadcast<Real>(11.0 / 512.0);
-    Real const t183 = fma(broadcast<Real>(2.0 / 1.0), source[45], source[43]);
+    Real const t182 = t180 * broadcast<Real>(k26);
+    Real const t183 = fma(broadcast<Real>(k10), source[45], source[43]);
     Real const t184 = source[47] + t183;
-    Real const t186 = t184 * broadcast<Real>(11.0 / 640.0);
-    Real const t189 = fma(broadcast<Real>(3.0 / 1.0), source[38], source[36]);
-    Real const t191 = fma(broadcast<Real>(3.0 / 1.0), source[40], t189);
+    Real const t186 = t184 * broadcast<Real>(k27);
+    Real const t189 = fma(broadcast<Real>(k4), source[38], source[36]);
+    Real const t191 = fma(broadcast<Real>(k4), source[40], t189);
     Real const t193 = t191 + source[42];
-    Real const t195 = t193 * broadcast<Real>(-77.0 / 3840.0);
-    Real const t198 = fma(broadcast<Real>(2.0 / 1.0), source[46], source[44]);
+    Real const t195 = t193 * -broadcast<Real>(k28);
+    Real const t198 = fma(broadcast<Real>(k10), source[46], source[44]);
     Real const t200 = t198 + source[48];
-    Real const t201 = broadcast<Real>(11.0 / 640.0) * t200;
+    Real const t201 = broadcast<Real>(k27) * t200;
     Real const t204 = (-source[38]) - source[36];
     Real const t205 = source[40] + t204;
     Real const t206 = source[42] + t205;
-    Real const t208 = t206 * broadcast<Real>(11.0 / 1024.0);
-    Real const t209 = broadcast<Real>(3.0 / 1.0) * source[44];
-    Real const t210 = fma(broadcast<Real>(2.0 / 1.0), source[46], t209);
+    Real const t208 = t206 * broadcast<Real>(k29);
+    Real const t209 = broadcast<Real>(k4) * source[44];
+    Real const t210 = fma(broadcast<Real>(k10), source[46], t209);
     Real const t212 = t210 - source[48];
-    Real const t213 = broadcast<Real>(11.0 / 2304.0) * t212;
-    Real const t214 = fma(broadcast<Real>(5.0 / 1.0), source[38], (-source[36]));
-    Real const t215 = fma(broadcast<Real>(5.0 / 1.0), source[40], t214);
+    Real const t213 = broadcast<Real>(k25) * t212;
+    Real const t214 = fma(broadcast<Real>(k16), source[38], (-source[36]));
+    Real const t215 = fma(broadcast<Real>(k16), source[40], t214);
     Real const t217 = t215 - source[42];
-    Real const t219 = t217 * broadcast<Real>(11.0 / 7680.0);
-    Real const t220 = broadcast<Real>(5.0 / 1.0) * source[44];
-    Real const t221 = fma(broadcast<Real>(-10.0 / 1.0), source[46], t220);
+    Real const t219 = t217 * broadcast<Real>(k30);
+    Real const t220 = broadcast<Real>(k16) * source[44];
+    Real const t221 = fma(-broadcast<Real>(k15), source[46], t220);
     Real const t222 = source[48] + t221;
-    Real const t223 = broadcast<Real>(1.0 / 3840.0) * t222;
-    Real const t225 = fma(source[38], broadcast<Real>(15.0 / 1.0), (-source[36]));
-    Real const t227 = fma(source[40], broadcast<Real>(-15.0 / 1.0), t225);
+    Real const t223 = broadcast<Real>(k17) * t222;
+    Real const t225 = fma(source[38], broadcast<Real>(k31), (-source[36]));
+    Real const t227 = fma(source[40], -broadcast<Real>(k31), t225);
     Real const t228 = source[42] + t227;
-    Real const t230 = t228 * broadcast<Real>(1.0 / 46080.0);
-    Real const t234 = fma(broadcast<Real>(-21.0 / 1.0), source[51], source[49]);
-    Real const t237 = fma(broadcast<Real>(35.0 / 1.0), source[53], t234);
-    Real const t240 = fma(broadcast<Real>(-7.0 / 1.0), source[55], t237);
-    Real const t242 = t240 * broadcast<Real>(1.0 / 645120.0);
-    Real const t244 = broadcast<Real>(-3.0 / 1.0) * source[58];
-    Real const t246 = fma(broadcast<Real>(10.0 / 1.0), source[60], t244);
-    Real const t248 = fma(broadcast<Real>(-3.0 / 1.0), source[62], t246);
-    Real const t249 = broadcast<Real>(1.0 / 23040.0) * t248;
-    Real const t251 = fma(source[51], broadcast<Real>(-9.0 / 1.0), source[49]);
-    Real const t252 = fma(broadcast<Real>(-5.0 / 1.0), source[53], t251);
-    Real const t253 = fma(broadcast<Real>(5.0 / 1.0), source[55], t252);
-    Real const t255 = t253 * broadcast<Real>(13.0 / 92160.0);
+    Real const t230 = t228 * broadcast<Real>(k32);
+    Real const t234 = fma(-broadcast<Real>(k33), source[51], source[49]);
+    Real const t237 = fma(broadcast<Real>(k34), source[53], t234);
+    Real const t240 = fma(-broadcast<Real>(k35), source[55], t237);
+    Real const t242 = t240 * broadcast<Real>(k36);
+    Real const t244 = -broadcast<Real>(k4) * source[58];
+    Real const t246 = fma(broadcast<Real>(k15), source[60], t244);
+    Real const t248 = fma(-broadcast<Real>(k4), source[62], t246);
+    Real const t249 = broadcast<Real>(k23) * t248;
+    Real const t251 = fma(source[51], -broadcast<Real>(k37), source[49]);
+    Real const t252 = fma(-broadcast<Real>(k16), source[53], t251);
+    Real const t253 = fma(broadcast<Real>(k16), source[55], t252);
+    Real const t255 = t253 * broadcast<Real>(k38);
     Real const t257 = source[62] - source[58];
-    Real const t259 = t257 * broadcast<Real>(13.0 / 5760.0);
+    Real const t259 = t257 * broadcast<Real>(k39);
     Real const t261 = source[49] - source[51];
-    Real const t262 = fma(broadcast<Real>(-5.0 / 1.0), source[53], t261);
-    Real const t263 = fma(broadcast<Real>(-3.0 / 1.0), source[55], t262);
-    Real const t265 = t263 * broadcast<Real>(143.0 / 92160.0);
-    Real const t266 = fma(broadcast<Real>(2.0 / 1.0), source[60], source[58]);
+    Real const t262 = fma(-broadcast<Real>(k16), source[53], t261);
+    Real const t263 = fma(-broadcast<Real>(k4), source[55], t262);
+    Real const t265 = t263 * broadcast<Real>(k40);
+    Real const t266 = fma(broadcast<Real>(k10), source[60], source[58]);
     Real const t267 = source[62] + t266;
-    Real const t269 = t267 * broadcast<Real>(-143.0 / 23040.0);
-    Real const t270 = fma(broadcast<Real>(3.0 / 1.0), source[51], source[49]);
-    Real const t271 = fma(broadcast<Real>(3.0 / 1.0), source[53], t270);
+    Real const t269 = t267 * -broadcast<Real>(k41);
+    Real const t270 = fma(broadcast<Real>(k4), source[51], source[49]);
+    Real const t271 = fma(broadcast<Real>(k4), source[53], t270);
     Real const t272 = source[55] + t271;
-    Real const t274 = t272 * broadcast<Real>(143.0 / 30720.0);
-    Real const t277 = fma(broadcast<Real>(3.0 / 1.0), source[59], source[57]);
-    Real const t279 = fma(broadcast<Real>(3.0 / 1.0), source[61], t277);
+    Real const t274 = t272 * broadcast<Real>(k42);
+    Real const t277 = fma(broadcast<Real>(k4), source[59], source[57]);
+    Real const t279 = fma(broadcast<Real>(k4), source[61], t277);
     Real const t281 = t279 + source[63];
-    Real const t283 = t281 * broadcast<Real>(143.0 / 26880.0);
-    Real const t286 = fma(broadcast<Real>(3.0 / 1.0), source[52], source[50]);
-    Real const t288 = fma(broadcast<Real>(3.0 / 1.0), source[54], t286);
+    Real const t283 = t281 * broadcast<Real>(k43);
+    Real const t286 = fma(broadcast<Real>(k4), source[52], source[50]);
+    Real const t288 = fma(broadcast<Real>(k4), source[54], t286);
     Real const t290 = t288 + source[56];
-    Real const t291 = broadcast<Real>(143.0 / 30720.0) * t290;
+    Real const t291 = broadcast<Real>(k42) * t290;
     Real const t292 = source[57] + source[59];
     Real const t294 = t292 - source[61];
     Real const t296 = t294 - source[63];
-    Real const t298 = t296 * broadcast<Real>(143.0 / 46080.0);
-    Real const t299 = broadcast<Real>(3.0 / 1.0) * source[50];
-    Real const t300 = fma(broadcast<Real>(5.0 / 1.0), source[52], t299);
+    Real const t298 = t296 * broadcast<Real>(k44);
+    Real const t299 = broadcast<Real>(k4) * source[50];
+    Real const t300 = fma(broadcast<Real>(k16), source[52], t299);
     Real const t301 = source[54] + t300;
     Real const t303 = t301 - source[56];
-    Real const t304 = broadcast<Real>(143.0 / 92160.0) * t303;
-    Real const t305 = fma(broadcast<Real>(-5.0 / 1.0), source[59], source[57]);
-    Real const t306 = fma(broadcast<Real>(-5.0 / 1.0), source[61], t305);
+    Real const t304 = broadcast<Real>(k40) * t303;
+    Real const t305 = fma(-broadcast<Real>(k16), source[59], source[57]);
+    Real const t306 = fma(-broadcast<Real>(k16), source[61], t305);
     Real const t307 = source[63] + t306;
-    Real const t309 = t307 * broadcast<Real>(13.0 / 23040.0);
-    Real const t310 = broadcast<Real>(5.0 / 1.0) * source[50];
-    Real const t311 = fma(broadcast<Real>(-5.0 / 1.0), source[52], t310);
-    Real const t312 = fma(broadcast<Real>(-9.0 / 1.0), source[54], t311);
+    Real const t309 = t307 * broadcast<Real>(k45);
+    Real const t310 = broadcast<Real>(k16) * source[50];
+    Real const t311 = fma(-broadcast<Real>(k16), source[52], t310);
+    Real const t312 = fma(-broadcast<Real>(k37), source[54], t311);
     Real const t313 = source[56] + t312;
-    Real const t314 = broadcast<Real>(13.0 / 92160.0) * t313;
-    Real const t315 = fma(broadcast<Real>(-15.0 / 1.0), source[59], source[57]);
-    Real const t316 = fma(broadcast<Real>(15.0 / 1.0), source[61], t315);
+    Real const t314 = broadcast<Real>(k38) * t313;
+    Real const t315 = fma(-broadcast<Real>(k31), source[59], source[57]);
+    Real const t316 = fma(broadcast<Real>(k31), source[61], t315);
     Real const t317 = t316 - source[63];
-    Real const t318 = broadcast<Real>(1.0 / 46080.0) * t317;
-    Real const t320 = source[50] * broadcast<Real>(7.0 / 1.0);
-    Real const t322 = fma(source[52], broadcast<Real>(-35.0 / 1.0), t320);
-    Real const t324 = fma(source[54], broadcast<Real>(21.0 / 1.0), t322);
+    Real const t318 = broadcast<Real>(k32) * t317;
+    Real const t320 = source[50] * broadcast<Real>(k35);
+    Real const t322 = fma(source[52], -broadcast<Real>(k34), t320);
+    Real const t324 = fma(source[54], broadcast<Real>(k33), t322);
     Real const t325 = t324 - source[56];
-    Real const t326 = broadcast<Real>(1.0 / 645120.0) * t325;
+    Real const t326 = broadcast<Real>(k36) * t325;
     target[0] = source[0];
     target[1] = t5;
     target[2] = (-source[3]);
@@ -1507,280 +1801,311 @@ CUDA_EXPORT void sourceToSpherical(
     target[61] = t314;
     target[62] = t318;
     target[63] = t326;
+    return target;
 }
+}    // namespace cosmictiger::gravity::cartesian
 
+namespace cosmictiger::gravity::basis_conversion {
 template <>
-inline constexpr int kLocalToCartesianFlops<9> = 262;
+inline constexpr int kExpansionCastFlops<9> = 262;
 template <>
-inline constexpr int kLocalToCartesianConventionalFlops<9> = 365;
-/// Assign the equivalent coefficients in the destination basis without changing spatial scale.
-template <class Real>
-CUDA_EXPORT void localToCartesian(
-    cartesian::Expansion<Real, 9>& target, spherical::Expansion<Real, 9> const& source) {
+inline constexpr int kExpansionCastConventionalFlops<9> = 365;
+}    // namespace cosmictiger::gravity::basis_conversion
+namespace cosmictiger::gravity::spherical {
+/// Return the equivalent coefficients in the destination basis at the same spatial scale.
+template <class Real, int order>
+CUDA_EXPORT Expansion<Real, order>::operator cartesian::Expansion<Real, order>() const
+    requires(order == 9)
+{
     using namespace math;
     Fma const fma{};
+    using Scalar = SimdScalar<Real>;
+    constexpr auto k0 = static_cast<Scalar>(+5.00000000000000000E-01);
+    constexpr auto k1 = static_cast<Scalar>(+3.00000000000000000E+00);
+    constexpr auto k2 = static_cast<Scalar>(+2.50000000000000000E-01);
+    constexpr auto k3 = static_cast<Scalar>(+4.00000000000000000E+00);
+    constexpr auto k4 = static_cast<Scalar>(+1.25000000000000000E-01);
+    constexpr auto k5 = static_cast<Scalar>(+2.00000000000000000E+00);
+    constexpr auto k6 = static_cast<Scalar>(+5.00000000000000000E+00);
+    constexpr auto k7 = static_cast<Scalar>(+1.00000000000000000E+01);
+    constexpr auto k8 = static_cast<Scalar>(+6.25000000000000000E-02);
+    constexpr auto k9 = static_cast<Scalar>(+1.50000000000000000E+01);
+    constexpr auto k10 = static_cast<Scalar>(+6.00000000000000000E+00);
+    constexpr auto k11 = static_cast<Scalar>(+3.12500000000000000E-02);
+    constexpr auto k12 = static_cast<Scalar>(+7.00000000000000000E+00);
+    constexpr auto k13 = static_cast<Scalar>(+2.10000000000000000E+01);
+    constexpr auto k14 = static_cast<Scalar>(+3.50000000000000000E+01);
+    constexpr auto k15 = static_cast<Scalar>(+1.56250000000000000E-02);
+    constexpr auto k16 = static_cast<Scalar>(+9.00000000000000000E+00);
+    constexpr auto k17 = static_cast<Scalar>(+5.60000000000000000E+01);
+    constexpr auto k18 = static_cast<Scalar>(+2.80000000000000000E+01);
+    constexpr auto k19 = static_cast<Scalar>(+8.00000000000000000E+00);
+    constexpr auto k20 = static_cast<Scalar>(+7.81250000000000000E-03);
+    constexpr auto k21 = static_cast<Scalar>(+1.40000000000000000E+01);
+    cartesian::Expansion<Real, order> target{};
+    auto const& source = *this;
     Real const t8 = source[6] + source[8];
-    Real const t10 = t8 * broadcast<Real>(-1.0 / 2.0);
-    Real const t13 = source[4] * broadcast<Real>(1.0 / 2.0);
+    Real const t10 = t8 * -broadcast<Real>(k0);
+    Real const t13 = source[4] * broadcast<Real>(k0);
     Real const t16 = source[8] - source[6];
-    Real const t17 = broadcast<Real>(1.0 / 2.0) * t16;
-    Real const t23 = fma(broadcast<Real>(3.0 / 1.0), source[11], source[9]);
-    Real const t25 = t23 * broadcast<Real>(-1.0 / 4.0);
+    Real const t17 = broadcast<Real>(k0) * t16;
+    Real const t23 = fma(broadcast<Real>(k1), source[11], source[9]);
+    Real const t25 = t23 * -broadcast<Real>(k2);
     Real const t28 = source[13] + source[15];
-    Real const t29 = broadcast<Real>(-1.0 / 4.0) * t28;
+    Real const t29 = -broadcast<Real>(k2) * t28;
     Real const t31 = source[9] - source[11];
-    Real const t33 = t31 * broadcast<Real>(1.0 / 4.0);
-    Real const t35 = source[13] * broadcast<Real>(-3.0 / 1.0);
+    Real const t33 = t31 * broadcast<Real>(k2);
+    Real const t35 = source[13] * -broadcast<Real>(k1);
     Real const t36 = source[15] + t35;
-    Real const t37 = broadcast<Real>(1.0 / 4.0) * t36;
+    Real const t37 = broadcast<Real>(k2) * t36;
     Real const t40 = source[12] + source[14];
-    Real const t41 = broadcast<Real>(-1.0 / 2.0) * t40;
-    Real const t43 = broadcast<Real>(1.0 / 2.0) * source[10];
+    Real const t41 = -broadcast<Real>(k0) * t40;
+    Real const t43 = broadcast<Real>(k0) * source[10];
     Real const t45 = source[14] - source[12];
-    Real const t46 = broadcast<Real>(1.0 / 2.0) * t45;
-    Real const t48 = broadcast<Real>(3.0 / 1.0) * source[20];
-    Real const t51 = fma(broadcast<Real>(4.0 / 1.0), source[22], t48);
+    Real const t46 = broadcast<Real>(k0) * t45;
+    Real const t48 = broadcast<Real>(k1) * source[20];
+    Real const t51 = fma(broadcast<Real>(k3), source[22], t48);
     Real const t53 = t51 + source[24];
-    Real const t55 = t53 * broadcast<Real>(1.0 / 8.0);
-    Real const t59 = fma(broadcast<Real>(2.0 / 1.0), source[18], source[16]);
-    Real const t61 = t59 * broadcast<Real>(-1.0 / 8.0);
+    Real const t55 = t53 * broadcast<Real>(k4);
+    Real const t59 = fma(broadcast<Real>(k5), source[18], source[16]);
+    Real const t61 = t59 * -broadcast<Real>(k4);
     Real const t63 = source[20] - source[24];
-    Real const t64 = broadcast<Real>(1.0 / 8.0) * t63;
-    Real const t66 = fma(source[18], broadcast<Real>(-2.0 / 1.0), source[16]);
-    Real const t67 = broadcast<Real>(1.0 / 8.0) * t66;
-    Real const t69 = fma(source[22], broadcast<Real>(-4.0 / 1.0), t48);
+    Real const t64 = broadcast<Real>(k4) * t63;
+    Real const t66 = fma(source[18], -broadcast<Real>(k5), source[16]);
+    Real const t67 = broadcast<Real>(k4) * t66;
+    Real const t69 = fma(source[22], -broadcast<Real>(k3), t48);
     Real const t70 = source[24] + t69;
-    Real const t71 = broadcast<Real>(1.0 / 8.0) * t70;
-    Real const t74 = fma(broadcast<Real>(3.0 / 1.0), source[19], source[17]);
-    Real const t75 = broadcast<Real>(-1.0 / 4.0) * t74;
+    Real const t71 = broadcast<Real>(k4) * t70;
+    Real const t74 = fma(broadcast<Real>(k1), source[19], source[17]);
+    Real const t75 = -broadcast<Real>(k2) * t74;
     Real const t78 = source[21] + source[23];
-    Real const t79 = broadcast<Real>(-1.0 / 4.0) * t78;
+    Real const t79 = -broadcast<Real>(k2) * t78;
     Real const t81 = source[17] - source[19];
-    Real const t82 = broadcast<Real>(1.0 / 4.0) * t81;
-    Real const t83 = broadcast<Real>(-3.0 / 1.0) * source[21];
+    Real const t82 = broadcast<Real>(k2) * t81;
+    Real const t83 = -broadcast<Real>(k1) * source[21];
     Real const t84 = source[23] + t83;
-    Real const t85 = broadcast<Real>(1.0 / 4.0) * t84;
-    Real const t89 = fma(broadcast<Real>(5.0 / 1.0), source[27], source[25]);
-    Real const t92 = fma(broadcast<Real>(10.0 / 1.0), source[29], t89);
-    Real const t94 = t92 * broadcast<Real>(1.0 / 16.0);
-    Real const t96 = broadcast<Real>(2.0 / 1.0) * source[31];
-    Real const t98 = fma(broadcast<Real>(3.0 / 1.0), source[33], t96);
+    Real const t85 = broadcast<Real>(k2) * t84;
+    Real const t89 = fma(broadcast<Real>(k6), source[27], source[25]);
+    Real const t92 = fma(broadcast<Real>(k7), source[29], t89);
+    Real const t94 = t92 * broadcast<Real>(k8);
+    Real const t96 = broadcast<Real>(k5) * source[31];
+    Real const t98 = fma(broadcast<Real>(k1), source[33], t96);
     Real const t100 = t98 + source[35];
-    Real const t101 = broadcast<Real>(1.0 / 16.0) * t100;
+    Real const t101 = broadcast<Real>(k8) * t100;
     Real const t104 = (-source[27]) - source[25];
-    Real const t105 = fma(broadcast<Real>(2.0 / 1.0), source[29], t104);
-    Real const t106 = broadcast<Real>(1.0 / 16.0) * t105;
+    Real const t105 = fma(broadcast<Real>(k5), source[29], t104);
+    Real const t106 = broadcast<Real>(k8) * t105;
     Real const t107 = t96 + source[33];
     Real const t109 = t107 - source[35];
-    Real const t110 = broadcast<Real>(1.0 / 16.0) * t109;
-    Real const t111 = fma(broadcast<Real>(-3.0 / 1.0), source[27], source[25]);
-    Real const t112 = fma(broadcast<Real>(2.0 / 1.0), source[29], t111);
-    Real const t113 = broadcast<Real>(1.0 / 16.0) * t112;
-    Real const t114 = broadcast<Real>(10.0 / 1.0) * source[31];
-    Real const t116 = fma(source[33], broadcast<Real>(-5.0 / 1.0), t114);
+    Real const t110 = broadcast<Real>(k8) * t109;
+    Real const t111 = fma(-broadcast<Real>(k1), source[27], source[25]);
+    Real const t112 = fma(broadcast<Real>(k5), source[29], t111);
+    Real const t113 = broadcast<Real>(k8) * t112;
+    Real const t114 = broadcast<Real>(k7) * source[31];
+    Real const t116 = fma(source[33], -broadcast<Real>(k6), t114);
     Real const t117 = source[35] + t116;
-    Real const t118 = broadcast<Real>(1.0 / 16.0) * t117;
-    Real const t120 = broadcast<Real>(3.0 / 1.0) * source[30];
-    Real const t122 = fma(broadcast<Real>(4.0 / 1.0), source[32], t120);
+    Real const t118 = broadcast<Real>(k8) * t117;
+    Real const t120 = broadcast<Real>(k1) * source[30];
+    Real const t122 = fma(broadcast<Real>(k3), source[32], t120);
     Real const t124 = t122 + source[34];
-    Real const t125 = broadcast<Real>(1.0 / 8.0) * t124;
-    Real const t128 = fma(broadcast<Real>(2.0 / 1.0), source[28], source[26]);
-    Real const t129 = broadcast<Real>(-1.0 / 8.0) * t128;
+    Real const t125 = broadcast<Real>(k4) * t124;
+    Real const t128 = fma(broadcast<Real>(k5), source[28], source[26]);
+    Real const t129 = -broadcast<Real>(k4) * t128;
     Real const t131 = source[30] - source[34];
-    Real const t132 = broadcast<Real>(1.0 / 8.0) * t131;
-    Real const t133 = fma(broadcast<Real>(-2.0 / 1.0), source[28], source[26]);
-    Real const t134 = broadcast<Real>(1.0 / 8.0) * t133;
-    Real const t135 = fma(broadcast<Real>(-4.0 / 1.0), source[32], t120);
+    Real const t132 = broadcast<Real>(k4) * t131;
+    Real const t133 = fma(-broadcast<Real>(k5), source[28], source[26]);
+    Real const t134 = broadcast<Real>(k4) * t133;
+    Real const t135 = fma(-broadcast<Real>(k3), source[32], t120);
     Real const t136 = source[34] + t135;
-    Real const t137 = broadcast<Real>(1.0 / 8.0) * t136;
-    Real const t139 = broadcast<Real>(10.0 / 1.0) * source[42];
-    Real const t142 = fma(broadcast<Real>(15.0 / 1.0), source[44], t139);
-    Real const t145 = fma(broadcast<Real>(6.0 / 1.0), source[46], t142);
+    Real const t137 = broadcast<Real>(k4) * t136;
+    Real const t139 = broadcast<Real>(k7) * source[42];
+    Real const t142 = fma(broadcast<Real>(k9), source[44], t139);
+    Real const t145 = fma(broadcast<Real>(k10), source[46], t142);
     Real const t147 = t145 + source[48];
-    Real const t149 = t147 * broadcast<Real>(-1.0 / 32.0);
-    Real const t152 = fma(broadcast<Real>(4.0 / 1.0), source[38], source[36]);
-    Real const t154 = fma(broadcast<Real>(5.0 / 1.0), source[40], t152);
-    Real const t156 = t154 * broadcast<Real>(1.0 / 32.0);
-    Real const t157 = broadcast<Real>(-2.0 / 1.0) * source[42];
+    Real const t149 = t147 * -broadcast<Real>(k11);
+    Real const t152 = fma(broadcast<Real>(k3), source[38], source[36]);
+    Real const t154 = fma(broadcast<Real>(k6), source[40], t152);
+    Real const t156 = t154 * broadcast<Real>(k11);
+    Real const t157 = -broadcast<Real>(k5) * source[42];
     Real const t159 = t157 - source[44];
-    Real const t160 = fma(broadcast<Real>(2.0 / 1.0), source[46], t159);
+    Real const t160 = fma(broadcast<Real>(k5), source[46], t159);
     Real const t161 = source[48] + t160;
-    Real const t162 = broadcast<Real>(1.0 / 32.0) * t161;
-    Real const t164 = fma(broadcast<Real>(3.0 / 1.0), source[40], (-source[36]));
-    Real const t165 = broadcast<Real>(1.0 / 32.0) * t164;
+    Real const t162 = broadcast<Real>(k11) * t161;
+    Real const t164 = fma(broadcast<Real>(k1), source[40], (-source[36]));
+    Real const t165 = broadcast<Real>(k11) * t164;
     Real const t166 = source[44] + t157;
-    Real const t167 = fma(broadcast<Real>(2.0 / 1.0), source[46], t166);
+    Real const t167 = fma(broadcast<Real>(k5), source[46], t166);
     Real const t169 = t167 - source[48];
-    Real const t170 = broadcast<Real>(1.0 / 32.0) * t169;
-    Real const t171 = fma(broadcast<Real>(-4.0 / 1.0), source[38], source[36]);
-    Real const t172 = fma(broadcast<Real>(5.0 / 1.0), source[40], t171);
-    Real const t173 = broadcast<Real>(1.0 / 32.0) * t172;
-    Real const t175 = source[42] * broadcast<Real>(-10.0 / 1.0);
-    Real const t176 = fma(broadcast<Real>(15.0 / 1.0), source[44], t175);
-    Real const t178 = fma(source[46], broadcast<Real>(-6.0 / 1.0), t176);
+    Real const t170 = broadcast<Real>(k11) * t169;
+    Real const t171 = fma(-broadcast<Real>(k3), source[38], source[36]);
+    Real const t172 = fma(broadcast<Real>(k6), source[40], t171);
+    Real const t173 = broadcast<Real>(k11) * t172;
+    Real const t175 = source[42] * -broadcast<Real>(k7);
+    Real const t176 = fma(broadcast<Real>(k9), source[44], t175);
+    Real const t178 = fma(source[46], -broadcast<Real>(k10), t176);
     Real const t179 = source[48] + t178;
-    Real const t180 = broadcast<Real>(1.0 / 32.0) * t179;
-    Real const t183 = fma(broadcast<Real>(5.0 / 1.0), source[39], source[37]);
-    Real const t185 = fma(broadcast<Real>(10.0 / 1.0), source[41], t183);
-    Real const t186 = broadcast<Real>(1.0 / 16.0) * t185;
-    Real const t188 = broadcast<Real>(2.0 / 1.0) * source[43];
-    Real const t190 = fma(broadcast<Real>(3.0 / 1.0), source[45], t188);
+    Real const t180 = broadcast<Real>(k11) * t179;
+    Real const t183 = fma(broadcast<Real>(k6), source[39], source[37]);
+    Real const t185 = fma(broadcast<Real>(k7), source[41], t183);
+    Real const t186 = broadcast<Real>(k8) * t185;
+    Real const t188 = broadcast<Real>(k5) * source[43];
+    Real const t190 = fma(broadcast<Real>(k1), source[45], t188);
     Real const t192 = t190 + source[47];
-    Real const t193 = broadcast<Real>(1.0 / 16.0) * t192;
+    Real const t193 = broadcast<Real>(k8) * t192;
     Real const t196 = (-source[39]) - source[37];
-    Real const t197 = fma(broadcast<Real>(2.0 / 1.0), source[41], t196);
-    Real const t198 = broadcast<Real>(1.0 / 16.0) * t197;
+    Real const t197 = fma(broadcast<Real>(k5), source[41], t196);
+    Real const t198 = broadcast<Real>(k8) * t197;
     Real const t199 = t188 + source[45];
     Real const t201 = t199 - source[47];
-    Real const t202 = broadcast<Real>(1.0 / 16.0) * t201;
-    Real const t203 = fma(broadcast<Real>(-3.0 / 1.0), source[39], source[37]);
-    Real const t204 = fma(broadcast<Real>(2.0 / 1.0), source[41], t203);
-    Real const t205 = broadcast<Real>(1.0 / 16.0) * t204;
-    Real const t206 = broadcast<Real>(10.0 / 1.0) * source[43];
-    Real const t207 = fma(broadcast<Real>(-5.0 / 1.0), source[45], t206);
+    Real const t202 = broadcast<Real>(k8) * t201;
+    Real const t203 = fma(-broadcast<Real>(k1), source[39], source[37]);
+    Real const t204 = fma(broadcast<Real>(k5), source[41], t203);
+    Real const t205 = broadcast<Real>(k8) * t204;
+    Real const t206 = broadcast<Real>(k7) * source[43];
+    Real const t207 = fma(-broadcast<Real>(k6), source[45], t206);
     Real const t208 = source[47] + t207;
-    Real const t209 = broadcast<Real>(1.0 / 16.0) * t208;
-    Real const t213 = fma(broadcast<Real>(7.0 / 1.0), source[51], source[49]);
-    Real const t216 = fma(broadcast<Real>(21.0 / 1.0), source[53], t213);
-    Real const t219 = fma(broadcast<Real>(35.0 / 1.0), source[55], t216);
-    Real const t221 = t219 * broadcast<Real>(-1.0 / 64.0);
-    Real const t223 = broadcast<Real>(5.0 / 1.0) * source[57];
-    Real const t226 = fma(broadcast<Real>(9.0 / 1.0), source[59], t223);
-    Real const t228 = fma(broadcast<Real>(5.0 / 1.0), source[61], t226);
+    Real const t209 = broadcast<Real>(k8) * t208;
+    Real const t213 = fma(broadcast<Real>(k12), source[51], source[49]);
+    Real const t216 = fma(broadcast<Real>(k13), source[53], t213);
+    Real const t219 = fma(broadcast<Real>(k14), source[55], t216);
+    Real const t221 = t219 * -broadcast<Real>(k15);
+    Real const t223 = broadcast<Real>(k6) * source[57];
+    Real const t226 = fma(broadcast<Real>(k16), source[59], t223);
+    Real const t228 = fma(broadcast<Real>(k6), source[61], t226);
     Real const t230 = t228 + source[63];
-    Real const t231 = broadcast<Real>(-1.0 / 64.0) * t230;
-    Real const t232 = fma(broadcast<Real>(3.0 / 1.0), source[51], source[49]);
+    Real const t231 = -broadcast<Real>(k15) * t230;
+    Real const t232 = fma(broadcast<Real>(k1), source[51], source[49]);
     Real const t233 = source[53] + t232;
-    Real const t234 = fma(broadcast<Real>(-5.0 / 1.0), source[55], t233);
-    Real const t236 = t234 * broadcast<Real>(1.0 / 64.0);
-    Real const t237 = broadcast<Real>(-3.0 / 1.0) * source[57];
-    Real const t238 = fma(broadcast<Real>(-3.0 / 1.0), source[59], t237);
+    Real const t234 = fma(-broadcast<Real>(k6), source[55], t233);
+    Real const t236 = t234 * broadcast<Real>(k15);
+    Real const t237 = -broadcast<Real>(k1) * source[57];
+    Real const t238 = fma(-broadcast<Real>(k1), source[59], t237);
     Real const t239 = source[61] + t238;
     Real const t240 = source[63] + t239;
-    Real const t241 = broadcast<Real>(1.0 / 64.0) * t240;
+    Real const t241 = broadcast<Real>(k15) * t240;
     Real const t243 = source[51] - source[49];
-    Real const t244 = fma(broadcast<Real>(3.0 / 1.0), source[53], t243);
-    Real const t245 = fma(broadcast<Real>(-3.0 / 1.0), source[55], t244);
-    Real const t246 = broadcast<Real>(1.0 / 64.0) * t245;
-    Real const t247 = broadcast<Real>(-5.0 / 1.0) * source[57];
+    Real const t244 = fma(broadcast<Real>(k1), source[53], t243);
+    Real const t245 = fma(-broadcast<Real>(k1), source[55], t244);
+    Real const t246 = broadcast<Real>(k15) * t245;
+    Real const t247 = -broadcast<Real>(k6) * source[57];
     Real const t249 = t247 - source[59];
-    Real const t250 = fma(broadcast<Real>(3.0 / 1.0), source[61], t249);
+    Real const t250 = fma(broadcast<Real>(k1), source[61], t249);
     Real const t252 = t250 - source[63];
-    Real const t253 = broadcast<Real>(1.0 / 64.0) * t252;
-    Real const t254 = fma(broadcast<Real>(-5.0 / 1.0), source[51], source[49]);
-    Real const t255 = fma(source[53], broadcast<Real>(9.0 / 1.0), t254);
-    Real const t256 = fma(broadcast<Real>(-5.0 / 1.0), source[55], t255);
-    Real const t257 = broadcast<Real>(1.0 / 64.0) * t256;
-    Real const t259 = source[57] * broadcast<Real>(-35.0 / 1.0);
-    Real const t260 = fma(broadcast<Real>(21.0 / 1.0), source[59], t259);
-    Real const t262 = fma(source[61], broadcast<Real>(-7.0 / 1.0), t260);
+    Real const t253 = broadcast<Real>(k15) * t252;
+    Real const t254 = fma(-broadcast<Real>(k6), source[51], source[49]);
+    Real const t255 = fma(source[53], broadcast<Real>(k16), t254);
+    Real const t256 = fma(-broadcast<Real>(k6), source[55], t255);
+    Real const t257 = broadcast<Real>(k15) * t256;
+    Real const t259 = source[57] * -broadcast<Real>(k14);
+    Real const t260 = fma(broadcast<Real>(k13), source[59], t259);
+    Real const t262 = fma(source[61], -broadcast<Real>(k12), t260);
     Real const t263 = source[63] + t262;
-    Real const t264 = broadcast<Real>(1.0 / 64.0) * t263;
-    Real const t266 = broadcast<Real>(10.0 / 1.0) * source[56];
-    Real const t268 = fma(broadcast<Real>(15.0 / 1.0), source[58], t266);
-    Real const t270 = fma(broadcast<Real>(6.0 / 1.0), source[60], t268);
+    Real const t264 = broadcast<Real>(k15) * t263;
+    Real const t266 = broadcast<Real>(k7) * source[56];
+    Real const t268 = fma(broadcast<Real>(k9), source[58], t266);
+    Real const t270 = fma(broadcast<Real>(k10), source[60], t268);
     Real const t272 = t270 + source[62];
-    Real const t273 = broadcast<Real>(-1.0 / 32.0) * t272;
-    Real const t276 = fma(broadcast<Real>(4.0 / 1.0), source[52], source[50]);
-    Real const t278 = fma(broadcast<Real>(5.0 / 1.0), source[54], t276);
-    Real const t279 = broadcast<Real>(1.0 / 32.0) * t278;
-    Real const t280 = broadcast<Real>(-2.0 / 1.0) * source[56];
+    Real const t273 = -broadcast<Real>(k11) * t272;
+    Real const t276 = fma(broadcast<Real>(k3), source[52], source[50]);
+    Real const t278 = fma(broadcast<Real>(k6), source[54], t276);
+    Real const t279 = broadcast<Real>(k11) * t278;
+    Real const t280 = -broadcast<Real>(k5) * source[56];
     Real const t282 = t280 - source[58];
-    Real const t283 = fma(broadcast<Real>(2.0 / 1.0), source[60], t282);
+    Real const t283 = fma(broadcast<Real>(k5), source[60], t282);
     Real const t284 = source[62] + t283;
-    Real const t285 = broadcast<Real>(1.0 / 32.0) * t284;
-    Real const t287 = fma(broadcast<Real>(3.0 / 1.0), source[54], (-source[50]));
-    Real const t288 = broadcast<Real>(1.0 / 32.0) * t287;
+    Real const t285 = broadcast<Real>(k11) * t284;
+    Real const t287 = fma(broadcast<Real>(k1), source[54], (-source[50]));
+    Real const t288 = broadcast<Real>(k11) * t287;
     Real const t289 = source[58] + t280;
-    Real const t290 = fma(broadcast<Real>(2.0 / 1.0), source[60], t289);
+    Real const t290 = fma(broadcast<Real>(k5), source[60], t289);
     Real const t292 = t290 - source[62];
-    Real const t293 = broadcast<Real>(1.0 / 32.0) * t292;
-    Real const t294 = fma(broadcast<Real>(-4.0 / 1.0), source[52], source[50]);
-    Real const t295 = fma(broadcast<Real>(5.0 / 1.0), source[54], t294);
-    Real const t296 = broadcast<Real>(1.0 / 32.0) * t295;
-    Real const t297 = broadcast<Real>(-10.0 / 1.0) * source[56];
-    Real const t298 = fma(broadcast<Real>(15.0 / 1.0), source[58], t297);
-    Real const t299 = fma(broadcast<Real>(-6.0 / 1.0), source[60], t298);
+    Real const t293 = broadcast<Real>(k11) * t292;
+    Real const t294 = fma(-broadcast<Real>(k3), source[52], source[50]);
+    Real const t295 = fma(broadcast<Real>(k6), source[54], t294);
+    Real const t296 = broadcast<Real>(k11) * t295;
+    Real const t297 = -broadcast<Real>(k7) * source[56];
+    Real const t298 = fma(broadcast<Real>(k9), source[58], t297);
+    Real const t299 = fma(-broadcast<Real>(k10), source[60], t298);
     Real const t300 = source[62] + t299;
-    Real const t301 = broadcast<Real>(1.0 / 32.0) * t300;
-    Real const t303 = broadcast<Real>(35.0 / 1.0) * source[72];
-    Real const t306 = fma(broadcast<Real>(56.0 / 1.0), source[74], t303);
-    Real const t309 = fma(broadcast<Real>(28.0 / 1.0), source[76], t306);
-    Real const t312 = fma(broadcast<Real>(8.0 / 1.0), source[78], t309);
+    Real const t301 = broadcast<Real>(k11) * t300;
+    Real const t303 = broadcast<Real>(k14) * source[72];
+    Real const t306 = fma(broadcast<Real>(k17), source[74], t303);
+    Real const t309 = fma(broadcast<Real>(k18), source[76], t306);
+    Real const t312 = fma(broadcast<Real>(k19), source[78], t309);
     Real const t314 = t312 + source[80];
-    Real const t316 = t314 * broadcast<Real>(1.0 / 128.0);
-    Real const t319 = fma(broadcast<Real>(6.0 / 1.0), source[66], source[64]);
-    Real const t322 = fma(broadcast<Real>(14.0 / 1.0), source[68], t319);
-    Real const t324 = fma(broadcast<Real>(14.0 / 1.0), source[70], t322);
-    Real const t326 = t324 * broadcast<Real>(-1.0 / 128.0);
-    Real const t327 = broadcast<Real>(5.0 / 1.0) * source[72];
-    Real const t328 = fma(broadcast<Real>(4.0 / 1.0), source[74], t327);
-    Real const t329 = fma(broadcast<Real>(-4.0 / 1.0), source[76], t328);
-    Real const t330 = fma(broadcast<Real>(-4.0 / 1.0), source[78], t329);
+    Real const t316 = t314 * broadcast<Real>(k20);
+    Real const t319 = fma(broadcast<Real>(k10), source[66], source[64]);
+    Real const t322 = fma(broadcast<Real>(k21), source[68], t319);
+    Real const t324 = fma(broadcast<Real>(k21), source[70], t322);
+    Real const t326 = t324 * -broadcast<Real>(k20);
+    Real const t327 = broadcast<Real>(k6) * source[72];
+    Real const t328 = fma(broadcast<Real>(k3), source[74], t327);
+    Real const t329 = fma(-broadcast<Real>(k3), source[76], t328);
+    Real const t330 = fma(-broadcast<Real>(k3), source[78], t329);
     Real const t332 = t330 - source[80];
-    Real const t333 = broadcast<Real>(1.0 / 128.0) * t332;
-    Real const t334 = fma(broadcast<Real>(2.0 / 1.0), source[66], source[64]);
-    Real const t335 = fma(broadcast<Real>(-2.0 / 1.0), source[68], t334);
-    Real const t336 = fma(broadcast<Real>(-6.0 / 1.0), source[70], t335);
-    Real const t337 = broadcast<Real>(1.0 / 128.0) * t336;
-    Real const t338 = broadcast<Real>(3.0 / 1.0) * source[72];
-    Real const t339 = fma(broadcast<Real>(-4.0 / 1.0), source[76], t338);
+    Real const t333 = broadcast<Real>(k20) * t332;
+    Real const t334 = fma(broadcast<Real>(k5), source[66], source[64]);
+    Real const t335 = fma(-broadcast<Real>(k5), source[68], t334);
+    Real const t336 = fma(-broadcast<Real>(k10), source[70], t335);
+    Real const t337 = broadcast<Real>(k20) * t336;
+    Real const t338 = broadcast<Real>(k1) * source[72];
+    Real const t339 = fma(-broadcast<Real>(k3), source[76], t338);
     Real const t340 = source[80] + t339;
-    Real const t341 = broadcast<Real>(1.0 / 128.0) * t340;
-    Real const t343 = fma(broadcast<Real>(2.0 / 1.0), source[66], (-source[64]));
-    Real const t344 = fma(broadcast<Real>(2.0 / 1.0), source[68], t343);
-    Real const t345 = fma(broadcast<Real>(-6.0 / 1.0), source[70], t344);
-    Real const t346 = broadcast<Real>(1.0 / 128.0) * t345;
-    Real const t347 = fma(broadcast<Real>(-4.0 / 1.0), source[74], t327);
-    Real const t348 = fma(broadcast<Real>(-4.0 / 1.0), source[76], t347);
-    Real const t349 = fma(broadcast<Real>(4.0 / 1.0), source[78], t348);
+    Real const t341 = broadcast<Real>(k20) * t340;
+    Real const t343 = fma(broadcast<Real>(k5), source[66], (-source[64]));
+    Real const t344 = fma(broadcast<Real>(k5), source[68], t343);
+    Real const t345 = fma(-broadcast<Real>(k10), source[70], t344);
+    Real const t346 = broadcast<Real>(k20) * t345;
+    Real const t347 = fma(-broadcast<Real>(k3), source[74], t327);
+    Real const t348 = fma(-broadcast<Real>(k3), source[76], t347);
+    Real const t349 = fma(broadcast<Real>(k3), source[78], t348);
     Real const t350 = t349 - source[80];
-    Real const t351 = broadcast<Real>(1.0 / 128.0) * t350;
-    Real const t352 = fma(broadcast<Real>(-6.0 / 1.0), source[66], source[64]);
-    Real const t353 = fma(broadcast<Real>(14.0 / 1.0), source[68], t352);
-    Real const t355 = fma(source[70], broadcast<Real>(-14.0 / 1.0), t353);
-    Real const t356 = broadcast<Real>(1.0 / 128.0) * t355;
-    Real const t358 = fma(source[74], broadcast<Real>(-56.0 / 1.0), t303);
-    Real const t359 = fma(broadcast<Real>(28.0 / 1.0), source[76], t358);
-    Real const t361 = fma(source[78], broadcast<Real>(-8.0 / 1.0), t359);
+    Real const t351 = broadcast<Real>(k20) * t350;
+    Real const t352 = fma(-broadcast<Real>(k10), source[66], source[64]);
+    Real const t353 = fma(broadcast<Real>(k21), source[68], t352);
+    Real const t355 = fma(source[70], -broadcast<Real>(k21), t353);
+    Real const t356 = broadcast<Real>(k20) * t355;
+    Real const t358 = fma(source[74], -broadcast<Real>(k17), t303);
+    Real const t359 = fma(broadcast<Real>(k18), source[76], t358);
+    Real const t361 = fma(source[78], -broadcast<Real>(k19), t359);
     Real const t362 = source[80] + t361;
-    Real const t363 = broadcast<Real>(1.0 / 128.0) * t362;
-    Real const t366 = fma(broadcast<Real>(7.0 / 1.0), source[67], source[65]);
-    Real const t368 = fma(broadcast<Real>(21.0 / 1.0), source[69], t366);
-    Real const t370 = fma(broadcast<Real>(35.0 / 1.0), source[71], t368);
-    Real const t371 = broadcast<Real>(-1.0 / 64.0) * t370;
-    Real const t373 = broadcast<Real>(5.0 / 1.0) * source[73];
-    Real const t375 = fma(broadcast<Real>(9.0 / 1.0), source[75], t373);
-    Real const t377 = fma(broadcast<Real>(5.0 / 1.0), source[77], t375);
+    Real const t363 = broadcast<Real>(k20) * t362;
+    Real const t366 = fma(broadcast<Real>(k12), source[67], source[65]);
+    Real const t368 = fma(broadcast<Real>(k13), source[69], t366);
+    Real const t370 = fma(broadcast<Real>(k14), source[71], t368);
+    Real const t371 = -broadcast<Real>(k15) * t370;
+    Real const t373 = broadcast<Real>(k6) * source[73];
+    Real const t375 = fma(broadcast<Real>(k16), source[75], t373);
+    Real const t377 = fma(broadcast<Real>(k6), source[77], t375);
     Real const t379 = t377 + source[79];
-    Real const t380 = broadcast<Real>(-1.0 / 64.0) * t379;
-    Real const t381 = fma(broadcast<Real>(3.0 / 1.0), source[67], source[65]);
+    Real const t380 = -broadcast<Real>(k15) * t379;
+    Real const t381 = fma(broadcast<Real>(k1), source[67], source[65]);
     Real const t382 = source[69] + t381;
-    Real const t383 = fma(broadcast<Real>(-5.0 / 1.0), source[71], t382);
-    Real const t384 = broadcast<Real>(1.0 / 64.0) * t383;
-    Real const t385 = broadcast<Real>(-3.0 / 1.0) * source[73];
-    Real const t386 = fma(broadcast<Real>(-3.0 / 1.0), source[75], t385);
+    Real const t383 = fma(-broadcast<Real>(k6), source[71], t382);
+    Real const t384 = broadcast<Real>(k15) * t383;
+    Real const t385 = -broadcast<Real>(k1) * source[73];
+    Real const t386 = fma(-broadcast<Real>(k1), source[75], t385);
     Real const t387 = source[77] + t386;
     Real const t388 = source[79] + t387;
-    Real const t389 = broadcast<Real>(1.0 / 64.0) * t388;
+    Real const t389 = broadcast<Real>(k15) * t388;
     Real const t391 = source[67] - source[65];
-    Real const t392 = fma(broadcast<Real>(3.0 / 1.0), source[69], t391);
-    Real const t393 = fma(broadcast<Real>(-3.0 / 1.0), source[71], t392);
-    Real const t394 = broadcast<Real>(1.0 / 64.0) * t393;
-    Real const t395 = broadcast<Real>(-5.0 / 1.0) * source[73];
+    Real const t392 = fma(broadcast<Real>(k1), source[69], t391);
+    Real const t393 = fma(-broadcast<Real>(k1), source[71], t392);
+    Real const t394 = broadcast<Real>(k15) * t393;
+    Real const t395 = -broadcast<Real>(k6) * source[73];
     Real const t397 = t395 - source[75];
-    Real const t398 = fma(broadcast<Real>(3.0 / 1.0), source[77], t397);
+    Real const t398 = fma(broadcast<Real>(k1), source[77], t397);
     Real const t400 = t398 - source[79];
-    Real const t401 = broadcast<Real>(1.0 / 64.0) * t400;
-    Real const t402 = fma(broadcast<Real>(-5.0 / 1.0), source[67], source[65]);
-    Real const t403 = fma(broadcast<Real>(9.0 / 1.0), source[69], t402);
-    Real const t404 = fma(broadcast<Real>(-5.0 / 1.0), source[71], t403);
-    Real const t405 = broadcast<Real>(1.0 / 64.0) * t404;
-    Real const t406 = broadcast<Real>(-35.0 / 1.0) * source[73];
-    Real const t407 = fma(broadcast<Real>(21.0 / 1.0), source[75], t406);
-    Real const t408 = fma(broadcast<Real>(-7.0 / 1.0), source[77], t407);
+    Real const t401 = broadcast<Real>(k15) * t400;
+    Real const t402 = fma(-broadcast<Real>(k6), source[67], source[65]);
+    Real const t403 = fma(broadcast<Real>(k16), source[69], t402);
+    Real const t404 = fma(-broadcast<Real>(k6), source[71], t403);
+    Real const t405 = broadcast<Real>(k15) * t404;
+    Real const t406 = -broadcast<Real>(k14) * source[73];
+    Real const t407 = fma(broadcast<Real>(k13), source[75], t406);
+    Real const t408 = fma(-broadcast<Real>(k12), source[77], t407);
     Real const t409 = source[79] + t408;
-    Real const t410 = broadcast<Real>(1.0 / 64.0) * t409;
+    Real const t410 = broadcast<Real>(k15) * t409;
     target[0] = source[0];
     target[1] = source[1];
     target[2] = source[3];
@@ -1862,7 +2187,8 @@ CUDA_EXPORT void localToCartesian(
     target[78] = t401;
     target[79] = t405;
     target[80] = t410;
+    return target;
 }
+}    // namespace cosmictiger::gravity::spherical
 
 #endif
-}    // namespace cosmictiger::gravity::basis_conversion
