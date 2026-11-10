@@ -89,6 +89,9 @@ void planGhosts() {
     };
     std::vector<GhostCell> directory;
     for (auto& [owner, future] : futures) {
+        future.wait();
+    }
+    for (auto& [owner, future] : futures) {
         auto const counts = future.get();
         auto const& request = requests[owner];
         if (counts.size() != request.size()) {
@@ -162,7 +165,9 @@ void receiveGhostCell(size_t index) {
             view.rungs[i] = particle.rung;
             view.masses[i] = particle.mass;
         }
-        auto root = treeCreateCell(cell, cache.meshSize, FmmParticleStore::Ghost);
+        TreeCreateReturn completed;
+        auto root =
+            treeCreateCell(cell, cache.meshSize, FmmParticleStore::Ghost, nullptr, &completed);
         --state.pendingGhosts;
         pending = false;
         publishSource(index, root);

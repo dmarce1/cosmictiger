@@ -61,7 +61,10 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
     }
     Array<TreeId, kChildCount> children;
     Vector3<Position>& centerPosition = rc.pos;
-    MultipoleBuffer& multi = rc.multi;
+    auto& multi = rc.multi;
+    if (policy.sourceStore == FmmParticleStore::Owned) {
+        multi.useDouble();
+    }
     auto& rbox = rc.box;
     float& radius = rc.radius;
     Vector3<double> xcValue;
@@ -368,8 +371,12 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
             flops += 3;
         }
         multipoleFlops += fmmDispatch([&](auto orderTag) {
+            if (multi.isDouble()) {
+                return treeComputeMultipole<decltype(orderTag)::value>(
+                    multi.precise(), ml, mr, xl, xr, centerPosition);
+            }
             return treeComputeMultipole<decltype(orderTag)::value>(
-                multi, ml, mr, xlValue, xrValue, xcValue);
+                multi.single(), ml.single(), mr.single(), xlValue, xrValue, xcValue);
         });
         children[kLeftChild] = rcl.id;
         children[kRightChild] = rcr.id;
@@ -436,8 +443,12 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
         flops += 4;    // Square root and three center-to-fixed conversions below.
         children[kLeftChild].index = children[kRightChild].index = -1;
         multipoleFlops += fmmDispatch([&](auto orderTag) {
+            if (multi.isDouble()) {
+                return treeComputeMultipole<decltype(orderTag)::value>(
+                    multi.precise(), particleRange, centerPosition, sources);
+            }
             return treeComputeMultipole<decltype(orderTag)::value>(
-                multi, particleRange, xcValue, sources);
+                multi.single(), particleRange, xcValue, sources);
         });
         for (int dim = 0; dim < kDimensions; dim++) {
             centerPosition[dim] = xcValue[dim];
@@ -469,7 +480,10 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
     flops += 4 * kDimensions;    // RangeFixed bounds: one scaling into fixed and one out.
     bool const global = processRange.second - processRange.first > 1;
     node.leaf = isleaf;
-    treeStoreNode(index, node, multi);
+    treeStoreNode(index, node, multi.narrow());
+    if (multi.isDouble()) {
+        flops += fmmMultipoleCoefficientCount(fmmOrder());
+    }
     rc.id.index = index;
     rc.id.proc = hpxRank();
     addCpuFlops(flops, FlopPrecision::Double);

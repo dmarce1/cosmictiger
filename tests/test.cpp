@@ -315,6 +315,7 @@ ApplicationTest const applicationTests[] = {
 #if COSMICTIGER_WITH_GRAVITY
     {"meshDomains", meshDomainsTest},
     {"pmmm", pmmmTest},
+    {"pmmmSources", pmmmTest},
     {"particleMeshSort", particleMeshSortTest},
     {"particleMeshTimestep", particleMeshTimestepTest},
     {"particleMeshDispatchLaunchFailure", particleMeshDispatchLaunchFailureTest},

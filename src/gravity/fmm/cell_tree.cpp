@@ -324,7 +324,7 @@ void treePrepareCellForestLocal(
 }
 
 TreeCellRoot treeCreateCell(ParticleMeshCell const& cell, int meshSize, FmmParticleStore store,
-    Range<double> const* sourceBox) {
+    Range<double> const* sourceBox, TreeCreateReturn* completedRoot) {
     uint64_t const cellCount = detail::particleMeshCellCount(meshSize);
     auto const sources = fmmSourceView(store);
     if (cell.key >= cellCount || cell.begin < 0 || cell.end <= cell.begin ||
@@ -363,7 +363,7 @@ TreeCellRoot treeCreateCell(ParticleMeshCell const& cell, int meshSize, FmmParti
     }
     auto const& gravity = getOptions().gravity;
     TreeCreateParameters params(0, gravity.openingAngle);
-    auto const built = treeCreateCellImpl(params, domainKey, processRange,
+    auto built = treeCreateCellImpl(params, domainKey, processRange,
         Pair<ParticleInteger>(cell.begin, cell.end), box, domainDepth, true, context);
 #if COSMICTIGER_WITH_SPH
     if (store == FmmParticleStore::Owned && getOptions().hydro.enabled) {
@@ -380,11 +380,17 @@ TreeCellRoot treeCreateCell(ParticleMeshCell const& cell, int meshSize, FmmParti
         }
     }
 #endif
-    {
+    auto const root = TreeCellRoot{cell.key, built.id, store == FmmParticleStore::Ghost};
+    if (completedRoot != nullptr) {
+        // Production consumes this double root once, then releases it. It does
+        // not retain a second root copy in the compatibility distributed cache.
+        *completedRoot = std::move(built);
+    } else {
+        built.multi.discardDouble();
         std::unique_lock<MutexType> lock(cellRootMutex);
-        cellRootReturns.emplace(built.id.index, built);
+        cellRootReturns.emplace(built.id.index, std::move(built));
     }
-    return {cell.key, built.id, store == FmmParticleStore::Ghost};
+    return root;
 }
 
 Vector<TreeCellRoot> treeCreateCellForest(Vector<ParticleMeshCell> const& cells, int meshSize) {

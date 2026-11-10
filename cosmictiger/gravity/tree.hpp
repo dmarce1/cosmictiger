@@ -18,6 +18,7 @@
 #include <cosmictiger/core/tree_id.hpp>
 #include <cosmictiger/gravity/fmm_types.hpp>
 #include <cosmictiger/gravity/sources.hpp>
+#include <cosmictiger/gravity/tree_source_moments.hpp>
 #include <cosmictiger/math/position.hpp>
 #include <cosmictiger/math/range.hpp>
 #include <cosmictiger/math/vector3.hpp>
@@ -119,7 +120,7 @@ inline FmmSourceView treeSourceView(TreeNode const& node) {
 }
 
 struct TreeCreateReturn {
-    MultipoleBuffer multi;
+    TreeBuildMoments multi;
     Vector3<Position> pos;
     TreeId id;
     float radius;

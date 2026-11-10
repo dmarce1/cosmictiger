@@ -82,6 +82,7 @@ void prepare(SolveRequest const& request) {
         state.unresolvedSources.clear();
         state.readySinks.clear();
         state.tasks.clear();
+        state.ownedTasks.clear();
         state.failure = {};
         state.kickResult = {};
         state.remainingSinks = state.cells.size();
@@ -220,11 +221,6 @@ void solve(SolveRequest request) {
     std::exception_ptr failure;
     bool started = false;
     try {
-        if (farField) {
-            profile::ScopedPhase phase(
-                request.applyKick ? "pmmmKick.deposit" : "pmmmSolve.deposit", coordinator);
-            allLocalities<PmmmDepositAction>();
-        }
         if (options.pmmmNearMethod == "fmm" && nearField) {
             {
                 profile::ScopedPhase phase(
@@ -237,6 +233,13 @@ void solve(SolveRequest request) {
                 request.applyKick ? "pmmmKick.startNearPipeline" : "pmmmSolve.startNearPipeline",
                 coordinator);
             allLocalities<PmmmStartPipelineAction>();
+        }
+        if (farField) {
+            // FMM producers deposit completed owned roots. This wait excludes
+            // near consumers, which may already be waiting for farReady.
+            profile::ScopedPhase phase(
+                request.applyKick ? "pmmmKick.deposit" : "pmmmSolve.deposit", coordinator);
+            allLocalities<PmmmDepositAction>();
         }
         if (farField) {
             // The FMM near-field pipeline overlaps the transform. These phases measure

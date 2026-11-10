@@ -494,6 +494,7 @@ void destroy() {
     state.sourceCells.clear();
     state.sourceCellsByKey.clear();
     state.tasks.clear();
+    state.ownedTasks.clear();
     state.acceleration.clear();
     state.potential.clear();
 }

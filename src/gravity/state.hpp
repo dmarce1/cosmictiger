@@ -178,6 +178,9 @@ struct SolveState {
     std::vector<size_t> unresolvedSources;
     std::deque<size_t> readySinks;
     std::vector<hpx::future<void>> tasks;
+    // Source producers never wait for farReady. Deposition waits only for
+    // these tasks, allowing ghost receivers and near consumers to overlap FFT.
+    std::vector<hpx::shared_future<void>> ownedTasks;
     std::shared_ptr<hpx::promise<void>> farPromise;
     hpx::shared_future<void> farReady;
     std::atomic<size_t> pendingGhosts{0};
@@ -231,6 +234,12 @@ void publishSource(size_t index, TreeCellRoot root);
 void failSource(size_t index, std::exception_ptr failure);
 void clearGhosts();
 void deposit();
+CellData rootMoments(size_t cellIndex, TreeCreateReturn const& root);
+void depositCells(std::vector<CellData> cells);
+inline bool reuseOwnedRoots() {
+    return getOptions().gravity.pmmmNearMethod == "fmm" && !state.request.farOnly &&
+        !frozenNearRequest(state.request);
+}
 void transform();
 // Frozen near passes skip the transform; release waiters on the far field.
 void skipTransform();

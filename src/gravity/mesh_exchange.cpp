@@ -1,5 +1,6 @@
 /* CosmicTiger - Nitadori PMMM mesh exchange; BSL-1.0. */
 
+#include <cosmictiger/gravity/tree_multipole.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/domain.hpp>
 
@@ -82,6 +83,7 @@ void accumulate(std::vector<CellData> const& cells) {
             state.moments[begin + component] += cell.coefficients[component];
         }
         state.radialTrace += cell.radialTrace;
+        observe(PmmmCellEvent::MomentsDeposited, cell.key);
     }
     addCpuFlops(FlopCount(cells.size()) * (cache.sourceCount + 1), FlopPrecision::Double);
 }
@@ -152,13 +154,93 @@ std::vector<double> readExpansion(uint64_t key) {
     return coefficients;
 }
 
+void depositCells(std::vector<CellData> cells) {
+    std::unordered_map<int, std::vector<CellData>> packets;
+    for (auto& cell : cells) {
+        int const x = coordinates(cell.key)[0];
+        packets[cache.slabOwner[x]].push_back(std::move(cell));
+    }
+    std::vector<hpx::future<void>> futures;
+    futures.reserve(packets.size());
+    std::exception_ptr failure;
+    try {
+        for (auto& [owner, packet] : packets) {
+            futures.push_back(
+                hpx::async<PmmmAccumulateAction>(cache.owners[owner], std::move(packet)));
+        }
+    } catch (...) {
+        failure = std::current_exception();
+    }
+    for (auto& future : futures) {
+        future.wait();
+    }
+    if (failure) {
+        std::rethrow_exception(failure);
+    }
+    for (auto& future : futures) {
+        future.get();
+    }
+}
+
+CellData rootMoments(size_t cellIndex, TreeCreateReturn const& root) {
+    auto const& range = state.cells[cellIndex];
+    if (!root.multi.isDouble()) {
+        throw std::runtime_error("Owned mesh deposition requires an unrounded double tree root");
+    }
+    auto const cellCoordinates = coordinates(range.key);
+    Vector3<Position> center;
+    for (int axis = 0; axis < kDimensions; ++axis) {
+        center[axis] = (cellCoordinates[axis] + 0.5) / cache.meshSize;
+    }
+    CellData cell;
+    cell.key = range.key;
+    cell.coefficients.resize(cache.sourceCount);
+    FlopCount flops = fmmDispatch([&](auto tag) {
+        return treeSourceToMesh<decltype(tag)::value>(
+            cell.coefficients.data(), root.multi.precise(), root.pos, center, cache.meshSize);
+    });
+    // Independent radial summary about the mesh center. No source trace is
+    // inferred from the STF moments, and no second harmonic P2M is performed.
+    for (ParticleInteger i = range.begin; i < range.end; ++i) {
+        double const mass = particlesMass(i);
+        for (int axis = 0; axis < kDimensions; ++axis) {
+            double const offset =
+                unwrappedDoubleDistance(particlesPos(axis, i), center[axis]) * cache.meshSize;
+            cell.radialTrace += mass * offset * offset;
+        }
+        state.stageRungs[i - state.activeRange.first] = particlesRung(i);
+        flops += 1 + 6 * kDimensions;
+    }
+    addCpuFlops(flops + kDimensions * (kPositionBits == 64 ? 6 : 3), FlopPrecision::Double);
+    return cell;
+}
+
 void deposit() {
+    if (reuseOwnedRoots()) {
+        // These futures contain no near consumers and can complete before FFT.
+        for (auto& task : state.ownedTasks) {
+            try {
+                task.get();
+            } catch (...) {
+                recordFailure(std::current_exception());
+            }
+        }
+        std::exception_ptr failure;
+        {
+            std::lock_guard<MutexType> lock(state.queueMutex);
+            failure = state.failure;
+        }
+        if (failure) {
+            std::rethrow_exception(failure);
+        }
+        return;
+    }
     // Bound packet sizes and outstanding remote writes independently of N.
     constexpr size_t kCellsPerPacket = 32;
     parallelFor((state.cells.size() + kCellsPerPacket - 1) / kCellsPerPacket,
         "gravity.pmmm.depositMoments", [&](size_t batch) {
             FlopCount flops = 0;
-            std::unordered_map<int, std::vector<CellData>> packets;
+            std::vector<CellData> cells;
             size_t const end = std::min(state.cells.size(), (batch + 1) * kCellsPerPacket);
             for (size_t cellIndex = batch * kCellsPerPacket; cellIndex < end; ++cellIndex) {
                 auto const& range = state.cells[cellIndex];
@@ -175,29 +257,10 @@ void deposit() {
                     }
                     flops += 3 * kDimensions;
                 }
-                packets[cache.slabOwner[cellCoordinates[0]]].push_back(std::move(cell));
+                cells.push_back(std::move(cell));
             }
             addCpuFlops(flops, FlopPrecision::Double);
-            std::vector<hpx::future<void>> futures;
-            futures.reserve(packets.size());
-            std::exception_ptr failure;
-            try {
-                for (auto& [owner, packet] : packets) {
-                    futures.push_back(
-                        hpx::async<PmmmAccumulateAction>(cache.owners[owner], std::move(packet)));
-                }
-            } catch (...) {
-                failure = std::current_exception();
-            }
-            for (auto& future : futures) {
-                future.wait();
-            }
-            if (failure) {
-                std::rethrow_exception(failure);
-            }
-            for (auto& future : futures) {
-                future.get();
-            }
+            depositCells(std::move(cells));
         });
 }
 

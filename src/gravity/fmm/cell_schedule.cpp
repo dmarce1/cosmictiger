@@ -1,10 +1,73 @@
 /* CosmicTiger - Nitadori PMMM cell schedule; BSL-1.0. */
 
 #include <hpx/threading_base/annotated_function.hpp>
+#include <hpx/threading_base/scoped_annotation.hpp>
 
+#include <cosmictiger/gravity/fmm/tree_local.hpp>
 #include "../actions.hpp"
 
 namespace pmmm::detail {
+
+// Reuse the near batch's immutable, sorted selection. In particular, do not
+// invoke selectBatchSinks again: mixed leaves have already reserved sink-only
+// nodes, and another selection would duplicate them. This descent only reads
+// the original owned source tree and keeps one order-sized local per depth.
+template <int order>
+void descendFar(TreeId id,
+    cosmictiger::gravity::cartesian::tracefree::Expansion<float, order> const& expansion,
+    float curvature, FmmForceResult const& near, size_t& compact, KickReturn& result,
+    FlopCount& flops, FlopCount& singleFlops, FlopCounts& kickFlops) {
+    namespace local = cosmictiger::gravity::tree_local;
+    auto const* node = treeGetNode(id);
+    if (compact == near.particleIndices.size() ||
+        near.particleIndices[compact] >= node->particleRange.second) {
+        return;
+    }
+    ALWAYS_ASSERT(id.proc == hpxRank() && node->sourceStore == FmmParticleStore::Owned);
+    if (near.particleIndices[compact] < node->particleRange.first) {
+        throw std::runtime_error("PMMM far descent lost its selected sink mapping");
+    }
+    if (!node->leaf) {
+        for (auto const child : node->children) {
+            auto const* childNode = treeGetNode(child);
+            if (compact == near.particleIndices.size() ||
+                near.particleIndices[compact] >= childNode->particleRange.second) {
+                continue;
+            }
+            cosmictiger::gravity::cartesian::tracefree::Expansion<float, order> translated{};
+            singleFlops += local::translate(translated, expansion,
+                               local::displacement<float>(childNode->pos, node->pos), curvature,
+                               state.request.doPotential) +
+                6;
+            descendFar(
+                child, translated, curvature, near, compact, result, flops, singleFlops, kickFlops);
+        }
+        return;
+    }
+    for (; compact < near.particleIndices.size() &&
+        near.particleIndices[compact] < node->particleRange.second;
+        ++compact) {
+        ParticleInteger const index = near.particleIndices[compact];
+        Vector3<Position> position;
+        for (int axis = 0; axis < kDimensions; ++axis) {
+            position[axis] = particlesPos(axis, index);
+        }
+        cosmictiger::gravity::Field<float> far{};
+        singleFlops +=
+            local::evaluate(far, expansion, local::displacement<float>(position, node->pos),
+                curvature, state.request.doPotential) +
+            6;
+        std::array<double, 4> field{};
+        if (state.request.doPotential) {
+            field[0] = double(far[0]) + near.potential[compact];
+        }
+        for (int axis = 0; axis < kDimensions; ++axis) {
+            field[axis + 1] = double(far[axis + 1]) + near.acceleration[axis][compact];
+        }
+        flops += 3 * (kDimensions + int(state.request.doPotential));
+        consumeField(index, field, result, flops, kickFlops);
+    }
+}
 
 void recordFailure(std::exception_ptr failure) {
     {
@@ -46,6 +109,7 @@ void clearGhosts() {
     state.sourceCellsByKey.clear();
     state.sinkSources.clear();
     state.tasks.clear();
+    state.ownedTasks.clear();
     state.stageRungs.clear();
 }
 
@@ -109,7 +173,13 @@ void computeReadyCells() {
             state.farReady.get();
             double const h = 1.0 / cache.meshSize;
             double const localTrace = (4 * std::numbers::pi / 3) * h * h * state.background[0];
-            FlopCount flops = 4;
+            double const curvature =
+                cosmictiger::gravity::tree_local::backgroundCurvature(localTrace, cache.meshSize);
+            float const treeCurvature = curvature;
+            // Width conversion/division (2), trace products (3), and curvature
+            // products/division plus two mesh-size conversions (6).
+            FlopCount flops = 12;    // Includes narrowing the solve's curvature once per batch.
+            FlopCount singleFlops = 0;
             FlopCounts kickFlops;
             KickReturn result;
             size_t compact = 0;
@@ -121,30 +191,42 @@ void computeReadyCells() {
                 }
                 auto const center = coordinates(cell.key);
                 auto const coefficients = localExpansion(cell.key);
-                for (; compact < fields.particleIndices.size() &&
-                    fields.particleIndices[compact] < cell.end;
-                    ++compact) {
-                    ParticleInteger const index = fields.particleIndices[compact];
-                    if (index < cell.begin) {
-                        throw std::runtime_error("PMMM batch output lost its sink mapping");
-                    }
-                    std::array<double, 4> field{};
-                    auto const value = particle(index, center, flops);
-                    flops += evaluate(
-                        cache.order, field, coefficients.data(), localTrace, value.offset, h);
-                    field[0] += fields.potential[compact];
-                    for (int dim = 0; dim < kDimensions; ++dim) {
-                        field[dim + 1] += fields.acceleration[dim][compact];
-                    }
-                    flops += 8;    // Four float-to-double promotions and field additions.
-                    consumeField(index, field, result, flops, kickFlops);
+                hpx::scoped_annotation farWork("gravity.pmmm.cartesianFarDescent");
+                Vector3<Position> meshCenter;
+                for (int axis = 0; axis < kDimensions; ++axis) {
+                    meshCenter[axis] = (center[axis] + .5) * h;
                 }
+                // Cell-index promotion/add/product and native fixed conversion;
+                // the host Fixed64 conversion separates two safe 32-bit limbs.
+                flops += kDimensions * (kPositionBits == 64 ? 10 : 5);
+                auto const root = state.sourceCells[sink]->ready.get();
+                fmmDispatch([&](auto tag) {
+                    constexpr int kOrder = decltype(tag)::value;
+                    cosmictiger::gravity::cartesian::tracefree::Expansion<double, kOrder> local;
+                    flops += cosmictiger::gravity::tree_local::fromMesh(
+                        local, coefficients.data(), localTrace, cache.meshSize);
+                    auto const rootPosition = treeGetNode(root.id)->pos;
+                    cosmictiger::gravity::cartesian::tracefree::Expansion<double, kOrder> atRoot{};
+                    flops += cosmictiger::gravity::tree_local::translate(atRoot, local,
+                                 cosmictiger::gravity::tree_local::displacement(
+                                     rootPosition, meshCenter),
+                                 curvature, state.request.doPotential) +
+                        9;
+                    cosmictiger::gravity::cartesian::tracefree::Expansion<float, kOrder> treeLocal;
+                    for (int coefficient = 0; coefficient < treeLocal.size(); ++coefficient) {
+                        treeLocal[coefficient] = atRoot[coefficient];
+                    }
+                    flops += treeLocal.size();
+                    observe(PmmmCellEvent::FarLocalReady, cell.key);
+                    descendFar(root.id, treeLocal, treeCurvature, fields, compact, result, flops,
+                        singleFlops, kickFlops);
+                });
             }
             if (compact != fields.particleIndices.size()) {
                 throw std::runtime_error("PMMM batch output contains an unknown sink");
             }
             addCpuFlops(flops + kickFlops.doublePrecision, FlopPrecision::Double);
-            addCpuFlops(kickFlops.singlePrecision, FlopPrecision::Single);
+            addCpuFlops(singleFlops + kickFlops.singlePrecision, FlopPrecision::Single);
             {
                 std::lock_guard<MutexType> lock(state.queueMutex);
                 state.kickResult += result;
@@ -172,26 +254,53 @@ void startPipeline() {
     state.particleFetchStart = particlesRemoteFetchCount();
     size_t const ownedCount = state.cells.size();
     size_t const workers = std::max(size_t(1), hpx::get_os_thread_count());
-    state.tasks.reserve(2 * workers + state.sourceCells.size() - ownedCount);
+    state.tasks.reserve(workers + state.sourceCells.size() - ownedCount);
+    state.ownedTasks.reserve(workers);
     try {
         for (size_t worker = 0; worker < workers; ++worker) {
-            state.tasks.push_back(hpx::async(hpx::annotated_function(
-                [worker, workers, ownedCount]() {
-                    for (size_t index = worker; index < ownedCount; index += workers) {
-                        try {
-                            auto const& cell = state.cells[index];
-                            auto root =
-                                treeCreateCell(cell, cache.meshSize, FmmParticleStore::Owned);
-                            for (ParticleInteger i = cell.begin; i < cell.end; ++i) {
-                                state.stageRungs[i - state.activeRange.first] = particlesRung(i);
+            state.ownedTasks.push_back(hpx::async(
+                hpx::annotated_function(
+                    [worker, workers, ownedCount]() {
+                        // Retain at most 32 converted cells per producer; the double
+                        // Cartesian root is released after each conversion. Slab
+                        // writes are acknowledged before the next packet is built.
+                        constexpr size_t kPacketCells = 32;
+                        for (size_t begin = worker; begin < ownedCount;
+                            begin += workers * kPacketCells) {
+                            std::vector<CellData> packet;
+                            for (size_t index = begin;
+                                index < std::min(ownedCount, begin + workers * kPacketCells);
+                                index += workers) {
+                                try {
+                                    auto const& cell = state.cells[index];
+                                    TreeCreateReturn completed;
+                                    auto const root = treeCreateCell(cell, cache.meshSize,
+                                        FmmParticleStore::Owned, nullptr, &completed);
+                                    if (reuseOwnedRoots()) {
+                                        packet.push_back(rootMoments(index, completed));
+                                    } else {
+                                        for (ParticleInteger i = cell.begin; i < cell.end; ++i) {
+                                            state.stageRungs[i - state.activeRange.first] =
+                                                particlesRung(i);
+                                        }
+                                    }
+                                    observe(PmmmCellEvent::OwnedRootReady, cell.key);
+                                    publishSource(index, root);
+                                } catch (...) {
+                                    failSource(index, std::current_exception());
+                                }
                             }
-                            publishSource(index, root);
-                        } catch (...) {
-                            failSource(index, std::current_exception());
+                            if (!packet.empty()) {
+                                try {
+                                    depositCells(std::move(packet));
+                                } catch (...) {
+                                    recordFailure(std::current_exception());
+                                }
+                            }
                         }
-                    }
-                },
-                "gravity.pmmm.buildOwnedSourceCells")));
+                    },
+                    "gravity.pmmm.buildOwnedSourceCells"))
+                    .share());
         }
         // Each receive suspends independently: a delayed cell must not stop
         // requests for other cells that can release ready boundary work.
@@ -213,6 +322,13 @@ void startPipeline() {
 }
 
 void finishPipeline() {
+    for (auto& task : state.ownedTasks) {
+        try {
+            task.get();
+        } catch (...) {
+            recordFailure(std::current_exception());
+        }
+    }
     for (auto& task : state.tasks) {
         if (task.valid()) {
             task.wait();

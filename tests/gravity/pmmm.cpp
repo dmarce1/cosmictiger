@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <format>
@@ -16,6 +17,9 @@
 #include <utility>
 #include <vector>
 
+#include <hpx/serialization/input_archive.hpp>
+#include <hpx/serialization/output_archive.hpp>
+
 #include <cosmictiger/core/build_config.hpp>
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/hpx.hpp>
@@ -28,6 +32,7 @@
 #include <cosmictiger/gravity/solver.hpp>
 #include <cosmictiger/gravity/sources.hpp>
 #include <cosmictiger/gravity/tree.hpp>
+#include <cosmictiger/gravity/tree_multipole.hpp>
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/domain.hpp>
@@ -72,6 +77,42 @@ void requirePmmm(bool condition, std::string const& message) {
     }
 }
 
+void checkSourceMomentSerialization() {
+    TreeBuildMoments input;
+    input.useDouble();
+    int const count = fmmMultipoleCoefficientCount(fmmOrder());
+    for (int i = 0; i < count; ++i) {
+        input.precise()[i] = .125 + i + std::ldexp(1., -36);
+    }
+    auto roundTrip = [&](TreeBuildMoments const& value) {
+        std::vector<char> bytes;
+        {
+            hpx::serialization::output_archive output(bytes);
+            output << value;
+        }
+        TreeBuildMoments copy;
+        hpx::serialization::input_archive archive(bytes);
+        archive >> copy;
+        requirePmmm(
+            copy.isDouble() == value.isDouble(), "build-return transport changed source precision");
+        for (int i = 0; i < count; ++i) {
+            requirePmmm(copy[i] == value[i], "build-return transport changed a coefficient");
+        }
+        return bytes.size();
+    };
+    auto const wide = roundTrip(input);
+    input.discardDouble();
+    auto const narrow = roundTrip(input);
+    requirePmmm(wide == narrow + count * sizeof(float),
+        "ghost/root-cache transport widened or serialized inactive source coefficients: float=" +
+            std::to_string(narrow) + " double=" + std::to_string(wide) +
+            " count=" + std::to_string(count));
+    std::cout << "PMMM source transport active coefficients=" << count
+              << " float/double bytes=" << narrow << "/" << wide
+              << " build frame=" << sizeof(TreeCreateReturn)
+              << " persistent moment=" << sizeof(MultipoleBuffer) << '\n';
+}
+
 void checkGhostMassPermutation() {
     std::array<Position, 4> x{0.875, 0.125, 0.625, 0.375};
     std::array<Position, 4> y{}, z{};
@@ -93,6 +134,33 @@ void checkGhostMassPermutation() {
                 rungs[i] == int(8 * x[i].toDouble()) && (x[i].toDouble() < 0.5) == (i < middle),
             "ghost source permutation detached a variable mass or rung from its position");
     }
+    // Exercise the production double leaf/M2M/root-conversion arithmetic with
+    // explicit unequal masses, independently of the coupled-hydro solver gate.
+    fmmDispatch([&](auto tag) {
+        constexpr int order = decltype(tag)::value;
+        Vector3<Position> const center{.5, .5, .5};
+        TreeBuildMoments left, right;
+        left.useDouble();
+        right.useDouble();
+        Vector3<Position> const lc{.25, .375, .5}, rc{.75, .625, .5};
+        treeComputeMultipole<order>(left.precise(), {0, 2}, lc, view);
+        treeComputeMultipole<order>(right.precise(), {2, 4}, rc, view);
+        SourceMultipoleBuffer root;
+        treeComputeMultipole<order>(root, left, right, lc, rc, center);
+        std::array<double, FmmOrder<order>::kMultipoleCoefficients_> mapped{}, direct{};
+        treeSourceToMesh<order>(mapped.data(), root, center, center, 1);
+        for (int i = 0; i < 4; ++i) {
+            Vector3<double> offset;
+            for (int axis = 0; axis < kDimensions; ++axis) {
+                offset[axis] = unwrappedDoubleDistance(view.positions[axis][i], center[axis]);
+            }
+            pmmm::addMoments(order, direct.data(), masses[i], offset);
+        }
+        for (size_t i = 0; i < mapped.size(); ++i) {
+            requirePmmm(std::abs(mapped[i] - direct[i]) < 2.e-13,
+                "unequal-mass double root differs from direct spherical P2M");
+        }
+    });
 }
 
 void reservePmmmCudaFixture() {
@@ -103,7 +171,6 @@ void reservePmmmCudaFixture() {
     fmmGhostClear();
     particlesResize(0);
 }
-
 
 void resetPmmmSavedForces() {
     // Domain migration transfers physical particle state, not saved diagnostic
@@ -343,7 +410,6 @@ void checkPmmmNearEdges() {
     options.gravity.smoothingLength = 0.001;
     setOptions(options);
 }
-
 
 void initializePmmmFixture(int fixture, int ownership) {
     // The first two and the next pair share cells on the n=8 mesh. Their
@@ -616,16 +682,245 @@ size_t verifyPmmmTreeCell(TreeId id, uint64_t key, int meshSize) {
     return internalNodes;
 }
 
+struct SourceAudit {
+    std::mutex mutex;
+    std::map<uint64_t, int> roots, deposits, locals;
+    bool failOnce = false;
+    bool failFar = false;
+};
+std::shared_ptr<SourceAudit> sourceAudit;
+void installSourceAudit(bool enable, int failingRank) {
+    pmmmSetCellObserver({});
+    sourceAudit.reset();
+    if (!enable) {
+        return;
+    }
+    auto audit = std::make_shared<SourceAudit>();
+    audit->failFar = failingRank < -1;
+    audit->failOnce = hpxRank() == (audit->failFar ? -2 - failingRank : failingRank);
+    sourceAudit = audit;
+    pmmmSetCellObserver([audit](PmmmCellEvent event, uint64_t key) {
+        std::lock_guard<std::mutex> lock(audit->mutex);
+        if (event == PmmmCellEvent::OwnedRootReady) {
+            ++audit->roots[key];
+            if (audit->failOnce && !audit->failFar) {
+                audit->failOnce = false;
+                throw std::runtime_error("injected owned-root publication failure");
+            }
+        }
+        if (event == PmmmCellEvent::MomentsDeposited) {
+            ++audit->deposits[key];
+        }
+        if (event == PmmmCellEvent::FarLocalReady) {
+            ++audit->locals[key];
+            if (audit->failOnce && audit->failFar) {
+                audit->failOnce = false;
+                throw std::runtime_error("injected Cartesian far-local failure");
+            }
+        }
+    });
+}
+Vector<uint64_t> readSourceAudit() {
+    auto const audit = sourceAudit;
+    std::lock_guard<std::mutex> lock(audit->mutex);
+    uint64_t duplicates = 0;
+    for (auto const& [key, count] : audit->roots) {
+        duplicates += count != 1;
+    }
+    for (auto const& [key, count] : audit->deposits) {
+        duplicates += count != 1;
+    }
+    for (auto const& [key, count] : audit->locals) {
+        duplicates += count != 1;
+    }
+    return {audit->roots.size(), audit->deposits.size(), duplicates, audit->locals.size()};
+}
+
+struct PrecisionMoments {
+    TreeBuildMoments legacy;
+    TreeBuildMoments mixed;
+    TreeBuildMoments widened;
+    TreeBuildMoments full;
+};
+
+template <int order>
+PrecisionMoments sourcePrecision(TreeId id) {
+    auto const* node = treeGetNode(id);
+    PrecisionMoments result;
+    result.mixed.useDouble();
+    result.widened.useDouble();
+    result.full.useDouble();
+    Vector3<double> center;
+    for (int axis = 0; axis < kDimensions; ++axis) {
+        center[axis] = node->pos[axis].toDouble();
+    }
+    if (node->leaf) {
+        auto const sources = treeSourceView(*node);
+        treeComputeMultipole<order>(result.legacy.single(), node->particleRange, center, sources);
+        treeComputeMixedMultipole<order>(
+            result.mixed.precise(), node->particleRange, center, sources);
+        treeComputeWideReductionMultipole<order>(
+            result.widened.precise(), node->particleRange, center, sources);
+        treeComputeMultipole<order>(result.full.precise(), node->particleRange, node->pos, sources);
+    } else {
+        auto const left = sourcePrecision<order>(node->children[0]);
+        auto const right = sourcePrecision<order>(node->children[1]);
+        auto const* l = treeGetNode(node->children[0]);
+        auto const* r = treeGetNode(node->children[1]);
+        Vector3<double> lc, rc;
+        for (int axis = 0; axis < kDimensions; ++axis) {
+            lc[axis] = l->pos[axis].toDouble();
+            rc[axis] = r->pos[axis].toDouble();
+        }
+        treeComputeMultipole<order>(
+            result.legacy.single(), left.legacy.single(), right.legacy.single(), lc, rc, center);
+        treeComputeMultipole<order>(
+            result.mixed.precise(), left.mixed, right.mixed, l->pos, r->pos, node->pos);
+        treeComputeMultipole<order>(
+            result.widened.precise(), left.widened, right.widened, l->pos, r->pos, node->pos);
+        treeComputeMultipole<order>(
+            result.full.precise(), left.full, right.full, l->pos, r->pos, node->pos);
+    }
+    MultipoleBuffer stored;
+    treeReadMultipole(node->mpos, stored);
+    for (int i = 0; i < FmmOrder<order>::kMultipoleCoefficients_; ++i) {
+        requirePmmm(float(result.full[i]) == stored[i],
+            "owned tree arena differs from narrowed full-double upward result");
+    }
+    return result;
+}
+
+void checkSourcePrecision(TreeCellRoot const& root) {
+    fmmDispatch([&](auto tag) {
+        constexpr int order = decltype(tag)::value;
+        int const side = getOptions().gravity.meshSize;
+        auto const* node = treeGetNode(root.id);
+        auto const variants = sourcePrecision<order>(root.id);
+        Vector3<Position> center;
+        uint64_t key = root.key;
+        for (int axis = kDimensions - 1; axis >= 0; --axis) {
+            center[axis] = (double(key % side) + .5) / side;
+            key /= side;
+        }
+        std::array<double, FmmOrder<order>::kMultipoleCoefficients_> direct{};
+        auto const sources = treeSourceView(*node);
+        for (ParticleInteger i = node->particleRange.first; i < node->particleRange.second; ++i) {
+            Vector3<double> offset;
+            for (int axis = 0; axis < kDimensions; ++axis) {
+                offset[axis] = (positionDomainCoordinate(sources.positions[axis][i]) * side -
+                    center[axis].toDouble() * side);
+            }
+            pmmm::addMoments(order, direct.data(), fmmSourceMass(sources, i), offset);
+        }
+        std::array<double, FmmOrder<order>::kLocalCoefficients_> green{};
+        pmmm::green(order, green.data(), {.43, -.37, .29}, 1. / side, false);
+        auto const terms = pmmm::contractionTerms(order);
+        auto field = [&](auto const& moments) {
+            std::array<double, FmmOrder<order>::kLocalCoefficients_> local{};
+            for (auto const& term : terms) {
+                local[term.local] += term.weight * moments[term.source] * green[term.green];
+            }
+            std::array<double, 4> result{};
+            pmmm::evaluate(order, result, local.data(), 0, {.17, -.11, .23}, 1. / side);
+            return result;
+        };
+        auto const expectedField = field(direct);
+        std::array<double, 4> coefficientError{}, fieldError{};
+        int variantIndex = 0;
+        for (auto const* variant :
+            {&variants.legacy, &variants.mixed, &variants.widened, &variants.full}) {
+            SourceMultipoleBuffer input;
+            for (int i = 0; i < int(direct.size()); ++i) {
+                input[i] = (*variant)[i];
+            }
+            std::array<double, FmmOrder<order>::kMultipoleCoefficients_> mapped{};
+            treeSourceToMesh<order>(mapped.data(), input, node->pos, center, side);
+            double rankScale = direct[0];
+            for (int n = 0; n <= order - 2; ++n) {
+                if (n) {
+                    rankScale *= .5 / n;
+                }
+                for (int m = -n; m <= n; ++m) {
+                    int const slot = n * (n + 1) + m;
+                    coefficientError[variantIndex] = std::max(coefficientError[variantIndex],
+                        std::abs(mapped[slot] - direct[slot]) / std::max(rankScale, 1.e-100));
+                }
+            }
+            auto const actualField = field(mapped);
+            for (int i = 0; i < 4; ++i) {
+                fieldError[variantIndex] = std::max(fieldError[variantIndex],
+                    std::abs(actualField[i] - expectedField[i]) /
+                        std::max(1., std::abs(expectedField[i])));
+            }
+            ++variantIndex;
+        }
+        requirePmmm(coefficientError[3] < 2.e-11 && fieldError[3] < 2.e-11,
+            "full-double root deposition exceeds direct double error envelope");
+        std::cout << "PMMM source precision rank=" << hpxRank() << " mesh=" << side
+                  << " cell=" << root.key
+                  << " coefficient legacy/mixed/widened/full=" << coefficientError[0] << "/"
+                  << coefficientError[1] << "/" << coefficientError[2] << "/" << coefficientError[3]
+                  << " field=" << fieldError[0] << "/" << fieldError[1] << "/" << fieldError[2]
+                  << "/" << fieldError[3] << '\n';
+    });
+}
+
+// Inspect the actual slab moments after a solve, independently accumulating the
+// pre-refactor direct double P2M from every global source record.
+void verifyDepositedMoments(Vector<PmmmSample> const& samples) {
+    auto const& mesh = pmmm::detail::cache;
+    auto const& state = pmmm::detail::state;
+    if (pmmm::detail::frozenNearRequest(state.request) || state.request.applyKick) {
+        return;
+    }
+    std::vector<double> expected(state.moments.size());
+    double radial = 0;
+    for (auto const& sample : samples) {
+        uint64_t const x = sample.cellKey / (uint64_t(mesh.meshSize) * mesh.meshSize);
+        if (x < uint64_t(mesh.localBegin) || x >= uint64_t(mesh.localBegin + mesh.localSize)) {
+            continue;
+        }
+        auto const cell = pmmm::detail::coordinates(sample.cellKey);
+        Vector3<double> offset;
+        for (int axis = 0; axis < kDimensions; ++axis) {
+            Position position;
+            position.raw() = sample.rawPosition[axis];
+            offset[axis] = positionDomainCoordinate(position) * mesh.meshSize - (cell[axis] + .5);
+            radial += sample.mass * offset[axis] * offset[axis];
+        }
+        pmmm::addMoments(mesh.order,
+            expected.data() + mesh.cellIndex(sample.cellKey) * mesh.sourceCount, sample.mass,
+            offset);
+    }
+    for (size_t cell = 0; cell < mesh.cellCount(); ++cell) {
+        double const mass = expected[cell * mesh.sourceCount];
+        double scale = mass;
+        for (int n = 0; n <= mesh.order - 2; ++n) {
+            if (n) {
+                scale *= .5 / n;
+            }
+            for (int m = -n; m <= n; ++m) {
+                size_t const i = cell * mesh.sourceCount + n * (n + 1) + m;
+                requirePmmm(
+                    std::abs(state.moments[i] - expected[i]) <= 2.e-11 * std::max(scale, 1.e-100),
+                    "deposited root coefficient differs from direct double mesh P2M");
+            }
+        }
+    }
+    requirePmmm(std::abs(state.radialTrace - radial) <= 2.e-12 * std::max(1., radial),
+        "root radial summary differs from direct cell scan");
+}
+
 Vector<TreeCellRoot> buildPmmmTestForest() {
     int const meshSize = getOptions().gravity.meshSize;
     auto const cells = particleMeshSort(meshSize);
     auto roots = treeCreateCellForest(cells, meshSize);
     for (auto const& root : roots) {
         verifyPmmmTreeCell(root.id, root.key, meshSize);
+        checkSourcePrecision(root);
     }
     return roots;
 }
-
 
 // Independent direct Ewald summation, with no generated kernels, mesh, FFT,
 // harmonic coefficients, or production image tables. The primary self term is
@@ -860,7 +1155,6 @@ void comparePmmmSamples(
     std::string const context = " near=" + options.gravity.pmmmNearMethod +
         " mesh=" + std::to_string(options.gravity.meshSize) +
         " fmmOrder=" + std::to_string(options.gravity.fmmOrder) +
-        " fmmOrder=" + std::to_string(options.gravity.fmmOrder) +
         " width=" + std::to_string(options.gravity.pmmmNearWidth) +
         " theta=" + std::to_string(options.gravity.openingAngle) +
         " cuda=" + std::to_string(options.gravity.cuda);
@@ -906,6 +1200,9 @@ HPX_PLAIN_ACTION(detail::readPmmmKickFixture, ReadPmmmKickFixtureAction);
 HPX_PLAIN_ACTION(detail::installPmmmOverlapGate, InstallPmmmOverlapGateAction);
 HPX_PLAIN_ACTION(detail::readPmmmOverlapGate, ReadPmmmOverlapGateAction);
 HPX_PLAIN_ACTION(detail::buildPmmmTestForest, BuildPmmmTestForestAction);
+HPX_PLAIN_ACTION(detail::verifyDepositedMoments, VerifyDepositedMomentsAction);
+HPX_PLAIN_ACTION(detail::installSourceAudit, InstallSourceAuditAction);
+HPX_PLAIN_ACTION(detail::readSourceAudit, ReadSourceAuditAction);
 HPX_PLAIN_ACTION(detail::reservePmmmCudaFixture, ReservePmmmCudaFixtureAction);
 HPX_PLAIN_ACTION(detail::resetPmmmSavedForces, ResetPmmmSavedForcesAction);
 
@@ -926,16 +1223,13 @@ void distributePmmmFixture(int fixture) {
     auto const saved = getOptions();
     auto options = saved;
     options.initial.numberOfParticles = pmmmFixtureParticleCount(fixture);
-    // Fresh fixtures deliberately place every rung on arbitrary localities.
-    // Disable gravity only during migration so the hierarchical dark-matter
-    // path transfers every owned rung, just as the mixed-mass hydro path does.
-    // Domain geometry still uses the same particle-balanced spatial cuts.
-    options.gravity.enabled = false;
-    options.run.hierarchicalGravity = false;
+    // Fresh fixtures place every rung on arbitrary localities. Preserve the
+    // PMMM-aligned domain cuts and use the explicit all-rung migration mode.
+    // Disabling gravity here would let domains split an occupied mesh cell.
     setOptions(options);
     particlesSortByRung(0);
     domainsRebound();
-    domainsBegin(0);
+    domainsBegin(-1);
     domainsEnd();
     setOptions(saved);
     std::vector<hpx::future<void>> futures;
@@ -976,7 +1270,6 @@ void checkPmmmForestGeometry() {
     particlesCacheFree();
 }
 
-
 Vector<PmmmSample> gatherPmmmSamples() {
     std::vector<hpx::future<Vector<PmmmSample>>> futures;
     for (auto const& locality : hpxLocalities()) {
@@ -1009,6 +1302,13 @@ Vector<PmmmSample> gatherPmmmSamples() {
         "source mass differs from the particle population");
     requirePmmm(std::abs(diagnostics.depositedMass - mass) < 2.0e-6 * std::max(1.0, mass),
         "cell moments lost mass");
+    std::vector<hpx::future<void>> momentChecks;
+    for (auto const& locality : hpxLocalities()) {
+        momentChecks.push_back(hpx::async<VerifyDepositedMomentsAction>(locality, samples));
+    }
+    for (auto& check : momentChecks) {
+        check.get();
+    }
     return samples;
 }
 
@@ -1064,7 +1364,9 @@ Vector<PmmmSample> gatherPmmmKickSamples() {
 void checkPmmmTraditionalKicks() {
     auto const saved = getOptions();
     auto options = saved;
-    options.gravity.meshSize = 8;
+    // Fixture 8 lies at side-16 cell centers. Keep that mesh so the
+    // independent Ewald kick check is free of finite-order truncation at q=3..9.
+    options.gravity.meshSize = 16;
     options.gravity.pmmmCoarseMeshSize = 0;
     options.gravity.pmmmNearWidth = 2;
     options.gravity.openingAngle = 0.02;
@@ -1750,6 +2052,111 @@ void checkPmmmCellOverlap() {
               << std::flush;
 }
 
+void checkRootDepositionRecovery() {
+    if (getOptions().gravity.pmmmNearMethod != "fmm") {
+        return;
+    }
+    auto const saved = getOptions();
+    auto options = saved;
+    options.gravity.meshSize = 8;
+    options.gravity.pmmmNearWidth = 1;
+    options.gravity.pmmmBatchParticles = 1;
+    pmmmDestroy();
+    setOptions(options);
+    preparePmmmFixture(6);
+    distributePmmmFixture(6);
+    auto install = [](bool enabled, int rank) {
+        std::vector<hpx::future<void>> futures;
+        for (auto const& locality : hpxLocalities()) {
+            futures.push_back(hpx::async<InstallSourceAuditAction>(locality, enabled, rank));
+        }
+        for (auto& future : futures) {
+            future.get();
+        }
+    };
+    install(true, -1);
+    pmmmSolve(true);
+    auto const reference = gatherPmmmSamples();
+    std::map<uint64_t, bool> occupied;
+    for (auto const& sample : reference) {
+        occupied[sample.cellKey] = true;
+    }
+    uint64_t built = 0, deposited = 0, converted = 0;
+    for (auto const& locality : hpxLocalities()) {
+        auto const counts = hpx::async<ReadSourceAuditAction>(locality).get();
+        built += counts[0];
+        deposited += counts[1];
+        converted += counts[3];
+        requirePmmm(counts[2] == 0, "owned source was built/deposited more than once");
+    }
+    requirePmmm(
+        built == occupied.size() && deposited == occupied.size() && converted == occupied.size(),
+        "owned-root build/deposition/local-conversion count differs from occupied cells");
+    for (int failure : {reference.front().rank, -2 - reference.front().rank}) {
+        install(true, failure);
+        bool failed = false;
+        try {
+            pmmmSolve(true);
+        } catch (std::exception const&) {
+            failed = true;
+        }
+        requirePmmm(failed, "owned-root/far-local failure injection did not propagate");
+        install(false, -1);
+        pmmmSolve(true);
+        comparePmmmSamples(reference, gatherPmmmSamples());
+    }
+    pmmmDestroy();
+    setOptions(saved);
+    std::cout << "PMMM owned-root exactly-once deposition and failure/recovery checks passed\n"
+              << std::flush;
+}
+
+void checkPmmmFarOverlap() {
+    if (hpxSize() != 1 || hpx::get_os_thread_count() < 2 ||
+        getOptions().gravity.pmmmNearMethod != "fmm") {
+        return;
+    }
+    auto const saved = getOptions();
+    auto options = saved;
+    options.gravity.meshSize = 8;
+    options.gravity.pmmmNearWidth = 1;
+    options.gravity.pmmmBatchParticles = 1;
+    pmmmDestroy();
+    setOptions(options);
+    // Eight mutually non-neighboring occupied cells. Hold the first producer
+    // before publication/deposition; another producer can release a near batch.
+    preparePmmmFixture(4);
+    pmmmSolve(true);
+    auto const reference = gatherPmmmSamples();
+    hpx::promise<void> release;
+    auto ready = release.get_future().share();
+    std::atomic<bool> completed{false};
+    pmmmSetCellObserver([&](PmmmCellEvent event, uint64_t key) {
+        if (event == PmmmCellEvent::OwnedRootReady && key == 0) {
+            requirePmmm(ready.wait_for(std::chrono::seconds(10)) == hpx::future_status::ready,
+                "near/far overlap gate timed out before releasing the owned producer");
+            ready.get();
+        }
+        if (event == PmmmCellEvent::NearCompleted && !completed.exchange(true)) {
+            bool const early = !pmmm::detail::state.farReady.is_ready();
+            release.set_value();
+            requirePmmm(early, "near batch did not complete ahead of the blocked FFT");
+        }
+    });
+    try {
+        pmmmSolve(true);
+    } catch (...) {
+        pmmmSetCellObserver({});
+        throw;
+    }
+    pmmmSetCellObserver({});
+    requirePmmm(completed, "no near batch overlapped the held far-field producer");
+    comparePmmmSamples(reference, gatherPmmmSamples());
+    pmmmDestroy();
+    setOptions(saved);
+    std::cout << "PMMM deterministic near completion before far readiness passed\n" << std::flush;
+}
+
 void checkPmmmFmmNear() {
     if (!(getOptions().gravity.pmmmNearMethod == "fmm")) {
         return;
@@ -1810,7 +2217,9 @@ void checkPmmmFmmNear() {
         }
         // Clustered forces can strongly cancel. These angles test
         // a useful multipole approximation and convergence toward direct PP.
-        options.gravity.openingAngle = 0.4;
+        // Dipole-only sources need a tighter acceptance angle to meet the
+        // same approximation budget; the q>=4 fixture retains its original angle.
+        options.gravity.openingAngle = fmmOrder() == 3 ? 0.2 : 0.4;
         setOptions(options);
         pmmmSolve(true);
         auto const loose = gatherPmmmSamples();
@@ -1879,10 +2288,10 @@ void checkPmmmFmmNear() {
     setOptions(saved);
 }
 
-
 }    // namespace detail
 
 void pmmmTest() {
+    detail::checkSourceMomentSerialization();
     detail::checkGhostMassPermutation();
     auto options = getOptions();
     // Every PMMM mesh side is a power of two; the legacy force oracles cover
@@ -1903,6 +2312,32 @@ void pmmmTest() {
     options.run.hierarchicalGravity =
         usesHierarchicalIntegration(options.run) && options.gravity.enabled;
     setOptions(options);
+    if (options.run.test == "pmmmSources") {
+        // Focus the changed source pipeline independently of the full-field
+        // Ewald/finite-expansion suite, which remains in run.test=pmmm.
+        for (int side : {4, 8, 16}) {
+            pmmmDestroy();
+            options.gravity.meshSize = side;
+            options.gravity.pmmmNearWidth = 1;
+            setOptions(options);
+            for (int fixture : {0, 1, 2, 3, 4, 7}) {
+                detail::preparePmmmFixture(fixture);
+                detail::distributePmmmFixture(fixture);
+                pmmmSolve(true);
+                auto const reference = detail::gatherPmmmSamples();
+                pmmmSolve(false);
+                detail::comparePmmmSamples(reference, detail::gatherPmmmSamples(), false);
+            }
+        }
+        pmmmDestroy();
+        detail::checkPmmmFmmNear();
+        detail::checkRootDepositionRecovery();
+        detail::checkPmmmFarOverlap();
+        detail::checkPmmmCellOverlap();
+        pmmmDestroy();
+        std::cout << "PMMM owned-root source pipeline matrix passed\n" << std::flush;
+        return;
+    }
     if (options.gravity.pmmmNearMethod == "pp") {
         detail::checkPmmmNearEdges();
         detail::checkPmmmNearBatches();
@@ -2008,6 +2443,8 @@ void pmmmTest() {
     detail::checkPmmmStreamedStages();
     detail::checkPmmmStageMeshes();
     detail::checkPmmmCoarseMeshes();
+    detail::checkRootDepositionRecovery();
+    detail::checkPmmmFarOverlap();
     detail::checkPmmmCellOverlap();
     std::cout << std::format("PMMM periodic force, mass, self, ownership, and cache checks passed "
                              "at order {:d} with {:s} near interactions\n",

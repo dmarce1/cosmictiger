@@ -80,5 +80,12 @@ float pmmmPotential(ParticleInteger index);
 
 // Local instrumentation hook. Set/clear only between solves; callbacks execute
 // on HPX tasks and may suspend for deterministic readiness tests.
-enum class PmmmCellEvent { GhostRequested, GhostReady, NearCompleted };
+enum class PmmmCellEvent {
+    GhostRequested,
+    GhostReady,
+    NearCompleted,
+    OwnedRootReady,
+    MomentsDeposited,
+    FarLocalReady
+};
 void pmmmSetCellObserver(std::function<void(PmmmCellEvent, uint64_t)> observer);

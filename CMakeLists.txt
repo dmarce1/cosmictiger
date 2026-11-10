@@ -1752,6 +1752,23 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             PROPERTIES TIMEOUT 30)
     endif()
 
+    if(COSMICTIGER_WITH_GRAVITY)
+        get_target_property(source_capabilities cosmictiger_default_config INTERFACE_COMPILE_DEFINITIONS)
+        list(FILTER source_capabilities EXCLUDE REGEX "^(COSMICTIGER_POSITION_BITS|FMM_MIN_ORDER|FMM_MAX_ORDER|ORDER)=")
+        foreach(position_bits IN ITEMS 32 64)
+            set(source_target "tree_source_moments_fixed${position_bits}_test")
+            add_executable(${source_target} tests/gravity/tree_source_moments.cpp)
+            target_include_directories(${source_target} PRIVATE ${PROJECT_SOURCE_DIR})
+            target_link_libraries(${source_target} PRIVATE HPX::hpx Boost::boost)
+            target_compile_definitions(${source_target} PRIVATE ${source_capabilities}
+                COSMICTIGER_POSITION_BITS=${position_bits} ORDER=7 FMM_MIN_ORDER=3 FMM_MAX_ORDER=9)
+            target_compile_options(${source_target} PRIVATE -fno-fast-math -ffp-contract=off)
+            add_test(NAME "tree_source_moments_fixed${position_bits}" COMMAND ${source_target})
+            set_tests_properties("tree_source_moments_fixed${position_bits}" PROPERTIES
+                TIMEOUT 60 PROCESSORS 1 LABELS "fmm;pmmm;cpu")
+        endforeach()
+    endif()
+
     # Standalone generator families: these tests do not select a new runtime walk.
     if(COSMICTIGER_WITH_GRAVITY)
         foreach(representation IN ITEMS spherical_ewald)
@@ -1879,6 +1896,14 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                 ${cosmictiger_test_integrator_args})
         set_tests_properties(pmmm_cpu PROPERTIES TIMEOUT 300 PROCESSORS 2
             WORKING_DIRECTORY "${pmmm_workdir}" LABELS "pmmm;cpu")
+        set(pmmm_source_workdir "${PROJECT_BINARY_DIR}/tests/pmmm_sources_cpu")
+        file(MAKE_DIRECTORY "${pmmm_source_workdir}")
+        add_test(NAME pmmm_sources_cpu COMMAND $<TARGET_FILE:cosmictiger>
+            --run.test=pmmmSources --gravity.meshSize=8 --hydro.enabled=false
+            --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
+            --hpx:threads=2 --hpx:bind=none ${cosmictiger_test_integrator_args})
+        set_tests_properties(pmmm_sources_cpu PROPERTIES TIMEOUT 300 PROCESSORS 2
+            WORKING_DIRECTORY "${pmmm_source_workdir}" LABELS "pmmm;source;cpu")
         foreach(near_method IN ITEMS pp fmm)
             set(near_workdir "${PROJECT_BINARY_DIR}/tests/pmmm_near_${near_method}")
             file(MAKE_DIRECTORY "${near_workdir}")
@@ -1990,6 +2015,20 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             set_tests_properties(pmmm_mpi_threads PROPERTIES TIMEOUT 300 PROCESSORS 4
                 WORKING_DIRECTORY "${pmmm_threaded_workdir}" LABELS "pmmm;cpu;mpi;threads")
             # PMMM requires power-of-two locality counts.
+            foreach(source_ranks IN ITEMS 2 4)
+                set(source_workdir "${PROJECT_BINARY_DIR}/tests/pmmm_sources_mpi_${source_ranks}")
+                file(MAKE_DIRECTORY "${source_workdir}")
+                add_test(NAME pmmm_sources_mpi_${source_ranks} COMMAND ${MPIEXEC_EXECUTABLE}
+                    ${MPIEXEC_NUMPROC_FLAG} ${source_ranks} ${MPIEXEC_PREFLAGS}
+                    $<TARGET_FILE:cosmictiger> ${MPIEXEC_POSTFLAGS}
+                    --run.test=pmmmSources --gravity.meshSize=8 --hydro.enabled=false
+                    --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
+                    --hpx:threads=1 --hpx:bind=none --hpx:localities=${source_ranks}
+                    ${cosmictiger_mpi_transport_args} ${cosmictiger_test_integrator_args})
+                set_tests_properties(pmmm_sources_mpi_${source_ranks} PROPERTIES TIMEOUT 300
+                    PROCESSORS ${source_ranks} WORKING_DIRECTORY "${source_workdir}"
+                    LABELS "pmmm;source;mpi")
+            endforeach()
             foreach(pmmm_ranks IN ITEMS 4 8)
                 set(pmmm_workdir "${PROJECT_BINARY_DIR}/tests/pmmm_mpi_${pmmm_ranks}")
                 file(MAKE_DIRECTORY "${pmmm_workdir}")
@@ -2821,7 +2860,8 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
     # These standalone tests deliberately compile both position widths, rather
     # than inheriting the configured application's position definition.
     list(REMOVE_ITEM cosmictiger_targets_after_tests
-        gravity_error_cuda_reference_32_test gravity_error_cuda_reference_64_test)
+        gravity_error_cuda_reference_32_test gravity_error_cuda_reference_64_test
+        tree_source_moments_fixed32_test tree_source_moments_fixed64_test)
     foreach(test_target IN LISTS cosmictiger_targets_after_tests)
         get_target_property(test_type ${test_target} TYPE)
         if(NOT test_type STREQUAL "UTILITY")
