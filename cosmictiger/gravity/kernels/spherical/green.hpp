@@ -14,10 +14,10 @@
 
 namespace cosmictiger::gravity::spherical::detail {
 
-// Every operator adds to output. Output and source must not alias.
+// P2M and L2P add to output; Green::evaluate overwrites it.
+// L2P output and source must not alias.
 // Field ordering is potential, accelerationX, accelerationY, accelerationZ (-gradient).
-// M2M displacement is old center minus new center. L2L/L2P displacement is
-// new center/point minus old center. M2L displacement is target minus source.
+// L2P displacement is evaluation point minus local center.
 
 template <int degree>
 class Green;
@@ -29,8 +29,7 @@ class Green<2> {
 public:
     static constexpr int kFlops_ = 29;
     static constexpr int kConventionalFlops_ = 28;
-    template <typename Real, typename Output, typename Source = Output,
-        typename Derivatives = Source>
+    template <typename Real, typename Output, typename Source = Output>
     CUDA_EXPORT static void evaluate(Output& output, Real x, Real y, Real z) {
         using namespace math;
         Fma const fma{};
@@ -77,8 +76,7 @@ class Green<3> {
 public:
     static constexpr int kFlops_ = 46;
     static constexpr int kConventionalFlops_ = 50;
-    template <typename Real, typename Output, typename Source = Output,
-        typename Derivatives = Source>
+    template <typename Real, typename Output, typename Source = Output>
     CUDA_EXPORT static void evaluate(Output& output, Real x, Real y, Real z) {
         using namespace math;
         Fma const fma{};
@@ -149,8 +147,7 @@ class Green<4> {
 public:
     static constexpr int kFlops_ = 68;
     static constexpr int kConventionalFlops_ = 79;
-    template <typename Real, typename Output, typename Source = Output,
-        typename Derivatives = Source>
+    template <typename Real, typename Output, typename Source = Output>
     CUDA_EXPORT static void evaluate(Output& output, Real x, Real y, Real z) {
         using namespace math;
         Fma const fma{};
@@ -252,8 +249,7 @@ class Green<5> {
 public:
     static constexpr int kFlops_ = 95;
     static constexpr int kConventionalFlops_ = 115;
-    template <typename Real, typename Output, typename Source = Output,
-        typename Derivatives = Source>
+    template <typename Real, typename Output, typename Source = Output>
     CUDA_EXPORT static void evaluate(Output& output, Real x, Real y, Real z) {
         using namespace math;
         Fma const fma{};
@@ -393,8 +389,7 @@ class Green<6> {
 public:
     static constexpr int kFlops_ = 125;
     static constexpr int kConventionalFlops_ = 156;
-    template <typename Real, typename Output, typename Source = Output,
-        typename Derivatives = Source>
+    template <typename Real, typename Output, typename Source = Output>
     CUDA_EXPORT static void evaluate(Output& output, Real x, Real y, Real z) {
         using namespace math;
         Fma const fma{};
@@ -577,8 +572,7 @@ class Green<7> {
 public:
     static constexpr int kFlops_ = 162;
     static constexpr int kConventionalFlops_ = 206;
-    template <typename Real, typename Output, typename Source = Output,
-        typename Derivatives = Source>
+    template <typename Real, typename Output, typename Source = Output>
     CUDA_EXPORT static void evaluate(Output& output, Real x, Real y, Real z) {
         using namespace math;
         Fma const fma{};
@@ -813,8 +807,7 @@ class Green<8> {
 public:
     static constexpr int kFlops_ = 203;
     static constexpr int kConventionalFlops_ = 262;
-    template <typename Real, typename Output, typename Source = Output,
-        typename Derivatives = Source>
+    template <typename Real, typename Output, typename Source = Output>
     CUDA_EXPORT static void evaluate(Output& output, Real x, Real y, Real z) {
         using namespace math;
         Fma const fma{};

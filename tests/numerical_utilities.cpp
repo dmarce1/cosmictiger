@@ -35,22 +35,6 @@ void require(bool condition, char const* message) {
     }
 }
 
-void testErfcexp() {
-    double const arguments[] = {0.0, 1.0, 8.0, -1.0};
-    double const tolerance = 8.0 * std::numeric_limits<double>::epsilon();
-    for (double const argument : arguments) {
-        double complement;
-        double exponential;
-        erfcexp(argument, &complement, &exponential);
-        double const expectedComplement = std::erfc(argument);
-        double const expectedExponential = std::exp(-argument * argument);
-        require(std::abs(complement - expectedComplement) <= tolerance * expectedComplement,
-            "erfcexp must return the complementary error function");
-        require(std::abs(exponential - expectedExponential) <= tolerance * expectedExponential,
-            "erfcexp must return exp(-x*x)");
-    }
-}
-
 void testPositionDifferences() {
     constexpr PositionInteger kHalf = PositionInteger(1) << (kPositionBits - 1);
     constexpr PositionInteger kLast = std::numeric_limits<PositionInteger>::max();
@@ -238,10 +222,6 @@ void testRanges() {
 }
 
 }    // namespace detail
-
-TEST(NumericalUtilities, Erfcexp) {
-    detail::testErfcexp();
-}
 
 TEST(NumericalUtilities, PositionDifferences) {
     detail::testPositionDifferences();

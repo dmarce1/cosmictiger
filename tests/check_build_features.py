@@ -39,7 +39,7 @@ ROCKSTAR_SOURCES = {
     "tests/analysis_backends.cpp", "tests/analysis_tools.cpp", "tests/bh.cpp", "tests/compression.cpp",
     "tests/fp16.cpp", "tests/groups_catalogue.cpp", "tests/halo_catalog_fixture.cpp",
     "tests/lightcone_cpu.cpp", "tests/lightcone_cuda.cu", "tests/lightcone_epoch.cpp",
-    "tests/rockstar.cpp", "tests/rockstar_core.cpp", "tests/rockstar_eigenpair.cpp",
+    "tests/rockstar.cpp", "tests/rockstar_core.cpp",
     "tests/rockstar_properties.cpp"}
 
 
@@ -148,7 +148,7 @@ def sourceSelectionErrors(sources, configuration):
                 "tests/compression.cpp", "tests/fp16.cpp", "tests/groups_catalogue.cpp",
                 "tests/halo_catalog_fixture.cpp", "tests/lightcone_cpu.cpp", "tests/lightcone_cuda.cu",
                 "tests/lightcone_epoch.cpp", "tests/rockstar.cpp", "tests/rockstar_core.cpp",
-                "tests/rockstar_eigenpair.cpp", "tests/rockstar_properties.cpp",
+                "tests/rockstar_properties.cpp",
                 "tests/softening_flops.cpp"}
             if gravitySource or haloSource or excludedSource or Path(source).name.startswith("fmm_instance_"):
                 errors.append(f"gravity disabled but compiles gravity source: {source}")
@@ -167,7 +167,7 @@ def sourceSelectionErrors(sources, configuration):
         if not hasGravity(configuration) and source in {
                 "src/gravity/gravity.cpp", "src/gravity/kick.cpp", "src/gravity/kick.cu",
                 "src/gravity/kick_workspace.cpp", "src/gravity/kick_executor.cpp",
-                "src/gravity/kick_interaction_counts.cpp", "src/gravity/source_access.cpp",
+                "src/gravity/source_access.cpp",
                 "src/gravity/sources.cpp", "src/gravity/tree_build.cpp", "src/gravity/tree_arena.cpp",
                 "tests/gravity/cartesian_kernels.cpp", "tests/gravity/cartesian_kernels_cuda.cu",
                 "tests/gravity/cartesian_l2l_cuda.cu", "tests/gravity/fmm_acceptance.cpp",

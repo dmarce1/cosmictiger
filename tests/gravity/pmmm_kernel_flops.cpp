@@ -119,13 +119,6 @@ namespace detail {
             countedField[component] = countedField[component] / Real(kCellWidth);
         }
         EXPECT_EQ(evaluationCount, Real::count());
-
-        std::array<Real, order * order> translated{};
-        Real translatedTrace{};
-        Real::reset();
-        spherical::EwaldL2L<kDegree>::template add<Real>(translated, translatedTrace, countedLocal,
-            Real(0.2), Real(point[0]), Real(point[1]), Real(point[2]));
-        EXPECT_EQ(spherical::EwaldL2L<kDegree>::kConventionalFlops_, Real::count());
     }
 
 }    // namespace detail

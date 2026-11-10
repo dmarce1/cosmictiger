@@ -14,18 +14,8 @@
 #include <vector>
 
 #include <cosmictiger/gravity/kernels/spherical_ewald_kernels.hpp>
-#include <cosmictiger/gravity/kernels/spherical_operators.hpp>
 #include <cosmictiger/math/simd_math.hpp>
 #include <cosmictiger/math/vector3.hpp>
-
-// This generator test has no HPX runtime; the spherical M2M operator's aliasing
-// check still needs an assertion implementation when ASSERT is enabled.
-void cosmictigerAssert(char const* condition, bool satisfied, char const* file, int line) {
-    if (!satisfied) {
-        std::fprintf(stderr, "%s:%d: assertion \"%s\" failed\n", file, line, condition);
-        throw std::runtime_error("generated spherical Ewald assertion failed");
-    }
-}
 
 namespace counted {
 inline size_t operations = 0;
@@ -299,53 +289,14 @@ void scalarCases() {
             }
         }
     }
-    // Pure background tests isolate its signs and accumulation from harmonics.
-    std::array<Real, kCount> zero{}, shifted{};
-    Real shiftedTrace = Real(.25);
-    EwaldL2L<degree>::template add<Real>(
-        shifted, shiftedTrace, zero, Real(2), Real(.1), Real(-.2), Real(.3));
-    near(shifted[0], -.14, epsilon, "background translated potential");
-    near(shifted[3], -.2, epsilon, "background translated x");
-    near(shifted[1], .4, epsilon, "background translated y");
-    near(shifted[2], -.6, epsilon, "background translated z");
-    near(shiftedTrace, 2.25, epsilon, "background translated trace");
+    // The production evaluator applies the background trace at a point.
+    std::array<Real, kCount> zero{};
     std::array<Real, 4> field{};
     EwaldL2P<degree>::template add<Real>(field, zero, Real(2), Real(.1), Real(-.2), Real(.3));
     near(field[0], -.14, epsilon, "background point potential");
     near(field[1], .2, epsilon, "background point x");
     near(field[2], -.4, epsilon, "background point y");
     near(field[3], .6, epsilon, "background point z");
-}
-
-template <int degree>
-void typedTraceCases() {
-    using namespace cosmictiger::gravity::spherical;
-    constexpr int kOrder = degree + 1;
-    Vector3<double> particleOffset{};
-    particleOffset[0] = .2;
-    particleOffset[1] = -.1;
-    particleOffset[2] = .4;
-    Vector3<double> displacement{};
-    displacement[0] = .3;
-    displacement[1] = .5;
-    displacement[2] = -.2;
-    Vector3<double> translatedOffset{};
-    for (int dim = 0; dim < kDimensions; ++dim) {
-        translatedOffset[dim] = particleOffset[dim] + displacement[dim];
-    }
-    Multipole<double, kOrder> source{};
-    Multipole<double, kOrder> translated{};
-    Multipole<double, kOrder> reference{};
-    double sourceTrace = 0;
-    double translatedTrace = 0;
-    double referenceTrace = 0;
-    P2M(source, sourceTrace, 2.0, particleOffset);
-    M2M(translated, translatedTrace, source, sourceTrace, displacement);
-    P2M(reference, referenceTrace, 2.0, translatedOffset);
-    near(translatedTrace, referenceTrace, 1e-12, "typed translated source trace");
-    for (int slot = 0; slot < degree * degree; ++slot) {
-        near(translated[slot], reference[slot], 1e-12, "typed translated multipole");
-    }
 }
 
 template <int degree>
@@ -389,7 +340,6 @@ template <int degree>
 void run() {
     scalarCases<degree, float>();
     scalarCases<degree, double>();
-    typedTraceCases<degree>();
     countCase<degree>();
     simdCase<degree, float>();
     simdCase<degree, double>();

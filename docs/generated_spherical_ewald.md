@@ -70,13 +70,10 @@ using combined source and local degree at most `degree`. Source moments use
 regular harmonics of **negative** source offset, matching the other generated
 spherical kernels. No pointwise Ewald M2L kernel is used in this path.
 
-The radial source moment is maintained separately from harmonic storage. P2M
-adds `mass*(x*x+y*y+z*z)` to it. For M2M with displacement `d = oldCenter-newCenter`,
-the destination trace increment is
-`sourceTrace - 4*d.x*M[3] - 4*d.y*M[1] - 2*d.z*M[2] + dot(d,d)*M[0]`.
-This formula follows from expanding the squared source offset after translation;
-the factors of two reflect the regular-harmonic dipole normalization. The base
-harmonic P2M/M2M APIs cannot reconstruct this independent radial moment.
+The radial source moment is maintained separately from harmonic storage. The
+mesh deposit accumulates `mass*(x*x+y*y+z*z)` for each source particle. The
+generated spherical P2M produces only harmonic moments; PMMM does not
+translate spherical multipoles or locals in real space.
 
 The raw radial second moment is `sum(mass*|offset|^2)`; it contributes when
 source degree two is retained (local degree >=3). `EwaldGreen` returns the
@@ -88,15 +85,10 @@ encode. These corrections follow Nitadori's equations 38–42. This is one
 specific isotropic periodic trace; it is not the full hierarchy of traces
 needed for Plummer softening.
 
-`EwaldL2L<degree>::add<Real>(output, outputTrace, source, sourceTrace,
-                                x, y, z)`
-adds the harmonic translation and transports this quadratic polynomial.
-The offset is new center minus old center.
 `EwaldL2P<degree>::add<Real>(field, source, sourceTrace, x, y, z)`
 evaluates it at a point offset. Fields are `[potential, accelerationX,
 accelerationY, accelerationZ]`; acceleration is minus the potential gradient.
-A constant quadratic trace does not change on translation, but it changes
-both potential and acceleration.
+The quadratic trace changes both potential and acceleration.
 
 Do not rotate an arbitrary periodic Green tensor into an axial free-space
 contraction. Rotating the displacement does not rotate the periodic lattice
@@ -117,7 +109,7 @@ instruction counts; float promotion does not alter the counted expression DAG.
 the selected compiled range, float and double, origin and near-origin,
 Cartesian axes, general positions, and box corners. It compares all coefficients to an independent complex
 recurrence, Gaussian quadrature central term, explicit finite gamma sums, and
-an unpaired, larger lattice. It also checks trace-aware translations and point evaluation,
+an unpaired, larger lattice. It also checks trace-aware point evaluation,
 heterogeneous SIMD lanes, and exact executed-source arithmetic counts using an
 instrumented scalar. CUDA compilation and execution are separate validation
 layers; the host suite does not establish a CUDA runtime result.

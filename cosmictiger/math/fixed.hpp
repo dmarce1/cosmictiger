@@ -17,7 +17,7 @@
 
 #include <cosmictiger/core/assert.hpp>
 #include <cosmictiger/cuda/cuda.hpp>
-#include <cosmictiger/math/simd.hpp>
+#include <cosmictiger/math/simd_math.hpp>
 
 template <class, int>
 class Fixed;

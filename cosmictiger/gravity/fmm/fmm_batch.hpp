@@ -3,7 +3,6 @@
 
 #include <cosmictiger/gravity/kick.hpp>
 
-FmmForceResult kickCellForest(Vector<KickWorkitem> workitems, bool doPotential);
 // All source trees are local and immutable; disjoint sink batches may overlap.
 // Select sinks before either CPU or CUDA evaluation, without changing source
 // trees or permuting their particles. The arena reserves one extra node per

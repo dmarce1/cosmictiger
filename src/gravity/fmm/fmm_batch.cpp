@@ -239,12 +239,3 @@ FmmForceResult kickCellBatch(Vector<KickWorkitem> workitems, bool doPotential, i
     result.interactionCounts = workspace->interactionCounts();
     return result;
 }
-
-FmmForceResult kickCellForest(Vector<KickWorkitem> workitems, bool doPotential) {
-    auto result = kickCellBatch(std::move(workitems), doPotential);
-    ALWAYS_ASSERT(result.particleIndices.size() == size_t(particlesOwnedSize()));
-    for (size_t index = 0; index < result.particleIndices.size(); ++index) {
-        ALWAYS_ASSERT(result.particleIndices[index] == ParticleInteger(index));
-    }
-    return result;
-}

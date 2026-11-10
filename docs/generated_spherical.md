@@ -41,30 +41,23 @@ accelerationZ]`, with acceleration equal to the negative gradient.
 
 ## API
 
-The generated implementation classes in `spherical::detail` have templated static methods. All `add`
-methods accumulate into initialized output; input and output must not alias.
-They accept any coefficient containers supporting `operator[]`, including
-`Multipole`, `Expansion`, fixed C arrays and `std::array`. `Real` is explicit
-because the containers can differ. CUDA scalar and CPU scalar/SIMD math share
-the emitter.
+The generated classes retained for PMMM are `P2M`, `Green`, and `L2P` in
+`spherical::detail`. The `add` methods accumulate into initialized output;
+`Green::evaluate` overwrites its output. They accept coefficient containers
+supporting `operator[]`, including `Multipole`, `Expansion`, fixed C arrays,
+and `std::array`. `Real` is explicit because the containers can differ. CUDA
+scalar and CPU scalar/SIMD math share the emitter.
 
 | Class | Method arguments after explicit `<Real>` |
 | --- | --- |
 | `P2M<S>` | `add(output,mass,x,y,z)` |
-| `M2M<S>` | `add(output,source,x,y,z)` |
-| `M2L<L>` | `add(output,source,x,y,z)` |
-| `M2P<L>` | `add(field,source,x,y,z)` |
-| `L2L<L>` | `add(output,source,x,y,z)` |
 | `L2P<L>` | `add(field,source,x,y,z)` |
-| `P2L<L>` | `add(output,mass,x,y,z)` |
 | `Green<L>` | `evaluate(output,x,y,z)` (overwrites) |
 
-Here `S=L-1`. M2M displacement is the old source center minus the new source
-center. L2L displacement is the new local center minus the old local center;
-L2P uses evaluation point minus local center. P2M uses particle position minus
-source center. M2L and Green functions use target center/point minus source
-center. Free-space singular kernels require nonzero separation. Translations
-accept zero displacement, either axis sign and heterogeneous SIMD lanes.
+Here `S=L-1`. L2P uses evaluation point minus local center. P2M uses particle
+position minus source center. Green uses target center minus source center and
+requires nonzero separation. P2M and L2P accept zero displacement, either axis
+sign, and heterogeneous SIMD lanes.
 
 The PMMM far field uses the generated `Green` evaluator to add the primary
 free-space interaction outside its near-field mask. It builds and caches the
@@ -75,28 +68,24 @@ outside the harmonic coefficient arrays, as described in
 
 ## Rotation choices and costs
 
-The generator compares three rotation candidates for each translation or
-evaluation operator:
+The generator compares three rotation candidates for L2P:
 
-- `v=0`: direct complex-harmonic contraction, emitted as real arithmetic;
+- `v=0`: direct local evaluation, emitted as real arithmetic;
 - `v=1`: azimuthal rotation places the displacement in the x–z plane, where
   harmonic imaginary components vanish;
-- `v=2`: axial contraction. M2L/M2P use two z rotations and constant x/z swaps
-  to align a general displacement with z. M2M/L2L/L2P compose commuting axial
-  and planar translations, then align only the planar part using one z phase
-  pair and two x/z swaps. This avoids two otherwise necessary swaps.
+- `v=2`: compose commuting axial and planar local evaluations, then align the
+  planar part using one z phase pair and two x/z swaps.
 
 Constant swap coefficients use the exact rational recurrence in Dehnen
-Eq. (63), not floating-point matrix construction. Regular/source transforms
-use the transpose of the Green/local matrix. Real conjugate symmetry creates
+Eq. (63), not floating-point matrix construction. Real conjugate symmetry creates
 sparse real/imaginary blocks. Phase recurrences share powers across ranks.
 Exact zeros and signs are folded, duplicate products are combined, common
 expressions are interned, and a backwards traversal from the required outputs
 omits unneeded rotation components and harmonics. The resulting arithmetic
 uses explicit `simdFma` calls.
 
-Only the candidate with the smallest emitted weighted count is emitted in
-each public operator, such as `M2L<degree>`. Its preceding comment identifies
+Only the L2P candidate with the smallest emitted weighted count is emitted.
+Its preceding comment identifies
 the chosen variant; `kFlops_` exposes its count. There are no public variant
 classes or variant template arguments. Every candidate's count and the winning
 variant appear in the operation report. Ties choose the lower variant number.
@@ -120,22 +109,13 @@ previous finite-order rotation pitfalls. Its C++ generator is not copied.
 
 ## Validation
 
-`tests/gravity/generated_spherical.cpp` uses independently written loop-based complex
-harmonic recurrences and translation/contraction sums, rather than the Python
-DAG. It checks the selected operators, arbitrary Green contraction, additive
-outputs, P2M/P2L normalization, and a three-particle direct
-force comparison. Multipoles and locals include arbitrary real and imaginary
-coefficients in every rank. Fixtures include both axis signs, zero translations,
-near-axis directions and general displacements. P2M errors are normalized by
-the norm of each rank so small high-order moments remain meaningfully tested.
-
-A historical run of the split order-3 through order-9 executables passed
-181,468 comparisons with GCC, strict arithmetic (`-fno-fast-math -ffp-contract=off`),
-scalar float/double and heterogeneous four-lane double SIMD. Worst scaled
-discrepancy was
-`3.876e-5` in the intentionally ill-conditioned float arbitrary-moment stress
-cases; the float test budget is `4e-5`, and the double/SIMD budget is `2e-10`.
-These are numerical and emitted-arithmetic checks, not runtime speed benchmarks.
+`tests/gravity/generated_spherical.cpp` uses independently written loop-based
+complex harmonic recurrences. It checks P2M, Green, and L2P against those
+recurrences, including additive output for the active evaluators. Local inputs
+include arbitrary real and imaginary coefficients in every rank. Fixtures
+include both axis signs, zero offsets, near-axis directions, and general
+displacements. P2M errors are normalized by the norm of each rank so small
+high-order moments remain meaningfully tested.
 
 CMake splits this source with `GENERATED_SPHERICAL_TEST_DEGREE` to keep each
 compilation bounded. It creates `generated_spherical_degree_<degree>` CTest tests

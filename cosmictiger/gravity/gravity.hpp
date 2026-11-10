@@ -51,8 +51,6 @@ void cpuGravityPc(
 void cpuGravityPp(
     ForceVectors&, int, TreeId, Vector<TreeId> const&, float h, FmmGeometry const& geometry = {});
 
-void showTimings();
-
 // CUDA operators are order-templated device functions in cosmictiger/gravity_cuda.hpp.
 
 // Distributed CUDA PP interaction totals, normalized by CUDA-processed sinks.

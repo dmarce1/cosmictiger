@@ -320,7 +320,7 @@ resolution criterion (pinned from both sides, with exact `rho ~ 1/r` quantiles u
 to 5000 particles, an upper-edge cusp and deterministic Poisson samples), and
 Klypin inversion. Both the standard and the `-ffast-math` build of the test run
 these cases.
-`rockstar_eigenpair` exercises the public eigenpair wrapper. `lightcone_epoch`
+`lightcone_epoch`
 checks emission-time direction, equivalent reference epochs, and velocity scaling.
 
 The runtime `rockstar_cpu` regression checks unbinding order, SO properties at

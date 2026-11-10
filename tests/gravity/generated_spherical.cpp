@@ -112,37 +112,6 @@ Point negate(Point value) {
     return value;
 }
 
-Harmonics m2l(Harmonics const& source, Harmonics const& greens, int degree, int targetDegree) {
-    Harmonics result((targetDegree + 1) * (targetDegree + 1));
-    for (int n = 0; n <= targetDegree; ++n) {
-        for (int m = 0; m <= n; ++m) {
-            for (int k = 0; k <= std::min(degree - 1, degree - n); ++k) {
-                for (int l = -k; l <= k; ++l) {
-                    result[index(n, m)] +=
-                        std::conj(coefficient(source, k, l)) * coefficient(greens, n + k, m + l);
-                }
-            }
-        }
-    }
-    return result;
-}
-
-Harmonics translateMoments(Harmonics const& source, Point const& shift, int degree) {
-    Harmonics const harmonics = regular(degree, negate(shift));
-    Harmonics result((degree + 1) * (degree + 1));
-    for (int n = 0; n <= degree; ++n) {
-        for (int m = 0; m <= n; ++m) {
-            for (int k = 0; k <= n; ++k) {
-                for (int l = -k; l <= k; ++l) {
-                    result[index(n, m)] +=
-                        coefficient(source, n - k, m - l) * coefficient(harmonics, k, l);
-                }
-            }
-        }
-    }
-    return result;
-}
-
 Harmonics translateLocal(
     Harmonics const& source, Point const& shift, int degree, int targetDegree) {
     Harmonics const harmonics = regular(degree, shift);
@@ -250,44 +219,15 @@ void compareField(
 }
 
 template <typename Real, int degree>
-void testSelected(spherical::Multipole<Real, degree + 1> const& source,
-    spherical::Expansion<Real, degree + 1> const& local, Real x, Real y, Real z,
-    std::array<Point, 4> const& shifts, std::array<Harmonics, 4> const& sourceOracle,
-    std::array<Harmonics, 4> const& localOracle) {
-    context = "degree " + std::to_string(degree) + " selected operators";
-    spherical::Multipole<Real, degree + 1> moments;
-    clear(moments, 0.125);
-    spherical::detail::M2M<degree - 1>::template add<Real>(moments, source, x, y, z);
-    for (int laneIndex = 0; laneIndex < laneCount<Real>(); ++laneIndex) {
-        compare(moments, translateMoments(sourceOracle[laneIndex], shifts[laneIndex], degree - 1),
-            laneIndex, 0.125);
-    }
-    spherical::Expansion<Real, degree + 1> shifted;
-    clear(shifted, 0.125);
-    spherical::detail::L2L<degree>::template add<Real>(shifted, local, x, y, z);
+void testLocalEvaluation(spherical::Expansion<Real, degree + 1> const& local, Real x, Real y,
+    Real z, std::array<Point, 4> const& shifts, std::array<Harmonics, 4> const& localOracle) {
+    context = "degree " + std::to_string(degree) + " local point evaluation";
     std::array<Real, 4> field;
     field.fill(math::broadcast<Real>(0.125));
     spherical::detail::L2P<degree>::template add<Real>(field, local, x, y, z);
     for (int laneIndex = 0; laneIndex < laneCount<Real>(); ++laneIndex) {
-        compare(shifted, translateLocal(localOracle[laneIndex], shifts[laneIndex], degree, degree),
-            laneIndex, 0.125);
         compareField(field, translateLocal(localOracle[laneIndex], shifts[laneIndex], degree, 1),
             laneIndex, 0.125);
-    }
-    // Keep zero translation in M2M/L2L, but use a nonsingular z displacement for M2L.
-    for (int laneIndex = 0; laneIndex < laneCount<Real>(); ++laneIndex) {
-        setLane(z, laneIndex, shifts[laneIndex][2] + 1.75);
-    }
-    clear(shifted, 0.125);
-    field.fill(math::broadcast<Real>(0.125));
-    spherical::detail::M2L<degree>::template add<Real>(shifted, source, x, y, z);
-    spherical::detail::M2P<degree>::template add<Real>(field, source, x, y, z);
-    for (int laneIndex = 0; laneIndex < laneCount<Real>(); ++laneIndex) {
-        Point point = shifts[laneIndex];
-        point[2] = lane(z, laneIndex);
-        Harmonics const greens = singular(degree, point);
-        compare(shifted, m2l(sourceOracle[laneIndex], greens, degree, degree), laneIndex, 0.125);
-        compareField(field, m2l(sourceOracle[laneIndex], greens, degree, 1), laneIndex, 0.125);
     }
 }
 
@@ -339,78 +279,19 @@ void testOrder() {
         for (int laneIndex = 0; laneIndex < laneCount<Real>(); ++laneIndex) {
             compare(source, sourceOracle[laneIndex], laneIndex, 0, true);
         }
-        // Independent arbitrary coefficients exercise every rank/order, rather
-        // than relying only on point moments tied to the translation direction.
-        for (int laneIndex = 0; laneIndex < laneCount<Real>(); ++laneIndex) {
-            for (int n = 0; n < degree; ++n) {
-                for (int m = 0; m <= n; ++m) {
-                    setLane(source[index(n, m)], laneIndex,
-                        std::sin(0.29 * (index(n, m) + 7 * fixture + laneIndex + 1)));
-                    if (m) {
-                        setLane(source[index(n, -m)], laneIndex,
-                            std::cos(0.17 * (index(n, m) + 5 * fixture + laneIndex + 1)));
-                    }
-                    sourceOracle[laneIndex][index(n, m)] =
-                        Complex(lane(source[index(n, m)], laneIndex),
-                            m ? lane(source[index(n, -m)], laneIndex) : 0);
-                }
-            }
-        }
-        testSelected<Real, degree>(source, local, x, y, z, shifts, sourceOracle, localOracle);
+        testLocalEvaluation<Real, degree>(local, x, y, z, shifts, localOracle);
         for (int laneIndex = 0; laneIndex < laneCount<Real>(); ++laneIndex) {
             setLane(z, laneIndex, shifts[laneIndex][2] + 1.75);
         }
         spherical::Green<Real, degree + 1> green;
-        spherical::Expansion<Real, degree + 1> pointLocal, selectedLocal;
-        clear(pointLocal);
-        clear(selectedLocal);
         spherical::detail::Green<degree>::template evaluate<Real>(green, x, y, z);
-        spherical::detail::P2L<degree>::template add<Real>(pointLocal, mass, x, y, z);
-        spherical::detail::M2L<degree>::template add<Real>(selectedLocal, source, x, y, z);
-        context = "Green/P2L/selected M2L degree " + std::to_string(degree);
+        context = "Green degree " + std::to_string(degree);
         for (int laneIndex = 0; laneIndex < laneCount<Real>(); ++laneIndex) {
             Point point = shifts[laneIndex];
             point[2] = lane(z, laneIndex);
             Harmonics const greens = singular(degree, point);
             compare(green, greens, laneIndex);
-            compare(pointLocal, greens, laneIndex);
-            Harmonics const expected = m2l(sourceOracle[laneIndex], greens, degree, degree);
-            compare(selectedLocal, expected, laneIndex);
         }
-    }
-}
-
-template <int degree>
-void directParticleCheck() {
-    spherical::Multipole<double, degree + 1> source;
-    clear(source);
-    std::array<Point, 3> const particles = {
-        {{0.002, -0.001, 0.003}, {-0.002, 0.003, 0.001}, {0.001, 0.001, -0.002}}};
-    for (Point const& point : particles) {
-        spherical::detail::P2M<degree - 1>::template add<double>(
-            source, 0.7, point[0], point[1], point[2]);
-    }
-    Point const target = {0.9, -0.7, 1.1};
-    std::array<double, 4> field{};
-    spherical::detail::M2P<degree>::template add<double>(
-        field, source, target[0], target[1], target[2]);
-    std::array<double, 4> expected{};
-    for (Point const& point : particles) {
-        Point displacement;
-        double radiusSquared = 0;
-        for (int axis = 0; axis < 3; ++axis) {
-            displacement[axis] = target[axis] - point[axis];
-            radiusSquared += displacement[axis] * displacement[axis];
-        }
-        double const inverseRadius = 1 / std::sqrt(radiusSquared);
-        expected[0] -= 0.7 * inverseRadius;
-        for (int axis = 0; axis < 3; ++axis) {
-            expected[axis + 1] -= 0.7 * displacement[axis] * inverseRadius / radiusSquared;
-        }
-    }
-    context = "direct particle force degree " + std::to_string(degree);
-    for (int component = 0; component < 4; ++component) {
-        check(field[component], expected[component], 20 * std::pow(0.004, degree) + 2e-13);
     }
 }
 
@@ -419,14 +300,6 @@ void allOrders() {
     testOrder<Real, degree>();
     if constexpr (degree < kMaxTestDegree) {
         allOrders<Real, degree + 1>();
-    }
-}
-
-template <int degree = kMinTestDegree>
-void allDirectParticleChecks() {
-    directParticleCheck<degree>();
-    if constexpr (degree < kMaxTestDegree) {
-        allDirectParticleChecks<degree + 1>();
     }
 }
 
@@ -439,7 +312,6 @@ int main() {
 #if !defined(__CUDACC__) && !defined(GENERATED_SPHERICAL_SKIP_SIMD)
         detail::allOrders<SimdVector<double, 4>>();
 #endif
-        detail::allDirectParticleChecks();
         std::printf(
             "Generated Spherical: %zu independent checks passed, worst scaled discrepancy %.3e\n",
             detail::checks, detail::worst);

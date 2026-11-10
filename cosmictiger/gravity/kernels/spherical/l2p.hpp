@@ -14,10 +14,10 @@
 
 namespace cosmictiger::gravity::spherical::detail {
 
-// Every operator adds to output. Output and source must not alias.
+// P2M and L2P add to output; Green::evaluate overwrites it.
+// L2P output and source must not alias.
 // Field ordering is potential, accelerationX, accelerationY, accelerationZ (-gradient).
-// M2M displacement is old center minus new center. L2L/L2P displacement is
-// new center/point minus old center. M2L displacement is target minus source.
+// L2P displacement is evaluation point minus local center.
 
 template <int degree>
 class L2P;
@@ -30,8 +30,7 @@ class L2P<2> {
 public:
     static constexpr int kFlops_ = 45;
     static constexpr int kConventionalFlops_ = 69;
-    template <typename Real, typename Output, typename Source = Output,
-        typename Derivatives = Source>
+    template <typename Real, typename Output, typename Source = Output>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
         using namespace math;
         Fma const fma{};
@@ -96,8 +95,7 @@ class L2P<3> {
 public:
     static constexpr int kFlops_ = 89;
     static constexpr int kConventionalFlops_ = 127;
-    template <typename Real, typename Output, typename Source = Output,
-        typename Derivatives = Source>
+    template <typename Real, typename Output, typename Source = Output>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
         using namespace math;
         Fma const fma{};
@@ -202,8 +200,7 @@ class L2P<4> {
 public:
     static constexpr int kFlops_ = 136;
     static constexpr int kConventionalFlops_ = 206;
-    template <typename Real, typename Output, typename Source = Output,
-        typename Derivatives = Source>
+    template <typename Real, typename Output, typename Source = Output>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
         using namespace math;
         Fma const fma{};
@@ -355,8 +352,7 @@ class L2P<5> {
 public:
     static constexpr int kFlops_ = 198;
     static constexpr int kConventionalFlops_ = 313;
-    template <typename Real, typename Output, typename Source = Output,
-        typename Derivatives = Source>
+    template <typename Real, typename Output, typename Source = Output>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
         using namespace math;
         Fma const fma{};
@@ -570,8 +566,7 @@ class L2P<6> {
 public:
     static constexpr int kFlops_ = 274;
     static constexpr int kConventionalFlops_ = 447;
-    template <typename Real, typename Output, typename Source = Output,
-        typename Derivatives = Source>
+    template <typename Real, typename Output, typename Source = Output>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
         using namespace math;
         Fma const fma{};
@@ -861,8 +856,7 @@ class L2P<7> {
 public:
     static constexpr int kFlops_ = 369;
     static constexpr int kConventionalFlops_ = 617;
-    template <typename Real, typename Output, typename Source = Output,
-        typename Derivatives = Source>
+    template <typename Real, typename Output, typename Source = Output>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
         using namespace math;
         Fma const fma{};
@@ -1247,8 +1241,7 @@ class L2P<8> {
 public:
     static constexpr int kFlops_ = 482;
     static constexpr int kConventionalFlops_ = 822;
-    template <typename Real, typename Output, typename Source = Output,
-        typename Derivatives = Source>
+    template <typename Real, typename Output, typename Source = Output>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
         using namespace math;
         Fma const fma{};

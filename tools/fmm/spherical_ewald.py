@@ -206,22 +206,6 @@ def generate(minLocalDegree=2,maxLocalDegree=8):
         counts[str(degree+1)] = report
     green.append('} // namespace cosmictiger::gravity::spherical')
     outputs['spherical/ewald_green.hpp'] = '\n'.join(green) + '\n'
-    l2l = ['#pragma once', '#include <cosmictiger/gravity/kernels/spherical/l2l.hpp>',
-           '#include <cosmictiger/math/simd_math.hpp>',
-           '', 'namespace cosmictiger::gravity::spherical {',
-           "template <int degree> class EwaldL2L {", "public:", "static constexpr int kFlops_ = detail::L2L<degree>::kFlops_ + 9;",
-              "static constexpr int kConventionalFlops_ = detail::L2L<degree>::kConventionalFlops_ + 15;",
-              "template <typename Real, typename Local, typename Source>",
-              "CUDA_EXPORT static void add(Local& output, Real& outputTrace, Source const& source, Real sourceTrace, Real x, Real y, Real z) {",
-              "detail::L2L<degree>::template add<Real>(output, source, x, y, z);",
-              "Real const radiusSquared = math::fma(x, x, math::fma(y, y, z * z));",
-              "output[0] = math::fma(-math::broadcast<Real>(0.5) * sourceTrace, radiusSquared, output[0]);",
-              "output[3] = math::fma(-sourceTrace, x, output[3]);",
-              "output[1] = math::fma(-sourceTrace, y, output[1]);",
-              "output[2] = math::fma(-sourceTrace, z, output[2]);",
-              "outputTrace += sourceTrace;", "}", "};",
-           '} // namespace cosmictiger::gravity::spherical']
-    outputs['spherical/ewald_l2l.hpp'] = '\n'.join(l2l) + '\n'
     l2p = ['#pragma once', '#include <cosmictiger/gravity/kernels/spherical/l2p.hpp>',
            '#include <cosmictiger/math/simd_math.hpp>',
            '', 'namespace cosmictiger::gravity::spherical {',
@@ -240,6 +224,6 @@ def generate(minLocalDegree=2,maxLocalDegree=8):
     facade = ['#pragma once', '',
               '#include <cosmictiger/gravity/kernels/spherical_kernels.hpp>']
     facade.extend(f'#include <cosmictiger/gravity/kernels/spherical/{name}.hpp>'
-                  for name in ('ewald_green', 'ewald_l2l', 'ewald_l2p'))
+                  for name in ('ewald_green', 'ewald_l2p'))
     outputs['spherical_ewald_kernels.hpp'] = '\n'.join(facade) + '\n'
     return outputs, {"cost_model":{"fma":1,"sqrt":7,"add":1,"multiply":1,"division":1,"special_functions":"reported separately"},"conventional_cost_model":{"fma":2,"sqrt":1,"add":1,"multiply":1,"division":1,"special_functions":1},"lattice_radius":RADIUS,"central_series_terms":SERIES_TERMS,"orders":counts}

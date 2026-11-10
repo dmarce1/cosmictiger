@@ -11,7 +11,7 @@
 
 #include <cosmictiger/math/radial_kernel.hpp>
 #if defined(RADIAL_KERNEL_TEST_SIMD)
-#include <cosmictiger/math/simd.hpp>
+#include <cosmictiger/math/simd_math.hpp>
 #endif
 
 namespace detail {

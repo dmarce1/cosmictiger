@@ -136,7 +136,6 @@ The audit checked each interaction family and its route to the global counter.
 | `cpuGravityCc`, `cudaGravityCcDirect` | Generated M2L operations, coordinates and expansion accumulation/reductions. |
 | `cpuGravityCp`, `cudaGravityCpDirect` | Generated Green-function operations, coordinates, mass weighting and expansion accumulation/reductions. |
 | `cpuGravityPc`, `cudaGravityPcDirect` | Generated M2P operations, coordinates and force/potential accumulation. |
-| Ewald CC paths | Actual accepted-image derivative work, generated Ewald M2L, coordinates and numerical reductions. |
 | `treeComputeMultipole` (internal) | Two generated M2M evaluations, 12 coordinate operations and coefficient accumulation. |
 | `treeComputeMultipole` (leaf) | Three setup operations plus padded particles times generated P2M, six coordinate operations and twice the coefficient count. |
 | Tree/acceptance | Bounds, centers, radii and numerical acceptance tests; scalar acceptance costs 17–19 depending on short circuits, SIMD 19 per lane. |

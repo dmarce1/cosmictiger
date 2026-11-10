@@ -18,7 +18,7 @@
 #include <cosmictiger/core/timer.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/math/math.hpp>
-#include <cosmictiger/math/simd.hpp>
+#include <cosmictiger/math/simd_math.hpp>
 
 int bhSort(DeviceVector<Vector3<float>>& parts, Vector<int>& sortOrder, int begin, int end,
     float xm, int xdim) {

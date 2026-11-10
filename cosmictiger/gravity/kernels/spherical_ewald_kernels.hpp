@@ -7,7 +7,7 @@
  */
 
 // Symbol directory (periodic spherical Ewald operators):
-// M: source multipole; L: target local expansion; G: periodic Green harmonics.
+// L: target local expansion; G: periodic Green harmonics.
 // x, y, z: minimum-image target-minus-source displacement in unit-box coordinates.
 // sourceTrace, localTrace, greenTrace: independent radial/background terms.
 // The primary free-space singularity is handled separately from the periodic correction.
@@ -15,6 +15,5 @@
 #pragma once
 
 #include <cosmictiger/gravity/kernels/spherical/ewald_green.hpp>
-#include <cosmictiger/gravity/kernels/spherical/ewald_l2l.hpp>
 #include <cosmictiger/gravity/kernels/spherical/ewald_l2p.hpp>
 #include <cosmictiger/gravity/kernels/spherical_kernels.hpp>

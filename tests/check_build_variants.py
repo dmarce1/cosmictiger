@@ -118,7 +118,7 @@ class BuildFeaturesTest(unittest.TestCase):
                        "tests/compression.cpp", "tests/fp16.cpp", "tests/groups_catalogue.cpp",
                        "tests/halo_catalog_fixture.cpp", "tests/lightcone_cpu.cpp", "tests/lightcone_cuda.cu",
                        "tests/lightcone_epoch.cpp", "tests/rockstar.cpp", "tests/rockstar_core.cpp",
-                       "tests/rockstar_eigenpair.cpp", "tests/rockstar_properties.cpp"):
+                       "tests/rockstar_properties.cpp"):
             with self.subTest(source=source):
                 self.configure(ROCKSTAR=False)
                 self.cache["BUILD_TESTING"] = "ON"
@@ -142,7 +142,7 @@ class BuildFeaturesTest(unittest.TestCase):
         self.configure(ROCKSTAR=False)
         targetPath = self.buildDirectory / "CMakeFiles/TargetDirectories.txt"
         for name in ("cosmictiger_fp16", "halo_catalog_export", "groups2halofunc", "halo_catalog_fixture",
-                     "rockstar_core_test", "rockstar_properties_fast_math_test", "rockstar_eigenpair_test",
+                     "rockstar_core_test", "rockstar_properties_fast_math_test",
                      "lightcone_cpu_test", "lightcone_cuda_test", "lightcone_epoch_test", "compression_test",
                      "fp16_standard_test", "analysis_tools_test"):
             with self.subTest(name=name):
@@ -384,7 +384,7 @@ class BuildFeaturesTest(unittest.TestCase):
                        "tests/analysis_tools.cpp", "tests/halo_catalog_fixture.cpp",
                        "tests/compression.cpp", "tests/fp16.cpp", "tests/lightcone_cpu.cpp",
                        "tests/lightcone_cuda.cu", "tests/lightcone_epoch.cpp", "tests/rockstar_core.cpp",
-                       "tests/rockstar_eigenpair.cpp", "tests/rockstar_properties.cpp"):
+                       "tests/rockstar_properties.cpp"):
             with self.subTest(source=source):
                 self.configure(GRAVITY=False)
                 self.cache["BUILD_TESTING"] = "ON"
@@ -789,7 +789,6 @@ class FeatureConfigurationTest(unittest.TestCase):
                             if line.startswith("-- source=")}
                 self.assertEqual(sourceSelectionErrors(selected, configuration), [])
                 self.assertIn("src/core/hpx.cpp", selected)
-                self.assertNotIn("src/math/math.cpp", selected)
                 for name in ("src/analysis/group_entry.cpp", "src/analysis/compress.cpp"):
                     self.assertEqual(name in selected, hasGravity(configuration), name)
                 self.assertEqual("src/analysis/healpix.cu" in selected, hasGravity(configuration) and cuda)
