@@ -487,7 +487,7 @@ def main():
                 addCpu(f"refine_{label}_n{size}_{tag}", stem,
                        ("refine", label, size, tag),
                        integrator="global", resolution=size,
-                       overrides={"run.numberOfSteps": "1",
+                       overrides={"run.numberOfOutputs": "2",
                                   "hydro.cfl": repr(defaultCfl * factor)})
     cosmologyCases = ["5/3"] if args.quick else ["5/3", "7/5"]
     gammas = {"5/3": repr(5.0 / 3.0), "7/5": repr(7.0 / 5.0)}
@@ -500,7 +500,7 @@ def main():
                # evolves on the expanding background alone until that returns.
                overrides={"gravity.enabled": "false",
                           "chemistry.enabled": "false", "starFormation.enabled": "false",
-                          "hydro.heatCapacityRatio": gammas[gamma], "run.numberOfSteps": "2048",
+                          "hydro.heatCapacityRatio": gammas[gamma], "run.numberOfOutputs": "2049",
                           "run.maxIterations": "5"})
 
     mpiSpecs = []

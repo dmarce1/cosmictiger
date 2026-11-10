@@ -79,6 +79,10 @@ def check_interval_clock(states, coarse):
         require(math.isclose(state.tau, expected, rel_tol=1e-9, abs_tol=1e-15),
                 f"interval clock mismatch: tau={state.tau} start={state.outer_start} "
                 f"interval={state.outer_interval} phase={phase(state)}")
+        next_output = (math.floor(state.outer_start / coarse + 1e-9) + 1) * coarse
+        steps_left = (next_output - state.outer_start) / state.outer_interval
+        require(math.isclose(steps_left, round(steps_left), rel_tol=1e-9, abs_tol=1e-9),
+                "long step is not an integer subdivision of the remaining output interval")
         start_position = state.outer_start / coarse
         end_position = (state.outer_start + state.outer_interval) / coarse
         require(math.floor(start_position + 1e-9) == math.ceil(end_position - 1e-9) - 1 or
@@ -170,7 +174,7 @@ def main():
               "gravity.meshSize": mesh_size, "gravity.pmmmNearWidth": 2,
               "gravity.pmmmOuterInterval": "true",
               "gravity.expansionDegree": args.order - 1,
-              "run.timeIntegrator": args.time_integrator, "gravity.enabled": "true",
+              "gravity.enabled": "true",
               "gravity.cuda": "false", "drift.cuda": "false", "hydro.cuda": "false",
               "hydro.enabled": "false", "run.scenario": "plummer",
               "compute.positionType": args.position_type,
@@ -180,7 +184,7 @@ def main():
               # One coarse step of 0.005: with eta 0.04 the Plummer far acceleration
               # bound (about 2.9e-3) selects a non-dyadic first interval and
               # multiple outer intervals, while the near force picks the rungs.
-              "run.endTime": 0.005, "run.numberOfSteps": 1, "gravity.timestepEta": 0.04,
+              "run.endTime": 0.005, "run.numberOfOutputs": 2, "gravity.timestepEta": 0.02,
               "analysis.groups": "false", "analysis.tracers": "false",
               "analysis.views": "false", "analysis.power": "false", "lightcone.enabled": "false",
               "output.silo": "false", "output.directory": ".", "checkpoint.intervalSeconds": 0,
@@ -200,7 +204,7 @@ def main():
         return runSimulation(command, directory, "run.log", expectSuccess=success)
 
     label = f"pmmm_interval_{args.time_integrator}_{args.near_method}"
-    coarse = common["run.endTime"] / common["run.numberOfSteps"]
+    coarse = common["run.endTime"] / (common["run.numberOfOutputs"] - 1)
     iterations = 400
     baseline = prepareCase(root, label + "_baseline")
     log = run(baseline, dict(common, **{"run.maxIterations": iterations}))
@@ -273,7 +277,7 @@ def main():
     # Compare to the same split scheme with a tighter coarse interval. Every
     # comparison run retains mandatory splitting and its own frozen membership.
     reference = prepareCase(root, label + "_reference")
-    reference_log = run(reference, dict(common, **{"run.numberOfSteps": 4,
+    reference_log = run(reference, dict(common, **{"run.numberOfOutputs": 5,
                                                  "run.maxIterations": 1000}))
     frozen_energy = read_energy(baseline)
     reference_energy = read_energy(reference)

@@ -101,7 +101,7 @@ def main():
     base = args.workdir.resolve()
     base.mkdir(parents=True, exist_ok=True)
     command = [str(executable), "--hpx:threads=2", "--hpx:bind=none",
-               "--run.timeIntegrator=hierarchical", "--gravity.meshSize=8"]
+               "--gravity.meshSize=8"]
     expected_files = {stem + ".ini" for stem, *_ in SCENARIOS}
     expected_files.update(stem + ".ini" for stem in COSMOLOGY_PRESETS)
     actual_files = {path.name for path in (root / "configurations").glob("*.ini")
@@ -117,16 +117,11 @@ def main():
         directory.mkdir()
         return directory
 
-    def with_integrator(integrator):
-        """The shared command with run.timeIntegrator replaced."""
-        return [f"--run.timeIntegrator={integrator}" if part.startswith("--run.timeIntegrator=")
-                else part for part in command]
-
     def exercise(stem, scenario, gravity, hydro, chemistry, name=None, overrides=None,
                  relative_output=None, silo=True):
         directory = prepare(name or scenario)
         # SPH with PMMM self-gravity runs only on the hierarchical ladder.
-        scenario_command = with_integrator("hierarchical" if gravity and hydro else "traditional")
+        scenario_command = command
         # Cosmology derives its initial power and thermal history internally.
         # Every generated product must remain under output.directory.
         options = {
@@ -190,23 +185,22 @@ def main():
         print(f"{name or scenario}: solver selection, finite diagnostics, and output containment passed")
         return directory, destination, options
 
-    def expect_coupled_rejection(stem, scenario):
-        # Self-gravitating gas runs only on the hierarchical ladder; a block-step request
-        # must be rejected at startup, before initialization.
+    def expect_retired_integrator_rejection(stem, scenario):
+        # Integrator selection is retired, including for self-gravitating gas.
         directory = prepare(scenario + "_traditional")
         output = run_process(command + [f"--configuration={root / 'configurations' / (stem + '.ini')}",
-                                        "--run.maxIterations=0", *[f"--{key}={value}" for key, value in
+                                        "--run.maxIterations=0", "--run.timeIntegrator=traditional", *[f"--{key}={value}" for key, value in
                                                                    cpu_backend_options().items()]],
                              directory, success=False)
-        if "SPH with PMMM self-gravity requires run.timeIntegrator=hierarchical" not in output:
-            raise RuntimeError(f"{scenario}: coupled SPH/gravity preset accepted a block integrator")
-        print(f"{scenario}: self-gravitating gas rejected on the traditional integrator")
+        if "unrecognized option" not in output or "run.timeIntegrator" not in output:
+            raise RuntimeError(f"{scenario}: retired integrator selector was accepted")
+        print(f"{scenario}: retired traditional integrator selector rejected")
 
     results = {}
     for case in SCENARIOS:
         stem, scenario, gravity, hydro, chemistry = case
         if gravity and hydro:
-            expect_coupled_rejection(stem, scenario)
+            expect_retired_integrator_rejection(stem, scenario)
         results[scenario] = exercise(*case, overrides={"initial.closePack": "true", "run.gasParticleCount": str(4 * 8**3)}
                                      if scenario == "gresho" else None)
 

@@ -1273,8 +1273,9 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
                 a = 1.0 / cosmosAinv(adotWork, scaleWork, dt);
             }
             profile::profileBegin("drift");
-            double const endTime =
-                schedule.endTime > 0.0 ? schedule.endTime : getOptions().run.numberOfSteps * t0;
+            double const endTime = schedule.endTime > 0.0 ?
+                schedule.endTime :
+                getOptions().run.outputIntervalCount() * t0;
             driftRungEverywhere(a, dt, tau, tau + dt, endTime, levels[li], drag);
             profile::profileEnd();
             tm.stop();
@@ -1393,7 +1394,7 @@ void outputTimeFile(DriverParameters const& parameters) {
     double const initialTau =
         expandingBackground ? cosmosConformalTime(a0 * 1.0e-6, a0, false) : 0.0;
     double const initialTime = expandingBackground ? cosmosTime(a0 * 1.0e-6, a0) : 0.0;
-    int const m = getOptions().run.numberOfSteps;
+    int const m = getOptions().run.outputIntervalCount();
     FILE* fp = fopen(outputPath("time.txt").c_str(), "wt");
     if (fp == NULL) {
         THROW_ERROR("Unable to open time.txt for writing\n");
@@ -1470,7 +1471,7 @@ void driver() {
         params = readCheckpoint();
         profile::profileEnd();
         profile::checkForInterrupt();
-        double const coarseInterval = params.tauMax / getOptions().run.numberOfSteps;
+        double const coarseInterval = params.tauMax / getOptions().run.outputIntervalCount();
         double const endpointTolerance =
             32.0 * std::numeric_limits<double>::epsilon() * params.tauMax;
         if (!std::isfinite(coarseInterval) || !(coarseInterval > 0.0) ||
@@ -1624,7 +1625,7 @@ void driver() {
     int& step = params.step;
     auto& totalProcessed = params.totalProcessed;
     auto& runtime = params.runtime;
-    int numberOfSteps = getOptions().run.numberOfSteps;
+    int numberOfSteps = getOptions().run.outputIntervalCount();
     double z0 = getOptions().cosmology.startRedshift;
     double dloga = log(z0 + 1.0) / numberOfSteps;
     double pot;
@@ -1762,7 +1763,7 @@ void driver() {
     Timer evolutionTime;
     evolutionTime.start();
     totalTime.start();
-    double const coarseInterval = tauMax / getOptions().run.numberOfSteps;
+    double const coarseInterval = tauMax / getOptions().run.outputIntervalCount();
     int lastOutputStep = driverOutputStep(tau, coarseInterval) -
         (driverFinalOutputStep(tau, coarseInterval) == driverOutputStep(tau, coarseInterval));
     for (;; step += global ? 0 : 1) {
@@ -1770,7 +1771,7 @@ void driver() {
             break;
         }
 
-        double t0 = tauMax / getOptions().run.numberOfSteps;
+        double t0 = tauMax / getOptions().run.outputIntervalCount();
         do {
             // Stop only between completed substeps, retaining the current clock
             // for the ordinary final checkpoint and distributed cleanup below.
@@ -2270,7 +2271,7 @@ void driver() {
         // Keep the work ledger and driver state at the completed drift, and
         // leave completed-checkpoint restarts alone (thisIter == 0).
         EnergiesT finalEnergies = energies;
-        double t0 = tauMax / getOptions().run.numberOfSteps;
+        double t0 = tauMax / getOptions().run.outputIntervalCount();
         double const theta = getOptions().gravity.openingAngle;
         MeshKickSchedule schedule;
         schedule.endTime = tauMax;
@@ -2303,8 +2304,8 @@ void driver() {
         double const finalGlassError = std::abs(energies0.pot - a * finalEnergies.pot) /
             std::max(std::abs(a * finalEnergies.pot), 1.0e-30);
         // Energy rows are labelled on the coarse output clock, not the outer interval.
-        outputEnergy(tau / (tauMax / getOptions().run.numberOfSteps), a, finalEnergies, energy0,
-            finalGlassError);
+        outputEnergy(tau / (tauMax / getOptions().run.outputIntervalCount()), a, finalEnergies,
+            energy0, finalGlassError);
     }
     if (getOptions().lightcone.enabled) {
         particlesFree();

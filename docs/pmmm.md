@@ -19,7 +19,7 @@ tree walk, including direct particle-pair interactions at close leaves.
 PMMM-FMM is the only gravity solver; `gravity.method.near` is retired.
 
 The sole integration scheme is hierarchical short gravity with mandatory outer
-long kicks and midpoint SPH. `run.timeIntegrator=hierarchical` is automatic.
+long kicks and midpoint SPH, selected automatically.
 `gravity.expansionDegree` selects a compiled potential degree and defaults to
 the largest enabled degree, six in the default range.
 
@@ -36,7 +36,7 @@ threads so waiting for the shared planner lock cannot block HPX workers.
 
 ```sh
 ./build_pmmm/cosmictiger \
-  --gravity.expansionDegree=6 --run.timeIntegrator=hierarchical \
+  --gravity.expansionDegree=6 \
   --gravity.meshSize=32 --gravity.pmmmNearWidth=2 \
   --run.darkMatterParticleCount=32768 --run.gasParticleCount=32768 --hydro.enabled=false \
   --gravity.cuda=false --hpx:threads=12
@@ -45,13 +45,13 @@ threads so waiting for the shared planner lock cannot block HPX workers.
 The runtime settings can also be supplied in an INI file:
 
 ```ini
+[run]
+numberOfOutputs = 99 # includes both endpoint states
+
 [gravity]
 expansionDegree = 6
 meshSize = 32
 pmmmNearWidth = 2
-
-[run]
-timeIntegrator = hierarchical
 
 [hydro]
 enabled = false
@@ -117,7 +117,7 @@ distribution. With the near FMM capability enabled:
 
 ```sh
 ./build_pmmm/cosmictiger \
-  --run.timeIntegrator=hierarchical --gravity.meshSize=32 --gravity.pmmmNearWidth=2 \
+  --gravity.meshSize=32 --gravity.pmmmNearWidth=2 \
   --gravity.expansionDegree=6 --compute.bucketSize=32 \
   --hydro.enabled=false --gravity.cuda=false
 ```
@@ -428,7 +428,7 @@ wall time, including communication, staging, and scheduling overhead. See
 ## Outer interval with frozen near membership
 
 `gravity.pmmmOuterInterval = true` (PMMM-FMM,
-`run.timeIntegrator = hierarchical`) integrates the far field
+the fixed hierarchical scheme) integrates the far field
 on a mandatory outer interval and the near field on the
 inner rung clock. One mesh transform runs per outer boundary; no inner pass
 deposits, transforms or evaluates a far expansion.
@@ -491,12 +491,19 @@ owner and `cellOwner` resolves from the frozen cell center.
 ### Interval selection
 
 ```text
-H_new = min( η sqrt(a / (|L_new| N)) over particles, expansion bound,
-             time to the next coarse output boundary, time to the end )
+h = min( η sqrt(a / (|L_new| N)) over particles, expansion bound, R )
+n = max(1, floor(R / h))
+H_new = R / n
+R = time remaining to the next equally spaced output phase or run/stage end
 ```
 
 with `N = gravity.meshSize`, so the length scale is one mesh cell (`1/N` in box
-units), `η = gravity.timestepEta` and the same caps as `pmSelectOuterInterval`.
+units) and `η = gravity.timestepEta`. The final interval is rounded upward to
+an integer subdivision of the remaining output interval, as requested by
+`pmSelectOuterInterval`; it may therefore exceed the raw proposal `h`.
+`run.numberOfOutputs` includes both endpoints and sets `Nout - 1` equal intervals
+in physical time for fixed scenarios or conformal time for cosmology. Every
+enabled Silo phase is written; the old step count and Silo skip controls are retired.
 Inner rungs come from the near force at the softening scale. The
 potential energy at a boundary is the near potential of the boundary pass plus
 the far potential of the far solve, counted once.
@@ -635,7 +642,7 @@ A small CPU application regression can be selected explicitly:
 
 ```sh
 ./build_pmmm/cosmictiger --run.test=pmmm \
-  --run.timeIntegrator=hierarchical --gravity.meshSize=8 \
+  --gravity.meshSize=8 \
   --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --hydro.enabled=false \
   --gravity.cuda=false --hpx:threads=2 --hpx:bind=none
 ```

@@ -44,12 +44,15 @@ have degree `order - 1`. The generated implementation functions take degrees.
 Types use PascalCase, functions and variables camelCase, and namespaces and
 filenames snake_case, with the standard FMM operator abbreviations retained.
 
-Numerical coefficients are declared at each kernel function's entry as `k0`,
-`k1`, and so on, using `Scalar = SimdScalar<Real>` so they remain scalar
-`constexpr` values for both scalar and SIMD instantiations. Literals use a
-leading sign, uppercase `E`, and 17 digits after the decimal point; exact
-rational coefficients are rounded in decimal before conversion to `Scalar`.
-Opposite signs share one nonnegative magnitude, with negation at the use site.
+Numerical coefficients are declared at each kernel function's entry in ascending
+order of nonnegative magnitude, using `Scalar = SimdScalar<Real>` so they remain
+scalar `constexpr` values for both scalar and SIMD instantiations. Names use
+equal-width indices within each function: `k0` through `k8` for nine constants,
+or `k00` through `k14` for fifteen. Literals have no leading plus, use uppercase
+`E`, and have 18 digits after the decimal point. Exact rational coefficients
+are rounded to nearest, with ties to even, using integer arithmetic before
+conversion to `Scalar`. Opposite signs share one magnitude, with negation at
+the use site.
 Integer indices, template arguments, and loop bounds are not coefficients.
 
 ## Generate and verify

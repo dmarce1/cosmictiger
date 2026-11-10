@@ -38,7 +38,7 @@ def run_case(executable, base, name, fraction):
     directory.mkdir(parents=True)
     options = dict(cpu_backend_options(), **{
         "run.scenario": "plummer",
-        "run.numberOfSteps": "2",
+        "run.numberOfOutputs": "3",
         "run.endTime": "0.0016",
         "run.maxIterations": "400",
         "run.rungMergeFraction": fraction,

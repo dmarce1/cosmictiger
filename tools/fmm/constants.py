@@ -2,7 +2,6 @@
 # Copyright (C) 2026 Dominic C. Marcello
 # Distributed under the Boost Software License, Version 1.0.
 """Give every generated gravity function a typed, sign-shared constant table."""
-from decimal import Decimal, localcontext
 from fractions import Fraction
 import re
 
@@ -19,13 +18,32 @@ def coefficient(expression):
 
 
 def scientific(value):
-    """Round an exact rational to 17 fractional digits, before binary conversion."""
-    with localcontext() as context:
-        context.prec = max(40, len(str(abs(value.numerator))) + 20)
-        decimal = Decimal(value.numerator) / Decimal(value.denominator)
-        mantissa, exponent = format(decimal, '+.17E').split('E')
-    # Decimal's zero exponent depends on its trailing zeros; use printf spelling.
-    return f'{mantissa}E{int(exponent) if value else 0:+03d}'
+    """Round an exact rational to 18 fractional digits, nearest with ties to even.
+
+    Integer quotient/remainder arithmetic avoids intermediate decimal rounding,
+    including values arbitrarily close to a rounding midpoint.
+    """
+    if not value:
+        return '0.000000000000000000E+00'
+    numerator, denominator = abs(value.numerator), value.denominator
+    exponent = len(str(numerator)) - len(str(denominator))
+    if (numerator < denominator * 10**exponent if exponent >= 0 else
+            numerator * 10**(-exponent) < denominator):
+        exponent -= 1
+    shift = 18 - exponent
+    if shift >= 0:
+        numerator *= 10**shift
+    else:
+        denominator *= 10**(-shift)
+    digits, remainder = divmod(numerator, denominator)
+    if 2 * remainder > denominator or (2 * remainder == denominator and digits % 2):
+        digits += 1
+    if digits == 10**19:
+        digits //= 10
+        exponent += 1
+    mantissa = str(digits)
+    sign = '-' if value < 0 else ''
+    return f'{sign}{mantissa[0]}.{mantissa[1:]}E{exponent:+03d}'
 
 
 def hoistConstants(cpp):
@@ -55,17 +73,21 @@ def hoistConstants(cpp):
         body = re.sub(rf'^[ \t]*constexpr auto (k\d+) = ({COEFFICIENT});\n',
                       removeDeclaration, body, flags=re.MULTILINE)
         broadcast = re.compile(r'(?:math::)?broadcast<Real>\(([^()]*)\)')
-        names = {}
+        magnitudes = set()
+        for argument in broadcast.finditer(body):
+            expression = previous.get(argument[1], argument[1]).strip()
+            if re.fullmatch(COEFFICIENT, expression):
+                magnitudes.add(abs(coefficient(expression)))
+        width = len(str(max(0, len(magnitudes) - 1)))
+        names = {value: f'k{index:0{width}d}'
+                 for index, value in enumerate(sorted(magnitudes))}
         def replace(match):
             expression = previous.get(match[1], match[1]).strip()
             if not re.fullmatch(COEFFICIENT, expression):
                 return match[0]
             value = coefficient(expression)
-            magnitude = abs(value)
-            if magnitude not in names:
-                names[magnitude] = f'k{len(names)}'
             sign = '-' if value < 0 else ''
-            return f'{sign}math::broadcast<Real>({names[magnitude]})'
+            return f'{sign}math::broadcast<Real>({names[abs(value)]})'
         body = broadcast.sub(replace, body)
         declarations = ''.join(
             f'\n    constexpr auto {name} = static_cast<Scalar>({scientific(value)});'

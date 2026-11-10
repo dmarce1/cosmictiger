@@ -113,13 +113,12 @@ def main():
     mesh_size = 30
     common = {"hpx:threads": 2, "hpx:bind": "none",
               "gravity.meshSize": mesh_size, "gravity.pmmmNearWidth": 2,
-              "gravity.expansionDegree": args.order - 1, "run.timeIntegrator": args.time_integrator,
-              "gravity.enabled": "true", "gravity.cuda": str(args.cuda).lower(),
+              "gravity.expansionDegree": args.order - 1, "gravity.enabled": "true", "gravity.cuda": str(args.cuda).lower(),
               "drift.cuda": str(args.cuda).lower(),
               "compute.positionType": args.position_type,
               "run.darkMatterParticleCount": 512, "run.gasParticleCount": 512, "initial.closePack": "false",
               "scenario.cosmology.useGlass": "false", "chemistry.enabled": "false",
-              "run.endTime": 0.005, "run.numberOfSteps": 4,
+              "run.endTime": 0.005, "run.numberOfOutputs": 5,
               "analysis.groups": "false", "analysis.tracers": "false",
               "analysis.views": "false", "analysis.power": "false", "lightcone.enabled": "false",
               "output.silo": "false", "output.directory": ".", "checkpoint.intervalSeconds": 0}

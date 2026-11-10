@@ -119,7 +119,7 @@ def run_regression(args, directory):
                "scenario.cosmology.useGlass": "false", "chemistry.enabled": "false",
                "gravity.enabled": str(args.scenario == "plummer").lower(),
                "gravity.meshSize": 8, "gravity.pmmmNearWidth": 2,
-               "run.endTime": END_TIME, "run.numberOfSteps": STEP_COUNT,
+               "run.endTime": END_TIME, "run.numberOfOutputs": STEP_COUNT + 1,
                "run.maxIterations": 1000000, "run.verbose": "true",
                "analysis.groups": "false", "analysis.tracers": "false",
                "analysis.views": "false", "analysis.power": "false",

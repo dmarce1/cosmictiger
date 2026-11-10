@@ -65,18 +65,13 @@ def main():
     far = next((value for value in ("pmmm", "none") if value in solvers), None)
     if far is None:
         raise RuntimeError("no compiled gravity solver supports the startup fixture")
-    eligible = [value for value in choices("Time integrators")
-                if value != "hierarchical" or far != "none"]
-    integrator = next((value for value in ("traditional", "global", "hierarchical")
-                       if value in eligible), None)
-    if integrator is None:
-        raise RuntimeError("no compiled time integrator supports the startup fixture")
+    if "hierarchical" not in choices("Time integrators"):
+        raise RuntimeError("the sole integration scheme is unavailable in the startup fixture")
     options = {
         **backends,
         "run.scenario": "hydroWave" if far == "none" else "plummer",
-        "run.timeIntegrator": integrator,
         "run.maxIterations": "0",
-        "run.numberOfSteps": "1",
+        "run.numberOfOutputs": "2",
         "run.verbose": "false",
         "gravity.enabled": "false" if far == "none" else "true",
         "hydro.enabled": "true" if far == "none" else "false",

@@ -87,7 +87,7 @@ def main():
     metadata = execute(prepare("metadata"), ["--run.test=checkpointState", "--hydro.enabled=false"])
     execute(prepare("saved_diagnostics"), ["--run.test=sphOnlyDiagnostics", "--hydro.enabled=true"])
     for key, value in (("gravity.expansionDegree", "0"),
-                       ("run.timeIntegrator", selected["run.timeIntegrator"]),
+                       ("run.timeIntegrator", "hierarchical"),
                        ("run.scenario", "sod"),
                        ("compute.positionType", args.position_type), ("gravity.enabled", "F")):
         if not re.search(r"^" + re.escape(key) + r"\s*:\s*" + value + r"\s*$",

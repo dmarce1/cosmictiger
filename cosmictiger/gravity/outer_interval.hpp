@@ -10,8 +10,9 @@ struct PmBoundaryResult {
     double nextInterval = 0.0;
 };
 
-// The selected next interval given the raw bounds: the long-force acceleration
-// bound, the cosmological expansion bound, the time left to the next coarse
-// output boundary and the end of the run. Never a power of two by construction.
+// Round the raw long-force/expansion proposal upward to R/floor(R/h), where
+// R is the time remaining to the next output phase or run end and h is the
+// capped proposal. This gives an integer number of remaining long steps.
+// Inner rung subdivisions remain dyadic; the long interval need not be.
 double pmSelectOuterInterval(double accelerationTimestep, double expansionTimestep, double time,
-    double coarseInterval, double endTime);
+    double outputInterval, double endTime);

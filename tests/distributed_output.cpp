@@ -458,7 +458,7 @@ void distributedOutputTest() {
     options.hydro.enabled = true;
     options.chemistry.enabled = false;
     options.output.silo = true;
-    options.output.siloInterval = 1;
+
     options.output.directory = "distributed_output_fixture/run_" +
         std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
     options.output.units = "code";
@@ -514,7 +514,7 @@ void distributedOutputTest() {
 
     options.output.units = "code";
     options.output.frame = "comoving";
-    options.output.siloInterval = 3;
+
     setOptions(options);
     viewConfigure();
     auto const skipped = detail::distributedMasterPath(4);
@@ -522,7 +522,7 @@ void distributedOutputTest() {
         !std::filesystem::exists(skipped), "cadence probe starts unpublished");
     viewOutputViews(4, 0.25, false, -1.0);
     detail::requireDistributedOutput(
-        !std::filesystem::exists(skipped), "cadence skips nonoutput cycle");
+        std::filesystem::exists(skipped), "each requested output cycle is written");
     // The same scale can occur on either side of a cosmological turnaround.
     // Preserve the caller's actual age through both master and remote leaves.
     viewOutputViews(4, 0.25, true, 4.2e9);

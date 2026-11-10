@@ -75,7 +75,7 @@ def main():
 
     def run(name, options, success=True, pmmm_mesh=8, selectors=True):
         if selectors:
-            selected = {"run.timeIntegrator": args.time_integrator}
+            selected = {}
             if not gravity_compiled:
                 selected["gravity.enabled"] = "false"
             else:
@@ -155,7 +155,7 @@ def main():
                 "hydro.minSmoothingLength", "hydro.maxSmoothingLength",
                 "scenario.disc.centralEffectiveRadius", "scenario.disc.centralSmoothingLength",
                 "scenario.rayleighTaylor.zPlaneAcceleration",
-                "output.silo", "output.siloInterval", "output.directory",
+                "output.silo", "run.numberOfOutputs", "output.directory",
                 "output.units", "output.frame",
                 "units.massSolar", "units.boxLength",
                 "output.xMin", "output.xMax", "output.yMin", "output.yMax",
@@ -163,7 +163,7 @@ def main():
                 "starFormation.enabled", "starFormation.seed", "starFormation.criticalPhysicalDensity",
                 "starFormation.criticalOverDensity",
                 "starFormation.evaporationFactor", "starFormation.starFormationTimeGyr"}
-    required.update({"run.timeIntegrator",
+    required.update({
                      "gravity.expansionDegree", "hydro.viscosityCoefficientMin",
                      "hydro.viscosityDecay", "hydro.balsaraSoundSpeedCoefficient"})
     required.update({"scenario.cosmology.gadget4Restart", "scenario.cosmology.useGlass",
@@ -212,12 +212,19 @@ def main():
         output = run("startup_options", startupOptions, selectors=False)
         if not re.search(r"^run\.timeIntegrator\s*:\s*hierarchical\s*$", output, re.MULTILINE):
             raise RuntimeError("the sole integration scheme was not selected automatically")
-        for mode in ("traditional", "global"):
+        for mode in ("hierarchical", "traditional", "global", "unknown"):
             rejected = run("startup_reject_" + mode,
                            startupOptions + [f"--run.timeIntegrator={mode}"],
                            success=False, selectors=False)
-            if "run.timeIntegrator must be hierarchical" not in rejected:
+            if "unrecognized option" not in rejected or "run.timeIntegrator" not in rejected:
                 raise RuntimeError(f"retired integrator {mode} lacked a clear diagnostic")
+            retiredConfig = args.workdir / f"retired_integrator_{mode}.ini"
+            retiredConfig.write_text(f"[run]\ntimeIntegrator = {mode}\n")
+            rejected = run("startup_reject_ini_" + mode,
+                           startupOptions + [f"--configuration={retiredConfig.resolve()}"],
+                           success=False, selectors=False)
+            if "unrecognized option" not in rejected or "timeIntegrator" not in rejected:
+                raise RuntimeError(f"retired INI integrator {mode} lacked a clear diagnostic")
         if gravity_compiled:
             rejected = run("startup_reject_unsplit",
                            startupOptions + ["--gravity.pmmmOuterInterval=false"],
@@ -245,7 +252,7 @@ def main():
         print("Nonverbose startup printed every registered option alphabetically with resolved values")
         return
 
-    removed_options = {"gravity.method.near", "compute.cuda", "hydro.chemistry", "hydro.conduction", "hydro.diffusion",
+    removed_options = {"gravity.method.near", "run.timeIntegrator", "run.numberOfSteps", "output.siloInterval", "compute.cuda", "hydro.chemistry", "hydro.conduction", "hydro.diffusion",
                        "hydro.yReflect", "gravity.sphSmoothing", "cosmology.omegaK",
                        "initial.usePowerFile", "initial.particlesPerDimension",
                        "initial.darkMatterParticleCount", "initial.gasParticleCount", "gravity.method",
@@ -392,11 +399,10 @@ mapSize = 8
         output = run(f"selection_degree_{degree}",
                      metadata_options + [f"--gravity.expansionDegree={degree}"])
         assertNumericSetting(output, "gravity.expansionDegree", degree)
-    selected_options = [f"--gravity.expansionDegree={args.order - 1}",
-                        f"--run.timeIntegrator={args.time_integrator}"]
+    selected_options = [f"--gravity.expansionDegree={args.order - 1}"]
     selection_config = args.workdir / "algorithm_selection.ini"
     selection_config.write_text(
-        f"[run]\ntimeIntegrator = {args.time_integrator}\n[gravity]\n"
+        "[gravity]\n"
         f"expansionDegree = {args.order - 1}\n")
     output = run("selection_ini", metadata_options + [
         f"--configuration={selection_config.resolve()}"], selectors=False)
@@ -596,10 +602,11 @@ mapSize = 8
         if not re.search(r"^build\.starFormation\s*:\s*" + ("T" if starFormationAvailable else "F") + r"\s*$",
                          output, re.MULTILINE):
             raise RuntimeError("build metadata did not identify the compiled star formation capability")
-        expected_hierarchical = "T" if args.time_integrator == "hierarchical" else "F"
+        expected_hierarchical = "T" if re.search(
+            r"^gravity\.enabled\s*:\s*T\s*$", output, re.MULTILINE) else "F"
         if not re.search(r"^run\.hierarchicalGravity\s*:\s*" + expected_hierarchical + r"\s*$",
                          output, re.MULTILINE):
-            raise RuntimeError("gravity stepping did not match the compiled time integrator")
+            raise RuntimeError("hierarchical gravity did not match enabled self-gravity")
 
     assertCompiledSettings(balsara_default)
     assertCompiledSettings(configured)
@@ -747,17 +754,14 @@ mapSize = 8
             raise RuntimeError("disabled SPH chemistry request lacked build guidance")
     else:
         for gravity_enabled in ("true", "false"):
-            # SPH with PMMM self-gravity runs only on the hierarchical ladder.
-            coupled = gravity_enabled == "true" and gravity_compiled
-            rejected_here = hydro_rejected or coupled
+            # The sole scheme supports SPH with and without self-gravity.
+            rejected_here = hydro_rejected
             output = run(f"sph_cli_gravity_{gravity_enabled}", sph_options + [
                 "--hydro.enabled=true", f"--gravity.enabled={gravity_enabled}"],
                 success=not rejected_here)
             if rejected_here:
                 if hydro_rejected and hydro_error not in output:
                     raise RuntimeError("hierarchical hydro rejection lacked guidance")
-                if not hydro_rejected and "SPH with PMMM self-gravity requires" not in output:
-                    raise RuntimeError("SPH with gravity on a block integrator lacked its diagnostic")
                 continue
             assertCompiledSettings(output)
             if not re.search(r"^hydro\.enabled\s*:\s*T\s*$", output, re.MULTILINE):
@@ -1287,27 +1291,27 @@ mapSize = 8
     assertOutputSettings(disabled, "code", "comoving")
 
     output_config = args.workdir / "output.ini"
-    output_config.write_text("[output]\nsilo = true\nsiloInterval = 7\n"
+    output_config.write_text("[run]\nnumberOfOutputs = 7\n[output]\nsilo = true\n"
                              "units = cosmological\nframe = lab\n"
                              "directory = configured snapshots\nxMin = 0.25\nxMax = 0.75\n")
     configured = run("silo_ini", metadata_options + [f"--configuration={output_config.resolve()}"])
     assertOutputSettings(configured, "cosmological", "lab")
     if "Silo particle output: x [0.25, 0.75], y [0, 1], z [0, 1]" not in configured:
         raise RuntimeError("INI Silo bounds were not applied")
-    if "every 7 synchronized coarse steps" not in configured:
+    if "7 equally spaced outputs including endpoints" not in configured:
         raise RuntimeError("INI Silo cadence was not applied")
     if not (args.workdir / "configured snapshots").is_dir():
         raise RuntimeError("relative Silo output directory was not created")
 
     cli_directory = (args.workdir / "cli snapshots").resolve()
     overridden = run("silo_cli", metadata_options + [f"--configuration={output_config.resolve()}",
-                                                    "--output.xMin=0.5", "--output.siloInterval=3",
+                                                    "--output.xMin=0.5", "--run.numberOfOutputs=3",
                                                     "--output.units=both", "--output.frame=both",
                                                     f"--output.directory={cli_directory}"])
     assertOutputSettings(overridden, "both", "both")
     if "Silo particle output: x [0.5, 0.75], y [0, 1], z [0, 1]" not in overridden:
         raise RuntimeError("CLI bounds did not override INI bounds")
-    if "every 3 synchronized coarse steps" not in overridden or not cli_directory.is_dir():
+    if "3 equally spaced outputs including endpoints" not in overridden or not cli_directory.is_dir():
         raise RuntimeError("CLI output cadence or directory did not override the INI")
 
     disabled = run("silo_disabled", metadata_options + ["--output.silo=false"])
@@ -1393,9 +1397,8 @@ mapSize = 8
         preset_options = [f"--configuration={path}", "--chemistry.enabled=false",
                           "--starFormation.enabled=false"] + runtime_overrides
         if args.time_integrator == "hierarchical":
-            # This is option/serialization coverage, with hydro disabled by
-            # metadata_options; keep hierarchical integration eligible even
-            # for examples whose physical problem uses imposed forces only.
+            # Validate gravity options and serialization with hydro disabled
+            # even for presets whose physical problem uses imposed forces only.
             preset_options.append("--gravity.enabled=true")
         if args.without_sph and ini["run"]["scenario"] not in ("cosmology", "plummer", "glass"):
             # Keep validating every example's option coverage and syntax when its
@@ -1414,9 +1417,8 @@ mapSize = 8
                 starFormationAvailable and not hydro_rejected):
             enabled_options = [option for option in metadata_options
                                if not option.startswith("--hydro.enabled=")]
-            # SPH has no self-gravity coupling in the PMMM solver yet: check that the
-            # preset's own hydro, cooling and star formation switches survive with
-            # gravity (and its force-error sampling) switched off.
+            # Check the preset's hydro, cooling and star formation switches
+            # independently of gravity and its force-error sampling.
             enabled = run(f"enabled_physics_{case_name}", enabled_options +
                           [f"--configuration={path}", "--gravity.enabled=false",
                            "--gravity.errorInterval=0"] + runtime_overrides)
@@ -1441,8 +1443,6 @@ mapSize = 8
         ("legacy_config", "--run.configFile=missing_grouped_options.ini", "run.configFile"),
         ("legacy_help", "--run.help", "run.help"),
         ("missing_config", "--configuration=missing_grouped_options.ini", "Cannot open configuration file"),
-        ("silo_interval_zero", "--output.siloInterval=0", "output.siloInterval"),
-        ("silo_interval_negative", "--output.siloInterval=-1", "output.siloInterval"),
         ("silo_directory_empty", "--output.directory=", "output.directory"),
         ("silo_units_unknown", "--output.units=si", "output.units"),
         ("silo_units_empty", "--output.units=", "output.units"),
@@ -1478,7 +1478,8 @@ mapSize = 8
         ("z_plane_inf", "--scenario.rayleighTaylor.zPlaneAcceleration=inf", "scenario.rayleighTaylor.zPlaneAcceleration"),
         ("z_plane_overflow", "--scenario.rayleighTaylor.zPlaneAcceleration=1e100", "single precision"),
         ("z_plane_underflow", "--scenario.rayleighTaylor.zPlaneAcceleration=1e-100", "single precision"),
-        ("steps_zero", "--run.numberOfSteps=0", "run.numberOfSteps"),
+        ("outputs_zero", "--run.numberOfOutputs=0", "run.numberOfOutputs"),
+        ("outputs_one", "--run.numberOfOutputs=1", "run.numberOfOutputs"),
         ("end_time_negative", "--run.endTime=-1", "run.endTime"),
         ("end_time_nan", "--run.endTime=nan", "run.endTime"),
         ("end_time_inf", "--run.endTime=inf", "run.endTime"),
@@ -1564,7 +1565,8 @@ mapSize = 8
                  "gravity.fmmOrder": str(args.order), "gravity.pmmmOrder": str(args.order),
                  "gravity.p3mSplitCells": "1.25", "gravity.p3mCutoff": "4.5",
                  "gravity.openingAngle": "0.8", "gravity.openingSchedule": "none",
-                 "run.timeIntegrator": args.time_integrator
+                 "run.timeIntegrator": args.time_integrator, "run.numberOfSteps": "4",
+                 "output.siloInterval": "1"
                  }.get(option, "false")
         group, name = option.split(".", 1)
         # Numeric legacy booleans must not abbreviate the plummer scenario category.

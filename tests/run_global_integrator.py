@@ -88,7 +88,7 @@ def main():
               "output.directory": ".", "checkpoint.intervalSeconds": 0,
               # Global integration deliberately accepts a floor beyond the rung
               # table: its raw timestep must neither index nor obey that floor.
-              "run.numberOfSteps": 1, "run.minRung": 20}
+              "run.numberOfOutputs": 2, "run.minRung": 20}
     cases = []
     if not args.without_sph:
         cases.append(("hydro", False, True, None, None))

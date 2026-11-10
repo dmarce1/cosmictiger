@@ -25,14 +25,13 @@ def main():
     spacing = 0.5 / half_cells
     environment = dict(os.environ, OMP_NUM_THREADS='1', OPENBLAS_NUM_THREADS='1', CUDA_VISIBLE_DEVICES='')
     common = [str(args.executable.resolve()), '--hpx:threads=2', '--hpx:bind=none',
-              '--run.scenario=kelvinHelmholtz', '--run.timeIntegrator=hierarchical',
-              '--run.darkMatterParticleCount=0', '--gravity.enabled=false',
+              '--run.scenario=kelvinHelmholtz', '--run.darkMatterParticleCount=0', '--gravity.enabled=false',
               '--hydro.enabled=true', '--hydro.cuda=false', '--drift.cuda=false',
               '--chemistry.enabled=false', '--starFormation.enabled=false',
               '--hydro.kernelFamily=wendland', '--hydro.kernelDegree=5', '--hydro.neighborNumber=32',
               '--hydro.viscosityCoefficientMin=0', '--hydro.viscosityCoefficientMax=0', '--hydro.vonNeumannRichtmyerCoefficient=0',
               '--hydro.conductionCoefficient=0',
-              '--run.endTime=1e-7', '--run.numberOfSteps=2', '--run.maxIterations=1',
+              '--run.endTime=1e-7', '--run.numberOfOutputs=3', '--run.maxIterations=1',
               '--checkpoint.intervalSeconds=0', '--output.silo=false', '--output.directory=.',
               '--run.verbose=true']
 

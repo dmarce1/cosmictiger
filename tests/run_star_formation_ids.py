@@ -80,7 +80,7 @@ def main():
     base.mkdir(parents=True, exist_ok=True)
     selections = application_arguments(executable, hydro=True)
     common = [str(executable), '--hpx:threads=1', '--hpx:bind=none', *selections,
-        '--run.scenario=cosmology', '--run.endTime=0.0001', '--run.numberOfSteps=16',
+        '--run.scenario=cosmology', '--run.endTime=0.0001', '--run.numberOfOutputs=17',
         '--run.maxIterations=1', '--run.darkMatterParticleCount=512', '--run.gasParticleCount=512', '--scenario.cosmology.useGlass=false',
         '--cosmology.sigma8=0', '--gravity.enabled=false', '--hydro.enabled=true',
         '--chemistry.enabled=true', '--starFormation.enabled=true',

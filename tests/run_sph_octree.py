@@ -147,7 +147,7 @@ def main():
 
     for integrator in integrators:
         cases = [("wave", {"run.scenario": "hydroWave", "run.endTime": 0.5,
-                           "run.numberOfSteps": 1, "run.maxIterations": 8}, 1)]
+                           "run.numberOfOutputs": 2, "run.maxIterations": 8}, 1)]
         if args.mpi_exec:
             cases.append(("wave_mpi", dict(cases[-1][1]), 2))
         for name, options, ranks in cases:

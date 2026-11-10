@@ -113,7 +113,7 @@ def main():
     root = args.workdir.resolve()
     root.mkdir(parents=True, exist_ok=True)
     configurations = Path(__file__).resolve().parents[1] / "configurations"
-    base = {"run.timeIntegrator": "hierarchical",
+    base = {
             "gravity.pmmmOuterInterval": "true", "gravity.meshSize": 16,
             "chemistry.enabled": "false", "starFormation.enabled": "false",
             "output.silo": "false", "output.directory": ".", "checkpoint.intervalSeconds": 0,

@@ -190,7 +190,7 @@ def main():
                 label = "_".join(value for value in (far, near, integrator) if value)
                 options = dict(common, **selections, **{"run.scenario": "cosmology",
                     "gravity.enabled": str(gravity).lower(), "run.maxIterations": 2,
-                    "run.numberOfSteps": 64, "run.minRung": 0,
+                    "run.numberOfOutputs": 65, "run.minRung": 0,
                     "cosmology.sigma8": 0, "cosmology.startRedshift": 49,
                     "cosmology.endRedshift": 0, "checkpoint.intervalSeconds": 0,
                     "hpx:threads": 1, "chemistry.initializationTemperature": 10000})

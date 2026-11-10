@@ -4,43 +4,43 @@
 #include <cmath>
 #include <limits>
 
-#include <cosmictiger/core/stack_trace.hpp>
-#include <cosmictiger/cosmology/cosmology.hpp>
+#include <cosmictiger/core/safe_io.hpp>
 #include <cosmictiger/cosmology/evolution.hpp>
 #include <cosmictiger/gravity/outer_interval.hpp>
 
-/// Clamp the proposed mesh interval to the end time and next coarse output boundary without
-/// tiny residual steps.
+/// Round the proposed long step upward to an equal subdivision of the time
+/// remaining until the next output phase (or the end of the run).
 double pmSelectOuterInterval(double accelerationTimestep, double expansionTimestep, double time,
-    double coarseInterval, double endTime) {
-    if (!(coarseInterval > 0.0) || !std::isfinite(coarseInterval)) {
-        THROW_ERROR("The coarse output interval must be finite and positive\n");
+    double outputInterval, double endTime) {
+    if (!(outputInterval > 0.0) || !std::isfinite(outputInterval)) {
+        THROW_ERROR("The output interval must be finite and positive\n");
     }
     double const remaining = endTime - time;
     if (cosmology::endTimeReached(time, endTime) || !(remaining > 0.0)) {
         return 0.0;
     }
-    // Outputs and analysis stay on the nominal coarse clock: an interval never
-    // crosses the next coarse boundary, and lands exactly on it when it would.
-    double const position = time / coarseInterval;
+    double const position = time / outputInterval;
     double const tolerance =
         32.0 * std::numeric_limits<double>::epsilon() * std::max(1.0, position);
-    double const nextBoundary = (std::floor(position + tolerance) + 1.0) * coarseInterval;
-    double interval = std::min({accelerationTimestep, expansionTimestep, coarseInterval});
-    interval = std::min(interval, remaining);
+    double const nextBoundary =
+        std::min((std::floor(position + tolerance) + 1.0) * outputInterval, endTime);
     double const toBoundary = nextBoundary - time;
-    if (toBoundary > 0.0 && toBoundary < remaining) {
-        interval = std::min(interval, toBoundary);
+    double const candidate = std::min({accelerationTimestep, expansionTimestep, toBoundary});
+    if (!(candidate > 0.0) || !std::isfinite(candidate) || !(toBoundary > 0.0)) {
+        THROW_ERROR("The selected outer PM interval must be finite and positive\n");
     }
+    // H = R / max(1, floor(R / h)): the smallest equal subdivision >= h.
+    // R is time remaining to the next output, h is the raw long-step proposal.
+    // Roundoff in an exact-integer quotient must not discard a whole step.
+    double const quotient = toBoundary / candidate;
+    double const integral = std::round(quotient);
+    double const quotientTolerance =
+        8.0 * std::numeric_limits<double>::epsilon() * std::max(1.0, quotient);
+    double const steps = std::max(
+        1.0, std::floor(std::abs(quotient - integral) <= quotientTolerance ? integral : quotient));
+    double const interval = toBoundary / steps;
     if (!(interval > 0.0) || !std::isfinite(interval) || time + interval == time) {
         THROW_ERROR("The selected outer PM interval cannot advance the evolution clock\n");
-    }
-    // Absorb a sliver that would otherwise leave a tiny final interval.
-    double const slack = 1.0e-9 * coarseInterval;
-    if (toBoundary > interval && toBoundary - interval < slack) {
-        interval = toBoundary;
-    } else if (remaining > interval && remaining - interval < slack) {
-        interval = remaining;
     }
     return interval;
 }

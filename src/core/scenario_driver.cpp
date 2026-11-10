@@ -116,22 +116,34 @@ void runFixedScenario() {
         [](int sum, auto const& stage) { return sum + stage.numberOfSteps; });
     double const duration =
         baseOptions.run.endTime > 0.0 ? baseOptions.run.endTime : defaultDuration;
-    if (baseOptions.run.numberOfSteps < int(plan.stages.size())) {
-        THROW_ERROR("run.numberOfSteps must allow at least one coarse step per scenario stage\n");
-    }
-    int assignedSteps = 0;
-    int cumulativeDefaultSteps = 0;
-    for (size_t i = 0; i < plan.stages.size(); i++) {
-        auto& stage = plan.stages[i];
-        cumulativeDefaultSteps += stage.numberOfSteps;
-        int const cumulativeSteps = std::clamp(int(std::lround(double(cumulativeDefaultSteps) *
-                                                   baseOptions.run.numberOfSteps / defaultSteps)),
-            assignedSteps + 1, baseOptions.run.numberOfSteps - int(plan.stages.size() - i - 1));
-        stage.numberOfSteps = cumulativeSteps - assignedSteps;
-        assignedSteps += stage.numberOfSteps;
-        // Stage transitions fall on the shared coarse clock. This keeps the
-        // pending SPH half-step valid when entering/leaving stellar relaxation.
-        stage.duration = duration * stage.numberOfSteps / baseOptions.run.numberOfSteps;
+    // Gravity stages have their own physical boundaries, independently of the
+    // requested output phases. The long-step selector lands on either boundary.
+    bool const physicalStageClock = gravity::kBuildHasGravity && baseOptions.gravity.enabled;
+    if (physicalStageClock) {
+        for (auto& stage : plan.stages) {
+            stage.duration *= duration / defaultDuration;
+        }
+    } else {
+        if (baseOptions.run.outputIntervalCount() < int(plan.stages.size())) {
+            THROW_ERROR(
+                "run.numberOfOutputs must allow at least one interval per scenario stage\n");
+        }
+        int assignedSteps = 0;
+        int cumulativeDefaultSteps = 0;
+        for (size_t i = 0; i < plan.stages.size(); i++) {
+            auto& stage = plan.stages[i];
+            cumulativeDefaultSteps += stage.numberOfSteps;
+            int const cumulativeSteps =
+                std::clamp(int(std::lround(double(cumulativeDefaultSteps) *
+                               baseOptions.run.outputIntervalCount() / defaultSteps)),
+                    assignedSteps + 1,
+                    baseOptions.run.outputIntervalCount() - int(plan.stages.size() - i - 1));
+            stage.numberOfSteps = cumulativeSteps - assignedSteps;
+            assignedSteps += stage.numberOfSteps;
+            // Stage transitions fall on the shared coarse clock. This keeps the
+            // pending SPH half-step valid when entering/leaving stellar relaxation.
+            stage.duration = duration * stage.numberOfSteps / baseOptions.run.outputIntervalCount();
+        }
     }
     DriverParameters state{};
     state.a = 1.0;
@@ -169,7 +181,7 @@ void runFixedScenario() {
     bool const meshInterval = false;
 #endif
     if (meshInterval && restarting) {
-        double const coarse = duration / baseOptions.run.numberOfSteps;
+        double const coarse = duration / baseOptions.run.outputIntervalCount();
         long double const phase = std::ldexp(static_cast<long double>(state.itime), -64);
         long double const expected = static_cast<long double>(state.outerStart) +
             static_cast<long double>(state.outerInterval) * (state.itime == 0 ? 1.0L : phase);
@@ -222,18 +234,18 @@ void runFixedScenario() {
         checkpointTimer.reset();
         checkpointTimer.start();
     };
-    int stageEndStep = 0;
+    double elapsedStageTime = 0.0;
+    size_t stageIndex = 0;
     bool interrupted = false;
-    double const coarseInterval = duration / baseOptions.run.numberOfSteps;
+    double const coarseInterval = duration / baseOptions.run.outputIntervalCount();
     int lastOutputStep = driverOutputStep(state.tau, coarseInterval) -
         (driverFinalOutputStep(state.tau, coarseInterval) ==
             driverOutputStep(state.tau, coarseInterval));
     runtime.start();
     for (auto const& stage : plan.stages) {
-        stageEndStep += stage.numberOfSteps;
-        double const stageEnd = stageEndStep == baseOptions.run.numberOfSteps ?
-            duration :
-            duration * (double(stageEndStep) / baseOptions.run.numberOfSteps);
+        double const stageEnd =
+            ++stageIndex == plan.stages.size() ? duration : elapsedStageTime + stage.duration;
+        elapsedStageTime = stageEnd;
         double const tolerance = 1.0e-12 * duration;
         if (state.tau >= (global ? stageEnd : stageEnd - tolerance)) {
             // A run stopped at a stage end (iteration limit) saved the clock before the snap
@@ -261,7 +273,7 @@ void runFixedScenario() {
 #else
         bool const midpointHydro = false;
 #endif
-        double const baseTimestep = duration / baseOptions.run.numberOfSteps;
+        double const baseTimestep = duration / baseOptions.run.outputIntervalCount();
         while (state.tau < (global ? stageEnd : stageEnd - tolerance) &&
             iterations < baseOptions.run.maxIterations) {
             if (profile::interruptRequested()) {
@@ -327,7 +339,7 @@ void runFixedScenario() {
                 // solves the far field once and selects the next interval.
                 pmmmBoundary.time = state.tau;
                 pmmmBoundary.coarseInterval = coarseInterval;
-                pmmmBoundary.endTime = duration;
+                pmmmBoundary.endTime = stageEnd;
                 schedule.pmmmBoundary = &pmmmBoundary;
                 schedule.closingBaseTimestep = state.outerInterval;
                 schedule.longCloseTimestep = state.outerInterval;

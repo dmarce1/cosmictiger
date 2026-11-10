@@ -140,7 +140,8 @@ void checkUnitsOutputCommandLine(DBfile* file) {
         2.0e24 * 0.7 / constants::kMpcToCm, "resolved comoving box length in Mpc/h");
     requireUnitsOutput(readUnitsOutputInteger(file, "/cli/hydro/enabled") == 1,
         "boolean option stored as scalar integer");
-    requireUnitsOutput(readUnitsOutputInteger(file, "/cli/output/siloInterval") == 1,
+    requireUnitsOutput(readUnitsOutputInteger(file, "/cli/run/numberOfOutputs") ==
+            getOptions().run.numberOfOutputs,
         "integer option stored as scalar integer");
     requireUnitsOutput(readUnitsOutputText(file, "/cli/configuration") == "input with spaces.ini",
         "configuration path preserves spaces");
@@ -490,7 +491,7 @@ void unitsOutputTest() {
 #endif
 
     options.output.silo = true;
-    options.output.siloInterval = 1;
+
     options.output.directory = "units_output_fixture";
     options.output.xMin = options.output.yMin = options.output.zMin = 0.0;
     options.output.xMax = options.output.yMax = options.output.zMax = 1.0;

@@ -281,7 +281,7 @@ def main():
               "hydro.enabled": "true", "hydro.method": "sph",
               "chemistry.enabled": "false", "starFormation.enabled": "false",
               "run.verbose": "false", "run.scenario": "hydroWave", "run.endTime": 1.e-5,
-              "run.numberOfSteps": 1, "run.maxIterations": 1, "run.minRung": 0,
+              "run.numberOfOutputs": 2, "run.maxIterations": 1, "run.minRung": 0,
               "checkpoint.readIndex": -1, "checkpoint.intervalSeconds": 0,
               "output.silo": "false", "analysis.groups": "false", "analysis.power": "false",
               "analysis.views": "false", "analysis.slice": "false", "analysis.tracers": "false",

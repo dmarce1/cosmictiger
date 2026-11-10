@@ -29,7 +29,7 @@ def main():
         directory.mkdir()
         options = dict(cpu_backend_options(), **{
             "run.scenario": scenario, "run.maxIterations": 1,
-            "run.endTime": 0.000001, "run.numberOfSteps": 64,
+            "run.endTime": 0.000001, "run.numberOfOutputs": 65,
             "run.darkMatterParticleCount": dark_matter,
             "run.gasParticleCount": gas, "initial.closePack": str(close_pack).lower(),
             "hydro.enabled": str(gas != 0).lower(), "hydro.neighborNumber": 42,

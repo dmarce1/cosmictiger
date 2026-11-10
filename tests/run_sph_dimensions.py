@@ -19,12 +19,12 @@ args = parser.parse_args()
 root = args.workdir.resolve()
 root.mkdir(parents=True, exist_ok=True)
 common = [str(args.executable.resolve()), "--hpx:threads=2", "--hpx:bind=none",
-          f"--run.timeIntegrator={args.integrator}", "--run.darkMatterParticleCount=0",
+          "--run.darkMatterParticleCount=0",
           f"--run.gasParticleCount={128 if args.dimension == 1 else 1024}",
           "--gravity.enabled=false", "--chemistry.enabled=false", "--starFormation.enabled=false",
           "--hydro.enabled=true", f"--hydro.cuda={'true' if args.cuda else 'false'}",
           f"--drift.cuda={'true' if args.cuda else 'false'}", "--output.silo=false", "--output.directory=.",
-          "--run.endTime=0.001", "--run.numberOfSteps=2", "--checkpoint.intervalSeconds=0"]
+          "--run.endTime=0.001", "--run.numberOfOutputs=3", "--checkpoint.intervalSeconds=0"]
 environment = dict(os.environ, OMP_NUM_THREADS="1", OPENBLAS_NUM_THREADS="1")
 
 def run(name, scenario="hydroWave", options=(), succeeds=True, directory=None):

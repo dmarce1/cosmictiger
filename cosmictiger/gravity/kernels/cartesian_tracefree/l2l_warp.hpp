@@ -61,9 +61,9 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 3> const& L, Rea
     using namespace math;
     Fma const fma{};
     using Scalar = SimdScalar<Real>;
-    constexpr auto k0 = static_cast<Scalar>(+0.00000000000000000E+00);
-    constexpr auto k1 = static_cast<Scalar>(+1.00000000000000000E+00);
-    constexpr auto k2 = static_cast<Scalar>(+5.00000000000000000E-01);
+    constexpr auto k0 = static_cast<Scalar>(0.000000000000000000E+00);
+    constexpr auto k1 = static_cast<Scalar>(5.000000000000000000E-01);
+    constexpr auto k2 = static_cast<Scalar>(1.000000000000000000E+00);
     int const lane = threadIdx.x & 31;
     constexpr unsigned int kMask = 0xffffffffu;
     // 1 register(s) per lane hold the complete distributed Taylor basis:
@@ -71,7 +71,7 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 3> const& L, Rea
     // large register-selection tree for dynamic indexing.
     Real basis0 = broadcast<Real>(k0);
     if (lane == 0) {
-        basis0 = broadcast<Real>(k1);
+        basis0 = broadcast<Real>(k2);
     }
     if (lane == 1) {
         basis0 = dy;
@@ -86,11 +86,11 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 3> const& L, Rea
         Real const t5 = dx * dx;
         Real const t6 = dy * dy;
         Real const t7 = dz * dz;
-        Real const t10 = t6 * broadcast<Real>(k2);
-        Real const t12 = t7 * broadcast<Real>(k2);
+        Real const t10 = t6 * broadcast<Real>(k1);
+        Real const t12 = t7 * broadcast<Real>(k1);
         Real const t14 = t10 - t12;
         Real const t15 = dx * dy;
-        Real const t16 = t5 * broadcast<Real>(k2);
+        Real const t16 = t5 * broadcast<Real>(k1);
         Real const t17 = t16 - t12;
         Real const t18 = dy * dz;
         Real const t19 = dx * dz;
@@ -131,7 +131,7 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 3> const& L, Rea
             Real const basisValue = basisValue0;
             Real const weight =
                 (kind == 0 ? broadcast<Real>(k0) :
-                             (kind == 2 ? -broadcast<Real>(k1) : broadcast<Real>(k1))) *
+                             (kind == 2 ? -broadcast<Real>(k2) : broadcast<Real>(k2))) *
                 basisValue;
             partial = fma(weight, sourceValue, partial);
         }
@@ -239,10 +239,10 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 4> const& L, Rea
     using namespace math;
     Fma const fma{};
     using Scalar = SimdScalar<Real>;
-    constexpr auto k0 = static_cast<Scalar>(+0.00000000000000000E+00);
-    constexpr auto k1 = static_cast<Scalar>(+5.00000000000000000E-01);
-    constexpr auto k2 = static_cast<Scalar>(+1.00000000000000000E+00);
-    constexpr auto k3 = static_cast<Scalar>(+1.66666666666666667E-01);
+    constexpr auto k0 = static_cast<Scalar>(0.000000000000000000E+00);
+    constexpr auto k1 = static_cast<Scalar>(1.666666666666666667E-01);
+    constexpr auto k2 = static_cast<Scalar>(5.000000000000000000E-01);
+    constexpr auto k3 = static_cast<Scalar>(1.000000000000000000E+00);
     int const lane = threadIdx.x & 31;
     constexpr unsigned int kMask = 0xffffffffu;
     // 1 register(s) per lane hold the complete distributed Taylor basis:
@@ -252,16 +252,16 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 4> const& L, Rea
     Real const t5 = dx * dx;
     Real const t6 = dy * dy;
     Real const t7 = dz * dz;
-    Real const t10 = t6 * broadcast<Real>(k1);
-    Real const t12 = t7 * broadcast<Real>(k1);
+    Real const t10 = t6 * broadcast<Real>(k2);
+    Real const t12 = t7 * broadcast<Real>(k2);
     Real const t14 = t10 - t12;
     Real const t15 = dx * dy;
-    Real const t16 = t5 * broadcast<Real>(k1);
+    Real const t16 = t5 * broadcast<Real>(k2);
     Real const t17 = t16 - t12;
     Real const t18 = dy * dz;
     Real const t19 = dx * dz;
     if (lane == 0) {
-        basis0 = broadcast<Real>(k2);
+        basis0 = broadcast<Real>(k3);
     }
     if (lane == 1) {
         basis0 = dy;
@@ -288,15 +288,15 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 4> const& L, Rea
         basis0 = t19;
     }
     if (doPhi) {
-        Real const t21 = t6 * broadcast<Real>(k3);
+        Real const t21 = t6 * broadcast<Real>(k1);
         Real const t22 = t21 - t12;
         Real const t23 = dy * t22;
         Real const t24 = dx * t14;
         Real const t25 = dy * t17;
-        Real const t26 = t5 * broadcast<Real>(k3);
+        Real const t26 = t5 * broadcast<Real>(k1);
         Real const t27 = t26 - t12;
         Real const t28 = dx * t27;
-        Real const t31 = t7 * broadcast<Real>(k3);
+        Real const t31 = t7 * broadcast<Real>(k1);
         Real const t32 = t10 - t31;
         Real const t33 = dz * t32;
         Real const t34 = dz * t15;
@@ -345,7 +345,7 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 4> const& L, Rea
             Real const basisValue = basisValue0;
             Real const weight =
                 (kind == 0 ? broadcast<Real>(k0) :
-                             (kind == 2 ? -broadcast<Real>(k2) : broadcast<Real>(k2))) *
+                             (kind == 2 ? -broadcast<Real>(k3) : broadcast<Real>(k3))) *
                 basisValue;
             partial = fma(weight, sourceValue, partial);
         }
@@ -466,13 +466,13 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 5> const& L, Rea
     using namespace math;
     Fma const fma{};
     using Scalar = SimdScalar<Real>;
-    constexpr auto k0 = static_cast<Scalar>(+0.00000000000000000E+00);
-    constexpr auto k1 = static_cast<Scalar>(+5.00000000000000000E-01);
-    constexpr auto k2 = static_cast<Scalar>(+1.66666666666666667E-01);
-    constexpr auto k3 = static_cast<Scalar>(+1.00000000000000000E+00);
-    constexpr auto k4 = static_cast<Scalar>(+4.16666666666666667E-02);
-    constexpr auto k5 = static_cast<Scalar>(+2.50000000000000000E-01);
-    constexpr auto k6 = static_cast<Scalar>(+8.33333333333333333E-02);
+    constexpr auto k0 = static_cast<Scalar>(0.000000000000000000E+00);
+    constexpr auto k1 = static_cast<Scalar>(4.166666666666666667E-02);
+    constexpr auto k2 = static_cast<Scalar>(8.333333333333333333E-02);
+    constexpr auto k3 = static_cast<Scalar>(1.666666666666666667E-01);
+    constexpr auto k4 = static_cast<Scalar>(2.500000000000000000E-01);
+    constexpr auto k5 = static_cast<Scalar>(5.000000000000000000E-01);
+    constexpr auto k6 = static_cast<Scalar>(1.000000000000000000E+00);
     int const lane = threadIdx.x & 31;
     constexpr unsigned int kMask = 0xffffffffu;
     // 1 register(s) per lane hold the complete distributed Taylor basis:
@@ -482,30 +482,30 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 5> const& L, Rea
     Real const t5 = dx * dx;
     Real const t6 = dy * dy;
     Real const t7 = dz * dz;
-    Real const t10 = t6 * broadcast<Real>(k1);
-    Real const t12 = t7 * broadcast<Real>(k1);
+    Real const t10 = t6 * broadcast<Real>(k5);
+    Real const t12 = t7 * broadcast<Real>(k5);
     Real const t14 = t10 - t12;
     Real const t15 = dx * dy;
-    Real const t16 = t5 * broadcast<Real>(k1);
+    Real const t16 = t5 * broadcast<Real>(k5);
     Real const t17 = t16 - t12;
     Real const t18 = dy * dz;
     Real const t19 = dx * dz;
-    Real const t21 = t6 * broadcast<Real>(k2);
+    Real const t21 = t6 * broadcast<Real>(k3);
     Real const t22 = t21 - t12;
     Real const t23 = dy * t22;
     Real const t24 = dx * t14;
     Real const t25 = dy * t17;
-    Real const t26 = t5 * broadcast<Real>(k2);
+    Real const t26 = t5 * broadcast<Real>(k3);
     Real const t27 = t26 - t12;
     Real const t28 = dx * t27;
-    Real const t31 = t7 * broadcast<Real>(k2);
+    Real const t31 = t7 * broadcast<Real>(k3);
     Real const t32 = t10 - t31;
     Real const t33 = dz * t32;
     Real const t34 = dz * t15;
     Real const t37 = t16 - t31;
     Real const t38 = dz * t37;
     if (lane == 0) {
-        basis0 = broadcast<Real>(k3);
+        basis0 = broadcast<Real>(k6);
     }
     if (lane == 1) {
         basis0 = dy;
@@ -553,23 +553,23 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 5> const& L, Rea
         basis0 = t38;
     }
     if (doPhi) {
-        Real const t41 = t6 * broadcast<Real>(k4);
-        Real const t44 = t7 * broadcast<Real>(k5);
+        Real const t41 = t6 * broadcast<Real>(k1);
+        Real const t44 = t7 * broadcast<Real>(k4);
         Real const t45 = t41 - t44;
         Real const t46 = t6 * t45;
-        Real const t47 = t7 * broadcast<Real>(k4);
+        Real const t47 = t7 * broadcast<Real>(k1);
         Real const t48 = t7 * t47;
         Real const t49 = t46 + t48;
-        Real const t51 = t6 * broadcast<Real>(k5);
+        Real const t51 = t6 * broadcast<Real>(k4);
         Real const t56 = t15 * t22;
         Real const t59 = t51 - t44;
         Real const t60 = t5 * t59;
-        Real const t63 = t7 * broadcast<Real>(k6);
+        Real const t63 = t7 * broadcast<Real>(k2);
         Real const t67 = t63 - t51;
         Real const t68 = t7 * t67;
         Real const t69 = t60 + t68;
         Real const t87 = t15 * t27;
-        Real const t89 = t5 * broadcast<Real>(k4);
+        Real const t89 = t5 * broadcast<Real>(k1);
         Real const t90 = t89 - t44;
         Real const t91 = t5 * t90;
         Real const t92 = t48 + t91;
@@ -628,7 +628,7 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 5> const& L, Rea
             Real const basisValue = basisValue0;
             Real const weight =
                 (kind == 0 ? broadcast<Real>(k0) :
-                             (kind == 2 ? -broadcast<Real>(k3) : broadcast<Real>(k3))) *
+                             (kind == 2 ? -broadcast<Real>(k6) : broadcast<Real>(k6))) *
                 basisValue;
             partial = fma(weight, sourceValue, partial);
         }
@@ -781,15 +781,15 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 6> const& L, Rea
     using namespace math;
     Fma const fma{};
     using Scalar = SimdScalar<Real>;
-    constexpr auto k0 = static_cast<Scalar>(+0.00000000000000000E+00);
-    constexpr auto k1 = static_cast<Scalar>(+5.00000000000000000E-01);
-    constexpr auto k2 = static_cast<Scalar>(+1.66666666666666667E-01);
-    constexpr auto k3 = static_cast<Scalar>(+4.16666666666666667E-02);
-    constexpr auto k4 = static_cast<Scalar>(+2.50000000000000000E-01);
-    constexpr auto k5 = static_cast<Scalar>(+8.33333333333333333E-02);
-    constexpr auto k6 = static_cast<Scalar>(+1.00000000000000000E+00);
-    constexpr auto k7 = static_cast<Scalar>(+8.33333333333333333E-03);
-    constexpr auto k8 = static_cast<Scalar>(+1.66666666666666667E-02);
+    constexpr auto k0 = static_cast<Scalar>(0.000000000000000000E+00);
+    constexpr auto k1 = static_cast<Scalar>(8.333333333333333333E-03);
+    constexpr auto k2 = static_cast<Scalar>(1.666666666666666667E-02);
+    constexpr auto k3 = static_cast<Scalar>(4.166666666666666667E-02);
+    constexpr auto k4 = static_cast<Scalar>(8.333333333333333333E-02);
+    constexpr auto k5 = static_cast<Scalar>(1.666666666666666667E-01);
+    constexpr auto k6 = static_cast<Scalar>(2.500000000000000000E-01);
+    constexpr auto k7 = static_cast<Scalar>(5.000000000000000000E-01);
+    constexpr auto k8 = static_cast<Scalar>(1.000000000000000000E+00);
     int const lane = threadIdx.x & 31;
     constexpr unsigned int kMask = 0xffffffffu;
     // 2 register(s) per lane hold the complete distributed Taylor basis:
@@ -800,40 +800,40 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 6> const& L, Rea
     Real const t5 = dx * dx;
     Real const t6 = dy * dy;
     Real const t7 = dz * dz;
-    Real const t10 = t6 * broadcast<Real>(k1);
-    Real const t12 = t7 * broadcast<Real>(k1);
+    Real const t10 = t6 * broadcast<Real>(k7);
+    Real const t12 = t7 * broadcast<Real>(k7);
     Real const t14 = t10 - t12;
     Real const t15 = dx * dy;
-    Real const t16 = t5 * broadcast<Real>(k1);
+    Real const t16 = t5 * broadcast<Real>(k7);
     Real const t17 = t16 - t12;
     Real const t18 = dy * dz;
     Real const t19 = dx * dz;
-    Real const t21 = t6 * broadcast<Real>(k2);
+    Real const t21 = t6 * broadcast<Real>(k5);
     Real const t22 = t21 - t12;
     Real const t23 = dy * t22;
     Real const t24 = dx * t14;
     Real const t25 = dy * t17;
-    Real const t26 = t5 * broadcast<Real>(k2);
+    Real const t26 = t5 * broadcast<Real>(k5);
     Real const t27 = t26 - t12;
     Real const t28 = dx * t27;
-    Real const t31 = t7 * broadcast<Real>(k2);
+    Real const t31 = t7 * broadcast<Real>(k5);
     Real const t32 = t10 - t31;
     Real const t33 = dz * t32;
     Real const t34 = dz * t15;
     Real const t37 = t16 - t31;
     Real const t38 = dz * t37;
     Real const t41 = t6 * broadcast<Real>(k3);
-    Real const t44 = t7 * broadcast<Real>(k4);
+    Real const t44 = t7 * broadcast<Real>(k6);
     Real const t45 = t41 - t44;
     Real const t46 = t6 * t45;
     Real const t47 = t7 * broadcast<Real>(k3);
     Real const t48 = t7 * t47;
     Real const t49 = t46 + t48;
-    Real const t51 = t6 * broadcast<Real>(k4);
+    Real const t51 = t6 * broadcast<Real>(k6);
     Real const t56 = t15 * t22;
     Real const t59 = t51 - t44;
     Real const t60 = t5 * t59;
-    Real const t63 = t7 * broadcast<Real>(k5);
+    Real const t63 = t7 * broadcast<Real>(k4);
     Real const t67 = t63 - t51;
     Real const t68 = t7 * t67;
     Real const t69 = t60 + t68;
@@ -849,7 +849,7 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 6> const& L, Rea
     Real const t103 = t26 - t31;
     Real const t104 = t19 * t103;
     if (lane == 0) {
-        basis0 = broadcast<Real>(k6);
+        basis0 = broadcast<Real>(k8);
     }
     if (lane == 1) {
         basis0 = dy;
@@ -924,11 +924,11 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 6> const& L, Rea
         basis0 = t104;
     }
     if (doPhi) {
-        Real const t107 = t6 * broadcast<Real>(k7);
+        Real const t107 = t6 * broadcast<Real>(k1);
         Real const t109 = t107 - t63;
         Real const t110 = t6 * t109;
         Real const t111 = t48 + t110;
-        Real const t113 = t6 * broadcast<Real>(k5);
+        Real const t113 = t6 * broadcast<Real>(k4);
         Real const t118 = dy * t111;
         Real const t119 = dx * t49;
         Real const t120 = t113 - t44;
@@ -942,21 +942,21 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 6> const& L, Rea
         Real const t146 = t68 + t144;
         Real const t161 = dx * t146;
         Real const t162 = dy * t92;
-        Real const t163 = t5 * broadcast<Real>(k7);
+        Real const t163 = t5 * broadcast<Real>(k1);
         Real const t164 = t163 - t63;
         Real const t165 = t5 * t164;
         Real const t166 = t48 + t165;
         Real const t171 = dx * t166;
         Real const t172 = t41 - t63;
         Real const t173 = t6 * t172;
-        Real const t174 = t7 * broadcast<Real>(k7);
+        Real const t174 = t7 * broadcast<Real>(k1);
         Real const t175 = t7 * t174;
         Real const t176 = t173 + t175;
         Real const t180 = dz * t176;
         Real const t181 = t34 * t97;
         Real const t183 = t51 - t63;
         Real const t184 = t5 * t183;
-        Real const t185 = t7 * broadcast<Real>(k8);
+        Real const t185 = t7 * broadcast<Real>(k2);
         Real const t189 = t185 - t113;
         Real const t190 = t7 * t189;
         Real const t191 = t184 + t190;
@@ -1022,7 +1022,7 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 6> const& L, Rea
             Real const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
             Real const weight =
                 (kind == 0 ? broadcast<Real>(k0) :
-                             (kind == 2 ? -broadcast<Real>(k6) : broadcast<Real>(k6))) *
+                             (kind == 2 ? -broadcast<Real>(k8) : broadcast<Real>(k8))) *
                 basisValue;
             partial = fma(weight, sourceValue, partial);
         }
@@ -1072,7 +1072,7 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 6> const& L, Rea
             Real const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
             Real const weight =
                 (kind == 0 ? broadcast<Real>(k0) :
-                             (kind == 2 ? -broadcast<Real>(k6) : broadcast<Real>(k6))) *
+                             (kind == 2 ? -broadcast<Real>(k8) : broadcast<Real>(k8))) *
                 basisValue;
             partial = fma(weight, sourceValue, partial);
         }
@@ -1255,69 +1255,69 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 7> const& L, Rea
     using namespace math;
     Fma const fma{};
     using Scalar = SimdScalar<Real>;
-    constexpr auto k0 = static_cast<Scalar>(+0.00000000000000000E+00);
-    constexpr auto k1 = static_cast<Scalar>(+5.00000000000000000E-01);
-    constexpr auto k2 = static_cast<Scalar>(+1.66666666666666667E-01);
-    constexpr auto k3 = static_cast<Scalar>(+4.16666666666666667E-02);
-    constexpr auto k4 = static_cast<Scalar>(+2.50000000000000000E-01);
-    constexpr auto k5 = static_cast<Scalar>(+8.33333333333333333E-02);
-    constexpr auto k6 = static_cast<Scalar>(+8.33333333333333333E-03);
-    constexpr auto k7 = static_cast<Scalar>(+1.66666666666666667E-02);
-    constexpr auto k8 = static_cast<Scalar>(+1.00000000000000000E+00);
-    constexpr auto k9 = static_cast<Scalar>(+1.38888888888888889E-03);
-    constexpr auto k10 = static_cast<Scalar>(+2.08333333333333333E-02);
-    constexpr auto k11 = static_cast<Scalar>(+4.16666666666666667E-03);
-    constexpr auto k12 = static_cast<Scalar>(+1.25000000000000000E-01);
-    constexpr auto k13 = static_cast<Scalar>(+2.77777777777777778E-02);
+    constexpr auto k00 = static_cast<Scalar>(0.000000000000000000E+00);
+    constexpr auto k01 = static_cast<Scalar>(1.388888888888888889E-03);
+    constexpr auto k02 = static_cast<Scalar>(4.166666666666666667E-03);
+    constexpr auto k03 = static_cast<Scalar>(8.333333333333333333E-03);
+    constexpr auto k04 = static_cast<Scalar>(1.666666666666666667E-02);
+    constexpr auto k05 = static_cast<Scalar>(2.083333333333333333E-02);
+    constexpr auto k06 = static_cast<Scalar>(2.777777777777777778E-02);
+    constexpr auto k07 = static_cast<Scalar>(4.166666666666666667E-02);
+    constexpr auto k08 = static_cast<Scalar>(8.333333333333333333E-02);
+    constexpr auto k09 = static_cast<Scalar>(1.250000000000000000E-01);
+    constexpr auto k10 = static_cast<Scalar>(1.666666666666666667E-01);
+    constexpr auto k11 = static_cast<Scalar>(2.500000000000000000E-01);
+    constexpr auto k12 = static_cast<Scalar>(5.000000000000000000E-01);
+    constexpr auto k13 = static_cast<Scalar>(1.000000000000000000E+00);
     int const lane = threadIdx.x & 31;
     constexpr unsigned int kMask = 0xffffffffu;
     // 2 register(s) per lane hold the complete distributed Taylor basis:
     // basis index i lives in word i >> 5 on lane i & 31. Shuffles avoid a
     // large register-selection tree for dynamic indexing.
-    Real basis0 = broadcast<Real>(k0);
-    Real basis1 = broadcast<Real>(k0);
+    Real basis0 = broadcast<Real>(k00);
+    Real basis1 = broadcast<Real>(k00);
     Real const t5 = dx * dx;
     Real const t6 = dy * dy;
     Real const t7 = dz * dz;
-    Real const t10 = t6 * broadcast<Real>(k1);
-    Real const t12 = t7 * broadcast<Real>(k1);
+    Real const t10 = t6 * broadcast<Real>(k12);
+    Real const t12 = t7 * broadcast<Real>(k12);
     Real const t14 = t10 - t12;
     Real const t15 = dx * dy;
-    Real const t16 = t5 * broadcast<Real>(k1);
+    Real const t16 = t5 * broadcast<Real>(k12);
     Real const t17 = t16 - t12;
     Real const t18 = dy * dz;
     Real const t19 = dx * dz;
-    Real const t21 = t6 * broadcast<Real>(k2);
+    Real const t21 = t6 * broadcast<Real>(k10);
     Real const t22 = t21 - t12;
     Real const t23 = dy * t22;
     Real const t24 = dx * t14;
     Real const t25 = dy * t17;
-    Real const t26 = t5 * broadcast<Real>(k2);
+    Real const t26 = t5 * broadcast<Real>(k10);
     Real const t27 = t26 - t12;
     Real const t28 = dx * t27;
-    Real const t31 = t7 * broadcast<Real>(k2);
+    Real const t31 = t7 * broadcast<Real>(k10);
     Real const t32 = t10 - t31;
     Real const t33 = dz * t32;
     Real const t34 = dz * t15;
     Real const t37 = t16 - t31;
     Real const t38 = dz * t37;
-    Real const t41 = t6 * broadcast<Real>(k3);
-    Real const t44 = t7 * broadcast<Real>(k4);
+    Real const t41 = t6 * broadcast<Real>(k07);
+    Real const t44 = t7 * broadcast<Real>(k11);
     Real const t45 = t41 - t44;
     Real const t46 = t6 * t45;
-    Real const t47 = t7 * broadcast<Real>(k3);
+    Real const t47 = t7 * broadcast<Real>(k07);
     Real const t48 = t7 * t47;
     Real const t49 = t46 + t48;
-    Real const t51 = t6 * broadcast<Real>(k4);
+    Real const t51 = t6 * broadcast<Real>(k11);
     Real const t56 = t15 * t22;
     Real const t59 = t51 - t44;
     Real const t60 = t5 * t59;
-    Real const t63 = t7 * broadcast<Real>(k5);
+    Real const t63 = t7 * broadcast<Real>(k08);
     Real const t67 = t63 - t51;
     Real const t68 = t7 * t67;
     Real const t69 = t60 + t68;
     Real const t87 = t15 * t27;
-    Real const t89 = t5 * broadcast<Real>(k3);
+    Real const t89 = t5 * broadcast<Real>(k07);
     Real const t90 = t89 - t44;
     Real const t91 = t5 * t90;
     Real const t92 = t48 + t91;
@@ -1327,11 +1327,11 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 7> const& L, Rea
     Real const t101 = t18 * t37;
     Real const t103 = t26 - t31;
     Real const t104 = t19 * t103;
-    Real const t107 = t6 * broadcast<Real>(k6);
+    Real const t107 = t6 * broadcast<Real>(k03);
     Real const t109 = t107 - t63;
     Real const t110 = t6 * t109;
     Real const t111 = t48 + t110;
-    Real const t113 = t6 * broadcast<Real>(k5);
+    Real const t113 = t6 * broadcast<Real>(k08);
     Real const t118 = dy * t111;
     Real const t119 = dx * t49;
     Real const t120 = t113 - t44;
@@ -1345,21 +1345,21 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 7> const& L, Rea
     Real const t146 = t68 + t144;
     Real const t161 = dx * t146;
     Real const t162 = dy * t92;
-    Real const t163 = t5 * broadcast<Real>(k6);
+    Real const t163 = t5 * broadcast<Real>(k03);
     Real const t164 = t163 - t63;
     Real const t165 = t5 * t164;
     Real const t166 = t48 + t165;
     Real const t171 = dx * t166;
     Real const t172 = t41 - t63;
     Real const t173 = t6 * t172;
-    Real const t174 = t7 * broadcast<Real>(k6);
+    Real const t174 = t7 * broadcast<Real>(k03);
     Real const t175 = t7 * t174;
     Real const t176 = t173 + t175;
     Real const t180 = dz * t176;
     Real const t181 = t34 * t97;
     Real const t183 = t51 - t63;
     Real const t184 = t5 * t183;
-    Real const t185 = t7 * broadcast<Real>(k7);
+    Real const t185 = t7 * broadcast<Real>(k04);
     Real const t189 = t185 - t113;
     Real const t190 = t7 * t189;
     Real const t191 = t184 + t190;
@@ -1370,7 +1370,7 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 7> const& L, Rea
     Real const t209 = t175 + t208;
     Real const t213 = dz * t209;
     if (lane == 0) {
-        basis0 = broadcast<Real>(k8);
+        basis0 = broadcast<Real>(k13);
     }
     if (lane == 1) {
         basis0 = dy;
@@ -1478,25 +1478,25 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 7> const& L, Rea
         basis1 = t213;
     }
     if (doPhi) {
-        Real const t218 = t6 * broadcast<Real>(k9);
-        Real const t220 = t7 * broadcast<Real>(k10);
+        Real const t218 = t6 * broadcast<Real>(k01);
+        Real const t220 = t7 * broadcast<Real>(k05);
         Real const t221 = t218 - t220;
         Real const t222 = t6 * t221;
         Real const t223 = t7 * t220;
         Real const t224 = t222 + t223;
         Real const t225 = t6 * t224;
-        Real const t226 = t7 * -broadcast<Real>(k9);
+        Real const t226 = t7 * -broadcast<Real>(k01);
         Real const t228 = t7 * t226;
         Real const t229 = t7 * t228;
         Real const t230 = t225 + t229;
-        Real const t231 = t6 * broadcast<Real>(k10);
+        Real const t231 = t6 * broadcast<Real>(k05);
         Real const t241 = t15 * t111;
-        Real const t258 = t7 * broadcast<Real>(k11);
-        Real const t264 = t6 * broadcast<Real>(k12);
-        Real const t275 = t5 * broadcast<Real>(k10);
+        Real const t258 = t7 * broadcast<Real>(k02);
+        Real const t264 = t6 * broadcast<Real>(k09);
+        Real const t275 = t5 * broadcast<Real>(k05);
         Real const t276 = t275 - t220;
         Real const t277 = t6 * t276;
-        Real const t286 = t5 * broadcast<Real>(k12);
+        Real const t286 = t5 * broadcast<Real>(k09);
         Real const t287 = t47 - t286;
         Real const t288 = t7 * t287;
         Real const t289 = t277 + t288;
@@ -1505,7 +1505,7 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 7> const& L, Rea
         Real const t292 = t7 * t291;
         Real const t293 = t7 * t292;
         Real const t294 = t290 + t293;
-        Real const t315 = t6 * broadcast<Real>(k13);
+        Real const t315 = t6 * broadcast<Real>(k06);
         Real const t316 = t315 - t63;
         Real const t317 = t5 * t316;
         Real const t319 = t127 + t317;
@@ -1521,13 +1521,13 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 7> const& L, Rea
         Real const t347 = t7 * t346;
         Real const t348 = t344 + t347;
         Real const t386 = t15 * t166;
-        Real const t388 = t5 * broadcast<Real>(k9);
+        Real const t388 = t5 * broadcast<Real>(k01);
         Real const t389 = t388 - t220;
         Real const t390 = t5 * t389;
         Real const t391 = t223 + t390;
         Real const t392 = t5 * t391;
         Real const t393 = t229 + t392;
-        Real const t403 = t7 * broadcast<Real>(k13);
+        Real const t403 = t7 * broadcast<Real>(k06);
         Real const t404 = t107 - t403;
         Real const t405 = t6 * t404;
         Real const t406 = t175 + t405;
@@ -1590,7 +1590,7 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 7> const& L, Rea
         // Fixed contraction phase 0: 6 rows, 4 outputs.
         int const groupWidth = 8;
         int const targetIndex = __ldg(&l2lWarpTargets6[0][lane]);
-        Real partial = broadcast<Real>(k0);
+        Real partial = broadcast<Real>(k00);
 #pragma unroll
         for (int row = 0; row < 6; ++row) {
             unsigned int entry = __ldg(&l2lWarpSchedule6[row][lane]);
@@ -1607,17 +1607,17 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 7> const& L, Rea
             Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
             Real const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
             Real const weight =
-                (kind == 0 ? broadcast<Real>(k0) :
-                             (kind == 2 ? -broadcast<Real>(k8) : broadcast<Real>(k8))) *
+                (kind == 0 ? broadcast<Real>(k00) :
+                             (kind == 2 ? -broadcast<Real>(k13) : broadcast<Real>(k13))) *
                 basisValue;
             partial = fma(weight, sourceValue, partial);
         }
         Real const shuffled4 = __shfl_down_sync(kMask, partial, 4);
-        partial += (lane & (groupWidth - 1)) + 4 < groupWidth ? shuffled4 : broadcast<Real>(k0);
+        partial += (lane & (groupWidth - 1)) + 4 < groupWidth ? shuffled4 : broadcast<Real>(k00);
         Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
-        partial += (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : broadcast<Real>(k0);
+        partial += (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : broadcast<Real>(k00);
         Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
-        partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : broadcast<Real>(k0);
+        partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : broadcast<Real>(k00);
         bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
         if (leader) {
             partial += L[targetIndex];
@@ -1637,7 +1637,7 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 7> const& L, Rea
         // Fixed contraction phase 1: 8 rows, 11 outputs.
         int const groupWidth = lane < 20 ? 4 : (2);
         int const targetIndex = __ldg(&l2lWarpTargets6[1][lane]);
-        Real partial = broadcast<Real>(k0);
+        Real partial = broadcast<Real>(k00);
 #pragma unroll
         for (int row = 6; row < 14; ++row) {
             unsigned int entry = __ldg(&l2lWarpSchedule6[row][lane]);
@@ -1651,15 +1651,15 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 7> const& L, Rea
             Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
             Real const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
             Real const weight =
-                (kind == 0 ? broadcast<Real>(k0) :
-                             (kind == 2 ? -broadcast<Real>(k8) : broadcast<Real>(k8))) *
+                (kind == 0 ? broadcast<Real>(k00) :
+                             (kind == 2 ? -broadcast<Real>(k13) : broadcast<Real>(k13))) *
                 basisValue;
             partial = fma(weight, sourceValue, partial);
         }
         Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
-        partial += (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : broadcast<Real>(k0);
+        partial += (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : broadcast<Real>(k00);
         Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
-        partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : broadcast<Real>(k0);
+        partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : broadcast<Real>(k00);
         bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
         if (leader) {
             partial += L[targetIndex];
@@ -1686,7 +1686,7 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 7> const& L, Rea
         // Fixed contraction phase 2: 8 rows, 21 outputs.
         int const groupWidth = lane < 20 ? 2 : (lane < 31 ? 1 : (1));
         int const targetIndex = __ldg(&l2lWarpTargets6[2][lane]);
-        Real partial = broadcast<Real>(k0);
+        Real partial = broadcast<Real>(k00);
 #pragma unroll
         for (int row = 14; row < 22; ++row) {
             unsigned int entry = __ldg(&l2lWarpSchedule6[row][lane]);
@@ -1700,13 +1700,13 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 7> const& L, Rea
             Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
             Real const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
             Real const weight =
-                (kind == 0 ? broadcast<Real>(k0) :
-                             (kind == 2 ? -broadcast<Real>(k8) : broadcast<Real>(k8))) *
+                (kind == 0 ? broadcast<Real>(k00) :
+                             (kind == 2 ? -broadcast<Real>(k13) : broadcast<Real>(k13))) *
                 basisValue;
             partial = fma(weight, sourceValue, partial);
         }
         Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
-        partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : broadcast<Real>(k0);
+        partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : broadcast<Real>(k00);
         bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 31;
         if (leader) {
             partial += L[targetIndex];
@@ -1939,73 +1939,73 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 8> const& L, Rea
     using namespace math;
     Fma const fma{};
     using Scalar = SimdScalar<Real>;
-    constexpr auto k0 = static_cast<Scalar>(+0.00000000000000000E+00);
-    constexpr auto k1 = static_cast<Scalar>(+5.00000000000000000E-01);
-    constexpr auto k2 = static_cast<Scalar>(+1.66666666666666667E-01);
-    constexpr auto k3 = static_cast<Scalar>(+4.16666666666666667E-02);
-    constexpr auto k4 = static_cast<Scalar>(+2.50000000000000000E-01);
-    constexpr auto k5 = static_cast<Scalar>(+8.33333333333333333E-02);
-    constexpr auto k6 = static_cast<Scalar>(+8.33333333333333333E-03);
-    constexpr auto k7 = static_cast<Scalar>(+1.66666666666666667E-02);
-    constexpr auto k8 = static_cast<Scalar>(+1.38888888888888889E-03);
-    constexpr auto k9 = static_cast<Scalar>(+2.08333333333333333E-02);
-    constexpr auto k10 = static_cast<Scalar>(+4.16666666666666667E-03);
-    constexpr auto k11 = static_cast<Scalar>(+1.25000000000000000E-01);
-    constexpr auto k12 = static_cast<Scalar>(+2.77777777777777778E-02);
-    constexpr auto k13 = static_cast<Scalar>(+1.00000000000000000E+00);
-    constexpr auto k14 = static_cast<Scalar>(+1.98412698412698413E-04);
-    constexpr auto k15 = static_cast<Scalar>(+6.94444444444444444E-03);
-    constexpr auto k16 = static_cast<Scalar>(+1.38888888888888889E-02);
-    constexpr auto k17 = static_cast<Scalar>(+5.95238095238095238E-04);
+    constexpr auto k00 = static_cast<Scalar>(0.000000000000000000E+00);
+    constexpr auto k01 = static_cast<Scalar>(1.984126984126984127E-04);
+    constexpr auto k02 = static_cast<Scalar>(5.952380952380952381E-04);
+    constexpr auto k03 = static_cast<Scalar>(1.388888888888888889E-03);
+    constexpr auto k04 = static_cast<Scalar>(4.166666666666666667E-03);
+    constexpr auto k05 = static_cast<Scalar>(6.944444444444444444E-03);
+    constexpr auto k06 = static_cast<Scalar>(8.333333333333333333E-03);
+    constexpr auto k07 = static_cast<Scalar>(1.388888888888888889E-02);
+    constexpr auto k08 = static_cast<Scalar>(1.666666666666666667E-02);
+    constexpr auto k09 = static_cast<Scalar>(2.083333333333333333E-02);
+    constexpr auto k10 = static_cast<Scalar>(2.777777777777777778E-02);
+    constexpr auto k11 = static_cast<Scalar>(4.166666666666666667E-02);
+    constexpr auto k12 = static_cast<Scalar>(8.333333333333333333E-02);
+    constexpr auto k13 = static_cast<Scalar>(1.250000000000000000E-01);
+    constexpr auto k14 = static_cast<Scalar>(1.666666666666666667E-01);
+    constexpr auto k15 = static_cast<Scalar>(2.500000000000000000E-01);
+    constexpr auto k16 = static_cast<Scalar>(5.000000000000000000E-01);
+    constexpr auto k17 = static_cast<Scalar>(1.000000000000000000E+00);
     int const lane = threadIdx.x & 31;
     constexpr unsigned int kMask = 0xffffffffu;
     // 2 register(s) per lane hold the complete distributed Taylor basis:
     // basis index i lives in word i >> 5 on lane i & 31. Shuffles avoid a
     // large register-selection tree for dynamic indexing.
-    Real basis0 = broadcast<Real>(k0);
-    Real basis1 = broadcast<Real>(k0);
+    Real basis0 = broadcast<Real>(k00);
+    Real basis1 = broadcast<Real>(k00);
     Real const t5 = dx * dx;
     Real const t6 = dy * dy;
     Real const t7 = dz * dz;
-    Real const t10 = t6 * broadcast<Real>(k1);
-    Real const t12 = t7 * broadcast<Real>(k1);
+    Real const t10 = t6 * broadcast<Real>(k16);
+    Real const t12 = t7 * broadcast<Real>(k16);
     Real const t14 = t10 - t12;
     Real const t15 = dx * dy;
-    Real const t16 = t5 * broadcast<Real>(k1);
+    Real const t16 = t5 * broadcast<Real>(k16);
     Real const t17 = t16 - t12;
     Real const t18 = dy * dz;
     Real const t19 = dx * dz;
-    Real const t21 = t6 * broadcast<Real>(k2);
+    Real const t21 = t6 * broadcast<Real>(k14);
     Real const t22 = t21 - t12;
     Real const t23 = dy * t22;
     Real const t24 = dx * t14;
     Real const t25 = dy * t17;
-    Real const t26 = t5 * broadcast<Real>(k2);
+    Real const t26 = t5 * broadcast<Real>(k14);
     Real const t27 = t26 - t12;
     Real const t28 = dx * t27;
-    Real const t31 = t7 * broadcast<Real>(k2);
+    Real const t31 = t7 * broadcast<Real>(k14);
     Real const t32 = t10 - t31;
     Real const t33 = dz * t32;
     Real const t34 = dz * t15;
     Real const t37 = t16 - t31;
     Real const t38 = dz * t37;
-    Real const t41 = t6 * broadcast<Real>(k3);
-    Real const t44 = t7 * broadcast<Real>(k4);
+    Real const t41 = t6 * broadcast<Real>(k11);
+    Real const t44 = t7 * broadcast<Real>(k15);
     Real const t45 = t41 - t44;
     Real const t46 = t6 * t45;
-    Real const t47 = t7 * broadcast<Real>(k3);
+    Real const t47 = t7 * broadcast<Real>(k11);
     Real const t48 = t7 * t47;
     Real const t49 = t46 + t48;
-    Real const t51 = t6 * broadcast<Real>(k4);
+    Real const t51 = t6 * broadcast<Real>(k15);
     Real const t56 = t15 * t22;
     Real const t59 = t51 - t44;
     Real const t60 = t5 * t59;
-    Real const t63 = t7 * broadcast<Real>(k5);
+    Real const t63 = t7 * broadcast<Real>(k12);
     Real const t67 = t63 - t51;
     Real const t68 = t7 * t67;
     Real const t69 = t60 + t68;
     Real const t87 = t15 * t27;
-    Real const t89 = t5 * broadcast<Real>(k3);
+    Real const t89 = t5 * broadcast<Real>(k11);
     Real const t90 = t89 - t44;
     Real const t91 = t5 * t90;
     Real const t92 = t48 + t91;
@@ -2015,11 +2015,11 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 8> const& L, Rea
     Real const t101 = t18 * t37;
     Real const t103 = t26 - t31;
     Real const t104 = t19 * t103;
-    Real const t107 = t6 * broadcast<Real>(k6);
+    Real const t107 = t6 * broadcast<Real>(k06);
     Real const t109 = t107 - t63;
     Real const t110 = t6 * t109;
     Real const t111 = t48 + t110;
-    Real const t113 = t6 * broadcast<Real>(k5);
+    Real const t113 = t6 * broadcast<Real>(k12);
     Real const t118 = dy * t111;
     Real const t119 = dx * t49;
     Real const t120 = t113 - t44;
@@ -2033,21 +2033,21 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 8> const& L, Rea
     Real const t146 = t68 + t144;
     Real const t161 = dx * t146;
     Real const t162 = dy * t92;
-    Real const t163 = t5 * broadcast<Real>(k6);
+    Real const t163 = t5 * broadcast<Real>(k06);
     Real const t164 = t163 - t63;
     Real const t165 = t5 * t164;
     Real const t166 = t48 + t165;
     Real const t171 = dx * t166;
     Real const t172 = t41 - t63;
     Real const t173 = t6 * t172;
-    Real const t174 = t7 * broadcast<Real>(k6);
+    Real const t174 = t7 * broadcast<Real>(k06);
     Real const t175 = t7 * t174;
     Real const t176 = t173 + t175;
     Real const t180 = dz * t176;
     Real const t181 = t34 * t97;
     Real const t183 = t51 - t63;
     Real const t184 = t5 * t183;
-    Real const t185 = t7 * broadcast<Real>(k7);
+    Real const t185 = t7 * broadcast<Real>(k08);
     Real const t189 = t185 - t113;
     Real const t190 = t7 * t189;
     Real const t191 = t184 + t190;
@@ -2057,25 +2057,25 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 8> const& L, Rea
     Real const t208 = t5 * t207;
     Real const t209 = t175 + t208;
     Real const t213 = dz * t209;
-    Real const t218 = t6 * broadcast<Real>(k8);
-    Real const t220 = t7 * broadcast<Real>(k9);
+    Real const t218 = t6 * broadcast<Real>(k03);
+    Real const t220 = t7 * broadcast<Real>(k09);
     Real const t221 = t218 - t220;
     Real const t222 = t6 * t221;
     Real const t223 = t7 * t220;
     Real const t224 = t222 + t223;
     Real const t225 = t6 * t224;
-    Real const t226 = t7 * -broadcast<Real>(k8);
+    Real const t226 = t7 * -broadcast<Real>(k03);
     Real const t228 = t7 * t226;
     Real const t229 = t7 * t228;
     Real const t230 = t225 + t229;
-    Real const t231 = t6 * broadcast<Real>(k9);
+    Real const t231 = t6 * broadcast<Real>(k09);
     Real const t241 = t15 * t111;
-    Real const t258 = t7 * broadcast<Real>(k10);
-    Real const t264 = t6 * broadcast<Real>(k11);
-    Real const t275 = t5 * broadcast<Real>(k9);
+    Real const t258 = t7 * broadcast<Real>(k04);
+    Real const t264 = t6 * broadcast<Real>(k13);
+    Real const t275 = t5 * broadcast<Real>(k09);
     Real const t276 = t275 - t220;
     Real const t277 = t6 * t276;
-    Real const t286 = t5 * broadcast<Real>(k11);
+    Real const t286 = t5 * broadcast<Real>(k13);
     Real const t287 = t47 - t286;
     Real const t288 = t7 * t287;
     Real const t289 = t277 + t288;
@@ -2084,7 +2084,7 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 8> const& L, Rea
     Real const t292 = t7 * t291;
     Real const t293 = t7 * t292;
     Real const t294 = t290 + t293;
-    Real const t315 = t6 * broadcast<Real>(k12);
+    Real const t315 = t6 * broadcast<Real>(k10);
     Real const t316 = t315 - t63;
     Real const t317 = t5 * t316;
     Real const t319 = t127 + t317;
@@ -2100,13 +2100,13 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 8> const& L, Rea
     Real const t347 = t7 * t346;
     Real const t348 = t344 + t347;
     Real const t386 = t15 * t166;
-    Real const t388 = t5 * broadcast<Real>(k8);
+    Real const t388 = t5 * broadcast<Real>(k03);
     Real const t389 = t388 - t220;
     Real const t390 = t5 * t389;
     Real const t391 = t223 + t390;
     Real const t392 = t5 * t391;
     Real const t393 = t229 + t392;
-    Real const t403 = t7 * broadcast<Real>(k12);
+    Real const t403 = t7 * broadcast<Real>(k10);
     Real const t404 = t107 - t403;
     Real const t405 = t6 * t404;
     Real const t406 = t175 + t405;
@@ -2126,7 +2126,7 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 8> const& L, Rea
     Real const t452 = t175 + t451;
     Real const t456 = t19 * t452;
     if (lane == 0) {
-        basis0 = broadcast<Real>(k13);
+        basis0 = broadcast<Real>(k17);
     }
     if (lane == 1) {
         basis0 = dy;
@@ -2273,20 +2273,20 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 8> const& L, Rea
         basis1 = t456;
     }
     if (doPhi) {
-        Real const t459 = t6 * broadcast<Real>(k14);
+        Real const t459 = t6 * broadcast<Real>(k01);
         Real const t460 = t459 - t258;
         Real const t461 = t6 * t460;
-        Real const t462 = t7 * broadcast<Real>(k15);
+        Real const t462 = t7 * broadcast<Real>(k05);
         Real const t463 = t7 * t462;
         Real const t464 = t461 + t463;
         Real const t465 = t6 * t464;
         Real const t466 = t229 + t465;
-        Real const t467 = t6 * broadcast<Real>(k15);
-        Real const t471 = t6 * broadcast<Real>(k10);
+        Real const t467 = t6 * broadcast<Real>(k05);
+        Real const t471 = t6 * broadcast<Real>(k04);
         Real const t478 = dy * t466;
         Real const t479 = dx * t230;
-        Real const t489 = t7 * broadcast<Real>(k16);
-        Real const t507 = t5 * broadcast<Real>(k10);
+        Real const t489 = t7 * broadcast<Real>(k07);
+        Real const t507 = t5 * broadcast<Real>(k04);
         Real const t508 = t507 - t258;
         Real const t509 = t6 * t508;
         Real const t516 = t489 - t89;
@@ -2295,7 +2295,7 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 8> const& L, Rea
         Real const t519 = t6 * t518;
         Real const t520 = t293 + t519;
         Real const t540 = dy * t520;
-        Real const t552 = t5 * broadcast<Real>(k15);
+        Real const t552 = t5 * broadcast<Real>(k05);
         Real const t553 = t552 - t220;
         Real const t554 = t6 * t553;
         Real const t562 = t47 - t89;
@@ -2327,7 +2327,7 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 8> const& L, Rea
         Real const t643 = t347 + t642;
         Real const t682 = dx * t643;
         Real const t683 = dy * t393;
-        Real const t684 = t5 * broadcast<Real>(k14);
+        Real const t684 = t5 * broadcast<Real>(k01);
         Real const t685 = t684 - t258;
         Real const t686 = t5 * t685;
         Real const t687 = t463 + t686;
@@ -2339,13 +2339,13 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 8> const& L, Rea
         Real const t703 = t7 * t258;
         Real const t704 = t702 + t703;
         Real const t705 = t6 * t704;
-        Real const t706 = t7 * -broadcast<Real>(k14);
+        Real const t706 = t7 * -broadcast<Real>(k01);
         Real const t708 = t7 * t706;
         Real const t709 = t7 * t708;
         Real const t710 = t705 + t709;
         Real const t718 = dz * t710;
         Real const t719 = t34 * t406;
-        Real const t731 = t7 * broadcast<Real>(k17);
+        Real const t731 = t7 * broadcast<Real>(k02);
         Real const t745 = t275 - t462;
         Real const t746 = t6 * t745;
         Real const t753 = t174 - t89;
@@ -2429,7 +2429,7 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 8> const& L, Rea
         // Fixed contraction phase 0: 8 rows, 4 outputs.
         int const groupWidth = 8;
         int const targetIndex = __ldg(&l2lWarpTargets7[0][lane]);
-        Real partial = broadcast<Real>(k0);
+        Real partial = broadcast<Real>(k00);
 #pragma unroll
         for (int row = 0; row < 8; ++row) {
             unsigned int entry = __ldg(&l2lWarpSchedule7[row][lane]);
@@ -2446,17 +2446,17 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 8> const& L, Rea
             Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
             Real const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
             Real const weight =
-                (kind == 0 ? broadcast<Real>(k0) :
-                             (kind == 2 ? -broadcast<Real>(k13) : broadcast<Real>(k13))) *
+                (kind == 0 ? broadcast<Real>(k00) :
+                             (kind == 2 ? -broadcast<Real>(k17) : broadcast<Real>(k17))) *
                 basisValue;
             partial = fma(weight, sourceValue, partial);
         }
         Real const shuffled4 = __shfl_down_sync(kMask, partial, 4);
-        partial += (lane & (groupWidth - 1)) + 4 < groupWidth ? shuffled4 : broadcast<Real>(k0);
+        partial += (lane & (groupWidth - 1)) + 4 < groupWidth ? shuffled4 : broadcast<Real>(k00);
         Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
-        partial += (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : broadcast<Real>(k0);
+        partial += (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : broadcast<Real>(k00);
         Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
-        partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : broadcast<Real>(k0);
+        partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : broadcast<Real>(k00);
         bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
         if (leader) {
             partial += L[targetIndex];
@@ -2476,7 +2476,7 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 8> const& L, Rea
         // Fixed contraction phase 1: 5 rows, 4 outputs.
         int const groupWidth = 8;
         int const targetIndex = __ldg(&l2lWarpTargets7[1][lane]);
-        Real partial = broadcast<Real>(k0);
+        Real partial = broadcast<Real>(k00);
 #pragma unroll
         for (int row = 8; row < 13; ++row) {
             unsigned int entry = __ldg(&l2lWarpSchedule7[row][lane]);
@@ -2490,17 +2490,17 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 8> const& L, Rea
             Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
             Real const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
             Real const weight =
-                (kind == 0 ? broadcast<Real>(k0) :
-                             (kind == 2 ? -broadcast<Real>(k13) : broadcast<Real>(k13))) *
+                (kind == 0 ? broadcast<Real>(k00) :
+                             (kind == 2 ? -broadcast<Real>(k17) : broadcast<Real>(k17))) *
                 basisValue;
             partial = fma(weight, sourceValue, partial);
         }
         Real const shuffled4 = __shfl_down_sync(kMask, partial, 4);
-        partial += (lane & (groupWidth - 1)) + 4 < groupWidth ? shuffled4 : broadcast<Real>(k0);
+        partial += (lane & (groupWidth - 1)) + 4 < groupWidth ? shuffled4 : broadcast<Real>(k00);
         Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
-        partial += (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : broadcast<Real>(k0);
+        partial += (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : broadcast<Real>(k00);
         Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
-        partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : broadcast<Real>(k0);
+        partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : broadcast<Real>(k00);
         bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
         if (leader) {
             partial += L[targetIndex];
@@ -2520,7 +2520,7 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 8> const& L, Rea
         // Fixed contraction phase 2: 6 rows, 7 outputs.
         int const groupWidth = lane < 8 ? 8 : (4);
         int const targetIndex = __ldg(&l2lWarpTargets7[2][lane]);
-        Real partial = broadcast<Real>(k0);
+        Real partial = broadcast<Real>(k00);
 #pragma unroll
         for (int row = 13; row < 19; ++row) {
             unsigned int entry = __ldg(&l2lWarpSchedule7[row][lane]);
@@ -2534,17 +2534,17 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 8> const& L, Rea
             Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
             Real const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
             Real const weight =
-                (kind == 0 ? broadcast<Real>(k0) :
-                             (kind == 2 ? -broadcast<Real>(k13) : broadcast<Real>(k13))) *
+                (kind == 0 ? broadcast<Real>(k00) :
+                             (kind == 2 ? -broadcast<Real>(k17) : broadcast<Real>(k17))) *
                 basisValue;
             partial = fma(weight, sourceValue, partial);
         }
         Real const shuffled4 = __shfl_down_sync(kMask, partial, 4);
-        partial += (lane & (groupWidth - 1)) + 4 < groupWidth ? shuffled4 : broadcast<Real>(k0);
+        partial += (lane & (groupWidth - 1)) + 4 < groupWidth ? shuffled4 : broadcast<Real>(k00);
         Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
-        partial += (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : broadcast<Real>(k0);
+        partial += (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : broadcast<Real>(k00);
         Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
-        partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : broadcast<Real>(k0);
+        partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : broadcast<Real>(k00);
         bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
         if (leader) {
             partial += L[targetIndex];
@@ -2567,7 +2567,7 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 8> const& L, Rea
         // Fixed contraction phase 3: 8 rows, 15 outputs.
         int const groupWidth = lane < 4 ? 4 : (2);
         int const targetIndex = __ldg(&l2lWarpTargets7[3][lane]);
-        Real partial = broadcast<Real>(k0);
+        Real partial = broadcast<Real>(k00);
 #pragma unroll
         for (int row = 19; row < 27; ++row) {
             unsigned int entry = __ldg(&l2lWarpSchedule7[row][lane]);
@@ -2581,15 +2581,15 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 8> const& L, Rea
             Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
             Real const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
             Real const weight =
-                (kind == 0 ? broadcast<Real>(k0) :
-                             (kind == 2 ? -broadcast<Real>(k13) : broadcast<Real>(k13))) *
+                (kind == 0 ? broadcast<Real>(k00) :
+                             (kind == 2 ? -broadcast<Real>(k17) : broadcast<Real>(k17))) *
                 basisValue;
             partial = fma(weight, sourceValue, partial);
         }
         Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
-        partial += (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : broadcast<Real>(k0);
+        partial += (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : broadcast<Real>(k00);
         Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
-        partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : broadcast<Real>(k0);
+        partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : broadcast<Real>(k00);
         bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
         if (leader) {
             partial += L[targetIndex];
@@ -2620,7 +2620,7 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 8> const& L, Rea
         // Fixed contraction phase 4: 4 rows, 19 outputs.
         int const groupWidth = lane < 12 ? 2 : (lane < 25 ? 1 : (1));
         int const targetIndex = __ldg(&l2lWarpTargets7[4][lane]);
-        Real partial = broadcast<Real>(k0);
+        Real partial = broadcast<Real>(k00);
 #pragma unroll
         for (int row = 27; row < 31; ++row) {
             unsigned int entry = __ldg(&l2lWarpSchedule7[row][lane]);
@@ -2634,13 +2634,13 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 8> const& L, Rea
             Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
             Real const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
             Real const weight =
-                (kind == 0 ? broadcast<Real>(k0) :
-                             (kind == 2 ? -broadcast<Real>(k13) : broadcast<Real>(k13))) *
+                (kind == 0 ? broadcast<Real>(k00) :
+                             (kind == 2 ? -broadcast<Real>(k17) : broadcast<Real>(k17))) *
                 basisValue;
             partial = fma(weight, sourceValue, partial);
         }
         Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
-        partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : broadcast<Real>(k0);
+        partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : broadcast<Real>(k00);
         bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 25;
         if (leader) {
             partial += L[targetIndex];
@@ -2949,83 +2949,83 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 9> const& L, Rea
     using namespace math;
     Fma const fma{};
     using Scalar = SimdScalar<Real>;
-    constexpr auto k0 = static_cast<Scalar>(+0.00000000000000000E+00);
-    constexpr auto k1 = static_cast<Scalar>(+5.00000000000000000E-01);
-    constexpr auto k2 = static_cast<Scalar>(+1.66666666666666667E-01);
-    constexpr auto k3 = static_cast<Scalar>(+4.16666666666666667E-02);
-    constexpr auto k4 = static_cast<Scalar>(+2.50000000000000000E-01);
-    constexpr auto k5 = static_cast<Scalar>(+8.33333333333333333E-02);
-    constexpr auto k6 = static_cast<Scalar>(+8.33333333333333333E-03);
-    constexpr auto k7 = static_cast<Scalar>(+1.66666666666666667E-02);
-    constexpr auto k8 = static_cast<Scalar>(+1.38888888888888889E-03);
-    constexpr auto k9 = static_cast<Scalar>(+2.08333333333333333E-02);
-    constexpr auto k10 = static_cast<Scalar>(+4.16666666666666667E-03);
-    constexpr auto k11 = static_cast<Scalar>(+1.25000000000000000E-01);
-    constexpr auto k12 = static_cast<Scalar>(+2.77777777777777778E-02);
-    constexpr auto k13 = static_cast<Scalar>(+1.98412698412698413E-04);
-    constexpr auto k14 = static_cast<Scalar>(+6.94444444444444444E-03);
-    constexpr auto k15 = static_cast<Scalar>(+1.38888888888888889E-02);
-    constexpr auto k16 = static_cast<Scalar>(+5.95238095238095238E-04);
-    constexpr auto k17 = static_cast<Scalar>(+1.00000000000000000E+00);
-    constexpr auto k18 = static_cast<Scalar>(+2.48015873015873016E-05);
-    constexpr auto k19 = static_cast<Scalar>(+6.94444444444444444E-04);
-    constexpr auto k20 = static_cast<Scalar>(+1.73611111111111111E-03);
-    constexpr auto k21 = static_cast<Scalar>(+3.47222222222222222E-03);
-    constexpr auto k22 = static_cast<Scalar>(+2.08333333333333333E-03);
-    constexpr auto k23 = static_cast<Scalar>(+9.92063492063492063E-05);
-    constexpr auto k24 = static_cast<Scalar>(+1.04166666666666667E-02);
-    constexpr auto k25 = static_cast<Scalar>(+1.48809523809523810E-04);
-    constexpr auto k26 = static_cast<Scalar>(+2.77777777777777778E-03);
+    constexpr auto k00 = static_cast<Scalar>(0.000000000000000000E+00);
+    constexpr auto k01 = static_cast<Scalar>(2.480158730158730159E-05);
+    constexpr auto k02 = static_cast<Scalar>(9.920634920634920635E-05);
+    constexpr auto k03 = static_cast<Scalar>(1.488095238095238095E-04);
+    constexpr auto k04 = static_cast<Scalar>(1.984126984126984127E-04);
+    constexpr auto k05 = static_cast<Scalar>(5.952380952380952381E-04);
+    constexpr auto k06 = static_cast<Scalar>(6.944444444444444444E-04);
+    constexpr auto k07 = static_cast<Scalar>(1.388888888888888889E-03);
+    constexpr auto k08 = static_cast<Scalar>(1.736111111111111111E-03);
+    constexpr auto k09 = static_cast<Scalar>(2.083333333333333333E-03);
+    constexpr auto k10 = static_cast<Scalar>(2.777777777777777778E-03);
+    constexpr auto k11 = static_cast<Scalar>(3.472222222222222222E-03);
+    constexpr auto k12 = static_cast<Scalar>(4.166666666666666667E-03);
+    constexpr auto k13 = static_cast<Scalar>(6.944444444444444444E-03);
+    constexpr auto k14 = static_cast<Scalar>(8.333333333333333333E-03);
+    constexpr auto k15 = static_cast<Scalar>(1.041666666666666667E-02);
+    constexpr auto k16 = static_cast<Scalar>(1.388888888888888889E-02);
+    constexpr auto k17 = static_cast<Scalar>(1.666666666666666667E-02);
+    constexpr auto k18 = static_cast<Scalar>(2.083333333333333333E-02);
+    constexpr auto k19 = static_cast<Scalar>(2.777777777777777778E-02);
+    constexpr auto k20 = static_cast<Scalar>(4.166666666666666667E-02);
+    constexpr auto k21 = static_cast<Scalar>(8.333333333333333333E-02);
+    constexpr auto k22 = static_cast<Scalar>(1.250000000000000000E-01);
+    constexpr auto k23 = static_cast<Scalar>(1.666666666666666667E-01);
+    constexpr auto k24 = static_cast<Scalar>(2.500000000000000000E-01);
+    constexpr auto k25 = static_cast<Scalar>(5.000000000000000000E-01);
+    constexpr auto k26 = static_cast<Scalar>(1.000000000000000000E+00);
     int const lane = threadIdx.x & 31;
     constexpr unsigned int kMask = 0xffffffffu;
     // 3 register(s) per lane hold the complete distributed Taylor basis:
     // basis index i lives in word i >> 5 on lane i & 31. Shuffles avoid a
     // large register-selection tree for dynamic indexing.
-    Real basis0 = broadcast<Real>(k0);
-    Real basis1 = broadcast<Real>(k0);
-    Real basis2 = broadcast<Real>(k0);
+    Real basis0 = broadcast<Real>(k00);
+    Real basis1 = broadcast<Real>(k00);
+    Real basis2 = broadcast<Real>(k00);
     Real const t5 = dx * dx;
     Real const t6 = dy * dy;
     Real const t7 = dz * dz;
-    Real const t10 = t6 * broadcast<Real>(k1);
-    Real const t12 = t7 * broadcast<Real>(k1);
+    Real const t10 = t6 * broadcast<Real>(k25);
+    Real const t12 = t7 * broadcast<Real>(k25);
     Real const t14 = t10 - t12;
     Real const t15 = dx * dy;
-    Real const t16 = t5 * broadcast<Real>(k1);
+    Real const t16 = t5 * broadcast<Real>(k25);
     Real const t17 = t16 - t12;
     Real const t18 = dy * dz;
     Real const t19 = dx * dz;
-    Real const t21 = t6 * broadcast<Real>(k2);
+    Real const t21 = t6 * broadcast<Real>(k23);
     Real const t22 = t21 - t12;
     Real const t23 = dy * t22;
     Real const t24 = dx * t14;
     Real const t25 = dy * t17;
-    Real const t26 = t5 * broadcast<Real>(k2);
+    Real const t26 = t5 * broadcast<Real>(k23);
     Real const t27 = t26 - t12;
     Real const t28 = dx * t27;
-    Real const t31 = t7 * broadcast<Real>(k2);
+    Real const t31 = t7 * broadcast<Real>(k23);
     Real const t32 = t10 - t31;
     Real const t33 = dz * t32;
     Real const t34 = dz * t15;
     Real const t37 = t16 - t31;
     Real const t38 = dz * t37;
-    Real const t41 = t6 * broadcast<Real>(k3);
-    Real const t44 = t7 * broadcast<Real>(k4);
+    Real const t41 = t6 * broadcast<Real>(k20);
+    Real const t44 = t7 * broadcast<Real>(k24);
     Real const t45 = t41 - t44;
     Real const t46 = t6 * t45;
-    Real const t47 = t7 * broadcast<Real>(k3);
+    Real const t47 = t7 * broadcast<Real>(k20);
     Real const t48 = t7 * t47;
     Real const t49 = t46 + t48;
-    Real const t51 = t6 * broadcast<Real>(k4);
+    Real const t51 = t6 * broadcast<Real>(k24);
     Real const t56 = t15 * t22;
     Real const t59 = t51 - t44;
     Real const t60 = t5 * t59;
-    Real const t63 = t7 * broadcast<Real>(k5);
+    Real const t63 = t7 * broadcast<Real>(k21);
     Real const t67 = t63 - t51;
     Real const t68 = t7 * t67;
     Real const t69 = t60 + t68;
     Real const t87 = t15 * t27;
-    Real const t89 = t5 * broadcast<Real>(k3);
+    Real const t89 = t5 * broadcast<Real>(k20);
     Real const t90 = t89 - t44;
     Real const t91 = t5 * t90;
     Real const t92 = t48 + t91;
@@ -3035,11 +3035,11 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 9> const& L, Rea
     Real const t101 = t18 * t37;
     Real const t103 = t26 - t31;
     Real const t104 = t19 * t103;
-    Real const t107 = t6 * broadcast<Real>(k6);
+    Real const t107 = t6 * broadcast<Real>(k14);
     Real const t109 = t107 - t63;
     Real const t110 = t6 * t109;
     Real const t111 = t48 + t110;
-    Real const t113 = t6 * broadcast<Real>(k5);
+    Real const t113 = t6 * broadcast<Real>(k21);
     Real const t118 = dy * t111;
     Real const t119 = dx * t49;
     Real const t120 = t113 - t44;
@@ -3053,21 +3053,21 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 9> const& L, Rea
     Real const t146 = t68 + t144;
     Real const t161 = dx * t146;
     Real const t162 = dy * t92;
-    Real const t163 = t5 * broadcast<Real>(k6);
+    Real const t163 = t5 * broadcast<Real>(k14);
     Real const t164 = t163 - t63;
     Real const t165 = t5 * t164;
     Real const t166 = t48 + t165;
     Real const t171 = dx * t166;
     Real const t172 = t41 - t63;
     Real const t173 = t6 * t172;
-    Real const t174 = t7 * broadcast<Real>(k6);
+    Real const t174 = t7 * broadcast<Real>(k14);
     Real const t175 = t7 * t174;
     Real const t176 = t173 + t175;
     Real const t180 = dz * t176;
     Real const t181 = t34 * t97;
     Real const t183 = t51 - t63;
     Real const t184 = t5 * t183;
-    Real const t185 = t7 * broadcast<Real>(k7);
+    Real const t185 = t7 * broadcast<Real>(k17);
     Real const t189 = t185 - t113;
     Real const t190 = t7 * t189;
     Real const t191 = t184 + t190;
@@ -3077,25 +3077,25 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 9> const& L, Rea
     Real const t208 = t5 * t207;
     Real const t209 = t175 + t208;
     Real const t213 = dz * t209;
-    Real const t218 = t6 * broadcast<Real>(k8);
-    Real const t220 = t7 * broadcast<Real>(k9);
+    Real const t218 = t6 * broadcast<Real>(k07);
+    Real const t220 = t7 * broadcast<Real>(k18);
     Real const t221 = t218 - t220;
     Real const t222 = t6 * t221;
     Real const t223 = t7 * t220;
     Real const t224 = t222 + t223;
     Real const t225 = t6 * t224;
-    Real const t226 = t7 * -broadcast<Real>(k8);
+    Real const t226 = t7 * -broadcast<Real>(k07);
     Real const t228 = t7 * t226;
     Real const t229 = t7 * t228;
     Real const t230 = t225 + t229;
-    Real const t231 = t6 * broadcast<Real>(k9);
+    Real const t231 = t6 * broadcast<Real>(k18);
     Real const t241 = t15 * t111;
-    Real const t258 = t7 * broadcast<Real>(k10);
-    Real const t264 = t6 * broadcast<Real>(k11);
-    Real const t275 = t5 * broadcast<Real>(k9);
+    Real const t258 = t7 * broadcast<Real>(k12);
+    Real const t264 = t6 * broadcast<Real>(k22);
+    Real const t275 = t5 * broadcast<Real>(k18);
     Real const t276 = t275 - t220;
     Real const t277 = t6 * t276;
-    Real const t286 = t5 * broadcast<Real>(k11);
+    Real const t286 = t5 * broadcast<Real>(k22);
     Real const t287 = t47 - t286;
     Real const t288 = t7 * t287;
     Real const t289 = t277 + t288;
@@ -3104,7 +3104,7 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 9> const& L, Rea
     Real const t292 = t7 * t291;
     Real const t293 = t7 * t292;
     Real const t294 = t290 + t293;
-    Real const t315 = t6 * broadcast<Real>(k12);
+    Real const t315 = t6 * broadcast<Real>(k19);
     Real const t316 = t315 - t63;
     Real const t317 = t5 * t316;
     Real const t319 = t127 + t317;
@@ -3120,13 +3120,13 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 9> const& L, Rea
     Real const t347 = t7 * t346;
     Real const t348 = t344 + t347;
     Real const t386 = t15 * t166;
-    Real const t388 = t5 * broadcast<Real>(k8);
+    Real const t388 = t5 * broadcast<Real>(k07);
     Real const t389 = t388 - t220;
     Real const t390 = t5 * t389;
     Real const t391 = t223 + t390;
     Real const t392 = t5 * t391;
     Real const t393 = t229 + t392;
-    Real const t403 = t7 * broadcast<Real>(k12);
+    Real const t403 = t7 * broadcast<Real>(k19);
     Real const t404 = t107 - t403;
     Real const t405 = t6 * t404;
     Real const t406 = t175 + t405;
@@ -3145,20 +3145,20 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 9> const& L, Rea
     Real const t451 = t5 * t450;
     Real const t452 = t175 + t451;
     Real const t456 = t19 * t452;
-    Real const t459 = t6 * broadcast<Real>(k13);
+    Real const t459 = t6 * broadcast<Real>(k04);
     Real const t460 = t459 - t258;
     Real const t461 = t6 * t460;
-    Real const t462 = t7 * broadcast<Real>(k14);
+    Real const t462 = t7 * broadcast<Real>(k13);
     Real const t463 = t7 * t462;
     Real const t464 = t461 + t463;
     Real const t465 = t6 * t464;
     Real const t466 = t229 + t465;
-    Real const t467 = t6 * broadcast<Real>(k14);
-    Real const t471 = t6 * broadcast<Real>(k10);
+    Real const t467 = t6 * broadcast<Real>(k13);
+    Real const t471 = t6 * broadcast<Real>(k12);
     Real const t478 = dy * t466;
     Real const t479 = dx * t230;
-    Real const t489 = t7 * broadcast<Real>(k15);
-    Real const t507 = t5 * broadcast<Real>(k10);
+    Real const t489 = t7 * broadcast<Real>(k16);
+    Real const t507 = t5 * broadcast<Real>(k12);
     Real const t508 = t507 - t258;
     Real const t509 = t6 * t508;
     Real const t516 = t489 - t89;
@@ -3167,7 +3167,7 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 9> const& L, Rea
     Real const t519 = t6 * t518;
     Real const t520 = t293 + t519;
     Real const t540 = dy * t520;
-    Real const t552 = t5 * broadcast<Real>(k14);
+    Real const t552 = t5 * broadcast<Real>(k13);
     Real const t553 = t552 - t220;
     Real const t554 = t6 * t553;
     Real const t562 = t47 - t89;
@@ -3199,7 +3199,7 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 9> const& L, Rea
     Real const t643 = t347 + t642;
     Real const t682 = dx * t643;
     Real const t683 = dy * t393;
-    Real const t684 = t5 * broadcast<Real>(k13);
+    Real const t684 = t5 * broadcast<Real>(k04);
     Real const t685 = t684 - t258;
     Real const t686 = t5 * t685;
     Real const t687 = t463 + t686;
@@ -3211,13 +3211,13 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 9> const& L, Rea
     Real const t703 = t7 * t258;
     Real const t704 = t702 + t703;
     Real const t705 = t6 * t704;
-    Real const t706 = t7 * -broadcast<Real>(k13);
+    Real const t706 = t7 * -broadcast<Real>(k04);
     Real const t708 = t7 * t706;
     Real const t709 = t7 * t708;
     Real const t710 = t705 + t709;
     Real const t718 = dz * t710;
     Real const t719 = t34 * t406;
-    Real const t731 = t7 * broadcast<Real>(k16);
+    Real const t731 = t7 * broadcast<Real>(k05);
     Real const t745 = t275 - t462;
     Real const t746 = t6 * t745;
     Real const t753 = t174 - t89;
@@ -3252,7 +3252,7 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 9> const& L, Rea
     Real const t843 = t709 + t842;
     Real const t849 = dz * t843;
     if (lane == 0) {
-        basis0 = broadcast<Real>(k17);
+        basis0 = broadcast<Real>(k26);
     }
     if (lane == 1) {
         basis0 = dy;
@@ -3444,15 +3444,15 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 9> const& L, Rea
         basis1 = t849;
     }
     if (doPhi) {
-        Real const t227 = t7 * broadcast<Real>(k8);
-        Real const t501 = t6 * broadcast<Real>(k15);
-        Real const t658 = t5 * broadcast<Real>(k15);
-        Real const t853 = t6 * broadcast<Real>(k18);
-        Real const t854 = t7 * -broadcast<Real>(k19);
-        Real const t856 = t7 * broadcast<Real>(k19);
+        Real const t227 = t7 * broadcast<Real>(k07);
+        Real const t501 = t6 * broadcast<Real>(k16);
+        Real const t658 = t5 * broadcast<Real>(k16);
+        Real const t853 = t6 * broadcast<Real>(k01);
+        Real const t854 = t7 * -broadcast<Real>(k06);
+        Real const t856 = t7 * broadcast<Real>(k06);
         Real const t857 = t853 - t856;
         Real const t858 = t6 * t857;
-        Real const t859 = t7 * broadcast<Real>(k20);
+        Real const t859 = t7 * broadcast<Real>(k08);
         Real const t860 = t7 * t859;
         Real const t861 = t858 + t860;
         Real const t862 = t6 * t861;
@@ -3460,22 +3460,22 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 9> const& L, Rea
         Real const t864 = t7 * t863;
         Real const t865 = t862 + t864;
         Real const t866 = t6 * t865;
-        Real const t867 = t7 * broadcast<Real>(k18);
+        Real const t867 = t7 * broadcast<Real>(k01);
         Real const t868 = t7 * t867;
         Real const t869 = t7 * t868;
         Real const t870 = t7 * t869;
         Real const t871 = t866 + t870;
-        Real const t873 = t6 * broadcast<Real>(k19);
+        Real const t873 = t6 * broadcast<Real>(k06);
         Real const t888 = t15 * t466;
-        Real const t906 = t7 * broadcast<Real>(k21);
-        Real const t912 = t7 * broadcast<Real>(k22);
-        Real const t917 = t7 * broadcast<Real>(k23);
-        Real const t923 = t6 * broadcast<Real>(k24);
-        Real const t945 = t5 * broadcast<Real>(k19);
+        Real const t906 = t7 * broadcast<Real>(k11);
+        Real const t912 = t7 * broadcast<Real>(k09);
+        Real const t917 = t7 * broadcast<Real>(k02);
+        Real const t923 = t6 * broadcast<Real>(k15);
+        Real const t945 = t5 * broadcast<Real>(k06);
         Real const t946 = t945 - t856;
         Real const t947 = t6 * t946;
-        Real const t959 = t5 * -broadcast<Real>(k24);
-        Real const t960 = t5 * broadcast<Real>(k24);
+        Real const t959 = t5 * -broadcast<Real>(k15);
+        Real const t960 = t5 * broadcast<Real>(k15);
         Real const t961 = t906 - t960;
         Real const t962 = t7 * t961;
         Real const t963 = t947 + t962;
@@ -3498,8 +3498,8 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 9> const& L, Rea
         Real const t1031 = t6 * t1030;
         Real const t1032 = t568 + t1031;
         Real const t1052 = t15 * t1032;
-        Real const t1068 = t7 * broadcast<Real>(k25);
-        Real const t1090 = t5 * broadcast<Real>(k20);
+        Real const t1068 = t7 * broadcast<Real>(k03);
+        Real const t1090 = t5 * broadcast<Real>(k08);
         Real const t1106 = t859 - t960;
         Real const t1107 = t7 * t1106;
         Real const t1108 = t5 * t1090;
@@ -3512,7 +3512,7 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 9> const& L, Rea
         Real const t1115 = t7 * t1114;
         Real const t1116 = t1110 + t1115;
         Real const t1117 = t6 * t1116;
-        Real const t1119 = t5 * broadcast<Real>(k22);
+        Real const t1119 = t5 * broadcast<Real>(k09);
         Real const t1120 = t1068 - t1119;
         Real const t1121 = t7 * t1120;
         Real const t1122 = t1108 + t1121;
@@ -3544,7 +3544,7 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 9> const& L, Rea
         Real const t1221 = t7 * t1220;
         Real const t1222 = t1217 + t1221;
         Real const t1283 = t15 * t689;
-        Real const t1285 = t5 * broadcast<Real>(k18);
+        Real const t1285 = t5 * broadcast<Real>(k01);
         Real const t1286 = t1285 - t856;
         Real const t1287 = t5 * t1286;
         Real const t1288 = t860 + t1287;
@@ -3560,7 +3560,7 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 9> const& L, Rea
         Real const t1308 = t709 + t1307;
         Real const t1316 = t18 * t1308;
         Real const t1317 = t19 * t710;
-        Real const t1326 = t7 * broadcast<Real>(k26);
+        Real const t1326 = t7 * broadcast<Real>(k10);
         Real const t1342 = t507 - t227;
         Real const t1343 = t6 * t1342;
         Real const t1349 = t1326 - t658;
@@ -3662,7 +3662,7 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 9> const& L, Rea
         // Fixed contraction phase 0: 8 rows, 3 outputs.
         int const groupWidth = lane < 16 ? 16 : (8);
         int const targetIndex = __ldg(&l2lWarpTargets8[0][lane]);
-        Real partial = broadcast<Real>(k0);
+        Real partial = broadcast<Real>(k00);
 #pragma unroll
         for (int row = 0; row < 8; ++row) {
             unsigned int entry = __ldg(&l2lWarpSchedule8[row][lane]);
@@ -3681,19 +3681,19 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 9> const& L, Rea
             Real const basisValue =
                 basisIndex < 32 ? basisValue0 : (basisIndex < 64 ? basisValue1 : (basisValue2));
             Real const weight =
-                (kind == 0 ? broadcast<Real>(k0) :
-                             (kind == 2 ? -broadcast<Real>(k17) : broadcast<Real>(k17))) *
+                (kind == 0 ? broadcast<Real>(k00) :
+                             (kind == 2 ? -broadcast<Real>(k26) : broadcast<Real>(k26))) *
                 basisValue;
             partial = fma(weight, sourceValue, partial);
         }
         Real const shuffled8 = __shfl_down_sync(kMask, partial, 8);
-        partial += (lane & (groupWidth - 1)) + 8 < groupWidth ? shuffled8 : broadcast<Real>(k0);
+        partial += (lane & (groupWidth - 1)) + 8 < groupWidth ? shuffled8 : broadcast<Real>(k00);
         Real const shuffled4 = __shfl_down_sync(kMask, partial, 4);
-        partial += (lane & (groupWidth - 1)) + 4 < groupWidth ? shuffled4 : broadcast<Real>(k0);
+        partial += (lane & (groupWidth - 1)) + 4 < groupWidth ? shuffled4 : broadcast<Real>(k00);
         Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
-        partial += (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : broadcast<Real>(k0);
+        partial += (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : broadcast<Real>(k00);
         Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
-        partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : broadcast<Real>(k0);
+        partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : broadcast<Real>(k00);
         bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
         if (leader) {
             partial += L[targetIndex];
@@ -3712,7 +3712,7 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 9> const& L, Rea
         // Fixed contraction phase 1: 8 rows, 4 outputs.
         int const groupWidth = 8;
         int const targetIndex = __ldg(&l2lWarpTargets8[1][lane]);
-        Real partial = broadcast<Real>(k0);
+        Real partial = broadcast<Real>(k00);
 #pragma unroll
         for (int row = 8; row < 16; ++row) {
             unsigned int entry = __ldg(&l2lWarpSchedule8[row][lane]);
@@ -3728,17 +3728,17 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 9> const& L, Rea
             Real const basisValue =
                 basisIndex < 32 ? basisValue0 : (basisIndex < 64 ? basisValue1 : (basisValue2));
             Real const weight =
-                (kind == 0 ? broadcast<Real>(k0) :
-                             (kind == 2 ? -broadcast<Real>(k17) : broadcast<Real>(k17))) *
+                (kind == 0 ? broadcast<Real>(k00) :
+                             (kind == 2 ? -broadcast<Real>(k26) : broadcast<Real>(k26))) *
                 basisValue;
             partial = fma(weight, sourceValue, partial);
         }
         Real const shuffled4 = __shfl_down_sync(kMask, partial, 4);
-        partial += (lane & (groupWidth - 1)) + 4 < groupWidth ? shuffled4 : broadcast<Real>(k0);
+        partial += (lane & (groupWidth - 1)) + 4 < groupWidth ? shuffled4 : broadcast<Real>(k00);
         Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
-        partial += (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : broadcast<Real>(k0);
+        partial += (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : broadcast<Real>(k00);
         Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
-        partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : broadcast<Real>(k0);
+        partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : broadcast<Real>(k00);
         bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
         if (leader) {
             partial += L[targetIndex];
@@ -3758,7 +3758,7 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 9> const& L, Rea
         // Fixed contraction phase 2: 6 rows, 4 outputs.
         int const groupWidth = 8;
         int const targetIndex = __ldg(&l2lWarpTargets8[2][lane]);
-        Real partial = broadcast<Real>(k0);
+        Real partial = broadcast<Real>(k00);
 #pragma unroll
         for (int row = 16; row < 22; ++row) {
             unsigned int entry = __ldg(&l2lWarpSchedule8[row][lane]);
@@ -3774,17 +3774,17 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 9> const& L, Rea
             Real const basisValue =
                 basisIndex < 32 ? basisValue0 : (basisIndex < 64 ? basisValue1 : (basisValue2));
             Real const weight =
-                (kind == 0 ? broadcast<Real>(k0) :
-                             (kind == 2 ? -broadcast<Real>(k17) : broadcast<Real>(k17))) *
+                (kind == 0 ? broadcast<Real>(k00) :
+                             (kind == 2 ? -broadcast<Real>(k26) : broadcast<Real>(k26))) *
                 basisValue;
             partial = fma(weight, sourceValue, partial);
         }
         Real const shuffled4 = __shfl_down_sync(kMask, partial, 4);
-        partial += (lane & (groupWidth - 1)) + 4 < groupWidth ? shuffled4 : broadcast<Real>(k0);
+        partial += (lane & (groupWidth - 1)) + 4 < groupWidth ? shuffled4 : broadcast<Real>(k00);
         Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
-        partial += (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : broadcast<Real>(k0);
+        partial += (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : broadcast<Real>(k00);
         Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
-        partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : broadcast<Real>(k0);
+        partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : broadcast<Real>(k00);
         bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
         if (leader) {
             partial += L[targetIndex];
@@ -3804,7 +3804,7 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 9> const& L, Rea
         // Fixed contraction phase 3: 5 rows, 4 outputs.
         int const groupWidth = 8;
         int const targetIndex = __ldg(&l2lWarpTargets8[3][lane]);
-        Real partial = broadcast<Real>(k0);
+        Real partial = broadcast<Real>(k00);
 #pragma unroll
         for (int row = 22; row < 27; ++row) {
             unsigned int entry = __ldg(&l2lWarpSchedule8[row][lane]);
@@ -3820,17 +3820,17 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 9> const& L, Rea
             Real const basisValue =
                 basisIndex < 32 ? basisValue0 : (basisIndex < 64 ? basisValue1 : (basisValue2));
             Real const weight =
-                (kind == 0 ? broadcast<Real>(k0) :
-                             (kind == 2 ? -broadcast<Real>(k17) : broadcast<Real>(k17))) *
+                (kind == 0 ? broadcast<Real>(k00) :
+                             (kind == 2 ? -broadcast<Real>(k26) : broadcast<Real>(k26))) *
                 basisValue;
             partial = fma(weight, sourceValue, partial);
         }
         Real const shuffled4 = __shfl_down_sync(kMask, partial, 4);
-        partial += (lane & (groupWidth - 1)) + 4 < groupWidth ? shuffled4 : broadcast<Real>(k0);
+        partial += (lane & (groupWidth - 1)) + 4 < groupWidth ? shuffled4 : broadcast<Real>(k00);
         Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
-        partial += (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : broadcast<Real>(k0);
+        partial += (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : broadcast<Real>(k00);
         Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
-        partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : broadcast<Real>(k0);
+        partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : broadcast<Real>(k00);
         bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
         if (leader) {
             partial += L[targetIndex];
@@ -3850,7 +3850,7 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 9> const& L, Rea
         // Fixed contraction phase 4: 6 rows, 7 outputs.
         int const groupWidth = lane < 8 ? 8 : (4);
         int const targetIndex = __ldg(&l2lWarpTargets8[4][lane]);
-        Real partial = broadcast<Real>(k0);
+        Real partial = broadcast<Real>(k00);
 #pragma unroll
         for (int row = 27; row < 33; ++row) {
             unsigned int entry = __ldg(&l2lWarpSchedule8[row][lane]);
@@ -3866,17 +3866,17 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 9> const& L, Rea
             Real const basisValue =
                 basisIndex < 32 ? basisValue0 : (basisIndex < 64 ? basisValue1 : (basisValue2));
             Real const weight =
-                (kind == 0 ? broadcast<Real>(k0) :
-                             (kind == 2 ? -broadcast<Real>(k17) : broadcast<Real>(k17))) *
+                (kind == 0 ? broadcast<Real>(k00) :
+                             (kind == 2 ? -broadcast<Real>(k26) : broadcast<Real>(k26))) *
                 basisValue;
             partial = fma(weight, sourceValue, partial);
         }
         Real const shuffled4 = __shfl_down_sync(kMask, partial, 4);
-        partial += (lane & (groupWidth - 1)) + 4 < groupWidth ? shuffled4 : broadcast<Real>(k0);
+        partial += (lane & (groupWidth - 1)) + 4 < groupWidth ? shuffled4 : broadcast<Real>(k00);
         Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
-        partial += (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : broadcast<Real>(k0);
+        partial += (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : broadcast<Real>(k00);
         Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
-        partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : broadcast<Real>(k0);
+        partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : broadcast<Real>(k00);
         bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
         if (leader) {
             partial += L[targetIndex];
@@ -3899,7 +3899,7 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 9> const& L, Rea
         // Fixed contraction phase 5: 8 rows, 13 outputs.
         int const groupWidth = lane < 12 ? 4 : (2);
         int const targetIndex = __ldg(&l2lWarpTargets8[5][lane]);
-        Real partial = broadcast<Real>(k0);
+        Real partial = broadcast<Real>(k00);
 #pragma unroll
         for (int row = 33; row < 41; ++row) {
             unsigned int entry = __ldg(&l2lWarpSchedule8[row][lane]);
@@ -3915,15 +3915,15 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 9> const& L, Rea
             Real const basisValue =
                 basisIndex < 32 ? basisValue0 : (basisIndex < 64 ? basisValue1 : (basisValue2));
             Real const weight =
-                (kind == 0 ? broadcast<Real>(k0) :
-                             (kind == 2 ? -broadcast<Real>(k17) : broadcast<Real>(k17))) *
+                (kind == 0 ? broadcast<Real>(k00) :
+                             (kind == 2 ? -broadcast<Real>(k26) : broadcast<Real>(k26))) *
                 basisValue;
             partial = fma(weight, sourceValue, partial);
         }
         Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
-        partial += (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : broadcast<Real>(k0);
+        partial += (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : broadcast<Real>(k00);
         Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
-        partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : broadcast<Real>(k0);
+        partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : broadcast<Real>(k00);
         bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
         if (leader) {
             partial += L[targetIndex];
@@ -3952,7 +3952,7 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 9> const& L, Rea
         // Fixed contraction phase 6: 8 rows, 18 outputs.
         int const groupWidth = lane < 28 ? 2 : (1);
         int const targetIndex = __ldg(&l2lWarpTargets8[6][lane]);
-        Real partial = broadcast<Real>(k0);
+        Real partial = broadcast<Real>(k00);
 #pragma unroll
         for (int row = 41; row < 49; ++row) {
             unsigned int entry = __ldg(&l2lWarpSchedule8[row][lane]);
@@ -3968,13 +3968,13 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 9> const& L, Rea
             Real const basisValue =
                 basisIndex < 32 ? basisValue0 : (basisIndex < 64 ? basisValue1 : (basisValue2));
             Real const weight =
-                (kind == 0 ? broadcast<Real>(k0) :
-                             (kind == 2 ? -broadcast<Real>(k17) : broadcast<Real>(k17))) *
+                (kind == 0 ? broadcast<Real>(k00) :
+                             (kind == 2 ? -broadcast<Real>(k26) : broadcast<Real>(k26))) *
                 basisValue;
             partial = fma(weight, sourceValue, partial);
         }
         Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
-        partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : broadcast<Real>(k0);
+        partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : broadcast<Real>(k00);
         bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
         if (leader) {
             partial += L[targetIndex];
@@ -4008,7 +4008,7 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 9> const& L, Rea
         // Fixed contraction phase 7: 3 rows, 11 outputs.
         int const groupWidth = lane < 11 ? 1 : (1);
         int const targetIndex = __ldg(&l2lWarpTargets8[7][lane]);
-        Real partial = broadcast<Real>(k0);
+        Real partial = broadcast<Real>(k00);
 #pragma unroll
         for (int row = 49; row < 52; ++row) {
             unsigned int entry = __ldg(&l2lWarpSchedule8[row][lane]);
@@ -4024,8 +4024,8 @@ __device__ void executeL2LWarp(Target& targetL, Expansion<Real, 9> const& L, Rea
             Real const basisValue =
                 basisIndex < 32 ? basisValue0 : (basisIndex < 64 ? basisValue1 : (basisValue2));
             Real const weight =
-                (kind == 0 ? broadcast<Real>(k0) :
-                             (kind == 2 ? -broadcast<Real>(k17) : broadcast<Real>(k17))) *
+                (kind == 0 ? broadcast<Real>(k00) :
+                             (kind == 2 ? -broadcast<Real>(k26) : broadcast<Real>(k26))) *
                 basisValue;
             partial = fma(weight, sourceValue, partial);
         }

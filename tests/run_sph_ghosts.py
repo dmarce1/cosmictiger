@@ -150,10 +150,10 @@ def main():
               "checkpoint.intervalSeconds": 0, "run.verbose": "true",
               "compute.sphBucketSize": 16}
     scenarios = {
-        "wave": {"run.scenario": "hydroWave", "run.endTime": 0.5, "run.numberOfSteps": 4,
+        "wave": {"run.scenario": "hydroWave", "run.endTime": 0.5, "run.numberOfOutputs": 5,
                  "run.maxIterations": 6, "run.darkMatterParticleCount": 512,
                  "run.gasParticleCount": 512},
-        "sod": {"run.scenario": "sod", "run.numberOfSteps": 8, "run.maxIterations": 6,
+        "sod": {"run.scenario": "sod", "run.numberOfOutputs": 9, "run.maxIterations": 6,
                 "run.darkMatterParticleCount": 2048, "run.gasParticleCount": 2048},
     }
     # SPH couples to PMMM self-gravity only on the hierarchical integrator, which needs gravity.

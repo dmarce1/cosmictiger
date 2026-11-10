@@ -671,14 +671,9 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
     foreach(flag IN LISTS cosmictiger_mpi_transport_args)
         list(APPEND cosmictiger_python_mpi_args "--hpx-argument=${flag}")
     endforeach()
-    # Test fixtures select algorithms explicitly so mixed-capability builds
-    # exercise their intended path without changing normal option validation.
-    set(cosmictiger_test_integrator_args --run.timeIntegrator=${cosmictiger_default_integrator})
-    # SPH with PMMM self-gravity runs only on the hierarchical ladder.
-    set(cosmictiger_sph_gravity_integrator_args ${cosmictiger_test_integrator_args})
-    if(COSMICTIGER_WITH_GRAVITY)
-        set(cosmictiger_sph_gravity_integrator_args --run.timeIntegrator=hierarchical)
-    endif()
+    # The sole scheme is automatic; fixtures do not pass a runtime selector.
+    set(cosmictiger_test_integrator_args)
+    set(cosmictiger_sph_gravity_integrator_args)
     # PMMM is the only gravity solver; its near field defaults to fmm.
     set(cosmictiger_test_gravity_args)
     if(COSMICTIGER_WITH_GRAVITY)
@@ -836,6 +831,20 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
         target_compile_options(friedmann_test PRIVATE -fno-fast-math -ffp-contract=off)
         cosmictiger_add_gtest(NAME friedmann TARGET friedmann_test PROPERTIES TIMEOUT 60)
 
+        if(COSMICTIGER_WITH_SPH)
+            add_test(NAME output_schedule_application COMMAND ${Python3_EXECUTABLE}
+                ${PROJECT_SOURCE_DIR}/tests/run_output_schedule.py $<TARGET_FILE:cosmictiger>
+                ${PROJECT_BINARY_DIR}/tests/output_schedule_application)
+            set_tests_properties(output_schedule_application PROPERTIES
+                TIMEOUT 600 PROCESSORS 2 LABELS "output;cpu;pmmm")
+        endif()
+        add_executable(output_schedule_test tests/output_schedule.cpp src/gravity/outer_interval.cpp)
+        target_include_directories(output_schedule_test PRIVATE ${PROJECT_SOURCE_DIR})
+        cosmictiger_use_generated_kernels(output_schedule_test)
+        target_compile_options(output_schedule_test PRIVATE -fno-fast-math -ffp-contract=off)
+        cosmictiger_add_gtest(NAME output_schedule TARGET output_schedule_test
+            PROPERTIES TIMEOUT 30)
+
         add_executable(cosmology_evolution_test tests/cosmology_evolution.cpp)
         target_include_directories(cosmology_evolution_test PRIVATE ${PROJECT_SOURCE_DIR})
         target_compile_options(cosmology_evolution_test PRIVATE -fno-fast-math -ffp-contract=off)
@@ -942,7 +951,6 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             add_test(NAME star_formation_cpu COMMAND cosmictiger --run.test=star_formation
                 --hydro.enabled=true --starFormation.enabled=true --chemistry.enabled=true --chemistry.initializationTemperature=10000
                 --gravity.cuda=false --hydro.cuda=false --drift.cuda=false --run.darkMatterParticleCount=512 --run.gasParticleCount=512
-                --run.timeIntegrator=${star_formation_test_integrator}
                 ${cosmictiger_test_gravity_args}
                 --hpx:threads=1 --hpx:bind=none)
             set_tests_properties(star_formation_cpu PROPERTIES
@@ -952,7 +960,6 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             add_test(NAME star_formation_particles_cpu COMMAND cosmictiger --run.test=starFormationParticles
                 --hydro.enabled=true --starFormation.enabled=true --chemistry.enabled=true --chemistry.initializationTemperature=10000
                 --gravity.cuda=false --hydro.cuda=false --drift.cuda=false --run.darkMatterParticleCount=512 --run.gasParticleCount=512
-                --run.timeIntegrator=${star_formation_test_integrator}
                 ${cosmictiger_test_gravity_args}
                 --hpx:threads=1 --hpx:bind=none)
             set_tests_properties(star_formation_particles_cpu PROPERTIES
@@ -984,7 +991,6 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                     --gravity.cuda=${source_timing_cuda} --hydro.cuda=${source_timing_cuda}
                     --drift.cuda=${source_timing_cuda} --chemistry.cuda=${source_timing_cuda}
                     --starFormation.cuda=${source_timing_cuda}
-                    --run.timeIntegrator=${source_timing_integrator}
                     ${cosmictiger_test_gravity_args}
                     --hpx:threads=1 --hpx:bind=none ${source_timing_args})
                 set_tests_properties(${source_timing_name} PROPERTIES
@@ -1011,7 +1017,6 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                         --run.test=${star_mpi_run_test}
                         --hydro.enabled=true --starFormation.enabled=true --chemistry.enabled=true --chemistry.initializationTemperature=10000
                         --gravity.cuda=false --hydro.cuda=false --drift.cuda=false --run.darkMatterParticleCount=512 --run.gasParticleCount=512
-                        --run.timeIntegrator=${star_formation_test_integrator}
                         ${cosmictiger_test_gravity_args}
                         ${star_mpi_gravity_args}
                         --hpx:threads=1 --hpx:localities=2 --hpx:bind=none
@@ -1068,7 +1073,6 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                     --chemistry.initializationTemperature=10000
                     --gravity.cuda=true --hydro.cuda=true --drift.cuda=true
                     --chemistry.cuda=true --starFormation.cuda=true --run.darkMatterParticleCount=512 --run.gasParticleCount=512
-                    --run.timeIntegrator=${star_formation_test_integrator}
                     ${cosmictiger_test_gravity_args}
                     --hpx:threads=1 --hpx:bind=none)
                 set_tests_properties(${star_cuda_test} PROPERTIES
@@ -1324,8 +1328,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                 add_test(NAME ${boltzmann_smoke} COMMAND ${Python3_EXECUTABLE}
                     ${PROJECT_SOURCE_DIR}/tests/run_smoke.py dm_cpu $<TARGET_FILE:cosmictiger>
                     ${PROJECT_BINARY_DIR}/tests/${boltzmann_smoke}
-                    --extra-option=--scenario.cosmology.twoLpt=${boltzmann_two_lpt}
-                    --extra-option=--run.timeIntegrator=${cosmictiger_default_integrator})
+                    --extra-option=--scenario.cosmology.twoLpt=${boltzmann_two_lpt})
                 set_tests_properties(${boltzmann_smoke}
                     PROPERTIES RUN_SERIAL TRUE TIMEOUT 240 PROCESSORS 2)
             endforeach()
@@ -2528,8 +2531,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             add_test(NAME smoke_kernels_${kernel_case} COMMAND ${Python3_EXECUTABLE}
                 ${PROJECT_SOURCE_DIR}/tests/run_smoke.py sph $<TARGET_FILE:cosmictiger>
                 ${PROJECT_BINARY_DIR}/tests/smoke_kernels_${kernel_case}
-                --extra-option=--hydro.neighborNumber=120 ${kernel_options}
-                --extra-option=--run.timeIntegrator=${cosmictiger_default_integrator})
+                --extra-option=--hydro.neighborNumber=120 ${kernel_options})
             set_tests_properties(smoke_kernels_${kernel_case} PROPERTIES RUN_SERIAL TRUE TIMEOUT 600)
         endforeach()
     endif()
@@ -2609,15 +2611,13 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                 add_test(NAME smoke_sph_mpi COMMAND ${Python3_EXECUTABLE}
                     ${PROJECT_SOURCE_DIR}/tests/run_smoke.py sph_mpi
                     $<TARGET_FILE:cosmictiger>
-                    ${PROJECT_BINARY_DIR}/tests/smoke_sph_mpi --mpi-exec=${MPIEXEC_EXECUTABLE}
-                --extra-option=--run.timeIntegrator=${cosmictiger_default_integrator})
+                    ${PROJECT_BINARY_DIR}/tests/smoke_sph_mpi --mpi-exec=${MPIEXEC_EXECUTABLE})
                 set_tests_properties(smoke_sph_mpi PROPERTIES RUN_SERIAL TRUE TIMEOUT 260)
                 endif()
                 add_test(NAME smoke_sph_cpu_mpi COMMAND ${Python3_EXECUTABLE}
                     ${PROJECT_SOURCE_DIR}/tests/run_smoke.py sph_mpi
                     $<TARGET_FILE:cosmictiger>
-                    ${PROJECT_BINARY_DIR}/tests/smoke_sph_cpu_mpi --mpi-exec=${MPIEXEC_EXECUTABLE} --cpu
-                --extra-option=--run.timeIntegrator=${cosmictiger_default_integrator})
+                    ${PROJECT_BINARY_DIR}/tests/smoke_sph_cpu_mpi --mpi-exec=${MPIEXEC_EXECUTABLE} --cpu)
                 set_tests_properties(smoke_sph_cpu_mpi PROPERTIES RUN_SERIAL TRUE TIMEOUT 260)
             endif()
         endif()
@@ -2631,8 +2631,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             add_test(NAME smoke_${smoke_mode}_cpu COMMAND ${Python3_EXECUTABLE}
                 ${PROJECT_SOURCE_DIR}/tests/run_smoke.py ${smoke_mode}
                 $<TARGET_FILE:cosmictiger>
-                ${PROJECT_BINARY_DIR}/tests/smoke_${smoke_mode}_cpu --cpu
-                --extra-option=--run.timeIntegrator=${cosmictiger_default_integrator})
+                ${PROJECT_BINARY_DIR}/tests/smoke_${smoke_mode}_cpu --cpu)
             set_tests_properties(smoke_${smoke_mode}_cpu PROPERTIES RUN_SERIAL TRUE TIMEOUT 500)
         endforeach()
         # Variational SPH in Sod, blast and hydroWave, plus CFL refinement. These
@@ -2676,15 +2675,13 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             add_test(NAME smoke_${smoke_mode} COMMAND ${Python3_EXECUTABLE}
                 ${PROJECT_SOURCE_DIR}/tests/run_smoke.py ${smoke_mode}
                 $<TARGET_FILE:cosmictiger>
-                ${PROJECT_BINARY_DIR}/tests/smoke_${smoke_mode}
-                --extra-option=--run.timeIntegrator=${cosmictiger_default_integrator})
+                ${PROJECT_BINARY_DIR}/tests/smoke_${smoke_mode})
             set_tests_properties(smoke_${smoke_mode} PROPERTIES RUN_SERIAL TRUE TIMEOUT 500)
         endforeach()
         add_test(NAME smoke_dm_min_rung COMMAND ${Python3_EXECUTABLE}
             ${PROJECT_SOURCE_DIR}/tests/run_smoke.py dm_cpu
             $<TARGET_FILE:cosmictiger>
-            ${PROJECT_BINARY_DIR}/tests/smoke_dm_min_rung --minimum-rung=10
-                --extra-option=--run.timeIntegrator=${cosmictiger_default_integrator})
+            ${PROJECT_BINARY_DIR}/tests/smoke_dm_min_rung --minimum-rung=10)
         set_tests_properties(smoke_dm_min_rung PROPERTIES RUN_SERIAL TRUE TIMEOUT 500)
         if(COSMICTIGER_WITH_GRAVITY)
             add_test(NAME checkpoint_integrity COMMAND ${Python3_EXECUTABLE}

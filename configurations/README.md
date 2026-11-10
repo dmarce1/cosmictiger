@@ -19,10 +19,9 @@ The parser defaults leave hydro, cooling and star formation disabled.
 
 CMake `COSMICTIGER_ENABLE_*` options select which capabilities are compiled.
 PMMM-FMM is the sole gravity solver. Close leaf particle pairs are part of its
-tree walk. The sole integration scheme uses hierarchical short gravity, outer
-long kicks and midpoint SPH. The supplied configurations select
-`run.timeIntegrator=hierarchical`; this is also automatic.
-Restart recovers omitted degree and integration selections from the checkpoint.
+tree walk. Hierarchical short gravity, outer long kicks and midpoint SPH are
+selected automatically; `gravity.method.near` and `run.timeIntegrator` are retired.
+Restart recovers an omitted expansion degree from the checkpoint.
 
 `COSMICTIGER_EXPANSION_DEGREE=4-6` compiles potential degrees 4, 5, and 6 by default.
 `gravity.expansionDegree` chooses a compiled degree and defaults to the largest.
@@ -117,10 +116,10 @@ step. `output.silo=false` disables particle snapshots while retaining other
 selected diagnostics. `analysis.views`, `analysis.power`, `analysis.groups`,
 `analysis.tracers`, and `analysis.slice` select their respective products.
 
-`output.siloInterval` counts synchronized coarse steps, not adaptive substeps or
-wall-clock seconds. Finite-duration scenarios retain initial and final snapshots
-even when the final cycle is not a multiple of the selected interval. Star
-relaxation and subsequent evolution use successive snapshot cycle numbers.
+`run.numberOfOutputs` counts uniformly spaced output phases including the initial
+and final states; output uses physical time, or conformal time for cosmology.
+Enabled particle snapshots are written at every requested phase. Checkpoints
+remain independently scheduled in wall-clock seconds.
 
 The native output settings are `output.units=code` and
 `output.frame=comoving`. CGS and cosmological unit views and proper-coordinate
@@ -132,21 +131,28 @@ bounds remain normalized box coordinates and must satisfy
 
 For finite-duration scenarios, `run.endTime=0` selects the initializer's default
 duration. A positive value sets the total duration and scales the stages of a
-multi-stage scenario proportionally. `run.numberOfSteps` sets the total coarse
-interval count, divided proportionally between stages. Stage boundaries are
-rounded to that common coarse clock so pending SPH half-steps use a consistent
-timestep across transitions. `run.maxIterations`
+multi-stage scenario proportionally. `run.numberOfOutputs` counts both endpoint
+outputs and divides the duration into `numberOfOutputs - 1` equal intervals.
+Long timesteps are rounded upward to an integer subdivision of the time left
+before the next output phase. Enabled Silo snapshots are written at every phase;
+`output.siloInterval` has been retired. Self-gravitating stage durations retain
+their physical proportions independently of the output count; long steps also
+land on stage transitions. Gravity-free stage transitions retain their shared
+internal SPH clock. `run.maxIterations`
 bounds the adaptive evolution steps.
 
-| Scenario | Default duration | Coarse intervals |
+The table lists initializer defaults when the output count is omitted; presets
+may set a different count.
+
+| Scenario | Default duration | Default outputs |
 | --- | --- | --- |
-| Sod | 0.09 | 20 |
-| Blast | 0.005 | 16 |
-| Rayleigh–Taylor | 10 | 256 |
-| Kelvin–Helmholtz | 10 | 1024 |
-| Disc | 16 | 1024 |
-| Polytropic star | 10 then 100 dynamical times | 25 then 250 |
-| Hydro wave | 0.5 | 64 |
+| Sod | 0.09 | 21 |
+| Blast | 0.005 | 17 |
+| Rayleigh–Taylor | 10 | 257 |
+| Kelvin–Helmholtz | 10 | 1025 |
+| Disc | 16 | 1025 |
+| Polytropic star | 10 then 100 dynamical times | 276 |
+| Hydro wave | 0.5 | 65 |
 
 The Plummer configuration initializes only collisionless dark matter and uses
 the gravity driver; it replaces the former legacy Plummer hydro test. Glass

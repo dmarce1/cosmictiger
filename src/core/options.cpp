@@ -469,7 +469,7 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"run.scenario", options.run.scenario},
         {"run.endTime", options.run.endTime},
         {"run.maxIterations", options.run.maxIterations},
-        {"run.numberOfSteps", options.run.numberOfSteps},
+        {"run.numberOfOutputs", options.run.numberOfOutputs},
         {"run.minRung", options.run.minRung},
         {"run.rungMergeFraction", options.run.rungMergeFraction},
         {"run.treeOpeningAngle", options.run.treeOpeningAngle},
@@ -510,7 +510,6 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"run.darkMatterParticleCount", options.run.darkMatterParticleCount},
         {"run.gasParticleCount", options.run.gasParticleCount},
         {"output.silo", options.output.silo},
-        {"output.siloInterval", options.output.siloInterval},
         {"output.directory", options.output.directory},
         {"output.units", options.output.units},
         {"output.frame", options.output.frame},
@@ -669,10 +668,7 @@ bool processOptions(int argc, char* argv[]) {
     namespace po = hpx::program_options;
     bool rc;
     po::options_description runOpts("Run control");
-    runOpts.add_options()("run.timeIntegrator",
-        po::value<std::string>(&opts.run.timeIntegrator)->default_value(""),
-        "sole scheme: hierarchical gravity with outer long kicks and midpoint SPH; "
-        "hierarchical is selected automatically")("help", "produce help message")("configuration",
+    runOpts.add_options()("help", "produce help message")("configuration",
         po::value<std::string>(&opts.configuration)->default_value(""),
         "INI configuration file; explicit command-line values take precedence")("run.test",
         po::value<std::string>(&opts.run.test)->default_value(""),
@@ -695,9 +691,11 @@ bool processOptions(int argc, char* argv[]) {
         "total evolution time (conformal code time for cosmology); positive values override "
         "endRedshift, 0 uses the scenario duration")("run.maxIterations",
         po::value<int>(&opts.run.maxIterations)->default_value(1000000),
-        "maximum number of time steps")("run.numberOfSteps",
-        po::value<int>(&opts.run.numberOfSteps)->default_value(64), "number of super time steps")(
-        "run.minRung", po::value<int>(&opts.run.minRung)->default_value(0),
+        "maximum number of time steps")("run.numberOfOutputs",
+        po::value<int>(&opts.run.numberOfOutputs)->default_value(65),
+        "number of equally spaced outputs including initial and final states; at least 2; "
+        "physical code time, or conformal code time for cosmology")("run.minRung",
+        po::value<int>(&opts.run.minRung)->default_value(0),
         "minimum starting rung")("run.rungMergeFraction",
         po::value<double>(&opts.run.rungMergeFraction)->default_value(1.0 / 3.0),
         "hierarchical: merge the lowest occupied rung into the next one when the finer rungs "
@@ -789,9 +787,7 @@ bool processOptions(int argc, char* argv[]) {
     po::options_description outputOpts("Particle output");
     outputOpts.add_options()("output.silo",
         po::value<bool>(&opts.output.silo)->default_value(false),
-        "write particle Silo files for the configured box")("output.siloInterval",
-        po::value<int>(&opts.output.siloInterval)->default_value(1),
-        "number of synchronized coarse steps between particle Silo snapshots")("output.directory",
+        "write particle Silo files at every scheduled output time")("output.directory",
         po::value<std::string>(&opts.output.directory)->default_value("./output"),
         "directory for all scenario outputs; relative paths start at the working directory")(
         "output.units", po::value<std::string>(&opts.output.units)->default_value("code"),
@@ -1229,24 +1225,23 @@ bool processOptions(int argc, char* argv[]) {
         if (!opts.gravity.enabled && !opts.hydro.enabled) {
             detail::throwOptionError("A scenario requires gravity.enabled and/or hydro.enabled\n");
         }
-        if (!isExplicit("run.numberOfSteps")) {
-            opts.run.numberOfSteps = scenario.numberOfSteps;
+        if (!isExplicit("run.numberOfOutputs")) {
+            opts.run.numberOfOutputs = scenario.numberOfSteps + 1;
         }
         if (!isExplicit("output.directory")) {
             opts.output.directory = "./output/" + opts.run.scenario;
         }
     }
-    bool const checkpointSelectionNeeded = !isExplicit("run.timeIntegrator") ||
-        (gravity::kBuildHasGravity && !isExplicit("gravity.expansionDegree"));
+    bool const checkpointSelectionNeeded =
+        gravity::kBuildHasGravity && !isExplicit("gravity.expansionDegree");
     if (opts.checkpoint.readIndex >= 0 && checkpointSelectionNeeded) {
         checkpointSelection = readCheckpointSelection(
             opts.run.test.empty() ? opts.output.directory : "", opts.checkpoint.readIndex);
         if (!isExplicit("gravity.expansionDegree") && checkpointSelection.expansionOrder > 0) {
             expansionDegree = checkpointSelection.expansionOrder - 1;
         }
-        if (!isExplicit("run.timeIntegrator")) {
-            opts.run.timeIntegrator = checkpointSelection.timeIntegrator;
-        }
+        // The integrator is fixed. readCheckpoint validates the saved scheme;
+        // checkpoint metadata cannot select a different runtime algorithm.
     }
 #if COSMICTIGER_WITH_GRAVITY
     if (expansionDegree < kFmmMinOrder - 1 || expansionDegree > kFmmMaxOrder - 1) {
@@ -1387,9 +1382,6 @@ bool processOptions(int argc, char* argv[]) {
     }
     double const selfNeighborFloor =
         sph_geometry::kUnitBallVolume * radial_kernel::value(hydroTable, 0.0);
-    if (opts.output.siloInterval <= 0) {
-        detail::throwOptionError("output.siloInterval must be positive\n");
-    }
     if (opts.output.directory.empty()) {
         detail::throwOptionError("output.directory must not be empty\n");
     }
@@ -1517,8 +1509,9 @@ bool processOptions(int argc, char* argv[]) {
         opts.run.rungMergeFraction > 1.0) {
         detail::throwOptionError("run.rungMergeFraction must be finite and between 0 and 1\n");
     }
-    if (opts.run.numberOfSteps <= 0) {
-        detail::throwOptionError("run.numberOfSteps must be positive\n");
+    if (opts.run.numberOfOutputs < 2) {
+        detail::throwOptionError(
+            "run.numberOfOutputs must be at least 2 (initial and final outputs)\n");
     }
     if (opts.compute.positionType != "fixed32" && opts.compute.positionType != "fixed64") {
         detail::throwOptionError("compute.positionType must be fixed32 or fixed64\n");

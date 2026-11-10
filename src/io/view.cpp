@@ -1296,8 +1296,8 @@ void writeDistributedParticleViews(int cycle, double a, double time) {
 /// Honor the output cadence, determine the displayed time, and write configured distributed
 /// particle views.
 void viewOutputViews(int cycle, double a, bool force, double physicalYears) {
-    if (!getOptions().output.silo || viewBoxes.empty() ||
-        (!force && cycle % getOptions().output.siloInterval != 0)) {
+    (void) force;
+    if (!getOptions().output.silo || viewBoxes.empty()) {
         return;
     }
     double time = physicalYears >= 0.0 ? physicalYears / 1.0e9 : 0.0;
@@ -1346,9 +1346,9 @@ void viewConfigure() {
     viewBoxes.push_back(viewBox);
     if (terminal::verbose() || !opts.run.test.empty()) {
         std::cout << std::format("Silo particle output: x [{:g}, {:g}], y [{:g}, {:g}], z [{:g}, "
-                                 "{:g}], every {:d} synchronized coarse steps\n",
+                                 "{:g}], {:d} equally spaced outputs including endpoints\n",
                          opts.output.xMin, opts.output.xMax, opts.output.yMin, opts.output.yMax,
-                         opts.output.zMin, opts.output.zMax, opts.output.siloInterval)
+                         opts.output.zMin, opts.output.zMax, opts.run.numberOfOutputs)
                   << std::flush;
     }
     if (terminal::verbose() || !opts.run.test.empty()) {

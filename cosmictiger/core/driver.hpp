@@ -103,7 +103,7 @@ struct DriverParameters {
 // apply the per-particle mesh acceleration; longPotentialEnergy is the
 // gm-scaled mesh potential energy added to the synchronized diagnostics.
 // endTime is the run's end time for the hierarchical drift (zero: the
-// substep base timestep times run.numberOfSteps, which a non-dyadic outer PM
+// substep base timestep times (run.numberOfOutputs - 1), which a non-dyadic outer PM
 // interval does not reproduce).
 // PMMM outer interval (docs/pmmm.md): a force pass at a synchronized boundary
 // closes the old frozen membership, migrates, runs the far solve that selects

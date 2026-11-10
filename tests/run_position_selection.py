@@ -35,7 +35,7 @@ def main():
               "--run.darkMatterParticleCount=64", "--run.gasParticleCount=64", "--analysis.groups=false",
               "--analysis.tracers=false", "--analysis.views=false", "--analysis.power=false",
               "--lightcone.enabled=false", "--output.silo=false", "--output.directory=."]
-    common += [f"--run.timeIntegrator={args.time_integrator}", "--gravity.meshSize=8"]
+    common += ["--gravity.meshSize=8"]
     if args.order is not None:
         common.append(f"--gravity.expansionDegree={args.order - 1}")
     metadata = ["--run.test=checkpointState"]
@@ -103,7 +103,7 @@ def main():
     # round trips above, then reject changing representation during restart.
     baseline = prepareCase(workdir, "evolution")
     evolution = [str(executable), *common, "--run.scenario=plummer",
-                 "--run.endTime=0.00001", "--run.numberOfSteps=2",
+                 "--run.endTime=0.00001", "--run.numberOfOutputs=3",
                  "--checkpoint.intervalSeconds=1000000000"]
     runSimulation([*evolution, f"--compute.positionType={selected}", "--run.maxIterations=1"],
                   baseline, "run.log")
@@ -154,15 +154,13 @@ def main():
     hydro = prepareCase(workdir, "hydro")
     hydro_options = [option for option in common if not option.startswith(
         ("--hydro.enabled=", "--run.darkMatterParticleCount=", "--run.gasParticleCount="))]
-    hierarchicalHydro = args.time_integrator == "hierarchical"
-    # SPH has no self-gravity coupling in the PMMM solver: hydro runs are
-    # gravity free and cannot use the gravity-only hierarchical integrator.
-    hydroSupported = not args.without_sph and not hierarchicalHydro
+    # The sole midpoint scheme supports this gravity-free SPH fixture.
+    hydroSupported = not args.without_sph
     hydro_options.append("--gravity.enabled=false")
     output = runSimulation([str(executable), *hydro_options, f"--compute.positionType={selected}",
                             "--hydro.enabled=true",
                             "--run.darkMatterParticleCount=512", "--run.gasParticleCount=512", "--run.scenario=sod",
-                            "--run.endTime=0.00001", "--run.numberOfSteps=2", "--run.maxIterations=1",
+                            "--run.endTime=0.00001", "--run.numberOfOutputs=3", "--run.maxIterations=1",
                             "--checkpoint.intervalSeconds=1000000000"], hydro, "run.log",
                            expectSuccess=hydroSupported)
     if args.without_sph:
@@ -171,14 +169,8 @@ def main():
         print(f"{selected} selection, raw checkpoint bits, evolution/restart, width rejection, "
               "and disabled SPH rejection passed")
         return 0
-    if not hydroSupported:
-        if "hierarchical SPH requires FMM gravity" not in output:
-            raise RuntimeError("SPH rejection lacked integrator build guidance")
-        print(f"{selected} selection, raw checkpoint bits, evolution/restart, width rejection, "
-              "and non-FMM hierarchical SPH rejection passed")
-        return 0
     hydro_checkpoint = hydro / "checkpoint.1"
-    checkManifest(hydro_checkpoint, 1, scenario="sod", endTime=0.00001, gravity=hierarchicalHydro)
+    checkManifest(hydro_checkpoint, 1, scenario="sod", endTime=0.00001, gravity=False)
     if checkpoint_position_bytes((hydro_checkpoint / "checkpoint.0.dat").read_bytes()) != bits // 8:
         raise RuntimeError("hydro checkpoint used the wrong position representation")
     state = decode_checkpoint((hydro_checkpoint / "checkpoint.0.dat").read_bytes())

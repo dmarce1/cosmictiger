@@ -597,7 +597,7 @@ CheckpointHeader checkpointHeader(Options const& opts) {
     header.unitTime = opts.units.timeSeconds;
     header.unitMass = opts.units.massG;
     header.particlesPerSpecies = opts.initial.numberOfParticles;
-    header.nominalSteps = opts.run.numberOfSteps;
+    header.nominalSteps = opts.run.outputIntervalCount();
     header.reserved = checkpointPhysicsCode(opts);
     return header;
 }
@@ -626,7 +626,7 @@ bool checkpointCompatible(CheckpointHeader const& header, Options const& opts) {
         header.unitLength == opts.units.lengthCm && header.unitTime == opts.units.timeSeconds &&
         header.unitMass == opts.units.massG &&
         header.particlesPerSpecies == opts.initial.numberOfParticles &&
-        header.nominalSteps == opts.run.numberOfSteps;
+        header.nominalSteps == opts.run.outputIntervalCount();
 }
 
 // Stored only for SPH checkpoints; the dark-matter layout is unchanged.
@@ -1571,7 +1571,7 @@ void checkpointStateTest() {
     changed.hydro.maxSmoothingLength *= 2.0;
     ALWAYS_ASSERT(sphParameters != detail::sphCheckpointParameters(changed));
     changed = getOptions();
-    changed.run.numberOfSteps++;
+    changed.run.numberOfOutputs++;
     ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
     changed = getOptions();
     changed.initial.numberOfParticles++;

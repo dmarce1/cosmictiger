@@ -114,10 +114,10 @@ def main():
         option.split("=", 1)[0] == argument.split("=", 1)[0] for option in args.extra_option)]
     if args.mode == "sod":
         # Select the left half of the domain, a directory containing spaces,
-        # and a cadence that does not divide the final cycle (20).
+        # with snapshots at every uniformly spaced phase including both endpoints.
         output_config = args.workdir / "silo.ini"
         output_config.write_text("[output]\nsilo = true\nxMax = 0.5\n"
-                                 "siloInterval = 7\ndirectory = silo snapshots\n")
+                                 "directory = silo snapshots\n")
         command += ["--run.scenario=sod", "--hydro.enabled=true", "--gravity.cuda=true", "--hydro.cuda=true", "--drift.cuda=true",
                     f"--configuration={output_config.resolve()}"]
     elif args.mode in ("sph", "sph_analysis"):
@@ -164,9 +164,9 @@ def main():
             raise RuntimeError("Sod run did not select the configured Silo box")
         snapshots = sorted(output_directory.glob("view.0.*.silo"))
         cycles = {int(path.name.split(".")[2]) for path in snapshots}
-        if cycles != {0, 7, 14, 20} or any(path.stat().st_size == 0 for path in snapshots):
+        if cycles != set(range(21)) or any(path.stat().st_size == 0 for path in snapshots):
             raise RuntimeError(f"Sod Silo cadence/final snapshot mismatch: {sorted(cycles)}")
-        print("Silo: cycles 0, 7, 14, 20 in the configured directory (including final snapshot)")
+        print("Silo: all 21 equally spaced output phases, including both endpoints")
         rows = [[float(value) for value in line.split()]
                 for line in (output_directory / "sod.txt").read_text().splitlines()]
         # The N8 fixture has 576 particles with the exact 8:1 density lattice.

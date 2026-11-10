@@ -43,7 +43,7 @@ def application_options(executable, *, near=None, integrator=None, hydro=False):
     gravity = "pmmm" in compiled["far"]
     # Midpoint SPH also runs without self-gravity under the sole scheme.
     integrator = select(integrator, compiled["integrator"], ("hierarchical",), "integrator")
-    result = {"run.timeIntegrator": integrator}
+    result = {}
     if gravity:
         select(near, compiled["near"], ("fmm",), "near solver")
     return result

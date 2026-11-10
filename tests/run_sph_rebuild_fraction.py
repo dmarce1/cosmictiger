@@ -112,7 +112,7 @@ def main():
     # sources. Four events are enough to exercise sparse retained membership;
     # the global integrator remains fully active regardless of the threshold.
     blast = {"run.scenario": "blast", "run.endTime": 0.005,
-             "run.numberOfSteps": 1, "run.maxIterations": 4,
+             "run.numberOfOutputs": 2, "run.maxIterations": 4,
              "run.darkMatterParticleCount": 4096, "run.gasParticleCount": 3456}
     for integrator in integrators:
         for name, fraction in (("zero", 0), ("default", 1.0 / 3.0), ("one", 1)):

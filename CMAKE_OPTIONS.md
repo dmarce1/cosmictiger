@@ -71,9 +71,17 @@ synchronizes the legacy cache entry and compiler macro with it. Thus
 `-DCOSMICTIGER_ENABLE_STARS=OFF` disables stars even if the old cache entry
 was `ON`; after migration, change `STARS` to select either value.
 
-PMMM-FMM is the sole gravity solver.
-`run.timeIntegrator=hierarchical` is automatic. Other integrator values are
-rejected. An omitted expansion degree can be recovered on restart.
+PMMM-FMM is the sole gravity solver. Hierarchical short gravity, outer long kicks
+and midpoint SPH are automatic. `gravity.method.near` and `run.timeIntegrator`
+are retired. A restart can recover an omitted expansion degree.
+
+`run.numberOfOutputs` counts equally spaced output phases including `t=0` and
+`t=end` (at least two). The spacing is physical code time for fixed scenarios
+and conformal code time for cosmology. It replaces `run.numberOfSteps` and
+`output.siloInterval`; enabled Silo snapshots are written at every phase.
+To retain a former interval count `M`, request `numberOfOutputs=M+1`. The
+checkpoint header continues storing `M`. Adaptive long steps round upward to an
+integer subdivision of the time remaining before the next output phase.
 
 `gravity.expansionDegree` defaults to the highest compiled degree. Potential
 degree d means source multipole degree d-1 and historical internal order d+1.

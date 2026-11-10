@@ -1,6 +1,6 @@
 # Hierarchical gravity and time-bin merging
 
-`run.timeIntegrator=hierarchical` advances gravity with the Hamiltonian split of
+the fixed hierarchical scheme advances gravity with the Hamiltonian split of
 GADGET-4 ([Springel et al. 2021, MNRAS 506, 2871, section 4.2](https://wwwmpa.mpa-garching.mpg.de/gadget4/gadget4-code-paper.pdf)).
 `kickStepHierarchical` in `src/core/driver.cpp` runs one synchronization point.
 Call its lowest synchronized rung n and its finest occupied rung m. The set S_L

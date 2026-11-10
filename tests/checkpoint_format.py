@@ -115,8 +115,9 @@ def read_prefix(data):
                 and (degree == 0 if far == 0 else 3 <= degree <= 9)
                 and (near != 0 if far in (2, 4) else near == 0) and integrator in (0, 1, 2),
                 "invalid checkpoint algorithm selection")
+        # Bit 6 describes hierarchical self-gravity, not gravity-free midpoint SPH.
         require((integrator == 2) == bool(flags & (1 << 19)) and
-                (integrator == 1) == bool(flags & (1 << 6)),
+                (integrator == 1 and far != 0) == bool(flags & (1 << 6)),
                 "checkpoint algorithm and integrator flags disagree")
     if flags & (1 << 17):
         version = reader.take("Q")[0]

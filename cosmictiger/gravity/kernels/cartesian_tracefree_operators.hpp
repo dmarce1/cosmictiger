@@ -72,7 +72,7 @@ template <class Real, int order>
 CUDA_EXPORT int M2M(Multipole<Real, order>& target, Multipole<Real, order> const& source,
     Vector3<Real> const& displacement) {
     using Scalar = SimdScalar<Real>;
-    constexpr auto k0 = static_cast<Scalar>(+1.00000000000000000E+00);
+    constexpr auto k0 = static_cast<Scalar>(1.000000000000000000E+00);
     using namespace math;
     ASSERT(&target != &source);
     detail::M2M(target, source, displacement, broadcast<Real>(k0));
@@ -97,8 +97,8 @@ CUDA_EXPORT int M2L(Expansion<Real, order>& target, Multipole<Real, order> const
 template <class Real, int order>
 CUDA_EXPORT void evaluateGreen(Green<Real, order>& target, Vector3<Real> const& displacement) {
     using Scalar = SimdScalar<Real>;
-    constexpr auto k0 = static_cast<Scalar>(+0.00000000000000000E+00);
-    constexpr auto k1 = static_cast<Scalar>(+1.00000000000000000E+00);
+    constexpr auto k0 = static_cast<Scalar>(0.000000000000000000E+00);
+    constexpr auto k1 = static_cast<Scalar>(1.000000000000000000E+00);
     using namespace math;
     target = broadcast<Real>(k0);
     detail::P2L(target, broadcast<Real>(k1), displacement);
@@ -122,7 +122,7 @@ template <class Real, int order>
 CUDA_EXPORT int L2L(Expansion<Real, order>& target, Expansion<Real, order> const& source,
     Vector3<Real> const& displacement, bool doPotential = true) {
     using Scalar = SimdScalar<Real>;
-    constexpr auto k0 = static_cast<Scalar>(+1.00000000000000000E+00);
+    constexpr auto k0 = static_cast<Scalar>(1.000000000000000000E+00);
     using namespace math;
     ASSERT(&target != &source);
     Real const oldPotential = target[0];
@@ -139,7 +139,7 @@ template <class Real, int order>
 CUDA_EXPORT int L2P(gravity::Field<Real>& target, Expansion<Real, order> const& source,
     Vector3<Real> const& displacement, bool doPotential = true) {
     using Scalar = SimdScalar<Real>;
-    constexpr auto k0 = static_cast<Scalar>(+1.00000000000000000E+00);
+    constexpr auto k0 = static_cast<Scalar>(1.000000000000000000E+00);
     using namespace math;
     Real const oldPotential = target[0];
     detail::L2P(target, source, displacement, broadcast<Real>(k0));

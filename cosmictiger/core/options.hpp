@@ -25,7 +25,11 @@ struct Run {
     std::string test{};
     bool verbose{};
     int maxIterations{};
-    int numberOfSteps{};
+    // Scheduled outputs include the initial and final states.
+    int numberOfOutputs{65};
+    int outputIntervalCount() const {
+        return numberOfOutputs - 1;
+    }
     int minRung{};
     // Hierarchical gravity merges its lowest occupied rung into the next one when
     // the finer rungs hold at least this fraction of the coarse solve set
@@ -91,7 +95,6 @@ inline bool interpolatedInitialConditions(Initial const& initial, bool useGlass)
 
 struct Output {
     bool silo{};
-    int siloInterval{};
     std::string directory{};
     std::string units{"code"};
     std::string frame{"comoving"};
@@ -384,7 +387,7 @@ struct Options {
         arc & cosmology.omegaK;
         arc & cosmology.omegaLambda;
         arc & compute.bucketSize;
-        arc & run.numberOfSteps;
+        arc & run.numberOfOutputs;
         arc & initial.fourierSize;
         arc & gravity.cuda;
         arc & compute.positionType;
@@ -396,7 +399,8 @@ struct Options {
         arc & analysis.slice;
         arc & analysis.views;
         arc & output.silo;
-        arc & output.siloInterval;
+        int retiredSiloInterval = 1;
+        arc & retiredSiloInterval;
         arc & output.directory;
         arc & output.units;
         arc & output.frame;
