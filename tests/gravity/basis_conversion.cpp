@@ -17,7 +17,7 @@
 #include <cosmictiger/gravity/fmm/tree_local.hpp>
 #include <cosmictiger/gravity/kernels/basis_conversion.hpp>
 #include <cosmictiger/gravity/kernels/cartesian_tracefree_operators.hpp>
-#include <cosmictiger/gravity/kernels/spherical_operators.hpp>
+#include <cosmictiger/gravity/kernels/spherical/p2m.hpp>
 #include <cosmictiger/math/fixed.hpp>
 
 void cosmictigerAssert(char const*, bool condition, char const*, int) {
@@ -94,15 +94,6 @@ void clear(Coefficients& values, double initial = 0) {
         values[i] = math::broadcast<Real>(initial);
     }
 }
-template <class Coefficients>
-void compare(Coefficients const& a, Coefficients const& b) {
-    using Real = std::remove_cvref_t<decltype(a[0])>;
-    for (size_t i = 0; i < coefficientCount(a); ++i) {
-        for (int j = 0; j < lanes<Real>(); ++j) {
-            check(lane(a[i], j), lane(b[i], j), tolerance<Real>());
-        }
-    }
-}
 template <class Real>
 Vector3<Real> point(Point const& p) {
     return {math::broadcast<Real>(p[0]), math::broadcast<Real>(p[1]), math::broadcast<Real>(p[2])};
@@ -156,65 +147,25 @@ std::array<Complex, 4> regular(int n, int m, Point const& p) {
 
 template <class Real>
 void basisChecks() {
-    using Cm = cartesian::Multipole<Real, kOrder>;
-    using Sm = spherical::Multipole<Real, kOrder>;
     using Cl = cartesian::Expansion<Real, kOrder>;
     using Sl = spherical::Expansion<Real, kOrder>;
     using Field = cosmictiger::gravity::Field<Real>;
     std::array<Point, 3> const samples{{{.37, -.29, .43}, {-.41, .19, -.31}, {0, 0, .53}}};
-    auto const shift = point<Real>({.13, -.07, .11});
-    context = "every source component, field and translation";
-    for (int slot = 0; slot < Cm::kSize_; ++slot) {
-        Cm c, translated;
-        clear(c);
-        clear(translated);
-        for (int j = 0; j < lanes<Real>(); ++j) {
-            setLane(c[slot], j, 1 + .125 * j);
-        }
-        Sm s, moved, mapped;
-        clear(s, 17);
-        clear(moved);
-        clear(mapped);
-        conversion::sourceToSpherical(s, c);
-        cartesian::M2M(translated, c, shift);
-        conversion::sourceToSpherical(mapped, translated);
-        spherical::M2M(moved, s, shift);
-        compare(mapped, moved);
-        for (auto const& p : samples) {
-            Field cf, sf;
-            clear(cf);
-            clear(sf);
-            auto const distant = point<Real>({2 + p[0], -1 + p[1], 1.5 + p[2]});
-            cartesian::M2P(cf, c, distant);
-            spherical::M2P(sf, s, distant);
-            compare(cf, sf);
-        }
-    }
-    context = "every local component, closed polynomial and translation";
+    context = "every local component against a closed polynomial";
     for (int n = 0; n < kOrder; ++n) {
         for (int m = -n; m <= n; ++m) {
-            Sl s, moved;
+            Sl s;
             clear(s);
-            clear(moved);
             for (int j = 0; j < lanes<Real>(); ++j) {
                 setLane(s[n * (n + 1) + m], j, 1 + .125 * j);
             }
-            Cl c, translated, mapped;
+            Cl c;
             clear(c, 17);
-            clear(translated);
-            clear(mapped);
             conversion::localToCartesian(c, s);
-            cartesian::L2L(translated, c, shift);
-            spherical::L2L(moved, s, shift);
-            conversion::localToCartesian(mapped, moved);
-            compare(mapped, translated);
             for (auto const& p : samples) {
-                Field cf, sf;
+                Field cf;
                 clear(cf);
-                clear(sf);
                 cartesian::L2P(cf, c, point<Real>(p));
-                spherical::L2P(sf, s, point<Real>(p));
-                compare(cf, sf);
                 auto const oracle = regular(n, std::abs(m), p);
                 for (int component = 0; component < 4; ++component) {
                     double const value =
@@ -276,26 +227,22 @@ void seamCheck() {
     cloudCheck<double>(offsets);
 }
 
-void scalingAndBackground() {
-    using Cl = cartesian::Expansion<double, kOrder>;
-    using Sl = spherical::Expansion<double, kOrder>;
-    using Field = cosmictiger::gravity::Field<double>;
-    // Derived boundary scaling: y=κr, u=r/h, β_mesh=βh², β_tree=β/κ³.
-    // Symbol directory: κ is kScaleFactor; h is cell width; β is background
-    // curvature magnitude; y and u are tree and mesh coordinates.
+void sourceScalingCheck() {
+    // The Cartesian tree uses physical coordinates; PMMM source moments use mesh-cell units.
+    // Derived boundary scaling: x_tree = κ h u_mesh.
     double const κ = kScaleFactor;
-    double const β = .73;
     for (double const h : {.125, .03125, .0078125}) {
         context = "mesh/tree source rank scaling";
         cartesian::Multipole<double, kOrder> cm;
-        clear(cm);
         spherical::Multipole<double, kOrder> sm, direct;
+        clear(cm);
         clear(sm);
         clear(direct);
         for (int i = 0; i < 4; ++i) {
             Point const u{.12 + .03 * i, -.21 + .04 * i, .18 - .05 * i};
             cartesian::P2M(cm, .7 + .3 * i, Point{κ * h * u[0], κ * h * u[1], κ * h * u[2]});
-            spherical::P2M(direct, .7 + .3 * i, u);
+            spherical::detail::P2M<kOrder - 2>::template add<double>(
+                direct, .7 + .3 * i, u[0], u[1], u[2]);
         }
         conversion::sourceToSpherical(sm, cm);
         for (int n = 0; n <= kOrder - 2; ++n) {
@@ -308,73 +255,9 @@ void scalingAndBackground() {
                     direct[n * (n + 1) + m] / scale, 3e-11);
             }
         }
-        context = "implicit background, near subtraction, scaling, nested translations";
-        Sl original, prepared;
-        clear(original);
-        for (int i = 0; i < Sl::kCount_; ++i) {
-            original[i] = .017 * std::sin(i + 1.);
-        }
-        spherical::PeriodicBackground<double> const background{β * h * h};
-        prepared = original;
-        spherical::preparePeriodicLocal(prepared, background);
-        // Harmonic near subtraction changes no background context.
-        spherical::P2L(prepared, -.29, Point{2.7, -1.9, 2.3});
-        spherical::P2L(original, -.29, Point{2.7, -1.9, 2.3});
-        Cl tree;
-        clear(tree);
-        conversion::localToCartesian(tree, prepared);
-        for (int n = 0; n < kOrder; ++n) {
-            for (int i = n * n; i < (n + 1) * (n + 1); ++i) {
-                tree[i] *= std::pow(κ * h, -n) / κ;
-            }
-        }
-        double const βₜ = background.backgroundBeta / (κ * κ * κ * h * h);
-        check(βₜ / (β / (κ * κ * κ)), 1, 2e-15);
-        Point total{};
-        for (Point const d : {Point{.13, -.09, .07}, Point{-.04, .02, -.03}}) {
-            Sl shifted;
-            clear(shifted);
-            spherical::translatePeriodicLocal(shifted, prepared, d, background);
-            prepared = shifted;
-            Cl moved;
-            clear(moved);
-            Point const dy{κ * h * d[0], κ * h * d[1], κ * h * d[2]};
-            cartesian::L2L(moved, tree, dy);
-            moved[3] -= 3 * βₜ * dy[2];
-            moved[0] -= 1.5 * βₜ * dy[2] * dy[2];
-            tree = moved;
-            for (int axis = 0; axis < 3; ++axis) {
-                total[axis] += d[axis];
-            }
-        }
-        Point const u{.19, -.12, .23};
-        Point const y{κ * h * u[0], κ * h * u[1], κ * h * u[2]};
-        Field meshField, treeField, expected;
-        clear(meshField);
-        clear(treeField);
-        clear(expected);
-        spherical::evaluatePeriodicLocal(meshField, prepared, u, background);
-        cartesian::L2P(treeField, tree, y);
-        treeField[0] -= 1.5 * βₜ * y[2] * y[2];
-        treeField[3] += 3 * βₜ * y[2];
-        Point r;
-        double r2 = 0;
-        for (int axis = 0; axis < 3; ++axis) {
-            r[axis] = u[axis] + total[axis];
-            r2 += r[axis] * r[axis];
-        }
-        spherical::L2P(expected, original, r);
-        expected[0] -= .5 * background.backgroundBeta * r2;
-        for (int axis = 0; axis < 3; ++axis) {
-            expected[axis + 1] += background.backgroundBeta * r[axis];
-        }
-        compare(meshField, expected);
-        check(κ * treeField[0], meshField[0], 3e-11);
-        for (int axis = 0; axis < 3; ++axis) {
-            check(κ * κ * treeField[axis + 1], meshField[axis + 1] / h, 3e-11);
-        }
     }
 }
+
 template <class Real, class PositionType>
 void productionTreeLocal() {
     namespace local = cosmictiger::gravity::tree_local;
@@ -469,7 +352,7 @@ int main() {
         detail::cloudCheck<double>(cloud);
         detail::seamCheck<Fixed32>();
         detail::seamCheck<Fixed64>();
-        detail::scalingAndBackground();
+        detail::sourceScalingCheck();
         detail::productionTreeLocal<double, Fixed32>();
         detail::productionTreeLocal<double, Fixed64>();
         detail::productionTreeLocal<float, Fixed32>();

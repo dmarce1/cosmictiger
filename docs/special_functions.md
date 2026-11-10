@@ -1,4 +1,10 @@
-# Special-function comparison
+# Special-function comparison (archival)
+
+This is the 2026-10-20 benchmark record. The candidate `special_functions`
+headers, their dedicated tests and benchmarks, and the coefficient generator
+were removed after a reachability review found no production callers. The raw
+results below are retained as historical measurements; the build commands
+from that checkout no longer apply.
 
 Measurements: 2026-10-20, Ryzen 9 3900X, GCC 13.3, RTX 3090 (82 SMs),
 CUDA 12.8.93, compute capability 8.6. Repository base:
@@ -130,7 +136,7 @@ implementation here are independent of that library's interval tables.
 `tools/generate_special_coefficients.py` reproduces the new degree-15
 transformed erfcx polynomial using mpmath.
 
-## Where the functions are used
+## Where the functions were used at the time of the benchmark
 
 | Function | Existing implementation and consumers |
 | --- | --- |
@@ -206,9 +212,10 @@ on CUDA: ordinary `powf` under fast-math exceeded the test tolerance.
 
 ### FloatFloat and possible DoubleDouble intermediates
 
-The existing `cosmictiger/math/float_float.hpp` supplies scalar CPU/CUDA
-`FloatFloat` arithmetic. Its `twoProduct` primitive stores a rounded product
-and an FMA residual. The Gaussian correction above uses the same construction:
+At the time of the measurements, `cosmictiger/math/float_float.hpp` supplied
+scalar CPU/CUDA `FloatFloat` arithmetic. Its `twoProduct` primitive stored a
+rounded product and an FMA residual. The Gaussian correction above uses the
+same construction:
 `square` is the high word and `-tail` is the low word of `x*x`, when the
 residual is representable. Keeping those words separate preserves information
 that would disappear if they were added back into one float before `exp`.
@@ -272,30 +279,9 @@ polynomial probe was about 3–4× faster than Horner, but that is not a
 lane-width speedup for the complete function. Range reduction, masks,
 library vectorization, and memory traffic still determine end-to-end timing.
 
-## Reproduce
+## Historical reproduction
 
-Configure the project with its usual HPX and numerical-library dependencies
-and `BUILD_TESTING=ON`. For the measurements here, the build directory is
-`build/special_functions_validation`.
-
-```sh
-cmake --build build/special_functions_validation --parallel 4 --target \
-  special_functions_baseline_test special_functions_native_test \
-  special_functions_fast_math_test special_functions_cuda_standard_test \
-  special_functions_cuda_fast_math_test special_functions_standard_benchmark \
-  special_functions_fast_math_benchmark special_functions_cuda_standard_benchmark \
-  special_functions_cuda_fast_math_benchmark
-ctest --test-dir build/special_functions_validation -V -R '^special_functions_'
-build/special_functions_validation/special_functions_standard_benchmark 131072 15
-build/special_functions_validation/special_functions_fast_math_benchmark 131072 15
-build/special_functions_validation/special_functions_cuda_standard_benchmark 262144 15 16 32
-build/special_functions_validation/special_functions_cuda_fast_math_benchmark 262144 15 16 32
-# Optional register/cycle mode: fifth argument is iterations per thread.
-build/special_functions_validation/special_functions_cuda_standard_benchmark 262144 15 16 32 8192
-build/special_functions_validation/special_functions_cuda_fast_math_benchmark 262144 15 16 32 8192
-```
-
-Benchmarks are excluded from the default build and are not CTest timing
-gates. The reference translation unit always uses `-fno-fast-math
--ffp-contract=off`. CUDA accuracy tests launch one block and return skip
-code 77 only when the GPU is unavailable.
+The raw results, environment, and source hashes remain in
+[special_functions_results_20261020](special_functions_results_20261020/).
+Reproducing the measurements requires the source snapshot identified above;
+this checkout no longer defines the candidate targets.

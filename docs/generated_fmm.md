@@ -9,8 +9,9 @@
 
 The checked-in headers contain both families for local degrees 2 through 8,
 source degrees 1 through 7, corresponding to application FMM orders 3 through 9.
-M2L keeps terms of combined source and local degree at most the local-degree
-limit. `--min-order` and `--max-order` retain the
+The Cartesian near-field M2L uses the generated trace-free expansion. The PMMM
+far field contracts spherical source moments with the cached Green filter in
+Fourier space. `--min-order` and `--max-order` retain the
 existing generator convention: their arguments are **local degrees**, not the
 application FMM order.
 
@@ -27,13 +28,14 @@ The representations are generated and tested independently. The runtime walk,
 tree layout, checkpoint representation, and softening selection use Cartesian
 tracefree; the far-field mesh uses the spherical kernels.
 
-The public C++ namespaces are `cosmictiger::gravity::cartesian` and
-`cosmictiger::gravity::spherical`. Each provides distinct `Multipole`, `Expansion`,
-and `Green` types and destination-first additive operators `P2M`, `M2M`, `M2L`,
-`M2P`, `P2L`, `L2L`, and `L2P`. All share `gravity::Field`, with acceleration
-being minus the potential gradient. There are no implicit conversions between
-representations. Existing STF callers must include `cartesian_tracefree_operators.hpp`
-and qualify `cartesian` (or use ADL with its types).
+The C++ namespaces are `cosmictiger::gravity::cartesian` and
+`cosmictiger::gravity::spherical`. Each has distinct `Multipole`, `Expansion`,
+and `Green` types. Cartesian provides the destination-first tree operators;
+the generated spherical classes retained for PMMM are `P2M`, `Green`, and `L2P`,
+plus `EwaldGreen` and `EwaldL2P`. Field acceleration is minus the potential
+gradient. There are no implicit conversions between representations. Cartesian
+callers include `cartesian_tracefree_operators.hpp` and qualify
+`cartesian` (or use ADL with its types).
 
 `Multipole<Real, order>` has source degree `order - 2`; `Expansion` and `Green`
 have degree `order - 1`. The generated implementation classes use degrees.
@@ -112,16 +114,14 @@ derivative emitter retain their existing explicit FMAs and count conventions.
 
 ## Spherical rotation selection
 
-For each order, M2M, M2L, M2P, L2L, and L2P generate three candidates: no rotation,
-azimuthal rotation only, and full rotation. Generation selects the candidate
-with the smallest emitted weighted count and emits it directly as the public
-operator specialization. A comment on each specialization records its rotation
-variant; there is no C++ `Variant` type or variant template parameter. Equal
-counts choose the first candidate in that order. P2M/P2L use direct
-solid-harmonic recurrences. The operation report retains the costs of every
-candidate.
+For each order, L2P generates three candidates: no rotation, azimuthal
+rotation, and axial alignment. Generation selects the candidate with the
+smallest emitted weighted count. A comment on each specialization records its
+rotation variant; there is no C++ `Variant` type or variant template parameter.
+Equal counts choose the first candidate. P2M and Green use direct harmonic
+recurrences. The operation report retains the costs of every L2P candidate.
 
-Costs include geometry, rotation, translation/contraction, and accumulation into
+Costs include geometry, rotation, local evaluation, and accumulation into
 the caller's existing output. Addition, subtraction, multiplication, division,
 and an explicit fused multiply-add each cost **1**. A square root costs **7**;
 `1/sqrt(x)` costs **8**. Constants, copies, unary sign changes, comparisons, and
@@ -141,9 +141,10 @@ performed during generation.
 
 ## Traces and periodic fields
 
-Spherical Ewald is a lattice correction, so it uses a general harmonic
-contraction rather than the free-space axial shortcut. The periodic background is
-handled separately from the Cartesian trace-free coefficient arrays.
+The spherical Ewald lattice correction is built into the cached PMMM Green
+filter. PMMM contracts the filter and source moments in Fourier space; its
+general harmonic contraction cannot use the free-space axial shortcut. The
+periodic background is handled separately from the trace-free coefficient arrays.
 The formulas follow
 [Nitadori's PMMM paper, Appendix B](https://arxiv.org/html/1409.5981v2).
 See [the spherical API](generated_spherical.md) and
@@ -156,32 +157,12 @@ The following table is generated from the operation report. Parentheses give
 the chosen variant: none, azimuth, or full. Every value includes output
 accumulation and geometry; FMA costs 1 and sqrt costs 7.
 
-| FMM order | M2M | M2L | M2P | L2L | L2P |
-| --- | --- | --- | --- | --- | --- |
-| 3 | 9 (none) | 62 (none) | 55 (none) | 50 (none) | 45 (none) |
-| 4 | 46 (none) | 144 (azimuth) | 94 (full) | 130 (none) | 89 (full) |
-| 5 | 124 (none) | 270 (azimuth) | 146 (full) | 279 (none) | 136 (full) |
-| 6 | 271 (none) | 454 (azimuth) | 216 (full) | 464 (full) | 198 (full) |
-| 7 | 465 (full) | 710 (full) | 304 (azimuth) | 695 (full) | 274 (full) |
-| 8 | 696 (full) | 1001 (full) | 401 (azimuth) | 990 (full) | 369 (full) |
-| 9 | 990 (full) | 1370 (full) | 510 (azimuth) | 1353 (full) | 482 (full) |
-
-## Cartesian tracefree versus Spherical direct M2L
-
-These counts include displacement geometry and additive output, retain arbitrary
-source dipoles, and use the same degree truncation. Application coordinate-unit
-conversion is excluded for both representations. Cartesian tracefree geometry adds 14 to
-its generated body: one multiply, two FMAs, one square root, one division, and
-three coordinate multiplies. Both generators emit explicit FMAs. FMA costs 1
-and sqrt costs 7; the table counts emitted arithmetic, not measured instruction
-counts or timings.
-
-| FMM order | Cartesian tracefree | Spherical | Spherical rotation |
-| --- | --- | --- | --- |
-| 3 | 47 | 62 | none |
-| 4 | 99 | 144 | azimuth |
-| 5 | 200 | 270 | azimuth |
-| 6 | 393 | 454 | azimuth |
-| 7 | 707 | 710 | full |
-| 8 | 1230 | 1001 | full |
-| 9 | 2048 | 1370 | full |
+| FMM order | L2P |
+| --- | --- |
+| 3 | 45 (none) |
+| 4 | 89 (axial) |
+| 5 | 136 (axial) |
+| 6 | 198 (axial) |
+| 7 | 274 (axial) |
+| 8 | 369 (axial) |
+| 9 | 482 (axial) |

@@ -63,7 +63,7 @@ FlopCount treeSourceToMesh(double* output, SourceMultipoleBuffer const& source,
 
 #include <cosmictiger/gravity/kernels/basis_conversion.hpp>
 #include <cosmictiger/gravity/kernels/cartesian_tracefree_operators.hpp>
-#include <cosmictiger/math/simd.hpp>
+#include <cosmictiger/math/simd_math.hpp>
 
 template <int order>
 FlopCounts treeComputeMultipole(MultipoleBuffer& multi, MultipoleBuffer const& left,

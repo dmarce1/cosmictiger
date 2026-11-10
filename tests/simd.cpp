@@ -16,7 +16,7 @@
 
 #include <gtest/gtest.h>
 
-#include <cosmictiger/math/simd.hpp>
+#include <cosmictiger/math/simd_math.hpp>
 
 namespace detail {
 
@@ -212,40 +212,6 @@ void testWidth() {
     testPartialPackets<laneCount>();
 }
 
-void testMathApproximations() {
-    std::array<float, 8> const exponentArguments = {
-        -20.0f, -8.0f, -1.0f, -0.25f, 0.0f, 0.5f, 3.0f, 20.0f};
-    std::array<float, 8> const sineArguments = {-3.0f, -1.5f, -0.25f, 0.0f, 0.5f, 1.0f, 2.0f, 3.0f};
-    std::array<float, 8> const logarithmArguments = {
-        0.0001f, 0.125f, 0.5f, 1.0f, 1.5f, 2.0f, 7.0f, 1.0e12f};
-    std::array<float, 8> const errorArguments = {0.0f, 0.125f, 0.5f, 1.0f, 2.0f, 3.0f, 5.0f, 8.0f};
-    SimdFloat const exponentInput([&](auto lane) { return exponentArguments[size_t(lane)]; });
-    SimdFloat const sineInput([&](auto lane) { return sineArguments[size_t(lane)]; });
-    SimdFloat const logarithmInput([&](auto lane) { return logarithmArguments[size_t(lane)]; });
-    SimdFloat const errorInput([&](auto lane) { return errorArguments[size_t(lane)]; });
-    auto const exponential = exp(exponentInput);
-    auto const sine = sin(sineInput);
-    auto const logarithm = log(logarithmInput);
-    SimdFloat errorComplement;
-    SimdFloat errorExponential;
-    erfcexp(errorInput, &errorComplement, &errorExponential);
-    for (int lane = 0; lane < kSimdFloatSize; ++lane) {
-        double const expectedExponential = std::exp(double(exponentArguments[lane]));
-        requireNear(exponential[lane], expectedExponential, 3.0e-6 * expectedExponential,
-            "SIMD exponential approximation");
-        requireNear(
-            sine[lane], std::sin(double(sineArguments[lane])), 2.0e-6, "SIMD sine approximation");
-        requireNear(logarithm[lane], std::log(double(logarithmArguments[lane])), 5.0e-6,
-            "SIMD logarithm approximation");
-        double const argument = errorArguments[lane];
-        double const expectedErrorExponential = std::exp(-argument * argument);
-        requireNear(errorComplement[lane], std::erfc(argument), 3.0e-7,
-            "SIMD complementary error function approximation");
-        requireNear(errorExponential[lane], expectedErrorExponential,
-            3.0e-6 * expectedErrorExponential, "SIMD erfcexp exponential approximation");
-    }
-}
-
 }    // namespace detail
 
 #if defined(COSMICTIGER_SIMD_EXPECT_STANDARD)
@@ -266,8 +232,4 @@ TEST(Simd, Width8) {
 
 TEST(Simd, Width16) {
     detail::testWidth<16>();
-}
-
-TEST(Simd, MathApproximations) {
-    detail::testMathApproximations();
 }

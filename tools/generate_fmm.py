@@ -514,49 +514,6 @@ def emitKernel(E,independentM2lRatios=False):
     return '\n'.join(out),stats
 
 
-def emitEwaldKernel(sourceOrder, expansionOrder):
-    """Contract raw Cartesian moments with externally computed harmonic derivatives.
-
-    The periodic background is handled outside this harmonic contraction.
-    Only harmonic derivative components enter this operator.
-    """
-    g = Dag()
-    source = {alpha: g.symbol(f'M[{index(alpha)}]')
-              for degree in range(sourceOrder + 1) for alpha in indices(degree)}
-    derivatives = {alpha: g.symbol(f'D[{index(alpha)}]')
-                   for degree in range(expansionOrder + 1) for alpha in indices(degree)}
-    getSource = accessor(g, source)
-    getDerivative = accessor(g, derivatives)
-    result = {}
-    for degree in range(expansionOrder + 1):
-        for alpha in indices(degree):
-            terms = []
-            for rank in range(min(sourceOrder, expansionOrder - degree) + 1):
-                for nx in range(rank + 1):
-                    for ny in range(rank - nx + 1):
-                        beta = (nx, ny, rank - nx - ny)
-                        terms.append(g.scale(g.mul(getSource(beta), getDerivative(plus(alpha, beta))),
-                                             Q((-1)**rank, fac(beta))))
-            result[alpha] = g.add(*terms)
-    g, signed = normalizeSigns(g, list(result.values()))
-    live = g.live(root for root, sign in signed)
-    plan = EmissionPlan(g, signed)
-    statistics = plan.statistics(live, range(len(signed)))
-    code = [f'template <class Real> CUDA_EXPORT void M2L(',
-            f'    Expansion<Real, {expansionOrder+1}>& L,',
-            f'    Multipole<Real, {expansionOrder+1}> const& M,',
-            f'    Derivatives<Real, {expansionOrder+1}> const& D) {{',
-            ]
-    code += g.emitConstants(live)
-    code += plan.emit(live)
-    for output, alpha in enumerate(result):
-        code += plan.accumulate(f'L[{index(alpha)}]', output)
-    code += ['}', '']
-    statistics.update({'operator': 'EwaldM2L', 'source_order': sourceOrder,
-                       'order': expansionOrder})
-    return '\n'.join(code), statistics
-
-
 def replaceCartesianFields(cpp, sourceDegree, localDegree):
     from cartesian.types import component_name
     def field(number, degree):
@@ -564,8 +521,7 @@ def replaceCartesianFields(cpp, sourceDegree, localDegree):
                                    for a in indices(rank) if index(a) == number))
     # Emitted straight-line arithmetic names each coefficient directly.
     for variable, degree in (('targetM', sourceDegree), ('M', sourceDegree),
-                             ('targetL', localDegree), ('L', localDegree),
-                             ('D', localDegree)):
+                             ('targetL', localDegree), ('L', localDegree)):
         def replacement(match):
             number = int(match.group(1))
             name = field(number, degree)
@@ -585,7 +541,7 @@ def generateCartesianTracefree(minLocalDegree=2, maxLocalDegree=8, independentM2
     parts['l2l_warp'] = []
     statistics = []
     operatorStats = []
-    flopNames = {'m2l':'kM2LFlops', 'm2l_derivatives':'kM2LDerivativeFlops',
+    flopNames = {'m2l':'kM2LFlops',
                  'm2m':'kM2MFlops', 'l2l':'kL2LFlops', 'p2m':'kP2MFlops',
                  'p2l':'kP2LFlops', 'm2p':'kM2PFlops', 'l2p':'kL2PFlops'}
     for localDegree in range(minLocalDegree, maxLocalDegree + 1):
@@ -593,8 +549,7 @@ def generateCartesianTracefree(minLocalDegree=2, maxLocalDegree=8, independentM2
         guard = (f'#if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= {localDegree + 1}) && '
                  f'(!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= {localDegree + 1})')
         direct, directStats = emitKernel(localDegree, independentM2lRatios)
-        derivatives, derivativeStats = emitEwaldKernel(sourceDegree, localDegree)
-        statistics += [directStats, derivativeStats]
+        statistics.append(directStats)
         translations, translationStats = generateTranslations(sourceDegree, localDegree, sys.modules[__name__])
         particles, particleStats = generateParticles(sourceDegree, localDegree, sys.modules[__name__])
         particles[1] += particles[1].replace(
@@ -604,8 +559,7 @@ def generateCartesianTracefree(minLocalDegree=2, maxLocalDegree=8, independentM2
         warp = re.sub(r'\bsource\b', 'L', warp)
         warp = re.sub(r'\btarget\b', 'targetL', warp)
         operatorStats += translationStats + particleStats + [warpStats]
-        code = {'m2l': [(direct, directStats, 'm2l'),
-                        (derivatives, derivativeStats, 'm2l_derivatives')],
+        code = {'m2l': [(direct, directStats, 'm2l')],
                 'm2m': [(translations[0], translationStats[0], 'm2m')],
                 'l2l': [(translations[1], translationStats[1], 'l2l')],
                 'p2m': [(particles[0], particleStats[0], 'p2m')],
@@ -638,7 +592,6 @@ def generateCartesianTracefree(minLocalDegree=2, maxLocalDegree=8, independentM2
                        '#include <cosmictiger/gravity/kernels/cartesian_tracefree/geometry.hpp>')
             namespace = 'cosmictiger::gravity::cartesian::detail'
             names = [flopNames[operator]]
-            if operator == 'm2l': names.append(flopNames['m2l_derivatives'])
             prelude = '\n'.join(f'template <int degree> inline constexpr int {name} = 0;'
                                 for name in names)
         outputs[root] = '\n'.join([
@@ -687,53 +640,11 @@ inline constexpr bool kIndependentM2lRatios = {str(independentM2lRatios).lower()
     return outputs
 
 
-def m2lComparison(cartesianKernels, sphericalSelections):
-    """Compare direct M2L at equal degrees, including displacement geometry.
-
-    The direct M2L DAG includes three coordinate multiplies. Remaining radius
-    work costs one multiply, two FMAs, one sqrt and one division: 11 with
-    FMA=1 and sqrt=7.
-    Application unit conversion is outside both representation APIs.
-    """
-    # The DAG now includes the three coordinate normalizations; the remaining
-    # radius work is one multiply, two FMAs, sqrt and reciprocal.
-    geometryFlops = 11
-    cartesian = {
-        kernel['expansion_order']:
-            sum(kernel['arithmetic'].values()) + kernel['accumulations']
-        for kernel in cartesianKernels if 'expansion_order' in kernel
-    }
-    rows = []
-    for selection in sphericalSelections:
-        if selection['operator'] != 'M2l':
-            continue
-        degree = selection['degree']
-        rows.append({
-            'fmm_order': degree + 1,
-            'source_degree': degree - 1,
-            'local_degree': degree,
-            'cartesian_kernel_flops': cartesian[degree],
-            'cartesian_geometry_flops': geometryFlops,
-            'cartesian_weighted_flops': cartesian[degree] + geometryFlops,
-            'spherical_weighted_flops': selection['weighted_flops'],
-            'spherical_variant': ('none', 'azimuth', 'full')[selection['selected_variant']],
-        })
-    return {
-        'description': 'Free-space M2L, including displacement geometry and additive output; '
-            'source degree = FMM order - 2, local degree = FMM order - 1. '
-            'Generic source dipoles are retained. Application coordinate-unit conversion '
-            'is excluded from both families. +, -, *, / and explicit FMA cost 1; sqrt costs 7. '
-            'Both families emit explicit FMAs; no additional compiler contraction is assumed. '
-            'These are emitted arithmetic counts, not measured instruction counts or timings.',
-        'orders': rows,
-    }
-
-
 def generate(minLocalDegree=2, maxLocalDegree=8, independentM2lRatios=False):
     """Generate all representations at exactly the same requested order range.
 
     The near field's runtime representation is Cartesian tracefree; the spherical
-    kernels serve the PMMM far field and are an independent generated API.
+    kernels serve the PMMM far field.
     Preserve the original report entries for existing arithmetic-count consumers;
     each new family declares its own complete cost convention in its report.
     """
@@ -759,8 +670,6 @@ def generate(minLocalDegree=2, maxLocalDegree=8, independentM2lRatios=False):
         'kernels': report['kernels'],
         'operators': report['operators'],
     }
-    report['m2l_comparison'] = m2lComparison(
-        report['kernels'], report['representations']['spherical']['selections'])
     outputs['operation_counts.json'] = json.dumps(report, indent=2) + '\n'
     return outputs
 
@@ -801,7 +710,7 @@ SYMBOL_DIRECTORIES = {
 // dx, dy, dz: center displacement; basis: distributed Taylor polynomial values.
 """,
     'cartesian_tracefree/m2l.hpp': """// Symbol directory (Cartesian M2L):
-// M: source multipole; L: destination local expansion; D: Green derivatives.
+// M: source multipole; L: destination local expansion.
 // dx, dy, dz: target-minus-source center displacement; R: its radius; iR: 1/R.
 // Stored tensor fields are named by Cartesian indices; zz and other z-pairs follow from trace-free symmetry.
 """,
@@ -832,11 +741,11 @@ SYMBOL_DIRECTORIES = {
     'spherical_kernels.hpp': """// Symbol directory (real spherical FMM operators):
 // M: regular-harmonic source multipole; L: singular-harmonic local expansion.
 // G: signed singular Green harmonics of -1/R; R: source-target distance.
-// x, y, z: operator displacement; source degree is local degree minus one in M2L.
+// x, y, z: source offset for P2M, separation for Green, evaluation displacement for L2P.
 // Index (n,m) denotes harmonic degree n and signed storage order m.
 """,
     'spherical_ewald_kernels.hpp': """// Symbol directory (periodic spherical Ewald operators):
-// M: source multipole; L: target local expansion; G: periodic Green harmonics.
+// L: target local expansion; G: periodic Green harmonics.
 // x, y, z: minimum-image target-minus-source displacement in unit-box coordinates.
 // sourceTrace, localTrace, greenTrace: independent radial/background terms.
 // The primary free-space singularity is handled separately from the periodic correction.

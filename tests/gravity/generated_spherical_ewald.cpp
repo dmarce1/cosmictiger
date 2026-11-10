@@ -14,18 +14,8 @@
 #include <vector>
 
 #include <cosmictiger/gravity/kernels/spherical_ewald_kernels.hpp>
-#include <cosmictiger/gravity/kernels/spherical_operators.hpp>
 #include <cosmictiger/math/simd_math.hpp>
 #include <cosmictiger/math/vector3.hpp>
-
-// This generator test has no HPX runtime; the spherical M2M operator's aliasing
-// check still needs an assertion implementation when ASSERT is enabled.
-void cosmictigerAssert(char const* condition, bool satisfied, char const* file, int line) {
-    if (!satisfied) {
-        std::fprintf(stderr, "%s:%d: assertion \"%s\" failed\n", file, line, condition);
-        throw std::runtime_error("generated spherical Ewald assertion failed");
-    }
-}
 
 namespace counted {
 inline size_t operations = 0;
@@ -166,14 +156,6 @@ std::vector<Complex> regular(int degree, Point p) {
     return result;
 }
 
-Complex get(std::vector<Complex> const& values, int n, int m) {
-    if (std::abs(m) > n) {
-        return 0;
-    }
-    auto const value = values[index(n, std::abs(m))];
-    return m >= 0 ? value : (m % 2 ? -1. : 1.) * std::conj(value);
-}
-
 std::array<std::array<double, 2>, 32> quadrature() {
     std::array<std::array<double, 2>, 32> result{};
     for (int node = 0; node < 32; ++node) {
@@ -306,60 +288,9 @@ void scalarCases() {
                     "Green harmonic");
             }
         }
-        Point const source{.013, -.009, .007};
-        auto const sourceHarmonics = regular(degree - 1, {-source[0], -source[1], -source[2]});
-        std::array<Real, degree * degree> moments{};
-        for (int n = 0; n < degree; ++n) {
-            for (int m = -n; m <= n; ++m) {
-                moments[index(n, m)] = Real(m >= 0 ? sourceHarmonics[index(n, m)].real() :
-                                                     sourceHarmonics[index(n, -m)].imag());
-            }
-        }
-        double const sourceTrace =
-            source[0] * source[0] + source[1] * source[1] + source[2] * source[2];
-        std::array<Real, kCount> local{};
-        local.fill(Real(.125));
-        Real localTrace = Real(.25);
-        EwaldM2L<degree>::template add<Real>(
-            local, localTrace, moments, Real(sourceTrace), greens, trace);
-        for (int n = 0; n <= degree; ++n) {
-            for (int m = 0; m <= n; ++m) {
-                Complex expected{};
-                for (int k = 0; k <= std::min(degree - n, degree - 1); ++k) {
-                    for (int l = -k; l <= k; ++l) {
-                        expected +=
-                            std::conj(get(sourceHarmonics, k, l)) * get(exact, n + k, m + l);
-                    }
-                }
-                if (n == 0 && degree >= 3) {
-                    expected -= .5 * (4 * kPi / 3) * sourceTrace;
-                }
-                if (n == 1 && m == 0) {
-                    expected += (4 * kPi / 3) * source[2];
-                }
-                if (n == 1 && m == 1) {
-                    expected += (4 * kPi / 3) * Complex(source[0], source[1]);
-                }
-                double const tolerance =
-                    std::max(epsilon * 10, 3e-9) * std::max(1., std::abs(expected));
-                near(local[index(n, m)], .125 + expected.real(), tolerance, "M2L real");
-                if (m) {
-                    near(local[index(n, -m)], .125 + expected.imag(), tolerance, "M2L imaginary");
-                }
-            }
-        }
-        near(localTrace, .25 + 4 * kPi / 3, epsilon, "M2L trace accumulation");
     }
-    // Pure background tests isolate its signs and accumulation from harmonics.
-    std::array<Real, kCount> zero{}, shifted{};
-    Real shiftedTrace = Real(.25);
-    EwaldL2L<degree>::template add<Real>(
-        shifted, shiftedTrace, zero, Real(2), Real(.1), Real(-.2), Real(.3));
-    near(shifted[0], -.14, epsilon, "background translated potential");
-    near(shifted[3], -.2, epsilon, "background translated x");
-    near(shifted[1], .4, epsilon, "background translated y");
-    near(shifted[2], -.6, epsilon, "background translated z");
-    near(shiftedTrace, 2.25, epsilon, "background translated trace");
+    // The production evaluator applies the background trace at a point.
+    std::array<Real, kCount> zero{};
     std::array<Real, 4> field{};
     EwaldL2P<degree>::template add<Real>(field, zero, Real(2), Real(.1), Real(-.2), Real(.3));
     near(field[0], -.14, epsilon, "background point potential");
@@ -369,52 +300,15 @@ void scalarCases() {
 }
 
 template <int degree>
-void typedTraceCases() {
-    using namespace cosmictiger::gravity::spherical;
-    constexpr int kOrder = degree + 1;
-    Vector3<double> particleOffset{};
-    particleOffset[0] = .2;
-    particleOffset[1] = -.1;
-    particleOffset[2] = .4;
-    Vector3<double> displacement{};
-    displacement[0] = .3;
-    displacement[1] = .5;
-    displacement[2] = -.2;
-    Vector3<double> translatedOffset{};
-    for (int dim = 0; dim < kDimensions; ++dim) {
-        translatedOffset[dim] = particleOffset[dim] + displacement[dim];
-    }
-    Multipole<double, kOrder> source{};
-    Multipole<double, kOrder> translated{};
-    Multipole<double, kOrder> reference{};
-    double sourceTrace = 0;
-    double translatedTrace = 0;
-    double referenceTrace = 0;
-    P2M(source, sourceTrace, 2.0, particleOffset);
-    M2M(translated, translatedTrace, source, sourceTrace, displacement);
-    P2M(reference, referenceTrace, 2.0, translatedOffset);
-    near(translatedTrace, referenceTrace, 1e-12, "typed translated source trace");
-    for (int slot = 0; slot < degree * degree; ++slot) {
-        near(translated[slot], reference[slot], 1e-12, "typed translated multipole");
-    }
-}
-
-template <int degree>
 void countCase() {
     using namespace cosmictiger::gravity::spherical;
-    std::array<counted::Real, (degree + 1) * (degree + 1)> greens{}, local{};
-    std::array<counted::Real, degree * degree> source{};
-    counted::Real trace{}, localTrace{};
+    std::array<counted::Real, (degree + 1) * (degree + 1)> greens{};
+    counted::Real trace{};
     counted::operations = 0;
     EwaldGreen<degree>::template evaluate<counted::Real>(
         greens, trace, counted::Real(.2), counted::Real(-.1), counted::Real(.3));
     near(double(counted::operations), EwaldGreen<degree>::kFlops_, 0,
         "Ewald emitted arithmetic count");
-    counted::operations = 0;
-    EwaldM2L<degree>::template add<counted::Real>(
-        local, localTrace, source, counted::Real(.01), greens, trace);
-    near(double(counted::operations), EwaldM2L<degree>::kFlops_, 0,
-        "Ewald contraction arithmetic count");
 }
 
 template <int degree, typename Scalar>
@@ -446,7 +340,6 @@ template <int degree>
 void run() {
     scalarCases<degree, float>();
     scalarCases<degree, double>();
-    typedTraceCases<degree>();
     countCase<degree>();
     simdCase<degree, float>();
     simdCase<degree, double>();

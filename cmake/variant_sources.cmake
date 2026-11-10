@@ -67,7 +67,6 @@ function(cosmictiger_feature_sources output)
             src/gravity/kick_workspace.cpp
             src/gravity/tree_build.cpp
             src/gravity/kick_executor.cpp
-            src/gravity/kick_interaction_counts.cpp
             src/gravity/source_access.cpp
             src/gravity/sources.cpp
             src/gravity/tree_arena.cpp

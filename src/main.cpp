@@ -59,7 +59,7 @@
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/fp16.hpp>
 #include <cosmictiger/math/position.hpp>
-#include <cosmictiger/math/simd.hpp>
+#include <cosmictiger/math/simd_math.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #ifdef COSMICTIGER_BUILD_TESTING
 #include <tests/test.hpp>

@@ -12,7 +12,6 @@
 #include <gtest/gtest.h>
 
 #include <cosmictiger/gravity/fmm_geometry.hpp>
-#include <cosmictiger/math/tensor.hpp>
 #include <cosmictiger/math/vector3.hpp>
 
 TEST(FmmGeometryFlops, DisplacementPrecisionTracksPeriodicAndShiftedPaths) {
@@ -365,13 +364,4 @@ TEST(FmmGeometry, DegenerateAndWideRangesChooseValidDimensions) {
     auto const halves = box.split();
     EXPECT_EQ(halves.first.end, box.end);
     EXPECT_EQ(halves.second.begin, box.begin);
-}
-
-TEST(FmmGeometry, TensorSubtractionAndDependentComponentWrite) {
-    SymmetricTracelessTensor<double, 4> first, second;
-    first = 3.0;
-    second = 1.0;
-    auto const difference = first - second;
-    EXPECT_EQ(difference(1, 0, 0), 2.0);
-    EXPECT_THROW(first(1, 0, 2) = 0.0, std::runtime_error);
 }

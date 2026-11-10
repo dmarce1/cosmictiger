@@ -55,29 +55,6 @@ def regular(degree):
     return lines, cost, fmas
 
 
-def contraction(degree):
-    """Expand conj(M_kl) G_(n+k,m+l) using the real-storage symmetry."""
-    from .spherical import generateSimple
-    _, statistics = generateSimple('M2lDerivatives',degree)
-    lines = [f"detail::M2LDerivatives<{degree}>::template add<Real>(local, moments, greens);"]
-    cost = statistics['weighted_flops']
-    conventional = statistics['conventional_flops']
-    # Source radius moment first exists when source degree >=2.
-    if degree >= 3:
-        lines += [f"local[0] = math::fma(-{scalar(.5)} * greenTrace, sourceTrace, local[0]);"]
-        cost += 2
-        conventional += 3
-    for component, factor in [(3, 2), (1, 2), (2, 1)]:
-        operand = "-greenTrace" if factor == 1 else f"-{scalar(factor)} * greenTrace"
-        lines += [f"local[{component}] = math::fma({operand}, moments[{component}], local[{component}]);"]
-        cost += 1 + (factor != 1)
-        conventional += 2 + (factor != 1)
-    lines += ["localTrace = math::fma(greenTrace, moments[0], localTrace);"]
-    cost += 1
-    conventional += 2
-    return lines, cost, conventional
-
-
 def emitDegree(degree):
     count = (degree + 1)**2
     polynomial, polynomial_cost, polynomial_fmas = regular(degree)
@@ -174,12 +151,6 @@ def emitDegree(degree):
              "evaluateWorking<Working>(temporary, trace, detail::ewaldConvert<Working>(x), detail::ewaldConvert<Working>(y), detail::ewaldConvert<Working>(z));",
              f"for (int i = 0; i < {count}; ++i) {{ output[i] = detail::ewaldConvert<Real>(temporary[i]); }}",
              "greenTrace = detail::ewaldConvert<Real>(trace);", "}", "};"]
-    direct, contraction_cost, contraction_conventional = contraction(degree)
-    body += [f"template <> class EwaldM2L<{degree}> {{", "public:", f"static constexpr int kFlops_ = {contraction_cost};",
-             f"static constexpr int kConventionalFlops_ = {contraction_conventional};",
-             "template <typename Real, typename Local, typename Moments, typename Greens>",
-             "CUDA_EXPORT static void add(Local& local, Real& localTrace, Moments const& moments, Real sourceTrace, Greens const& greens, Real greenTrace) {"]
-    body += direct + ["}", "};"]
     pairs = sum(x*x+y*y+z*z <= RADIUS*RADIUS and (x>0 or x==0 and (y>0 or y==0 and z>0)) for x in range(-RADIUS,RADIUS+1) for y in range(-RADIUS,RADIUS+1) for z in range(-RADIUS,RADIUS+1))
     central_cost += 1
     # Preserve the historical arithmetic weights for kernel selection/reporting.
@@ -187,19 +158,17 @@ def emitDegree(degree):
     central_conventional = central_cost + polynomial_fmas + 2 + 1 + (degree + 1) * SERIES_TERMS
     real_conventional = real_cost + polynomial_fmas + 2 - 6 + 2
     wave_conventional = wave_cost + polynomial_fmas + 2 + 3
-    report = {"local_degree":degree,"source_degree":degree-1,"real_image_count":2*pairs,"reciprocal_pair_count":pairs,"central_weighted_flops":central_cost,
+    report = {"local_degree":degree,"real_image_count":2*pairs,"reciprocal_pair_count":pairs,"central_weighted_flops":central_cost,
               "real_pair_weighted_flops":2*real_cost+count*5,"reciprocal_pair_weighted_flops":wave_cost,
-              "green_weighted_flops":central_cost+pairs*(2*real_cost+count*5+wave_cost),"contraction_weighted_flops":contraction_cost,
+              "green_weighted_flops":central_cost+pairs*(2*real_cost+count*5+wave_cost),
               "central_conventional_flops":central_conventional,
               "real_pair_conventional_flops":2*real_conventional+count*5,
               "reciprocal_pair_conventional_flops":wave_conventional,
               "green_conventional_flops":central_conventional+pairs*(2*real_conventional+count*5+wave_conventional),
-              "contraction_conventional_flops":contraction_conventional,
               "special_function_calls":{"exp":1+3*pairs,"erfc":2*pairs,"sin":pairs,"cos":pairs},"sqrt_calls":2*pairs}
     body.insert(2, f"static constexpr int kFlops_ = {report['green_weighted_flops']};")
     body.insert(3, f"static constexpr int kConventionalFlops_ = {report['green_conventional_flops']};")
-    split = next(i for i, line in enumerate(body) if line.startswith('template <> class EwaldM2L<'))
-    return body[:split], body[split:], report
+    return body, report
 
 
 def generate(minLocalDegree=2,maxLocalDegree=8):
@@ -224,41 +193,19 @@ def generate(minLocalDegree=2,maxLocalDegree=8):
                   f"else {{ return Real([&](auto lane) {{ return std::{function}(value[lane]); }}); }}", "}"]
     lines += ["template <typename Real>", "CUDA_EXPORT inline void ewaldAccumulate(Real& sum, Real& correction, Real value) {",
               "Real const adjusted = value - correction;", "Real const next = sum + adjusted;", "correction = (next - sum) - adjusted;", "sum = next;", "}",
-              "}", "template <int degree> class EwaldGreen;", "template <int degree> class EwaldM2L;", "}"]
+              "}", "template <int degree> class EwaldGreen;", "}"]
     outputs = {'spherical/ewald_common.hpp': '\n'.join(lines) + '\n'}
     green = ['#pragma once', '#include <cosmictiger/gravity/kernels/spherical/ewald_common.hpp>',
              '', 'namespace cosmictiger::gravity::spherical {']
-    m2l = ['#pragma once', '#include <cosmictiger/gravity/kernels/spherical/ewald_common.hpp>',
-           '#include <cosmictiger/gravity/kernels/spherical/m2l_derivatives.hpp>',
-           '', 'namespace cosmictiger::gravity::spherical {']
     counts = {}
     for degree in range(minLocalDegree,maxLocalDegree+1):
-        greenCode, m2lCode, report = emitDegree(degree)
+        greenCode, report = emitDegree(degree)
         guard = (f'#if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= {degree + 1}) && '
                  f'(!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= {degree + 1})')
         green.extend((guard, *greenCode, '#endif'))
-        m2l.extend((guard, *m2lCode, '#endif'))
         counts[str(degree+1)] = report
     green.append('} // namespace cosmictiger::gravity::spherical')
-    m2l.append('} // namespace cosmictiger::gravity::spherical')
     outputs['spherical/ewald_green.hpp'] = '\n'.join(green) + '\n'
-    outputs['spherical/ewald_m2l.hpp'] = '\n'.join(m2l) + '\n'
-    l2l = ['#pragma once', '#include <cosmictiger/gravity/kernels/spherical/l2l.hpp>',
-           '#include <cosmictiger/math/simd_math.hpp>',
-           '', 'namespace cosmictiger::gravity::spherical {',
-           "template <int degree> class EwaldL2L {", "public:", "static constexpr int kFlops_ = detail::L2L<degree>::kFlops_ + 9;",
-              "static constexpr int kConventionalFlops_ = detail::L2L<degree>::kConventionalFlops_ + 15;",
-              "template <typename Real, typename Local, typename Source>",
-              "CUDA_EXPORT static void add(Local& output, Real& outputTrace, Source const& source, Real sourceTrace, Real x, Real y, Real z) {",
-              "detail::L2L<degree>::template add<Real>(output, source, x, y, z);",
-              "Real const radiusSquared = math::fma(x, x, math::fma(y, y, z * z));",
-              "output[0] = math::fma(-math::broadcast<Real>(0.5) * sourceTrace, radiusSquared, output[0]);",
-              "output[3] = math::fma(-sourceTrace, x, output[3]);",
-              "output[1] = math::fma(-sourceTrace, y, output[1]);",
-              "output[2] = math::fma(-sourceTrace, z, output[2]);",
-              "outputTrace += sourceTrace;", "}", "};",
-           '} // namespace cosmictiger::gravity::spherical']
-    outputs['spherical/ewald_l2l.hpp'] = '\n'.join(l2l) + '\n'
     l2p = ['#pragma once', '#include <cosmictiger/gravity/kernels/spherical/l2p.hpp>',
            '#include <cosmictiger/math/simd_math.hpp>',
            '', 'namespace cosmictiger::gravity::spherical {',
@@ -277,6 +224,6 @@ def generate(minLocalDegree=2,maxLocalDegree=8):
     facade = ['#pragma once', '',
               '#include <cosmictiger/gravity/kernels/spherical_kernels.hpp>']
     facade.extend(f'#include <cosmictiger/gravity/kernels/spherical/{name}.hpp>'
-                  for name in ('ewald_green', 'ewald_m2l', 'ewald_l2l', 'ewald_l2p'))
+                  for name in ('ewald_green', 'ewald_l2p'))
     outputs['spherical_ewald_kernels.hpp'] = '\n'.join(facade) + '\n'
     return outputs, {"cost_model":{"fma":1,"sqrt":7,"add":1,"multiply":1,"division":1,"special_functions":"reported separately"},"conventional_cost_model":{"fma":2,"sqrt":1,"add":1,"multiply":1,"division":1,"special_functions":1},"lattice_radius":RADIUS,"central_series_terms":SERIES_TERMS,"orders":counts}

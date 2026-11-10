@@ -13,7 +13,6 @@ and root-driven dead-code elimination specialize all three rotation schedules.
 from collections import Counter
 from fractions import Fraction as Q
 from functools import lru_cache
-from math import factorial
 
 
 class Dag:
@@ -295,12 +294,12 @@ def swapCoefficient(n,m,l):
             +(2 if m>0 else -2)*swapCoefficient(n-1,previous,l))/2
 
 
-def swapAxes(g, values, degree, multipole):
-    """Swap x and z using sparse real blocks, transpose for regular moments."""
+def swapAxes(g, values, degree):
+    """Swap x and z using sparse real blocks for local coefficients."""
     result = {}
     for n,m in components(degree):
         real, imaginary = [], []
-        coefficient = lambda l: swapCoefficient(n,l,m) if multipole else swapCoefficient(n,m,l)
+        coefficient = lambda l: swapCoefficient(n,m,l)
         for l in range(n+1):
             positive = coefficient(l)
             negative = (-1)**l*coefficient(-l) if l else Q(0)
@@ -320,66 +319,15 @@ def rotateZ(g, values, degree, cosine, sine):
     return {(n,m):complexMultiply(g,value,phase[m]) for (n,m),value in values.items()}
 
 
-def geometry(g,x,y,z,full):
+def geometry(g,x,y):
     """Axis-safe, lane-wise angles with explicit sqrt/division accounting."""
     rhoSquared = g.fma(x,x,g.multiply(y,y))
     safeSquared = g.selectZero(rhoSquared,g.one,rhoSquared)
     inverseRho = g.divide(g.one,g.sqrt(safeSquared))
     rho = g.multiply(rhoSquared,inverseRho)
-    if full:
-        radiusSquared = g.fma(z,z,rhoSquared)
-        inverseRadius = g.divide(g.one,g.sqrt(radiusSquared))
-        cosine1 = g.multiply(y,inverseRho)
-        sine1 = g.selectZero(rhoSquared,g.one,g.multiply(x,inverseRho))
-        cosine2 = g.selectZero(radiusSquared,g.one,g.multiply(z,inverseRadius))
-        sine2 = g.negate(g.multiply(rho,inverseRadius))
-        radius = g.multiply(radiusSquared,inverseRadius)
-        return cosine1,sine1,cosine2,sine2,radius,inverseRadius
     cosine = g.selectZero(rhoSquared,g.one,g.multiply(x,inverseRho))
     sine = g.negate(g.multiply(y,inverseRho))
     return cosine,sine,rho
-
-
-def forwardRotation(g,values,degree,multipole,angles,variant):
-    if variant == 0:
-        return values
-    cosine,sine = angles[:2]
-    values = rotateZ(g,values,degree,cosine,sine)
-    if variant == 2:
-        values = swapAxes(g,values,degree,multipole)
-        values = rotateZ(g,values,degree,angles[2],angles[3])
-        values = swapAxes(g,values,degree,multipole)
-    return values
-
-
-def backwardRotation(g,values,degree,multipole,angles,variant):
-    if variant == 2:
-        values = swapAxes(g,values,degree,multipole)
-        values = rotateZ(g,values,degree,angles[2],g.negate(angles[3]))
-        values = swapAxes(g,values,degree,multipole)
-    return rotateZ(g,values,degree,angles[0],g.negate(angles[1])) if variant else values
-
-
-def contraction(g,source,green,sourceDegree,targetDegree,totalDegree):
-    result = {}
-    for n,m in components(targetDegree):
-        products = []
-        for k in range(min(sourceDegree,totalDegree-n)+1):
-            for l in range(-k,k+1):
-                products.append((1,conjugate(g,complexGet(g,source,k,l)),complexGet(g,green,n+k,m+l)))
-        result[n,m] = complexSumProducts(g,products)
-    return result
-
-
-def translateMultipole(g,source,harmonics,degree):
-    result = {}
-    for n,m in components(degree):
-        products = []
-        for k in range(n+1):
-            for l in range(-k,k+1):
-                products.append((1,complexGet(g,source,n-k,m-l),complexGet(g,harmonics,k,l)))
-        result[n,m] = complexSumProducts(g,products)
-    return result
 
 
 def translateLocal(g,source,harmonics,degree,targetDegree):
@@ -419,7 +367,7 @@ def emitFunction(className,parameters,g,outputs,arguments,additive=True,operatio
     declaration = f'template <> class {className}<{parameters}> {{\npublic:\n'
     declaration += f'    static constexpr int kFlops_ = {flops};\n'
     declaration += f'    static constexpr int kConventionalFlops_ = {conventional};\n'
-    declaration += '    template <typename Real, typename Output, typename Source = Output, typename Derivatives = Source>\n'
+    declaration += '    template <typename Real, typename Output, typename Source = Output>\n'
     declaration += f'    CUDA_EXPORT static void {method}(Output &output, {arguments}) {{\n'
     declaration += '\n'.join(lines)+'\n'
     for slot,root in zip(outputs,roots):
@@ -438,69 +386,40 @@ def axialRegular(g,degree,distance):
     return result
 
 
-def axialSingular(g,degree,inverseRadius):
-    result = {(n,m):(g.zero,g.zero) for n,m in components(degree)}
-    result[0,0] = g.negate(inverseRadius),g.zero
-    for n in range(1,degree+1):
-        result[n,0] = g.scale(g.multiply(result[n-1,0][0],inverseRadius),-n),g.zero
-    return result
-
-
 def operatorName(operation):
-    return {'Greens':'Green', 'M2lDerivatives':'M2LDerivatives'}.get(operation,operation.upper())
+    return {'Greens':'Green'}.get(operation,operation.upper())
 
 
-def generateVariant(operation,degree,variant):
+def generateVariant(degree,variant):
     g = Dag()
     x,y,z = [g.symbol(name) for name in ('x','y','z')]
-    isM2l = operation in ('M2l','M2p')
-    isMultipole = operation == 'M2m' or isM2l
-    targetDegree = 1 if operation in ('M2p','L2p') else degree
-    sourceDegree = degree-1 if isM2l else degree
-    source = symbols(g,'source',sourceDegree)
-    # M2M receives old-center minus new-center: moment coordinates are negated.
-    if operation == 'M2m':
-        x,y,z = [g.negate(value) for value in (x,y,z)]
-    if variant == 2 and not isM2l:
+    source = symbols(g,'source',degree)
+    if variant == 2:
         # Compose commuting z and planar translations. Align only the planar
-        # displacement: one phase pair and two x/z swaps replace the four swaps
-        # needed to align a general 3D displacement. Dehnen Appendix A.6.
+        # displacement to evaluate a local at a point. Dehnen Appendix A.6.
         axial = axialRegular(g,degree,z)
-        if operation == 'M2m':
-            source = translateMultipole(g,source,axial,degree)
-        else:
-            source = translateLocal(g,source,axial,degree,degree)
-        cosine,sine,rho = geometry(g,x,y,z,False)
-        source = rotateZ(g,source,sourceDegree,cosine,sine)
-        source = swapAxes(g,source,sourceDegree,isMultipole)
+        source = translateLocal(g,source,axial,degree,degree)
+        cosine,sine,rho = geometry(g,x,y)
+        source = rotateZ(g,source,degree,cosine,sine)
+        source = swapAxes(g,source,degree)
         axial = axialRegular(g,degree,rho)
-        if operation == 'M2m':
-            result = translateMultipole(g,source,axial,degree)
-        else:
-            result = translateLocal(g,source,axial,degree,targetDegree)
-        result = swapAxes(g,result,targetDegree,isMultipole)
-        result = rotateZ(g,result,targetDegree,cosine,g.negate(sine))
+        result = translateLocal(g,source,axial,degree,1)
+        result = swapAxes(g,result,1)
+        result = rotateZ(g,result,1,cosine,g.negate(sine))
     else:
-        angles = geometry(g,x,y,z,variant==2) if variant else None
-        source = forwardRotation(g,source,sourceDegree,isMultipole,angles,variant)
+        angles = geometry(g,x,y) if variant else None
         if variant == 1:
+            source = rotateZ(g,source,degree,angles[0],angles[1])
             x,y = angles[2],g.zero
-        if isM2l:
-            green = axialSingular(g,degree,angles[5]) if variant == 2 else singular(g,degree,x,y,z)
-            result = contraction(g,source,green,sourceDegree,targetDegree,degree)
-        else:
-            harmonics = regular(g,degree,x,y,z)
-            if operation == 'M2m':
-                result = translateMultipole(g,source,harmonics,degree)
-            else:
-                result = translateLocal(g,source,harmonics,degree,targetDegree)
-        result = backwardRotation(g,result,targetDegree,operation=='M2m',angles,variant)
+        harmonics = regular(g,degree,x,y,z)
+        result = translateLocal(g,source,harmonics,degree,1)
+        if variant == 1:
+            result = rotateZ(g,result,1,angles[0],g.negate(angles[1]))
     outputs = pack(result)
-    if targetDegree == 1 and operation in ('M2p','L2p'):
-        outputs = {0:outputs[0],1:g.negate(outputs[3]),2:g.negate(outputs[1]),3:g.negate(outputs[2])}
+    outputs = {0:outputs[0],1:g.negate(outputs[3]),2:g.negate(outputs[1]),3:g.negate(outputs[2])}
     arguments = 'Source const &source, Real x, Real y, Real z'
-    return emitFunction(operatorName(operation),str(degree),g,outputs,arguments,
-                        operation=operation,degree=degree,variant=variant)
+    return emitFunction('L2P',str(degree),g,outputs,arguments,
+                        operation='L2p',degree=degree,variant=variant)
 
 
 def generateSimple(operation,degree):
@@ -508,21 +427,17 @@ def generateSimple(operation,degree):
     x,y,z = [g.symbol(name) for name in ('x','y','z')]
     if operation == 'P2m':
         values = regular(g,degree,*[g.negate(v) for v in (x,y,z)])
-    elif operation in ('P2l','Greens'):
+    elif operation == 'Greens':
         values = singular(g,degree,x,y,z)
-    elif operation == 'M2lDerivatives':
-        values = contraction(g,symbols(g,'source',degree-1),symbols(g,'derivatives',degree),degree-1,degree,degree)
     else:
         raise ValueError(operation)
     outputs = pack(values)
-    if operation in ('P2m','P2l'):
+    if operation == 'P2m':
         mass = g.symbol('mass')
         outputs = {slot:g.multiply(value,mass) for slot,value in outputs.items()}
         arguments = 'Real mass, Real x, Real y, Real z'
     elif operation == 'Greens':
         arguments = 'Real x, Real y, Real z'
-    else:
-        arguments = 'Source const &source, Derivatives const &derivatives'
     return emitFunction(operatorName(operation),str(degree),g,outputs,arguments,
                         additive=operation!='Greens',operation=operation,degree=degree)
 
@@ -535,17 +450,17 @@ HEADER = '''// Generated by tools/generate_fmm.py. Do not edit.
 
 namespace cosmictiger::gravity::spherical::detail {
 
-// Every operator adds to output. Output and source must not alias.
+// P2M and L2P add to output; Green::evaluate overwrites it.
+// L2P output and source must not alias.
 // Field ordering is potential, accelerationX, accelerationY, accelerationZ (-gradient).
-// M2M displacement is old center minus new center. L2L/L2P displacement is
-// new center/point minus old center. M2L displacement is target minus source.
+// L2P displacement is evaluation point minus local center.
 '''
 
 
 def generate(minLocalDegree=2,maxLocalDegree=8):
-    operations = ('P2m','P2l','M2m','M2l','M2p','L2l','L2p','Greens','M2lDerivatives')
+    operations = ('P2m','L2p','Greens')
     filenames = {operation: 'spherical/' + {
-        'Greens': 'green', 'M2lDerivatives': 'm2l_derivatives'
+        'Greens': 'green'
     }.get(operation, operation.lower()) + '.hpp' for operation in operations}
     parts = {}
     for operation in operations:
@@ -557,27 +472,25 @@ def generate(minLocalDegree=2,maxLocalDegree=8):
     for localDegree in range(minLocalDegree,maxLocalDegree+1):
         guard = (f'#if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= {localDegree + 1}) && '
                  f'(!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= {localDegree + 1})')
-        for operation in ('P2m','P2l','Greens','M2lDerivatives'):
+        for operation in ('P2m','Greens'):
             degree = localDegree-1 if operation=='P2m' else localDegree
             code,stats = generateSimple(operation,degree)
             parts[operation].extend((guard, code, '#endif'))
             report['kernels'].append(stats)
-        for operation in ('M2m','M2l','M2p','L2l','L2p'):
-            degree = localDegree-1 if operation=='M2m' else localDegree
-            candidates = []
-            implementations = []
-            for variant in range(3):
-                code,stats = generateVariant(operation,degree,variant)
-                implementations.append(code)
-                report['kernels'].append(stats)
-                candidates.append(stats['weighted_flops'])
-            selected = min(range(3),key=lambda variant:candidates[variant])
-            description = ('no rotation', 'azimuthal rotation', 'axial alignment')[selected]
-            parts[operation].extend((guard,
-                f'// Selected variant {selected}: {description} (minimum weighted arithmetic count).\n'
-                + implementations[selected], '#endif'))
-            report['selections'].append(dict(operator=operation,fmm_order=localDegree+1,degree=degree,
-                                             candidate_flops=candidates,selected_variant=selected,weighted_flops=candidates[selected]))
+        candidates = []
+        implementations = []
+        for variant in range(3):
+            code,stats = generateVariant(localDegree,variant)
+            implementations.append(code)
+            report['kernels'].append(stats)
+            candidates.append(stats['weighted_flops'])
+        selected = min(range(3),key=lambda variant:candidates[variant])
+        description = ('no rotation', 'azimuthal rotation', 'axial alignment')[selected]
+        parts['L2p'].extend((guard,
+            f'// Selected variant {selected}: {description} (minimum weighted arithmetic count).\n'
+            + implementations[selected], '#endif'))
+        report['selections'].append(dict(operator='L2p',fmm_order=localDegree+1,degree=localDegree,
+                                         candidate_flops=candidates,selected_variant=selected,weighted_flops=candidates[selected]))
     output = {}
     for operation in operations:
         header = parts[operation]

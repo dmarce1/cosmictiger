@@ -19,20 +19,6 @@
     },
     {
       "arithmetic": {
-        "*": 4,
-        "+": 1,
-        "fma": 17
-      },
-      "accumulations": 4,
-      "fused_accumulations": 5,
-      "weighted_flops": 26,
-      "conventional_flops": 43,
-      "operator": "EwaldM2L",
-      "source_order": 1,
-      "order": 2
-    },
-    {
-      "arithmetic": {
         "*": 36,
         "+": 4,
         "-": 6,
@@ -44,21 +30,6 @@
       "conventional_flops": 128,
       "expansion_order": 3,
       "source_order": 2
-    },
-    {
-      "arithmetic": {
-        "*": 25,
-        "+": 5,
-        "-": 4,
-        "fma": 54
-      },
-      "accumulations": 9,
-      "fused_accumulations": 7,
-      "weighted_flops": 97,
-      "conventional_flops": 151,
-      "operator": "EwaldM2L",
-      "source_order": 2,
-      "order": 3
     },
     {
       "arithmetic": {
@@ -76,21 +47,6 @@
     },
     {
       "arithmetic": {
-        "*": 88,
-        "+": 15,
-        "-": 8,
-        "fma": 142
-      },
-      "accumulations": 16,
-      "fused_accumulations": 9,
-      "weighted_flops": 269,
-      "conventional_flops": 411,
-      "operator": "EwaldM2L",
-      "source_order": 3,
-      "order": 4
-    },
-    {
-      "arithmetic": {
         "*": 125,
         "+": 20,
         "-": 42,
@@ -102,21 +58,6 @@
       "conventional_flops": 571,
       "expansion_order": 5,
       "source_order": 4
-    },
-    {
-      "arithmetic": {
-        "*": 230,
-        "+": 33,
-        "-": 13,
-        "fma": 316
-      },
-      "accumulations": 25,
-      "fused_accumulations": 11,
-      "weighted_flops": 617,
-      "conventional_flops": 933,
-      "operator": "EwaldM2L",
-      "source_order": 4,
-      "order": 5
     },
     {
       "arithmetic": {
@@ -134,21 +75,6 @@
     },
     {
       "arithmetic": {
-        "*": 499,
-        "+": 61,
-        "-": 19,
-        "fma": 625
-      },
-      "accumulations": 36,
-      "fused_accumulations": 13,
-      "weighted_flops": 1240,
-      "conventional_flops": 1865,
-      "operator": "EwaldM2L",
-      "source_order": 5,
-      "order": 6
-    },
-    {
-      "arithmetic": {
         "*": 345,
         "+": 82,
         "-": 127,
@@ -163,21 +89,6 @@
     },
     {
       "arithmetic": {
-        "*": 959,
-        "+": 101,
-        "-": 26,
-        "fma": 1133
-      },
-      "accumulations": 49,
-      "fused_accumulations": 15,
-      "weighted_flops": 2268,
-      "conventional_flops": 3401,
-      "operator": "EwaldM2L",
-      "source_order": 6,
-      "order": 7
-    },
-    {
-      "arithmetic": {
         "*": 539,
         "+": 187,
         "-": 171,
@@ -189,21 +100,6 @@
       "conventional_flops": 3173,
       "expansion_order": 8,
       "source_order": 7
-    },
-    {
-      "arithmetic": {
-        "*": 1691,
-        "+": 155,
-        "-": 34,
-        "fma": 1921
-      },
-      "accumulations": 64,
-      "fused_accumulations": 17,
-      "weighted_flops": 3865,
-      "conventional_flops": 5786,
-      "operator": "EwaldM2L",
-      "source_order": 7,
-      "order": 8
     }
   ],
   "operators": [
@@ -910,20 +806,6 @@
           "conventional_flops": 9
         },
         {
-          "operator": "P2l",
-          "degree": 2,
-          "variant": null,
-          "arithmetic": {
-            "multiply": 18,
-            "fma": 11,
-            "divide": 2,
-            "sqrt": 1,
-            "subtract": 3
-          },
-          "weighted_flops": 41,
-          "conventional_flops": 46
-        },
-        {
           "operator": "Greens",
           "degree": 2,
           "variant": null,
@@ -935,195 +817,6 @@
           },
           "weighted_flops": 29,
           "conventional_flops": 28
-        },
-        {
-          "operator": "M2lDerivatives",
-          "degree": 2,
-          "variant": null,
-          "arithmetic": {
-            "multiply": 6,
-            "fma": 19,
-            "add": 4
-          },
-          "weighted_flops": 29,
-          "conventional_flops": 48
-        },
-        {
-          "operator": "M2m",
-          "degree": 1,
-          "variant": 0,
-          "arithmetic": {
-            "multiply": 2,
-            "fma": 3,
-            "add": 4
-          },
-          "weighted_flops": 9,
-          "conventional_flops": 12
-        },
-        {
-          "operator": "M2m",
-          "degree": 1,
-          "variant": 1,
-          "arithmetic": {
-            "multiply": 9,
-            "fma": 7,
-            "selectZero": 2,
-            "sqrt": 1,
-            "divide": 1,
-            "add": 4
-          },
-          "weighted_flops": 28,
-          "conventional_flops": 29
-        },
-        {
-          "operator": "M2m",
-          "degree": 1,
-          "variant": 2,
-          "arithmetic": {
-            "fma": 8,
-            "multiply": 11,
-            "selectZero": 2,
-            "sqrt": 1,
-            "divide": 1,
-            "add": 3
-          },
-          "weighted_flops": 30,
-          "conventional_flops": 32
-        },
-        {
-          "operator": "M2l",
-          "degree": 2,
-          "variant": 0,
-          "arithmetic": {
-            "multiply": 25,
-            "fma": 22,
-            "divide": 2,
-            "sqrt": 1,
-            "add": 4,
-            "subtract": 2
-          },
-          "weighted_flops": 62,
-          "conventional_flops": 78
-        },
-        {
-          "operator": "M2l",
-          "degree": 2,
-          "variant": 1,
-          "arithmetic": {
-            "multiply": 32,
-            "fma": 18,
-            "selectZero": 2,
-            "sqrt": 2,
-            "divide": 3,
-            "add": 4,
-            "subtract": 4
-          },
-          "weighted_flops": 75,
-          "conventional_flops": 81
-        },
-        {
-          "operator": "M2l",
-          "degree": 2,
-          "variant": 2,
-          "arithmetic": {
-            "multiply": 37,
-            "fma": 22,
-            "selectZero": 3,
-            "sqrt": 2,
-            "divide": 2,
-            "add": 5
-          },
-          "weighted_flops": 80,
-          "conventional_flops": 90
-        },
-        {
-          "operator": "M2p",
-          "degree": 2,
-          "variant": 0,
-          "arithmetic": {
-            "multiply": 23,
-            "fma": 19,
-            "divide": 2,
-            "sqrt": 1,
-            "add": 1,
-            "subtract": 3
-          },
-          "weighted_flops": 55,
-          "conventional_flops": 68
-        },
-        {
-          "operator": "M2p",
-          "degree": 2,
-          "variant": 1,
-          "arithmetic": {
-            "multiply": 24,
-            "fma": 15,
-            "selectZero": 2,
-            "sqrt": 2,
-            "divide": 3,
-            "add": 1,
-            "subtract": 3
-          },
-          "weighted_flops": 60,
-          "conventional_flops": 63
-        },
-        {
-          "operator": "M2p",
-          "degree": 2,
-          "variant": 2,
-          "arithmetic": {
-            "multiply": 25,
-            "fma": 12,
-            "selectZero": 3,
-            "sqrt": 2,
-            "divide": 2,
-            "add": 1,
-            "subtract": 3
-          },
-          "weighted_flops": 57,
-          "conventional_flops": 57
-        },
-        {
-          "operator": "L2l",
-          "degree": 2,
-          "variant": 0,
-          "arithmetic": {
-            "multiply": 17,
-            "fma": 24,
-            "add": 9
-          },
-          "weighted_flops": 50,
-          "conventional_flops": 74
-        },
-        {
-          "operator": "L2l",
-          "degree": 2,
-          "variant": 1,
-          "arithmetic": {
-            "multiply": 28,
-            "fma": 30,
-            "selectZero": 2,
-            "sqrt": 1,
-            "divide": 1,
-            "add": 9
-          },
-          "weighted_flops": 75,
-          "conventional_flops": 99
-        },
-        {
-          "operator": "L2l",
-          "degree": 2,
-          "variant": 2,
-          "arithmetic": {
-            "multiply": 30,
-            "fma": 30,
-            "selectZero": 2,
-            "sqrt": 1,
-            "divide": 1,
-            "add": 9
-          },
-          "weighted_flops": 77,
-          "conventional_flops": 101
         },
         {
           "operator": "L2p",
@@ -1184,20 +877,6 @@
           "conventional_flops": 38
         },
         {
-          "operator": "P2l",
-          "degree": 3,
-          "variant": null,
-          "arithmetic": {
-            "multiply": 32,
-            "fma": 21,
-            "divide": 2,
-            "sqrt": 1,
-            "subtract": 5
-          },
-          "weighted_flops": 67,
-          "conventional_flops": 82
-        },
-        {
           "operator": "Greens",
           "degree": 3,
           "variant": null,
@@ -1209,195 +888,6 @@
           },
           "weighted_flops": 46,
           "conventional_flops": 50
-        },
-        {
-          "operator": "M2lDerivatives",
-          "degree": 3,
-          "variant": null,
-          "arithmetic": {
-            "multiply": 15,
-            "fma": 68,
-            "add": 9
-          },
-          "weighted_flops": 92,
-          "conventional_flops": 160
-        },
-        {
-          "operator": "M2m",
-          "degree": 2,
-          "variant": 0,
-          "arithmetic": {
-            "multiply": 13,
-            "fma": 24,
-            "add": 9
-          },
-          "weighted_flops": 46,
-          "conventional_flops": 70
-        },
-        {
-          "operator": "M2m",
-          "degree": 2,
-          "variant": 1,
-          "arithmetic": {
-            "multiply": 26,
-            "fma": 30,
-            "selectZero": 2,
-            "sqrt": 1,
-            "divide": 1,
-            "add": 9
-          },
-          "weighted_flops": 73,
-          "conventional_flops": 97
-        },
-        {
-          "operator": "M2m",
-          "degree": 2,
-          "variant": 2,
-          "arithmetic": {
-            "multiply": 33,
-            "fma": 31,
-            "selectZero": 2,
-            "sqrt": 1,
-            "divide": 1,
-            "add": 8
-          },
-          "weighted_flops": 80,
-          "conventional_flops": 105
-        },
-        {
-          "operator": "M2l",
-          "degree": 3,
-          "variant": 0,
-          "arithmetic": {
-            "multiply": 50,
-            "fma": 76,
-            "divide": 2,
-            "sqrt": 1,
-            "add": 9,
-            "subtract": 2
-          },
-          "weighted_flops": 146,
-          "conventional_flops": 216
-        },
-        {
-          "operator": "M2l",
-          "degree": 3,
-          "variant": 1,
-          "arithmetic": {
-            "multiply": 56,
-            "fma": 62,
-            "selectZero": 2,
-            "sqrt": 2,
-            "divide": 3,
-            "add": 9
-          },
-          "weighted_flops": 144,
-          "conventional_flops": 194
-        },
-        {
-          "operator": "M2l",
-          "degree": 3,
-          "variant": 2,
-          "arithmetic": {
-            "multiply": 78,
-            "fma": 54,
-            "selectZero": 3,
-            "sqrt": 2,
-            "divide": 2,
-            "add": 10,
-            "subtract": 1
-          },
-          "weighted_flops": 159,
-          "conventional_flops": 201
-        },
-        {
-          "operator": "M2p",
-          "degree": 3,
-          "variant": 0,
-          "arithmetic": {
-            "multiply": 43,
-            "fma": 50,
-            "divide": 2,
-            "sqrt": 1,
-            "add": 1,
-            "subtract": 3
-          },
-          "weighted_flops": 106,
-          "conventional_flops": 150
-        },
-        {
-          "operator": "M2p",
-          "degree": 3,
-          "variant": 1,
-          "arithmetic": {
-            "multiply": 42,
-            "fma": 38,
-            "selectZero": 2,
-            "sqrt": 2,
-            "divide": 3,
-            "add": 1,
-            "subtract": 3
-          },
-          "weighted_flops": 101,
-          "conventional_flops": 127
-        },
-        {
-          "operator": "M2p",
-          "degree": 3,
-          "variant": 2,
-          "arithmetic": {
-            "multiply": 44,
-            "fma": 30,
-            "selectZero": 3,
-            "sqrt": 2,
-            "divide": 2,
-            "add": 1,
-            "subtract": 3
-          },
-          "weighted_flops": 94,
-          "conventional_flops": 112
-        },
-        {
-          "operator": "L2l",
-          "degree": 3,
-          "variant": 0,
-          "arithmetic": {
-            "multiply": 36,
-            "fma": 78,
-            "add": 16
-          },
-          "weighted_flops": 130,
-          "conventional_flops": 208
-        },
-        {
-          "operator": "L2l",
-          "degree": 3,
-          "variant": 1,
-          "arithmetic": {
-            "multiply": 56,
-            "fma": 77,
-            "selectZero": 2,
-            "sqrt": 1,
-            "divide": 1,
-            "add": 16
-          },
-          "weighted_flops": 157,
-          "conventional_flops": 228
-        },
-        {
-          "operator": "L2l",
-          "degree": 3,
-          "variant": 2,
-          "arithmetic": {
-            "multiply": 62,
-            "fma": 76,
-            "selectZero": 2,
-            "sqrt": 1,
-            "divide": 1,
-            "add": 16
-          },
-          "weighted_flops": 162,
-          "conventional_flops": 232
         },
         {
           "operator": "L2p",
@@ -1458,20 +948,6 @@
           "conventional_flops": 75
         },
         {
-          "operator": "P2l",
-          "degree": 4,
-          "variant": null,
-          "arithmetic": {
-            "multiply": 49,
-            "fma": 35,
-            "divide": 2,
-            "sqrt": 1,
-            "subtract": 7
-          },
-          "weighted_flops": 100,
-          "conventional_flops": 129
-        },
-        {
           "operator": "Greens",
           "degree": 4,
           "variant": null,
@@ -1483,197 +959,6 @@
           },
           "weighted_flops": 68,
           "conventional_flops": 79
-        },
-        {
-          "operator": "M2lDerivatives",
-          "degree": 4,
-          "variant": null,
-          "arithmetic": {
-            "multiply": 28,
-            "fma": 176,
-            "add": 16
-          },
-          "weighted_flops": 220,
-          "conventional_flops": 396
-        },
-        {
-          "operator": "M2m",
-          "degree": 3,
-          "variant": 0,
-          "arithmetic": {
-            "multiply": 30,
-            "fma": 78,
-            "add": 16
-          },
-          "weighted_flops": 124,
-          "conventional_flops": 202
-        },
-        {
-          "operator": "M2m",
-          "degree": 3,
-          "variant": 1,
-          "arithmetic": {
-            "multiply": 53,
-            "fma": 77,
-            "selectZero": 2,
-            "sqrt": 1,
-            "divide": 1,
-            "add": 16
-          },
-          "weighted_flops": 154,
-          "conventional_flops": 225
-        },
-        {
-          "operator": "M2m",
-          "degree": 3,
-          "variant": 2,
-          "arithmetic": {
-            "multiply": 64,
-            "fma": 76,
-            "selectZero": 2,
-            "sqrt": 1,
-            "divide": 1,
-            "subtract": 1,
-            "add": 15
-          },
-          "weighted_flops": 164,
-          "conventional_flops": 234
-        },
-        {
-          "operator": "M2l",
-          "degree": 4,
-          "variant": 0,
-          "arithmetic": {
-            "multiply": 82,
-            "fma": 191,
-            "divide": 2,
-            "sqrt": 1,
-            "add": 16,
-            "subtract": 2
-          },
-          "weighted_flops": 300,
-          "conventional_flops": 485
-        },
-        {
-          "operator": "M2l",
-          "degree": 4,
-          "variant": 1,
-          "arithmetic": {
-            "multiply": 98,
-            "fma": 135,
-            "selectZero": 2,
-            "sqrt": 2,
-            "divide": 3,
-            "add": 16,
-            "subtract": 4
-          },
-          "weighted_flops": 270,
-          "conventional_flops": 393
-        },
-        {
-          "operator": "M2l",
-          "degree": 4,
-          "variant": 2,
-          "arithmetic": {
-            "multiply": 141,
-            "fma": 118,
-            "selectZero": 3,
-            "sqrt": 2,
-            "divide": 2,
-            "add": 17,
-            "subtract": 1
-          },
-          "weighted_flops": 293,
-          "conventional_flops": 399
-        },
-        {
-          "operator": "M2p",
-          "degree": 4,
-          "variant": 0,
-          "arithmetic": {
-            "multiply": 68,
-            "fma": 95,
-            "divide": 2,
-            "sqrt": 1,
-            "add": 1,
-            "subtract": 3
-          },
-          "weighted_flops": 176,
-          "conventional_flops": 265
-        },
-        {
-          "operator": "M2p",
-          "degree": 4,
-          "variant": 1,
-          "arithmetic": {
-            "multiply": 64,
-            "fma": 70,
-            "selectZero": 2,
-            "sqrt": 2,
-            "divide": 3,
-            "add": 1,
-            "subtract": 3
-          },
-          "weighted_flops": 155,
-          "conventional_flops": 213
-        },
-        {
-          "operator": "M2p",
-          "degree": 4,
-          "variant": 2,
-          "arithmetic": {
-            "multiply": 68,
-            "fma": 58,
-            "selectZero": 3,
-            "sqrt": 2,
-            "divide": 2,
-            "add": 1,
-            "subtract": 3
-          },
-          "weighted_flops": 146,
-          "conventional_flops": 192
-        },
-        {
-          "operator": "L2l",
-          "degree": 4,
-          "variant": 0,
-          "arithmetic": {
-            "multiply": 61,
-            "fma": 193,
-            "add": 25
-          },
-          "weighted_flops": 279,
-          "conventional_flops": 472
-        },
-        {
-          "operator": "L2l",
-          "degree": 4,
-          "variant": 1,
-          "arithmetic": {
-            "multiply": 92,
-            "fma": 162,
-            "selectZero": 2,
-            "sqrt": 1,
-            "divide": 1,
-            "add": 25
-          },
-          "weighted_flops": 287,
-          "conventional_flops": 443
-        },
-        {
-          "operator": "L2l",
-          "degree": 4,
-          "variant": 2,
-          "arithmetic": {
-            "multiply": 104,
-            "fma": 150,
-            "selectZero": 2,
-            "sqrt": 1,
-            "divide": 1,
-            "add": 27
-          },
-          "weighted_flops": 289,
-          "conventional_flops": 433
         },
         {
           "operator": "L2p",
@@ -1734,20 +1019,6 @@
           "conventional_flops": 124
         },
         {
-          "operator": "P2l",
-          "degree": 5,
-          "variant": null,
-          "arithmetic": {
-            "multiply": 69,
-            "fma": 53,
-            "divide": 2,
-            "sqrt": 1,
-            "subtract": 9
-          },
-          "weighted_flops": 140,
-          "conventional_flops": 187
-        },
-        {
           "operator": "Greens",
           "degree": 5,
           "variant": null,
@@ -1759,196 +1030,6 @@
           },
           "weighted_flops": 95,
           "conventional_flops": 115
-        },
-        {
-          "operator": "M2lDerivatives",
-          "degree": 5,
-          "variant": null,
-          "arithmetic": {
-            "multiply": 45,
-            "fma": 379,
-            "add": 25
-          },
-          "weighted_flops": 449,
-          "conventional_flops": 828
-        },
-        {
-          "operator": "M2m",
-          "degree": 4,
-          "variant": 0,
-          "arithmetic": {
-            "multiply": 53,
-            "fma": 193,
-            "add": 25
-          },
-          "weighted_flops": 271,
-          "conventional_flops": 464
-        },
-        {
-          "operator": "M2m",
-          "degree": 4,
-          "variant": 1,
-          "arithmetic": {
-            "multiply": 88,
-            "fma": 162,
-            "selectZero": 2,
-            "sqrt": 1,
-            "divide": 1,
-            "add": 25
-          },
-          "weighted_flops": 283,
-          "conventional_flops": 439
-        },
-        {
-          "operator": "M2m",
-          "degree": 4,
-          "variant": 2,
-          "arithmetic": {
-            "multiply": 105,
-            "fma": 151,
-            "selectZero": 2,
-            "sqrt": 1,
-            "divide": 1,
-            "add": 25,
-            "subtract": 1
-          },
-          "weighted_flops": 290,
-          "conventional_flops": 435
-        },
-        {
-          "operator": "M2l",
-          "degree": 5,
-          "variant": 0,
-          "arithmetic": {
-            "multiply": 121,
-            "fma": 403,
-            "divide": 2,
-            "sqrt": 1,
-            "add": 25,
-            "subtract": 2
-          },
-          "weighted_flops": 560,
-          "conventional_flops": 957
-        },
-        {
-          "operator": "M2l",
-          "degree": 5,
-          "variant": 1,
-          "arithmetic": {
-            "multiply": 142,
-            "fma": 270,
-            "selectZero": 2,
-            "sqrt": 2,
-            "divide": 3,
-            "add": 25
-          },
-          "weighted_flops": 454,
-          "conventional_flops": 712
-        },
-        {
-          "operator": "M2l",
-          "degree": 5,
-          "variant": 2,
-          "arithmetic": {
-            "multiply": 220,
-            "fma": 202,
-            "selectZero": 3,
-            "sqrt": 2,
-            "divide": 2,
-            "add": 28,
-            "subtract": 2
-          },
-          "weighted_flops": 468,
-          "conventional_flops": 658
-        },
-        {
-          "operator": "M2p",
-          "degree": 5,
-          "variant": 0,
-          "arithmetic": {
-            "multiply": 98,
-            "fma": 154,
-            "divide": 2,
-            "sqrt": 1,
-            "add": 1,
-            "subtract": 3
-          },
-          "weighted_flops": 265,
-          "conventional_flops": 413
-        },
-        {
-          "operator": "M2p",
-          "degree": 5,
-          "variant": 1,
-          "arithmetic": {
-            "multiply": 92,
-            "fma": 111,
-            "selectZero": 2,
-            "sqrt": 2,
-            "divide": 3,
-            "add": 1,
-            "subtract": 3
-          },
-          "weighted_flops": 224,
-          "conventional_flops": 323
-        },
-        {
-          "operator": "M2p",
-          "degree": 5,
-          "variant": 2,
-          "arithmetic": {
-            "multiply": 100,
-            "fma": 95,
-            "selectZero": 3,
-            "sqrt": 2,
-            "divide": 2,
-            "add": 2,
-            "subtract": 3
-          },
-          "weighted_flops": 216,
-          "conventional_flops": 299
-        },
-        {
-          "operator": "L2l",
-          "degree": 5,
-          "variant": 0,
-          "arithmetic": {
-            "multiply": 91,
-            "fma": 405,
-            "add": 36
-          },
-          "weighted_flops": 532,
-          "conventional_flops": 937
-        },
-        {
-          "operator": "L2l",
-          "degree": 5,
-          "variant": 1,
-          "arithmetic": {
-            "multiply": 135,
-            "fma": 304,
-            "selectZero": 2,
-            "sqrt": 1,
-            "divide": 1,
-            "add": 36
-          },
-          "weighted_flops": 483,
-          "conventional_flops": 781
-        },
-        {
-          "operator": "L2l",
-          "degree": 5,
-          "variant": 2,
-          "arithmetic": {
-            "multiply": 154,
-            "fma": 264,
-            "selectZero": 2,
-            "sqrt": 1,
-            "divide": 1,
-            "add": 38
-          },
-          "weighted_flops": 464,
-          "conventional_flops": 722
         },
         {
           "operator": "L2p",
@@ -2009,20 +1090,6 @@
           "conventional_flops": 184
         },
         {
-          "operator": "P2l",
-          "degree": 6,
-          "variant": null,
-          "arithmetic": {
-            "multiply": 90,
-            "fma": 75,
-            "divide": 2,
-            "sqrt": 1,
-            "subtract": 11
-          },
-          "weighted_flops": 185,
-          "conventional_flops": 254
-        },
-        {
           "operator": "Greens",
           "degree": 6,
           "variant": null,
@@ -2034,197 +1101,6 @@
           },
           "weighted_flops": 125,
           "conventional_flops": 156
-        },
-        {
-          "operator": "M2lDerivatives",
-          "degree": 6,
-          "variant": null,
-          "arithmetic": {
-            "multiply": 66,
-            "fma": 719,
-            "add": 36
-          },
-          "weighted_flops": 821,
-          "conventional_flops": 1540
-        },
-        {
-          "operator": "M2m",
-          "degree": 5,
-          "variant": 0,
-          "arithmetic": {
-            "multiply": 81,
-            "fma": 405,
-            "add": 36
-          },
-          "weighted_flops": 522,
-          "conventional_flops": 927
-        },
-        {
-          "operator": "M2m",
-          "degree": 5,
-          "variant": 1,
-          "arithmetic": {
-            "multiply": 130,
-            "fma": 304,
-            "selectZero": 2,
-            "sqrt": 1,
-            "divide": 1,
-            "add": 36
-          },
-          "weighted_flops": 478,
-          "conventional_flops": 776
-        },
-        {
-          "operator": "M2m",
-          "degree": 5,
-          "variant": 2,
-          "arithmetic": {
-            "multiply": 155,
-            "fma": 265,
-            "selectZero": 2,
-            "sqrt": 1,
-            "divide": 1,
-            "add": 36,
-            "subtract": 1
-          },
-          "weighted_flops": 465,
-          "conventional_flops": 724
-        },
-        {
-          "operator": "M2l",
-          "degree": 6,
-          "variant": 0,
-          "arithmetic": {
-            "multiply": 165,
-            "fma": 754,
-            "divide": 2,
-            "sqrt": 1,
-            "add": 36,
-            "subtract": 2
-          },
-          "weighted_flops": 966,
-          "conventional_flops": 1714
-        },
-        {
-          "operator": "M2l",
-          "degree": 6,
-          "variant": 1,
-          "arithmetic": {
-            "multiply": 200,
-            "fma": 473,
-            "selectZero": 2,
-            "sqrt": 2,
-            "divide": 3,
-            "add": 36,
-            "subtract": 4
-          },
-          "weighted_flops": 730,
-          "conventional_flops": 1191
-        },
-        {
-          "operator": "M2l",
-          "degree": 6,
-          "variant": 2,
-          "arithmetic": {
-            "multiply": 319,
-            "fma": 334,
-            "selectZero": 3,
-            "sqrt": 2,
-            "divide": 2,
-            "add": 39,
-            "subtract": 2
-          },
-          "weighted_flops": 710,
-          "conventional_flops": 1032
-        },
-        {
-          "operator": "M2p",
-          "degree": 6,
-          "variant": 0,
-          "arithmetic": {
-            "multiply": 131,
-            "fma": 227,
-            "divide": 2,
-            "sqrt": 1,
-            "add": 1,
-            "subtract": 3
-          },
-          "weighted_flops": 371,
-          "conventional_flops": 592
-        },
-        {
-          "operator": "M2p",
-          "degree": 6,
-          "variant": 1,
-          "arithmetic": {
-            "multiply": 122,
-            "fma": 161,
-            "selectZero": 2,
-            "sqrt": 2,
-            "divide": 3,
-            "add": 1,
-            "subtract": 3
-          },
-          "weighted_flops": 304,
-          "conventional_flops": 453
-        },
-        {
-          "operator": "M2p",
-          "degree": 6,
-          "variant": 2,
-          "arithmetic": {
-            "multiply": 138,
-            "fma": 147,
-            "selectZero": 3,
-            "sqrt": 2,
-            "divide": 2,
-            "add": 2,
-            "subtract": 3
-          },
-          "weighted_flops": 306,
-          "conventional_flops": 441
-        },
-        {
-          "operator": "L2l",
-          "degree": 6,
-          "variant": 0,
-          "arithmetic": {
-            "multiply": 128,
-            "fma": 756,
-            "add": 49
-          },
-          "weighted_flops": 933,
-          "conventional_flops": 1689
-        },
-        {
-          "operator": "L2l",
-          "degree": 6,
-          "variant": 1,
-          "arithmetic": {
-            "multiply": 187,
-            "fma": 525,
-            "selectZero": 2,
-            "sqrt": 1,
-            "divide": 1,
-            "add": 49
-          },
-          "weighted_flops": 769,
-          "conventional_flops": 1288
-        },
-        {
-          "operator": "L2l",
-          "degree": 6,
-          "variant": 2,
-          "arithmetic": {
-            "multiply": 212,
-            "fma": 424,
-            "selectZero": 2,
-            "sqrt": 1,
-            "divide": 1,
-            "add": 51
-          },
-          "weighted_flops": 695,
-          "conventional_flops": 1113
         },
         {
           "operator": "L2p",
@@ -2285,20 +1161,6 @@
           "conventional_flops": 257
         },
         {
-          "operator": "P2l",
-          "degree": 7,
-          "variant": null,
-          "arithmetic": {
-            "multiply": 116,
-            "fma": 101,
-            "divide": 2,
-            "sqrt": 1,
-            "subtract": 13
-          },
-          "weighted_flops": 239,
-          "conventional_flops": 334
-        },
-        {
           "operator": "Greens",
           "degree": 7,
           "variant": null,
@@ -2310,196 +1172,6 @@
           },
           "weighted_flops": 162,
           "conventional_flops": 206
-        },
-        {
-          "operator": "M2lDerivatives",
-          "degree": 7,
-          "variant": null,
-          "arithmetic": {
-            "multiply": 91,
-            "fma": 1248,
-            "add": 49
-          },
-          "weighted_flops": 1388,
-          "conventional_flops": 2636
-        },
-        {
-          "operator": "M2m",
-          "degree": 6,
-          "variant": 0,
-          "arithmetic": {
-            "multiply": 116,
-            "fma": 756,
-            "add": 49
-          },
-          "weighted_flops": 921,
-          "conventional_flops": 1677
-        },
-        {
-          "operator": "M2m",
-          "degree": 6,
-          "variant": 1,
-          "arithmetic": {
-            "multiply": 181,
-            "fma": 525,
-            "selectZero": 2,
-            "sqrt": 1,
-            "divide": 1,
-            "add": 49
-          },
-          "weighted_flops": 763,
-          "conventional_flops": 1282
-        },
-        {
-          "operator": "M2m",
-          "degree": 6,
-          "variant": 2,
-          "arithmetic": {
-            "multiply": 213,
-            "fma": 425,
-            "selectZero": 2,
-            "sqrt": 1,
-            "divide": 1,
-            "add": 49,
-            "subtract": 1
-          },
-          "weighted_flops": 696,
-          "conventional_flops": 1115
-        },
-        {
-          "operator": "M2l",
-          "degree": 7,
-          "variant": 0,
-          "arithmetic": {
-            "multiply": 218,
-            "fma": 1296,
-            "divide": 2,
-            "sqrt": 1,
-            "add": 49,
-            "subtract": 2
-          },
-          "weighted_flops": 1574,
-          "conventional_flops": 2864
-        },
-        {
-          "operator": "M2l",
-          "degree": 7,
-          "variant": 1,
-          "arithmetic": {
-            "multiply": 262,
-            "fma": 786,
-            "selectZero": 2,
-            "sqrt": 2,
-            "divide": 3,
-            "add": 49
-          },
-          "weighted_flops": 1114,
-          "conventional_flops": 1888
-        },
-        {
-          "operator": "M2l",
-          "degree": 7,
-          "variant": 2,
-          "arithmetic": {
-            "multiply": 432,
-            "fma": 496,
-            "selectZero": 3,
-            "sqrt": 2,
-            "divide": 2,
-            "add": 53,
-            "subtract": 4
-          },
-          "weighted_flops": 1001,
-          "conventional_flops": 1485
-        },
-        {
-          "operator": "M2p",
-          "degree": 7,
-          "variant": 0,
-          "arithmetic": {
-            "multiply": 171,
-            "fma": 314,
-            "divide": 2,
-            "sqrt": 1,
-            "add": 1,
-            "subtract": 3
-          },
-          "weighted_flops": 498,
-          "conventional_flops": 806
-        },
-        {
-          "operator": "M2p",
-          "degree": 7,
-          "variant": 1,
-          "arithmetic": {
-            "multiply": 160,
-            "fma": 220,
-            "selectZero": 2,
-            "sqrt": 2,
-            "divide": 3,
-            "add": 1,
-            "subtract": 3
-          },
-          "weighted_flops": 401,
-          "conventional_flops": 609
-        },
-        {
-          "operator": "M2p",
-          "degree": 7,
-          "variant": 2,
-          "arithmetic": {
-            "multiply": 181,
-            "fma": 213,
-            "selectZero": 3,
-            "sqrt": 2,
-            "divide": 2,
-            "add": 2,
-            "subtract": 3
-          },
-          "weighted_flops": 415,
-          "conventional_flops": 616
-        },
-        {
-          "operator": "L2l",
-          "degree": 7,
-          "variant": 0,
-          "arithmetic": {
-            "multiply": 170,
-            "fma": 1298,
-            "add": 64
-          },
-          "weighted_flops": 1532,
-          "conventional_flops": 2830
-        },
-        {
-          "operator": "L2l",
-          "degree": 7,
-          "variant": 1,
-          "arithmetic": {
-            "multiply": 246,
-            "fma": 852,
-            "selectZero": 2,
-            "sqrt": 1,
-            "divide": 1,
-            "add": 64
-          },
-          "weighted_flops": 1170,
-          "conventional_flops": 2016
-        },
-        {
-          "operator": "L2l",
-          "degree": 7,
-          "variant": 2,
-          "arithmetic": {
-            "multiply": 278,
-            "fma": 638,
-            "selectZero": 2,
-            "sqrt": 1,
-            "divide": 1,
-            "add": 66
-          },
-          "weighted_flops": 990,
-          "conventional_flops": 1622
         },
         {
           "operator": "L2p",
@@ -2560,20 +1232,6 @@
           "conventional_flops": 341
         },
         {
-          "operator": "P2l",
-          "degree": 8,
-          "variant": null,
-          "arithmetic": {
-            "multiply": 144,
-            "fma": 131,
-            "divide": 2,
-            "sqrt": 1,
-            "subtract": 15
-          },
-          "weighted_flops": 299,
-          "conventional_flops": 424
-        },
-        {
           "operator": "Greens",
           "degree": 8,
           "variant": null,
@@ -2585,197 +1243,6 @@
           },
           "weighted_flops": 203,
           "conventional_flops": 262
-        },
-        {
-          "operator": "M2lDerivatives",
-          "degree": 8,
-          "variant": null,
-          "arithmetic": {
-            "multiply": 120,
-            "fma": 2024,
-            "add": 64
-          },
-          "weighted_flops": 2208,
-          "conventional_flops": 4232
-        },
-        {
-          "operator": "M2m",
-          "degree": 7,
-          "variant": 0,
-          "arithmetic": {
-            "multiply": 156,
-            "fma": 1298,
-            "add": 64
-          },
-          "weighted_flops": 1518,
-          "conventional_flops": 2816
-        },
-        {
-          "operator": "M2m",
-          "degree": 7,
-          "variant": 1,
-          "arithmetic": {
-            "multiply": 239,
-            "fma": 852,
-            "selectZero": 2,
-            "sqrt": 1,
-            "divide": 1,
-            "add": 64
-          },
-          "weighted_flops": 1163,
-          "conventional_flops": 2009
-        },
-        {
-          "operator": "M2m",
-          "degree": 7,
-          "variant": 2,
-          "arithmetic": {
-            "multiply": 278,
-            "fma": 639,
-            "selectZero": 2,
-            "sqrt": 1,
-            "divide": 1,
-            "add": 64,
-            "subtract": 1
-          },
-          "weighted_flops": 990,
-          "conventional_flops": 1623
-        },
-        {
-          "operator": "M2l",
-          "degree": 8,
-          "variant": 0,
-          "arithmetic": {
-            "multiply": 277,
-            "fma": 2087,
-            "divide": 2,
-            "sqrt": 1,
-            "add": 64,
-            "subtract": 2
-          },
-          "weighted_flops": 2439,
-          "conventional_flops": 4520
-        },
-        {
-          "operator": "M2l",
-          "degree": 8,
-          "variant": 1,
-          "arithmetic": {
-            "multiply": 339,
-            "fma": 1223,
-            "selectZero": 2,
-            "sqrt": 2,
-            "divide": 3,
-            "add": 64,
-            "subtract": 4
-          },
-          "weighted_flops": 1647,
-          "conventional_flops": 2858
-        },
-        {
-          "operator": "M2l",
-          "degree": 8,
-          "variant": 2,
-          "arithmetic": {
-            "multiply": 562,
-            "fma": 720,
-            "selectZero": 3,
-            "sqrt": 2,
-            "divide": 2,
-            "add": 69,
-            "subtract": 3
-          },
-          "weighted_flops": 1370,
-          "conventional_flops": 2078
-        },
-        {
-          "operator": "M2p",
-          "degree": 8,
-          "variant": 0,
-          "arithmetic": {
-            "multiply": 215,
-            "fma": 415,
-            "divide": 2,
-            "sqrt": 1,
-            "add": 1,
-            "subtract": 3
-          },
-          "weighted_flops": 643,
-          "conventional_flops": 1052
-        },
-        {
-          "operator": "M2p",
-          "degree": 8,
-          "variant": 1,
-          "arithmetic": {
-            "multiply": 201,
-            "fma": 288,
-            "selectZero": 2,
-            "sqrt": 2,
-            "divide": 3,
-            "add": 1,
-            "subtract": 3
-          },
-          "weighted_flops": 510,
-          "conventional_flops": 786
-        },
-        {
-          "operator": "M2p",
-          "degree": 8,
-          "variant": 2,
-          "arithmetic": {
-            "multiply": 229,
-            "fma": 297,
-            "selectZero": 3,
-            "sqrt": 2,
-            "divide": 2,
-            "add": 2,
-            "subtract": 3
-          },
-          "weighted_flops": 547,
-          "conventional_flops": 832
-        },
-        {
-          "operator": "L2l",
-          "degree": 8,
-          "variant": 0,
-          "arithmetic": {
-            "multiply": 218,
-            "fma": 2089,
-            "add": 81
-          },
-          "weighted_flops": 2388,
-          "conventional_flops": 4477
-        },
-        {
-          "operator": "L2l",
-          "degree": 8,
-          "variant": 1,
-          "arithmetic": {
-            "multiply": 313,
-            "fma": 1315,
-            "selectZero": 2,
-            "sqrt": 1,
-            "divide": 1,
-            "add": 81
-          },
-          "weighted_flops": 1717,
-          "conventional_flops": 3026
-        },
-        {
-          "operator": "L2l",
-          "degree": 8,
-          "variant": 2,
-          "arithmetic": {
-            "multiply": 352,
-            "fma": 910,
-            "selectZero": 2,
-            "sqrt": 1,
-            "divide": 1,
-            "add": 83
-          },
-          "weighted_flops": 1353,
-          "conventional_flops": 2257
         },
         {
           "operator": "L2p",
@@ -2825,54 +1292,6 @@
       ],
       "selections": [
         {
-          "operator": "M2m",
-          "fmm_order": 3,
-          "degree": 1,
-          "candidate_flops": [
-            9,
-            28,
-            30
-          ],
-          "selected_variant": 0,
-          "weighted_flops": 9
-        },
-        {
-          "operator": "M2l",
-          "fmm_order": 3,
-          "degree": 2,
-          "candidate_flops": [
-            62,
-            75,
-            80
-          ],
-          "selected_variant": 0,
-          "weighted_flops": 62
-        },
-        {
-          "operator": "M2p",
-          "fmm_order": 3,
-          "degree": 2,
-          "candidate_flops": [
-            55,
-            60,
-            57
-          ],
-          "selected_variant": 0,
-          "weighted_flops": 55
-        },
-        {
-          "operator": "L2l",
-          "fmm_order": 3,
-          "degree": 2,
-          "candidate_flops": [
-            50,
-            75,
-            77
-          ],
-          "selected_variant": 0,
-          "weighted_flops": 50
-        },
-        {
           "operator": "L2p",
           "fmm_order": 3,
           "degree": 2,
@@ -2883,54 +1302,6 @@
           ],
           "selected_variant": 0,
           "weighted_flops": 45
-        },
-        {
-          "operator": "M2m",
-          "fmm_order": 4,
-          "degree": 2,
-          "candidate_flops": [
-            46,
-            73,
-            80
-          ],
-          "selected_variant": 0,
-          "weighted_flops": 46
-        },
-        {
-          "operator": "M2l",
-          "fmm_order": 4,
-          "degree": 3,
-          "candidate_flops": [
-            146,
-            144,
-            159
-          ],
-          "selected_variant": 1,
-          "weighted_flops": 144
-        },
-        {
-          "operator": "M2p",
-          "fmm_order": 4,
-          "degree": 3,
-          "candidate_flops": [
-            106,
-            101,
-            94
-          ],
-          "selected_variant": 2,
-          "weighted_flops": 94
-        },
-        {
-          "operator": "L2l",
-          "fmm_order": 4,
-          "degree": 3,
-          "candidate_flops": [
-            130,
-            157,
-            162
-          ],
-          "selected_variant": 0,
-          "weighted_flops": 130
         },
         {
           "operator": "L2p",
@@ -2945,54 +1316,6 @@
           "weighted_flops": 89
         },
         {
-          "operator": "M2m",
-          "fmm_order": 5,
-          "degree": 3,
-          "candidate_flops": [
-            124,
-            154,
-            164
-          ],
-          "selected_variant": 0,
-          "weighted_flops": 124
-        },
-        {
-          "operator": "M2l",
-          "fmm_order": 5,
-          "degree": 4,
-          "candidate_flops": [
-            300,
-            270,
-            293
-          ],
-          "selected_variant": 1,
-          "weighted_flops": 270
-        },
-        {
-          "operator": "M2p",
-          "fmm_order": 5,
-          "degree": 4,
-          "candidate_flops": [
-            176,
-            155,
-            146
-          ],
-          "selected_variant": 2,
-          "weighted_flops": 146
-        },
-        {
-          "operator": "L2l",
-          "fmm_order": 5,
-          "degree": 4,
-          "candidate_flops": [
-            279,
-            287,
-            289
-          ],
-          "selected_variant": 0,
-          "weighted_flops": 279
-        },
-        {
           "operator": "L2p",
           "fmm_order": 5,
           "degree": 4,
@@ -3003,54 +1326,6 @@
           ],
           "selected_variant": 2,
           "weighted_flops": 136
-        },
-        {
-          "operator": "M2m",
-          "fmm_order": 6,
-          "degree": 4,
-          "candidate_flops": [
-            271,
-            283,
-            290
-          ],
-          "selected_variant": 0,
-          "weighted_flops": 271
-        },
-        {
-          "operator": "M2l",
-          "fmm_order": 6,
-          "degree": 5,
-          "candidate_flops": [
-            560,
-            454,
-            468
-          ],
-          "selected_variant": 1,
-          "weighted_flops": 454
-        },
-        {
-          "operator": "M2p",
-          "fmm_order": 6,
-          "degree": 5,
-          "candidate_flops": [
-            265,
-            224,
-            216
-          ],
-          "selected_variant": 2,
-          "weighted_flops": 216
-        },
-        {
-          "operator": "L2l",
-          "fmm_order": 6,
-          "degree": 5,
-          "candidate_flops": [
-            532,
-            483,
-            464
-          ],
-          "selected_variant": 2,
-          "weighted_flops": 464
         },
         {
           "operator": "L2p",
@@ -3065,54 +1340,6 @@
           "weighted_flops": 198
         },
         {
-          "operator": "M2m",
-          "fmm_order": 7,
-          "degree": 5,
-          "candidate_flops": [
-            522,
-            478,
-            465
-          ],
-          "selected_variant": 2,
-          "weighted_flops": 465
-        },
-        {
-          "operator": "M2l",
-          "fmm_order": 7,
-          "degree": 6,
-          "candidate_flops": [
-            966,
-            730,
-            710
-          ],
-          "selected_variant": 2,
-          "weighted_flops": 710
-        },
-        {
-          "operator": "M2p",
-          "fmm_order": 7,
-          "degree": 6,
-          "candidate_flops": [
-            371,
-            304,
-            306
-          ],
-          "selected_variant": 1,
-          "weighted_flops": 304
-        },
-        {
-          "operator": "L2l",
-          "fmm_order": 7,
-          "degree": 6,
-          "candidate_flops": [
-            933,
-            769,
-            695
-          ],
-          "selected_variant": 2,
-          "weighted_flops": 695
-        },
-        {
           "operator": "L2p",
           "fmm_order": 7,
           "degree": 6,
@@ -3125,54 +1352,6 @@
           "weighted_flops": 274
         },
         {
-          "operator": "M2m",
-          "fmm_order": 8,
-          "degree": 6,
-          "candidate_flops": [
-            921,
-            763,
-            696
-          ],
-          "selected_variant": 2,
-          "weighted_flops": 696
-        },
-        {
-          "operator": "M2l",
-          "fmm_order": 8,
-          "degree": 7,
-          "candidate_flops": [
-            1574,
-            1114,
-            1001
-          ],
-          "selected_variant": 2,
-          "weighted_flops": 1001
-        },
-        {
-          "operator": "M2p",
-          "fmm_order": 8,
-          "degree": 7,
-          "candidate_flops": [
-            498,
-            401,
-            415
-          ],
-          "selected_variant": 1,
-          "weighted_flops": 401
-        },
-        {
-          "operator": "L2l",
-          "fmm_order": 8,
-          "degree": 7,
-          "candidate_flops": [
-            1532,
-            1170,
-            990
-          ],
-          "selected_variant": 2,
-          "weighted_flops": 990
-        },
-        {
           "operator": "L2p",
           "fmm_order": 8,
           "degree": 7,
@@ -3183,54 +1362,6 @@
           ],
           "selected_variant": 2,
           "weighted_flops": 369
-        },
-        {
-          "operator": "M2m",
-          "fmm_order": 9,
-          "degree": 7,
-          "candidate_flops": [
-            1518,
-            1163,
-            990
-          ],
-          "selected_variant": 2,
-          "weighted_flops": 990
-        },
-        {
-          "operator": "M2l",
-          "fmm_order": 9,
-          "degree": 8,
-          "candidate_flops": [
-            2439,
-            1647,
-            1370
-          ],
-          "selected_variant": 2,
-          "weighted_flops": 1370
-        },
-        {
-          "operator": "M2p",
-          "fmm_order": 9,
-          "degree": 8,
-          "candidate_flops": [
-            643,
-            510,
-            547
-          ],
-          "selected_variant": 1,
-          "weighted_flops": 510
-        },
-        {
-          "operator": "L2l",
-          "fmm_order": 9,
-          "degree": 8,
-          "candidate_flops": [
-            2388,
-            1717,
-            1353
-          ],
-          "selected_variant": 2,
-          "weighted_flops": 1353
         },
         {
           "operator": "L2p",
@@ -3268,19 +1399,16 @@
       "orders": {
         "3": {
           "local_degree": 2,
-          "source_degree": 1,
           "real_image_count": 924,
           "reciprocal_pair_count": 462,
           "central_weighted_flops": 330,
           "real_pair_weighted_flops": 167,
           "reciprocal_pair_weighted_flops": 80,
           "green_weighted_flops": 114444,
-          "contraction_weighted_flops": 35,
           "central_conventional_flops": 480,
           "real_pair_conventional_flops": 169,
           "reciprocal_pair_conventional_flops": 88,
           "green_conventional_flops": 119214,
-          "contraction_conventional_flops": 58,
           "special_function_calls": {
             "exp": 1387,
             "erfc": 924,
@@ -3291,19 +1419,16 @@
         },
         "4": {
           "local_degree": 3,
-          "source_degree": 2,
           "real_image_count": 924,
           "reciprocal_pair_count": 462,
           "central_weighted_flops": 461,
           "real_pair_weighted_flops": 278,
           "reciprocal_pair_weighted_flops": 143,
           "green_weighted_flops": 194963,
-          "contraction_weighted_flops": 100,
           "central_conventional_flops": 664,
           "real_pair_conventional_flops": 290,
           "reciprocal_pair_conventional_flops": 156,
           "green_conventional_flops": 206716,
-          "contraction_conventional_flops": 173,
           "special_function_calls": {
             "exp": 1387,
             "erfc": 924,
@@ -3314,19 +1439,16 @@
         },
         "5": {
           "local_degree": 4,
-          "source_degree": 3,
           "real_image_count": 924,
           "reciprocal_pair_count": 462,
           "central_weighted_flops": 603,
           "real_pair_weighted_flops": 421,
           "reciprocal_pair_weighted_flops": 225,
           "green_weighted_flops": 299055,
-          "contraction_weighted_flops": 228,
           "central_conventional_flops": 861,
           "real_pair_conventional_flops": 447,
           "reciprocal_pair_conventional_flops": 245,
           "green_conventional_flops": 320565,
-          "contraction_conventional_flops": 409,
           "special_function_calls": {
             "exp": 1387,
             "erfc": 924,
@@ -3337,19 +1459,16 @@
         },
         "6": {
           "local_degree": 5,
-          "source_degree": 4,
           "real_image_count": 924,
           "reciprocal_pair_count": 462,
           "central_weighted_flops": 756,
           "real_pair_weighted_flops": 596,
           "reciprocal_pair_weighted_flops": 326,
           "green_weighted_flops": 426720,
-          "contraction_weighted_flops": 457,
           "central_conventional_flops": 1071,
           "real_pair_conventional_flops": 640,
           "reciprocal_pair_conventional_flops": 355,
           "green_conventional_flops": 460761,
-          "contraction_conventional_flops": 841,
           "special_function_calls": {
             "exp": 1387,
             "erfc": 924,
@@ -3360,19 +1479,16 @@
         },
         "7": {
           "local_degree": 6,
-          "source_degree": 5,
           "real_image_count": 924,
           "reciprocal_pair_count": 462,
           "central_weighted_flops": 920,
           "real_pair_weighted_flops": 803,
           "reciprocal_pair_weighted_flops": 446,
           "green_weighted_flops": 577958,
-          "contraction_weighted_flops": 829,
           "central_conventional_flops": 1294,
           "real_pair_conventional_flops": 869,
           "reciprocal_pair_conventional_flops": 486,
           "green_conventional_flops": 627304,
-          "contraction_conventional_flops": 1553,
           "special_function_calls": {
             "exp": 1387,
             "erfc": 924,
@@ -3383,19 +1499,16 @@
         },
         "8": {
           "local_degree": 7,
-          "source_degree": 6,
           "real_image_count": 924,
           "reciprocal_pair_count": 462,
           "central_weighted_flops": 1095,
           "real_pair_weighted_flops": 1042,
           "reciprocal_pair_weighted_flops": 585,
           "green_weighted_flops": 752769,
-          "contraction_weighted_flops": 1396,
           "central_conventional_flops": 1530,
           "real_pair_conventional_flops": 1134,
           "reciprocal_pair_conventional_flops": 638,
           "green_conventional_flops": 820194,
-          "contraction_conventional_flops": 2649,
           "special_function_calls": {
             "exp": 1387,
             "erfc": 924,
@@ -3406,19 +1519,16 @@
         },
         "9": {
           "local_degree": 8,
-          "source_degree": 7,
           "real_image_count": 924,
           "reciprocal_pair_count": 462,
           "central_weighted_flops": 1281,
           "real_pair_weighted_flops": 1313,
           "reciprocal_pair_weighted_flops": 743,
           "green_weighted_flops": 951153,
-          "contraction_weighted_flops": 2216,
           "central_conventional_flops": 1779,
           "real_pair_conventional_flops": 1435,
           "reciprocal_pair_conventional_flops": 811,
           "green_conventional_flops": 1039431,
-          "contraction_conventional_flops": 4245,
           "special_function_calls": {
             "exp": 1387,
             "erfc": 924,
@@ -3627,20 +1737,6 @@
         },
         {
           "arithmetic": {
-            "*": 4,
-            "+": 1,
-            "fma": 17
-          },
-          "accumulations": 4,
-          "fused_accumulations": 5,
-          "weighted_flops": 26,
-          "conventional_flops": 43,
-          "operator": "EwaldM2L",
-          "source_order": 1,
-          "order": 2
-        },
-        {
-          "arithmetic": {
             "*": 36,
             "+": 4,
             "-": 6,
@@ -3652,21 +1748,6 @@
           "conventional_flops": 128,
           "expansion_order": 3,
           "source_order": 2
-        },
-        {
-          "arithmetic": {
-            "*": 25,
-            "+": 5,
-            "-": 4,
-            "fma": 54
-          },
-          "accumulations": 9,
-          "fused_accumulations": 7,
-          "weighted_flops": 97,
-          "conventional_flops": 151,
-          "operator": "EwaldM2L",
-          "source_order": 2,
-          "order": 3
         },
         {
           "arithmetic": {
@@ -3684,21 +1765,6 @@
         },
         {
           "arithmetic": {
-            "*": 88,
-            "+": 15,
-            "-": 8,
-            "fma": 142
-          },
-          "accumulations": 16,
-          "fused_accumulations": 9,
-          "weighted_flops": 269,
-          "conventional_flops": 411,
-          "operator": "EwaldM2L",
-          "source_order": 3,
-          "order": 4
-        },
-        {
-          "arithmetic": {
             "*": 125,
             "+": 20,
             "-": 42,
@@ -3710,21 +1776,6 @@
           "conventional_flops": 571,
           "expansion_order": 5,
           "source_order": 4
-        },
-        {
-          "arithmetic": {
-            "*": 230,
-            "+": 33,
-            "-": 13,
-            "fma": 316
-          },
-          "accumulations": 25,
-          "fused_accumulations": 11,
-          "weighted_flops": 617,
-          "conventional_flops": 933,
-          "operator": "EwaldM2L",
-          "source_order": 4,
-          "order": 5
         },
         {
           "arithmetic": {
@@ -3742,21 +1793,6 @@
         },
         {
           "arithmetic": {
-            "*": 499,
-            "+": 61,
-            "-": 19,
-            "fma": 625
-          },
-          "accumulations": 36,
-          "fused_accumulations": 13,
-          "weighted_flops": 1240,
-          "conventional_flops": 1865,
-          "operator": "EwaldM2L",
-          "source_order": 5,
-          "order": 6
-        },
-        {
-          "arithmetic": {
             "*": 345,
             "+": 82,
             "-": 127,
@@ -3771,21 +1807,6 @@
         },
         {
           "arithmetic": {
-            "*": 959,
-            "+": 101,
-            "-": 26,
-            "fma": 1133
-          },
-          "accumulations": 49,
-          "fused_accumulations": 15,
-          "weighted_flops": 2268,
-          "conventional_flops": 3401,
-          "operator": "EwaldM2L",
-          "source_order": 6,
-          "order": 7
-        },
-        {
-          "arithmetic": {
             "*": 539,
             "+": 187,
             "-": 171,
@@ -3797,21 +1818,6 @@
           "conventional_flops": 3173,
           "expansion_order": 8,
           "source_order": 7
-        },
-        {
-          "arithmetic": {
-            "*": 1691,
-            "+": 155,
-            "-": 34,
-            "fma": 1921
-          },
-          "accumulations": 64,
-          "fused_accumulations": 17,
-          "weighted_flops": 3865,
-          "conventional_flops": 5786,
-          "operator": "EwaldM2L",
-          "source_order": 7,
-          "order": 8
         }
       ],
       "operators": [
@@ -4485,80 +2491,5 @@
         }
       ]
     }
-  },
-  "m2l_comparison": {
-    "description": "Free-space M2L, including displacement geometry and additive output; source degree = FMM order - 2, local degree = FMM order - 1. Generic source dipoles are retained. Application coordinate-unit conversion is excluded from both families. +, -, *, / and explicit FMA cost 1; sqrt costs 7. Both families emit explicit FMAs; no additional compiler contraction is assumed. These are emitted arithmetic counts, not measured instruction counts or timings.",
-    "orders": [
-      {
-        "fmm_order": 3,
-        "source_degree": 1,
-        "local_degree": 2,
-        "cartesian_kernel_flops": 36,
-        "cartesian_geometry_flops": 11,
-        "cartesian_weighted_flops": 47,
-        "spherical_weighted_flops": 62,
-        "spherical_variant": "none"
-      },
-      {
-        "fmm_order": 4,
-        "source_degree": 2,
-        "local_degree": 3,
-        "cartesian_kernel_flops": 87,
-        "cartesian_geometry_flops": 11,
-        "cartesian_weighted_flops": 98,
-        "spherical_weighted_flops": 144,
-        "spherical_variant": "azimuth"
-      },
-      {
-        "fmm_order": 5,
-        "source_degree": 3,
-        "local_degree": 4,
-        "cartesian_kernel_flops": 186,
-        "cartesian_geometry_flops": 11,
-        "cartesian_weighted_flops": 197,
-        "spherical_weighted_flops": 270,
-        "spherical_variant": "azimuth"
-      },
-      {
-        "fmm_order": 6,
-        "source_degree": 4,
-        "local_degree": 5,
-        "cartesian_kernel_flops": 379,
-        "cartesian_geometry_flops": 11,
-        "cartesian_weighted_flops": 390,
-        "spherical_weighted_flops": 454,
-        "spherical_variant": "azimuth"
-      },
-      {
-        "fmm_order": 7,
-        "source_degree": 5,
-        "local_degree": 6,
-        "cartesian_kernel_flops": 692,
-        "cartesian_geometry_flops": 11,
-        "cartesian_weighted_flops": 703,
-        "spherical_weighted_flops": 710,
-        "spherical_variant": "full"
-      },
-      {
-        "fmm_order": 8,
-        "source_degree": 6,
-        "local_degree": 7,
-        "cartesian_kernel_flops": 1215,
-        "cartesian_geometry_flops": 11,
-        "cartesian_weighted_flops": 1226,
-        "spherical_weighted_flops": 1001,
-        "spherical_variant": "full"
-      },
-      {
-        "fmm_order": 9,
-        "source_degree": 7,
-        "local_degree": 8,
-        "cartesian_kernel_flops": 2035,
-        "cartesian_geometry_flops": 11,
-        "cartesian_weighted_flops": 2046,
-        "spherical_weighted_flops": 1370,
-        "spherical_variant": "full"
-      }
-    ]
   }
 }

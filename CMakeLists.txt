@@ -265,7 +265,6 @@ set(cosmictiger_header_files
     cosmictiger/gravity/kernels/cartesian_tracefree_operators.hpp
     cosmictiger/gravity/fmm_order.hpp
     cosmictiger/gravity/fmm_types.hpp
-    cosmictiger/gravity/kernels/spherical_operators.hpp
     cosmictiger/gravity/kernels/spherical_types.hpp
     cosmictiger/analysis/bh.hpp
     cosmictiger/gravity/fmm_cpu_instances.hpp
@@ -288,7 +287,6 @@ set(cosmictiger_header_files
     cosmictiger/math/complex.hpp
     cosmictiger/math/constants.hpp
     cosmictiger/math/fixed.hpp
-    cosmictiger/math/float_float.hpp
     cosmictiger/math/fp16.hpp
     cosmictiger/math/interpolation.hpp
     cosmictiger/math/kernel.hpp
@@ -299,11 +297,9 @@ set(cosmictiger_header_files
     cosmictiger/math/radial_density_kernel.hpp
     cosmictiger/math/radial_kernel.hpp
     cosmictiger/math/range.hpp
-    cosmictiger/math/simd.hpp
     cosmictiger/math/simd_backend.hpp
     cosmictiger/math/simd_math.hpp
     cosmictiger/math/simulation_units.hpp
-    cosmictiger/math/tensor.hpp
     cosmictiger/math/units.hpp
     cosmictiger/math/vector3.hpp
     cosmictiger/particles/domain.hpp
@@ -481,18 +477,10 @@ set(COSMICTIGER_GENERATED_FMM_FILES
     ${COSMICTIGER_GENERATED_FMM_DIR}/spherical_kernels.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/spherical_ewald_kernels.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/p2m.hpp
-    ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/p2l.hpp
-    ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/m2m.hpp
-    ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/m2l.hpp
-    ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/m2p.hpp
-    ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/l2l.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/l2p.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/green.hpp
-    ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/m2l_derivatives.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/ewald_common.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/ewald_green.hpp
-    ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/ewald_m2l.hpp
-    ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/ewald_l2l.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/ewald_l2p.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/operation_counts.json)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
@@ -1440,12 +1428,6 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
     endforeach()
 
     if(COSMICTIGER_WITH_ROCKSTAR)
-        add_executable(rockstar_eigenpair_test tests/rockstar_eigenpair.cpp src/math/math.cpp)
-        target_include_directories(rockstar_eigenpair_test PRIVATE ${PROJECT_SOURCE_DIR})
-        target_compile_definitions(rockstar_eigenpair_test PRIVATE ORDER=${cosmictiger_default_fmm_order})
-        cosmictiger_use_generated_kernels(rockstar_eigenpair_test)
-        cosmictiger_add_gtest(NAME rockstar_eigenpair TARGET rockstar_eigenpair_test
-            PROPERTIES TIMEOUT 30)
         foreach(halo_unit IN ITEMS rockstar_core rockstar_properties lightcone_epoch)
             add_executable(${halo_unit}_test tests/${halo_unit}.cpp)
             target_include_directories(${halo_unit}_test PRIVATE ${PROJECT_SOURCE_DIR})
@@ -1624,18 +1606,6 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
         PROPERTIES TIMEOUT 20)
 
     include(CheckIncludeFileCXX)
-    foreach(float_float_variant IN ITEMS standard fast_math)
-        set(float_float_target float_float_${float_float_variant}_test)
-        add_executable(${float_float_target} tests/float_float.cpp)
-        target_include_directories(${float_float_target} PRIVATE ${PROJECT_SOURCE_DIR})
-        target_link_libraries(${float_float_target} PRIVATE Boost::boost)
-        if(float_float_variant STREQUAL "fast_math")
-            target_compile_options(${float_float_target} PRIVATE -ffast-math)
-        endif()
-        cosmictiger_add_gtest(NAME float_float_${float_float_variant} TARGET ${float_float_target}
-            PROPERTIES TIMEOUT 30)
-    endforeach()
-
     check_include_file_cxx("experimental/simd" COSMICTIGER_HAS_EXPERIMENTAL_SIMD)
     foreach(simd_variant IN ITEMS auto baseline native)
         set(simd_target "simd_${simd_variant}_test")
@@ -1655,42 +1625,6 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
         endif()
         cosmictiger_add_gtest(NAME simd_${simd_variant} TARGET ${simd_target}
             PROPERTIES TIMEOUT 20)
-    endforeach()
-
-    # Keep the long-double oracle in a separate translation unit so the
-    # application's fast-math flags cannot change the reference calculations.
-    add_library(special_functions_reference STATIC tests/special_functions_reference.cpp)
-    target_compile_options(special_functions_reference PRIVATE -fno-fast-math -ffp-contract=off)
-    foreach(special_variant IN ITEMS baseline native fast_math)
-        set(special_target special_functions_${special_variant}_test)
-        add_executable(${special_target} tests/special_functions.cpp)
-        target_include_directories(${special_target} PRIVATE ${PROJECT_SOURCE_DIR})
-        target_link_libraries(${special_target} PRIVATE special_functions_reference)
-        if(special_variant STREQUAL "baseline")
-            if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64|i.86)$")
-                target_compile_options(${special_target} PRIVATE
-                    -msse2 -mno-avx -mno-avx2 -mno-avx512f -mno-fma)
-            endif()
-        elseif(COMPILER_SUPPORTS_MARCH_NATIVE)
-            target_compile_options(${special_target} PRIVATE -march=native)
-        endif()
-        if(special_variant STREQUAL "fast_math")
-            target_compile_options(${special_target} PRIVATE -ffast-math)
-        endif()
-        cosmictiger_add_gtest(NAME special_functions_${special_variant} TARGET ${special_target}
-            PROPERTIES TIMEOUT 60)
-    endforeach()
-    foreach(special_variant IN ITEMS standard fast_math)
-        set(special_benchmark special_functions_${special_variant}_benchmark)
-        add_executable(${special_benchmark} EXCLUDE_FROM_ALL tests/special_functions_benchmark.cpp)
-        target_include_directories(${special_benchmark} PRIVATE ${PROJECT_SOURCE_DIR})
-        target_link_libraries(${special_benchmark} PRIVATE special_functions_reference)
-        if(COMPILER_SUPPORTS_MARCH_NATIVE)
-            target_compile_options(${special_benchmark} PRIVATE -march=native)
-        endif()
-        if(special_variant STREQUAL "fast_math")
-            target_compile_options(${special_benchmark} PRIVATE -ffast-math)
-        endif()
     endforeach()
 
     if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
@@ -2370,39 +2304,6 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
     endif()
 
     if(COSMICTIGER_WITH_CUDA)
-        foreach(special_variant IN ITEMS standard fast_math)
-            set(special_target special_functions_cuda_${special_variant}_test)
-            add_executable(${special_target} tests/special_functions_cuda.cu)
-            target_include_directories(${special_target} PRIVATE ${PROJECT_SOURCE_DIR})
-            target_link_libraries(${special_target} PRIVATE CUDA::cudart special_functions_reference)
-            set(special_benchmark special_functions_cuda_${special_variant}_benchmark)
-            add_executable(${special_benchmark} EXCLUDE_FROM_ALL
-                tests/special_functions_benchmark_cuda.cu)
-            target_include_directories(${special_benchmark} PRIVATE ${PROJECT_SOURCE_DIR})
-            target_link_libraries(${special_benchmark} PRIVATE CUDA::cudart special_functions_reference)
-            if(special_variant STREQUAL "fast_math")
-                foreach(special_program IN ITEMS ${special_target} ${special_benchmark})
-                    target_compile_options(${special_program} PRIVATE
-                        $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math;-Xcompiler=-ffast-math>)
-                endforeach()
-            endif()
-            cosmictiger_add_gtest(NAME special_functions_cuda_${special_variant} TARGET ${special_target}
-                PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
-        endforeach()
-
-        foreach(float_float_variant IN ITEMS standard fast_math)
-            set(float_float_target float_float_cuda_${float_float_variant}_test)
-            add_executable(${float_float_target} tests/float_float_cuda.cu)
-            target_include_directories(${float_float_target} PRIVATE ${PROJECT_SOURCE_DIR})
-            target_link_libraries(${float_float_target} PRIVATE CUDA::cudart Boost::boost)
-            if(float_float_variant STREQUAL "fast_math")
-                target_compile_options(${float_float_target} PRIVATE
-                    $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math;-Xcompiler=-ffast-math>)
-            endif()
-            cosmictiger_add_gtest(NAME float_float_cuda_${float_float_variant} TARGET ${float_float_target}
-                PROPERTIES TIMEOUT 30 SKIP_RETURN_CODE 77)
-        endforeach()
-
         if(COSMICTIGER_WITH_GRAVITY)
             add_executable(cartesian_kernels_cuda_test tests/gravity/cartesian_kernels_cuda.cu)
             target_include_directories(cartesian_kernels_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})

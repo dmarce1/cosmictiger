@@ -86,23 +86,6 @@ public:
     friend bool operator==(CountingReal left, CountingReal right) {
         return left.value_ == right.value_;
     }
-
-    friend CountingReal exp(CountingReal value) {
-        CountingReal::add(1);
-        return std::exp(value.value());
-    }
-
-    friend void sincos(CountingReal value, CountingReal* sine, CountingReal* cosine) {
-        CountingReal::add(2);
-        *sine = std::sin(value.value());
-        *cosine = std::cos(value.value());
-    }
-
-    friend void erfcexp(CountingReal value, CountingReal* complement, CountingReal* exponential) {
-        CountingReal::add(2);
-        *complement = std::erfc(value.value());
-        *exponential = std::exp(-value.value() * value.value());
-    }
 };
 
 }    // namespace detail

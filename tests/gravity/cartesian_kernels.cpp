@@ -306,21 +306,7 @@ void testInteractions() {
                 actual, unitExpected, "M2L unit Cartesian derivative oracle");
         }
         {
-            Expansion<order> ewald{}, unscaledExpected{};
-            Green<order> storedDerivatives{};
             auto const unscaledSource = projectedMoments<order>(particles, 1.);
-            for (int rank = 0; rank <= kLocalDegree; ++rank) {
-                for (auto const& index : indices(rank)) {
-                    if (index[2] <= 1) {
-                        int const i = compactIndex(index);
-                        storedDerivatives[i] = derivatives.at(index);
-                        unscaledExpected[i] = expected[i] / std::pow(targetScale, rank);
-                    }
-                }
-            }
-            kernels::M2L(ewald, unscaledSource, storedDerivatives);
-            compareRanks<kLocalDegree>(
-                ewald, unscaledExpected, "Ewald M2L full Cartesian contraction oracle");
             kernels::P2L(pointActual, 1.7 / targetScale, separation / targetScale);
             compareRanks<kLocalDegree>(
                 pointActual, pointExpected, "P2L binomial derivative oracle");

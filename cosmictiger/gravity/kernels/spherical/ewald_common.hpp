@@ -92,6 +92,4 @@ namespace detail {
 }    // namespace detail
 template <int degree>
 class EwaldGreen;
-template <int degree>
-class EwaldM2L;
 }    // namespace cosmictiger::gravity::spherical

@@ -90,7 +90,7 @@ def cartesianFmmOrder(kernel):
 
 
 def sphericalFmmOrder(kernel):
-    offset = 2 if kernel['operator'] in ('P2m', 'M2m') else 1
+    offset = 2 if kernel['operator'] == 'P2m' else 1
     return kernel['degree'] + offset
 
 
@@ -111,8 +111,6 @@ def selectReportOrders(report, minFmmOrder, maxFmmOrder):
     ewald['orders'] = {order: counts for order, counts in ewald['orders'].items() if includes(int(order))}
     conversions = selected['representations']['basisConversion']
     conversions['kernels'] = [row for row in conversions['kernels'] if includes(row['fmm_order'])]
-    comparisons = selected['m2l_comparison']
-    comparisons['orders'] = [row for row in comparisons['orders'] if includes(row['fmm_order'])]
     return selected
 
 
@@ -142,18 +140,17 @@ def appendAvailabilityChecks(lines, report, minFmmOrder, maxFmmOrder):
         lines.append(f'static_assert(HasCartesianM2L<{order}> == {selected});')
         lines.append(f'static_assert(HasSourceConversion<{order}> == {selected});')
         lines.append(f'static_assert(HasLocalConversion<{order}> == {selected});')
-        for kernel in (f'spherical::detail::M2L<{degree}>',
-                       f'spherical::detail::P2M<{order - 2}>',
+        for kernel in (f'spherical::detail::P2M<{order - 2}>',
+                       f'spherical::detail::Green<{degree}>',
+                       f'spherical::detail::L2P<{degree}>',
                        f'spherical::EwaldGreen<{degree}>'):
             lines.append(f'static_assert(CompleteKernel<cosmictiger::gravity::{kernel}> == {selected});')
 
 
 def appendCartesianChecks(lines, report, checks):
     cartesian = report['representations']['cartesianTracefree']
-    comparison = {row['local_degree']: row for row in report['m2l_comparison']['orders']}
     operations = {
         'M2L': ('kM2LFlops', 'M2L(L, M, distance)', 11),
-        'EwaldM2L': ('kM2LDerivativeFlops', 'M2L(L, M, D)', 0),
         'M2M': ('kM2MFlops', 'M2M(targetM, M, distance, ratio)', 0),
         'L2L': ('kL2LFlops', 'L2L(targetL, L, distance, ratio)', 0),
         'P2M': ('kP2MFlops', 'P2M(targetM, mass, distance)', 0),
@@ -168,12 +165,8 @@ def appendCartesianChecks(lines, report, checks):
         degree = kernel.get('expansion_order', kernel.get('order'))
         order = degree + (2 if name in ('P2M','M2M','M2P') else 1)
         constant, call, geometry = operations[name]
-        if name == 'M2L':
-            row = comparison[degree]
-            if row['cartesian_geometry_flops'] != 11 or row['cartesian_weighted_flops'] != kernel['weighted_flops'] + 11:
-                raise ValueError(f'Incorrect Cartesian M2L comparison: {row}')
-            if report['independent_m2l_ratios']:
-                call = 'M2L(L, M, distance, ratio, ratio)'
+        if name == 'M2L' and report['independent_m2l_ratios']:
+            call = 'M2L(L, M, distance, ratio, ratio)'
         expected = kernel['weighted_flops'] + geometry
         expectedFma = kernel['arithmetic'].get('fma',0) + (2 if geometry else 0)
         label = f'Cartesian {name} degree {degree}'
@@ -183,7 +176,6 @@ def appendCartesianChecks(lines, report, checks):
             f'        static_assert(cosmictiger::gravity::cartesian::detail::{constant}<{degree}> == {kernel["conventional_flops"]});',
             f'        Multipole<Real, {order}> M{{}}, targetM{{}};',
             f'        Expansion<Real, {order}> L{{}}, targetL{{}};',
-            f'        Green<Real, {order}> D{{}};',
             '        cosmictiger::gravity::Field<Real> field{};',
             '        Vector3<Real> const distance{Real(0.3), Real(-0.2), Real(0.4)};',
             '        Real const mass(0.7), ratio(0.6);',
@@ -228,11 +220,10 @@ def buildChecks(report, minFmmOrder, maxFmmOrder):
                       '}'])
     lines.extend(['}',
              'int main() {', '    using Real = CountingReal;',
-             '    std::array<Real, 256> source{}, derivatives{}, output{};',
+             '    std::array<Real, 256> source{}, output{};',
              '    Real trace(0.2);',
              '    for (int i = 0; i < 256; ++i) {',
              '        source[i] = Real(0.25 / (i + 1));',
-             '        derivatives[i] = Real(0.5 / (i + 1));',
              '        output[i] = Real(0.125);', '    }'])
     appendCartesianChecks(lines, report, checks)
     representations = report['representations']
@@ -283,17 +274,13 @@ def buildChecks(report, minFmmOrder, maxFmmOrder):
             selection = selections[operation, degree]
             if variant != selection['selected_variant']:
                 continue
-        name = {'P2m': 'P2M', 'M2m': 'M2M', 'M2l': 'M2L', 'M2p': 'M2P',
-                'P2l': 'P2L', 'L2l': 'L2L', 'L2p': 'L2P', 'Greens': 'Green',
-                'M2lDerivatives': 'M2LDerivatives'}[operation]
+        name = {'P2m': 'P2M', 'L2p': 'L2P', 'Greens': 'Green'}[operation]
         parameters = str(degree)
         method = 'evaluate' if operation == 'Greens' else 'add'
-        if operation in ('P2m','P2l'):
+        if operation == 'P2m':
             arguments = 'output, Real(0.7), Real(0.3), Real(-0.2), Real(0.4)'
         elif operation == 'Greens':
             arguments = 'output, Real(0.3), Real(-0.2), Real(0.4)'
-        elif operation == 'M2lDerivatives':
-            arguments = 'output, source, derivatives'
         else:
             arguments = 'output, source, Real(0.3), Real(-0.2), Real(0.4)'
         fullName = f'cosmictiger::gravity::{namespace}::detail::{name}<{parameters}>'
@@ -313,12 +300,6 @@ def buildChecks(report, minFmmOrder, maxFmmOrder):
                 ('EwaldGreen', 'evaluate',
                  'output, trace, Real(0.13), Real(-0.21), Real(0.31)',
                  counts['green_weighted_flops']),
-                ('EwaldM2L', 'add',
-                 'output, trace, source, Real(0.23), derivatives, Real(0.41)',
-                 counts['contraction_weighted_flops']),
-                ('EwaldL2L', 'add',
-                 'output, trace, source, Real(0.23), Real(0.13), Real(-0.21), Real(0.31)',
-                 None),
                 ('EwaldL2P', 'add',
                  'output, source, Real(0.23), Real(0.13), Real(-0.21), Real(0.31)',
                  None)):

@@ -4,6 +4,7 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <complex>
 #include <cstdint>
 #include <format>
 #include <iostream>
@@ -984,10 +985,53 @@ std::array<double, 4> directPmmmReference(size_t sink, Vector<PmmmSample> const&
     return result;
 }
 
+template <size_t count>
+std::complex<double> sphericalCoefficient(
+    std::array<double, count> const& coefficients, int degree, int order) {
+    if (std::abs(order) > degree) {
+        return {};
+    }
+    int const magnitude = std::abs(order);
+    std::complex<double> const positive{coefficients[degree * (degree + 1) + magnitude],
+        magnitude ? coefficients[degree * (degree + 1) - magnitude] : 0.0};
+    return order >= 0 ? positive : (magnitude % 2 ? -1.0 : 1.0) * std::conj(positive);
+}
+
+// Contract packed real harmonics through their complex storage convention,
+// independently of the generated kernel and the Fourier contraction table.
+template <int degree>
+void addPeriodicExpansionReference(std::array<double, (degree + 1) * (degree + 1)>& local,
+    double& localTrace, std::array<double, degree * degree> const& moments, double sourceTrace,
+    std::array<double, (degree + 1) * (degree + 1)> const& green, double greenTrace) {
+    for (int n = 0; n <= degree; ++n) {
+        for (int m = 0; m <= n; ++m) {
+            std::complex<double> value{};
+            for (int k = 0; k <= std::min(degree - n, degree - 1); ++k) {
+                for (int l = -k; l <= k; ++l) {
+                    value += std::conj(sphericalCoefficient(moments, k, l)) *
+                        sphericalCoefficient(green, n + k, m + l);
+                }
+            }
+            local[n * (n + 1) + m] += value.real();
+            if (m) {
+                local[n * (n + 1) - m] += value.imag();
+            }
+        }
+    }
+    if constexpr (degree >= 3) {
+        local[0] -= 0.5 * greenTrace * sourceTrace;
+    }
+    local[3] -= 2.0 * greenTrace * moments[3];
+    local[1] -= 2.0 * greenTrace * moments[1];
+    local[2] -= greenTrace * moments[2];
+    localTrace += greenTrace * moments[0];
+}
+
 // Evaluate the selected finite expansion directly in double precision. Physical
-// offsets and generated M2L bypass mesh deposition, the contraction table, FFTs,
-// and cell-width rescaling. This checks implementation error separately from
-// truncation; directPmmmReference remains the independent full Ewald oracle.
+// offsets and the independent harmonic contraction bypass mesh deposition, the
+// Fourier contraction table, FFTs, and cell-width rescaling. This checks
+// implementation error separately from truncation; directPmmmReference remains
+// the independent full Ewald oracle.
 template <int order>
 std::array<double, 4> directPmmmExpansionReferenceOrder(
     size_t sink, Vector<PmmmSample> const& samples) {
@@ -1040,7 +1084,7 @@ std::array<double, 4> directPmmmExpansionReferenceOrder(
                 green[slot] += primary[slot];
             }
         }
-        spherical::EwaldM2L<kLocalDegree>::template add<double>(
+        addPeriodicExpansionReference<kLocalDegree>(
             local, localTrace, moments, sourceTrace, green, greenTrace);
         if (near && source != sink) {
             double const radiusSquared = pair[0] * pair[0] + pair[1] * pair[1] + pair[2] * pair[2];

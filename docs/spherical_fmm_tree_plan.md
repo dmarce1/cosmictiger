@@ -59,7 +59,7 @@ The source audit found these concrete integration points:
 
 | Area | Current behavior and source |
 | --- | --- |
-| Spherical generation | `tools/fmm/spherical.py`, `tools/fmm/spherical_ewald.py`; the public facade is `cosmictiger/gravity/kernels/spherical_operators.hpp` |
+| Spherical generation | `tools/fmm/spherical.py`, `tools/fmm/spherical_ewald.py`; the former public facade `cosmictiger/gravity/kernels/spherical_operators.hpp` was retired after this plan |
 | Cartesian model | `tools/generate_fmm.py`, `tools/cartesian/`; emitted operators under `cosmictiger/gravity/kernels/cartesian_tracefree/` |
 | Orders | `fmm_order.hpp`: order q has source degree q-2, local degree q-1, harmonic sizes (q-1)^2 and q^2; both paths use the same q |
 | Convolution truncation | `src/gravity/pmmm_kernels.cpp:58`: source rank plus local rank is at most q-1; retain this, rather than adopting another paper's order convention |

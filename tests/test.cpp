@@ -67,18 +67,6 @@ static void nativeChemistryInitializationTest() {
 }
 #endif
 
-// 0.7, 0.8
-// 0.55, 0.65
-// 0.4, 0.5
-/*
- float rand_normal() {
- float x = 2.0 * rand1() - 1.0;
- float y = 2.0 * rand1() - 1.0;
- auto normal = expc(cmplx(0, 1) * float(M_PI) * y) * sqrtf(-2.0 * logf(fabsf(x)));
- return normal.real();
- }
- */
-
 #if COSMICTIGER_WITH_GRAVITY
 static bool fftFinite(float value) {
     // Keep nonfinite checks effective in the application's fast-math build.

@@ -17,7 +17,7 @@
 
 #include <cosmictiger/gravity/fmm_acceptance.hpp>
 #if defined(FMM_ACCEPTANCE_TEST_SIMD)
-#include <cosmictiger/math/simd.hpp>
+#include <cosmictiger/math/simd_math.hpp>
 #endif
 
 namespace detail {

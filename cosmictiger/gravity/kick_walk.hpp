@@ -73,7 +73,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/range.hpp>
-#include <cosmictiger/math/simd.hpp>
+#include <cosmictiger/math/simd_math.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_SPH
@@ -133,9 +133,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
     Vector<TreeId> dchecklist, std::shared_ptr<KickWorkspace> cudaWorkspace,
     KickContext const& context) {
     using Expansion = cosmictiger::gravity::cartesian::Expansion<float, order>;
-    ALWAYS_ASSERT(!params.deferHydroOpening ||
-        (!params.forceOnly && !params.globalTimestep && !params.deferGasOpening &&
-            gravityGasOpeningDeferred()));
+    ALWAYS_ASSERT(!params.deferHydroOpening || (!params.forceOnly && gravityGasOpeningDeferred()));
     auto* deferredGasOpening = params.deferHydroOpening ? gravityDeferredGasOpeningData() : nullptr;
     constexpr int kLocalCoefficients = FmmOrder<order>::kLocalCoefficients_;
     constexpr int kLocalDegree = FmmOrder<order>::kLocalDegree_;
@@ -440,9 +438,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                     output.acceleration[kXi][outputIndex] = forces.gx[j];
                     output.acceleration[kYi][outputIndex] = forces.gy[j];
                     output.acceleration[kZi][outputIndex] = forces.gz[j];
-                    flops += cosmictiger::gravity::cartesian::detail::kL2PFlops<
-                                 kLocalDegree> +
-                        11;
+                    flops += cosmictiger::gravity::cartesian::detail::kL2PFlops<kLocalDegree> + 11;
                     continue;
                 }
                 forces.gx[j] *= Gm;
@@ -462,46 +458,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                 auto& vy = particlesVel(kYi, i);
                 auto& vz = particlesVel(kZi, i);
                 auto& rung = particlesRung(i);
-                if (params.globalTimestep) {
-                    float const gx = forces.gx[j], gy = forces.gy[j], gz = forces.gz[j];
-                    float const accelerationSquared = sqr(gx, gy, gz) + 1e-35f;
-                    double const timestep = std::min(double(params.maxDt),
-                        double(eta * sqrtf(params.a) *
-                            sqrtf(gravityEffectiveRadius / sqrtf(accelerationSquared))));
-                    ALWAYS_ASSERT(std::isfinite(timestep) && timestep > 0.0);
-                    kr.minimumTimestep = std::min(kr.minimumTimestep, timestep);
-                    float const mass = particlesMass(i);
-                    double const oldKinetic = 0.5 * mass * sqr(vx, vy, vz);
-#if COSMICTIGER_WITH_SPH
-                    bool const gas = getOptions().hydro.enabled && particlesType(i) == kSphType;
-#else
-                    bool const gas = false;
-#endif
-                    if (!gas || midpointHydro) {
-                        gravityGlobalAcceleration(kXi)[i] = gx;
-                        gravityGlobalAcceleration(kYi)[i] = gy;
-                        gravityGlobalAcceleration(kZi)[i] = gz;
-                        double const halfStep = params.sign * 0.5 * params.previousTimestep;
-                        vx = std::fma(gx, halfStep, vx);
-                        vy = std::fma(gy, halfStep, vy);
-                        vz = std::fma(gz, halfStep, vz);
-                        doubleFlops +=
-                            18;    // Signed double half-step and three mixed-precision FMAs.
-                        // Midpoint gas receives the same gravitational kick as dark matter.
-                        kr.kin += 0.5 * mass * sqr(vx, vy, vz);
-                        kr.xmom += mass * vx;
-                        kr.ymom += mass * vy;
-                        kr.zmom += mass * vz;
-                        kr.nmom += mass * sqrt(sqr(vx, vy, vz));
-                    }
-                    kr.pot += 0.5 * mass * forces.phi[j];
-                    kr.dkin += 0.5 * mass * sqr(vx, vy, vz) - oldKinetic;
-                    if (!gas || midpointHydro) {
-                        rung = 0;
-                    }
-                    flops += 12;
-                    doubleFlops += 2;    // Float timestep and maximum widened for selection.
-                } else if (params.htime) {
+                if (params.htime) {
                     // Signed gravity-only ladder, including gas on correction levels.
                     float const mass = particlesMass(i);
                     float g2;
@@ -591,8 +548,6 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                     bool const gas = false;
 #endif
                     float const kin0 = 0.5f * mass * sqr(vx, vy, vz);
-#if COSMICTIGER_WITH_SPH
-#endif
                     if ((!gas || midpointHydro) && !params.firstCall) {
                         flops += 9;
                         float const dt = params.sign * 0.5f * rungDt[rung] * params.t0;
@@ -635,11 +590,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                         }
                         ALWAYS_ASSERT(rung >= 0 && rung < kMaxRung);
                         dt = params.sign * 0.5f * rungDt[rung] * params.t0;
-                        if (gas && params.deferGasOpening) {
-                            gravityGlobalAcceleration(kXi)[i] = forces.gx[j];
-                            gravityGlobalAcceleration(kYi)[i] = forces.gy[j];
-                            gravityGlobalAcceleration(kZi)[i] = forces.gz[j];
-                        } else if (gas && params.deferHydroOpening) {
+                        if (gas && params.deferHydroOpening) {
                             auto& increment = deferredGasOpening[particlesCatIndex(i)];
                             increment[kXi] = std::fma(forces.gx[j], dt, increment[kXi]);
                             increment[kYi] = std::fma(forces.gy[j], dt, increment[kYi]);
@@ -661,9 +612,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                     kr.pot += 0.5f * mass * forces.phi[j];
                     kr.dkin += 0.5f * mass * sqr(vx, vy, vz) - kin0;
                 }
-                flops +=
-                    cosmictiger::gravity::cartesian::detail::kL2PFlops<kLocalDegree> +
-                    15;
+                flops += cosmictiger::gravity::cartesian::detail::kL2PFlops<kLocalDegree> + 15;
             }
         }
         if (cudaWorkspace != nullptr && cudaWorkspace->isBatch()) {
@@ -671,7 +620,6 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
             cudaWorkspace->addInteractionCounts(counts);
         } else {
             context.accumulateReturn(kr, selfPtr->numberOfParticles(), cudaWorkspace == nullptr);
-            kickAddInteractionCounts(counts);
         }
         addCpuFlops(flops, FlopPrecision::Single);
         addCpuFlops(doubleFlops, FlopPrecision::Double);
@@ -726,8 +674,6 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
 
         if (cudaWorkspace != nullptr && cudaWorkspace->isBatch()) {
             cudaWorkspace->addInteractionCounts(counts);
-        } else {
-            kickAddInteractionCounts(counts);
         }
         addCpuFlops(flops, FlopPrecision::Single);
         addCpuFlops(doubleFlops, FlopPrecision::Double);

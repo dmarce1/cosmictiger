@@ -18,7 +18,7 @@
 #include <cosmictiger/cuda/cuda.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/position.hpp>
-#include <cosmictiger/math/simd.hpp>
+#include <cosmictiger/math/simd_math.hpp>
 #include <cosmictiger/math/vector3.hpp>
 
 template <class T>

@@ -61,7 +61,6 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
     auto const* sinkY = data.y + sinkFirst;
     auto const* sinkZ = data.z + sinkFirst;
     int maxRung = 0;
-    float minimumTimestep = std::numeric_limits<float>::max();
     float phiTot = 0.0f;
     float kinTot = 0.f;
     float xmomTot = 0.0f;
@@ -140,47 +139,7 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
             (data.type[sinkIndex] == kDarkMatterType ? data.darkMatterMass : data.sphMass) :
             1.0f;
         float const kin0 = 0.5f * mass * sqr(vx, vy, vz);
-        if (params.globalTimestep) {
-            float const accelerationSquared = sqr(gx, gy, gz) + 1e-35f;
-            float const timestep = fminf(params.maxDt,
-                params.eta * sqrtf(params.a) *
-                    sqrtf(gravityEffectiveRadius / sqrtf(accelerationSquared)));
-            ALWAYS_ASSERT(isfinite(timestep) && timestep > 0.0f);
-            minimumTimestep = fminf(minimumTimestep, timestep);
-#if COSMICTIGER_WITH_SPH
-            bool const gas = data.sph && data.type[sinkIndex] == kSphType;
-#else
-            bool const gas = false;
-#endif
-            if (!gas || data.midpointHydro) {
-                data.globalAcceleration[kXi][sinkIndex] = gx;
-                data.globalAcceleration[kYi][sinkIndex] = gy;
-                data.globalAcceleration[kZi][sinkIndex] = gz;
-                double const halfStep = params.sign * 0.5 * params.previousTimestep;
-                vx = fma(double(gx), halfStep, double(vx));
-                vy = fma(double(gy), halfStep, double(vy));
-                vz = fma(double(gz), halfStep, double(vz));
-                doubleFlops += 18;    // Double half-step and three mixed-precision FMAs.
-            }
-            if (!gas || data.midpointHydro) {
-                rungs[sinkIndex] = 0;
-                // Midpoint gas receives the same gravitational kick as dark matter.
-                kinTot += 0.5f * mass * sqr(vx, vy, vz);
-                xmomTot += mass * vx;
-                ymomTot += mass * vy;
-                zmomTot += mass * vz;
-                nmomTot += mass * sqrtf(sqr(vx, vy, vz));
-            }
-            if (allGx != nullptr) {
-                allGx[sinkIndex] = gx;
-                allGy[sinkIndex] = gy;
-                allGz[sinkIndex] = gz;
-            }
-            if (allPhi != nullptr) {
-                allPhi[sinkIndex] = phi;
-            }
-            flops += 12;
-        } else if (params.htime) {
+        if (params.htime) {
             // Signed gravity-only ladder, including gas on correction levels.
             float const sgn = params.sign * (params.top ? 1.f : -1.f);
             flops += 1;    // Kick direction; exclude energy and momentum diagnostics.
@@ -314,11 +273,7 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
                 ALWAYS_ASSERT(rung >= 0 && rung < kMaxRung);
                 rungs[sinkIndex] = rung;
                 dt = params.sign * 0.5f * rungDt[rung] * params.t0;
-                if (gas && params.deferGasOpening) {
-                    data.globalAcceleration[kXi][sinkIndex] = gx;
-                    data.globalAcceleration[kYi][sinkIndex] = gy;
-                    data.globalAcceleration[kZi][sinkIndex] = gz;
-                } else if (gas && params.deferHydroOpening) {
+                if (gas && params.deferHydroOpening) {
                     auto& increment = data.deferredGasOpening[data.catIndex[sinkIndex]];
                     increment[kXi] = fmaf(gx, dt, increment[kXi]);
                     increment[kYi] = fmaf(gy, dt, increment[kYi]);
@@ -367,11 +322,8 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
     sharedReduceAdd(darkMatterZMomentumCorrection);
     sharedReduceAdd(darkMatterMomentumNormCorrection);
 
-    sharedReduceMin(minimumTimestep);
     sharedReduceMax(maxRung);
     if (tid == 0) {
-        result.minimumTimestep = fmin(result.minimumTimestep, double(minimumTimestep));
-        doubleFlops += 1;    // Promote the selected timestep into the shared result.
         result.maxRung = max(result.maxRung, maxRung);
         result.pot += phiTot;
         result.xmom += xmomTot;
@@ -850,9 +802,6 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
         atomicAdd(&rc->darkMatterZMomentumCorrection, kr.darkMatterZMomentumCorrection);
         atomicAdd(&rc->darkMatterMomentumNormCorrection, kr.darkMatterMomentumNormCorrection);
 
-        // Positive IEEE doubles have the same ordering as their unsigned bit patterns.
-        atomicMin(reinterpret_cast<unsigned long long*>(&rc->minimumTimestep),
-            static_cast<unsigned long long>(__double_as_longlong(kr.minimumTimestep)));
         atomicMax(&rc->maxRung, kr.maxRung);
     }
     addGpuFlops(flops, FlopPrecision::Single);

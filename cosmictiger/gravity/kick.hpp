@@ -51,7 +51,6 @@ struct CudaKickData {
     float* gy;
     float* gz;
     float* pot;
-    Array<float*, kDimensions> globalAcceleration{};
     Vector3<float>* deferredGasOpening = nullptr;
     ParticleInteger const* gravitySampleIndices;
     Vector3<float>* gravitySampleAccelerations;
@@ -101,12 +100,10 @@ struct KickParameters {
     ParticleInteger outputOffset = 0;
     bool forceOnly = false;
     bool profileCoordinator = true;
+    // Reserved HPX message fields from the retired global tree-kick path.
     bool globalTimestep = false;
-    // Traditional SPH common boundaries select and balance gas rungs before
-    // opening. The current force is retained only until that event finishes.
     bool deferGasOpening = false;
     // At a coarse hydro event, collect gas opening impulses until hydro finishes.
-    // This is independent of the common-boundary rung-balancing deferral above.
     bool deferHydroOpening = false;
     // At all-particle common boundaries, gas uses the full top force to choose
     // a rung. Neighbor closure follows before any descending subset is built.
@@ -114,7 +111,7 @@ struct KickParameters {
     // Hold those balanced gas rungs through correction walks and intervening
     // boundaries. Dark-matter rung selection remains unchanged.
     bool freezeGasRungs = false;
-    double previousTimestep = 0.0;
+    double previousTimestep = 0.0;    // Reserved HPX message field from the retired path.
     bool htime;
     float sign;
     int minLevel{};
@@ -209,13 +206,6 @@ struct KickParameters {
     }
 };
 
-// Global integration retains the new acceleration until the hydro/DM minimum
-// has been reduced. Begin after domain redistribution, before the force walk.
-void gravityBeginGlobalKick();
-double gravityFinishGlobalKick(double timestep);
-KickReturn gravityFinishBalancedGasKick(double baseTimestep, float sign);
-float* gravityGlobalAcceleration(int dimension);
-
 // Collective noncommon-boundary protocol: begin after migration, collect during
 // gravity walks, seal before any gas sort, and finish after hydro. Base-particle
 // ordering must remain fixed between seal and finish. No global/shared step or
@@ -291,6 +281,5 @@ int kickBlockCount(ParticleInteger particles);
 // Optional finer divisor for the near-cell walks (see kickFineBlockCount in
 // kick.cu); never below kickBlockCount.
 int kickFineBlockCount(ParticleInteger particles);
-size_t kickEstimateCudaMemoryUsage(double theta, int numberOfParticles, int checkCount);
 
 #endif /* KICK_HPP_ */
