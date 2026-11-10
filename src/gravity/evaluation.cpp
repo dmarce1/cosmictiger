@@ -221,26 +221,25 @@ void evaluateParticles(bool doPotential) {
 // Boundary far solve of the PMMM outer interval (docs/pmmm.md).
 //
 //   L_new,i = gm ∇ evaluated from the local expansion of particle i's cell,
-//   H_acc   = min_i η sqrt(a r_eff / |L_new,i|),   r_eff = w h,
+//   H_acc   = min_i η sqrt(a h / |L_new,i|),   h = 1/N,
 //   W_far   = Σ_i ½ m_i gm φ_far,i.
 //
 // Symbol directory: L_new → far acceleration stored in particlesLongAcceleration;
-// η → gravity.timestepEta; a → the scale factor; r_eff → the near-width distance,
-// the smallest separation a far source can have; w → pmmmNearWidth; h → cell width.
+// η → gravity.timestepEta; a → the scale factor; h → cell width;
+// N → meshSize, the number of cells per side.
 // Code names: L_new → acceleration, H_acc → result.minimumTimestep,
-// W_far → result.pot, r_eff → effectiveRadius.
+// W_far → result.pot, N → n.
 void evaluateFar() {
     int const n = cache.meshSize;
     double const h = 1.0 / n;
     double const localTrace = (4 * std::numbers::pi / 3) * h * h * state.background[0];
     double const gm = getOptions().gravity.gm;
-    double const effectiveRadius = cache.nearWidth * h;
     double const scale = state.request.scale;
     double const eta = state.request.eta;
     if (!particlesHasLongAcceleration(getOptions())) {
         throw std::runtime_error("The PMMM boundary far solve needs the long-acceleration field");
     }
-    addCpuFlops(6, FlopPrecision::Double);
+    addCpuFlops(5, FlopPrecision::Double);
     parallelFor(state.cells.size(), "gravity.pmmm.evaluateFar", [&](size_t cellIndex) {
         auto const& cell = state.cells[cellIndex];
         auto const center = coordinates(cell.key);
@@ -263,9 +262,8 @@ void evaluateFar() {
                 particlesLongAcceleration(dim, i) = float(acceleration);
                 accelerationSquared += acceleration * acceleration;
             }
-            double const timestep = eta *
-                std::sqrt(
-                    scale * effectiveRadius / std::max(std::sqrt(accelerationSquared), 1.0e-30));
+            double const timestep =
+                eta * std::sqrt(scale * h / std::max(std::sqrt(accelerationSquared), 1.0e-30));
             if (!(timestep > 0.0) || !std::isfinite(timestep)) {
                 throw std::runtime_error("PMMM outer interval bound is not finite and positive");
             }

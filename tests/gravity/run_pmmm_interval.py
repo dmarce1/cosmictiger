@@ -179,8 +179,8 @@ def main():
               "initial.closePack": "false", "scenario.cosmology.useGlass": "false",
               "chemistry.enabled": "false",
               # One coarse step of 0.005: with eta 0.04 the Plummer far acceleration
-              # bound (about 4.1e-3) selects a non-dyadic first interval and the
-              # remainder forms the second, while the near force picks the rungs.
+              # bound (about 2.9e-3) selects a non-dyadic first interval and
+              # multiple outer intervals, while the near force picks the rungs.
               "run.endTime": 0.005, "run.numberOfSteps": 1, "gravity.timestepEta": 0.04,
               "analysis.groups": "false", "analysis.tracers": "false",
               "analysis.views": "false", "analysis.power": "false", "lightcone.enabled": "false",

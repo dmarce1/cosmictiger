@@ -67,7 +67,7 @@ KickReturn pmmmKick(KickParameters const& parameters);
 // PMMM outer interval boundary: with every owned particle migrated to its
 // domain and at the synchronized position, sort by position, solve the far
 // field for every particle into particlesLongAcceleration (gm-scaled), and
-// choose the next interval from the far acceleration at the near-width scale,
+// choose the next interval from the far acceleration at the mesh-cell scale,
 // the expansion bound, the coarse output clock and the end time. No velocity,
 // rung or membership changes; the following refreshMembership pass stores them.
 PmBoundaryResult pmmmOuterBoundary(

@@ -500,12 +500,12 @@ owner and `cellOwner` resolves from the frozen cell center.
 ### Interval selection
 
 ```text
-H_new = min( η sqrt(a w h / |L_new|) over particles, expansion bound,
+H_new = min( η sqrt(a / (|L_new| N)) over particles, expansion bound,
              time to the next coarse output boundary, time to the end )
 ```
 
-with `w h` the near width in box units, the smallest separation a far source
-can have, `η = gravity.timestepEta` and the same caps as `pmSelectOuterInterval`.
+with `N = gravity.meshSize`, so the length scale is one mesh cell (`1/N` in box
+units), `η = gravity.timestepEta` and the same caps as `pmSelectOuterInterval`.
 Inner rungs come from the near force at the softening scale. The
 potential energy at a boundary is the near potential of the boundary pass plus
 the far potential of the far solve, counted once.
