@@ -19,13 +19,14 @@
 #include <cosmictiger/gravity/kernels/cartesian_tracefree_types.hpp>
 #include <cosmictiger/math/vector3.hpp>
 
-namespace cosmictiger::gravity::cartesian::tracefree::detail {
+namespace cosmictiger::gravity::cartesian::detail {
 #ifdef __CUDACC__
 template <int degree>
 inline constexpr int kL2LWarpFlops = 0;
 template <int degree>
 inline constexpr int kL2LWarpNoPotentialFlops = 0;
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 3) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 3)
 #ifdef __CUDACC__
@@ -184,6 +185,7 @@ __device__ void L2LWarpInto(
 #endif
 
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 4) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 4)
 #ifdef __CUDACC__
@@ -396,6 +398,7 @@ __device__ void L2LWarpInto(
 #endif
 
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 5) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 5)
 #ifdef __CUDACC__
@@ -681,6 +684,7 @@ __device__ void L2LWarpInto(
 #endif
 
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 6) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 6)
 #ifdef __CUDACC__
@@ -1112,6 +1116,7 @@ __device__ void L2LWarpInto(
 #endif
 
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 7) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 7)
 #ifdef __CUDACC__
@@ -1735,6 +1740,7 @@ __device__ void L2LWarpInto(
 #endif
 
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 8) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 8)
 #ifdef __CUDACC__
@@ -2650,6 +2656,7 @@ __device__ void L2LWarpInto(
 #endif
 
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 9) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 9)
 #ifdef __CUDACC__
@@ -4006,4 +4013,4 @@ __device__ void L2LWarpInto(
 #endif
 
 #endif
-}    // namespace cosmictiger::gravity::cartesian::tracefree::detail
+}    // namespace cosmictiger::gravity::cartesian::detail

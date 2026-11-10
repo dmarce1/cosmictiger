@@ -19,7 +19,7 @@
 #include <cosmictiger/gravity/fmm_types.hpp>
 #include <cosmictiger/gravity/kernels/cartesian_tracefree/geometry.hpp>
 
-namespace cosmictiger::gravity::cartesian::tracefree::detail {
+namespace cosmictiger::gravity::cartesian::detail {
 template <int degree>
 inline constexpr int kP2LFlops = 0;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 3) && \
@@ -105,6 +105,7 @@ CUDA_EXPORT void P2L(Derivatives<Real, 3>& L, Real mass, Vector3<Real> const& di
 template <>
 inline constexpr int kP2LFlops<2> = 34;
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 4) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 4)
 // FMM order 4.
@@ -230,6 +231,7 @@ CUDA_EXPORT void P2L(Derivatives<Real, 4>& L, Real mass, Vector3<Real> const& di
 template <>
 inline constexpr int kP2LFlops<3> = 60;
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 5) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 5)
 // FMM order 5.
@@ -421,6 +423,7 @@ CUDA_EXPORT void P2L(Derivatives<Real, 5>& L, Real mass, Vector3<Real> const& di
 template <>
 inline constexpr int kP2LFlops<4> = 102;
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 6) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 6)
 // FMM order 6.
@@ -692,6 +695,7 @@ CUDA_EXPORT void P2L(Derivatives<Real, 6>& L, Real mass, Vector3<Real> const& di
 template <>
 inline constexpr int kP2LFlops<5> = 155;
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 7) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 7)
 // FMM order 7.
@@ -1065,6 +1069,7 @@ CUDA_EXPORT void P2L(Derivatives<Real, 7>& L, Real mass, Vector3<Real> const& di
 template <>
 inline constexpr int kP2LFlops<6> = 224;
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 8) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 8)
 // FMM order 8.
@@ -1582,6 +1587,7 @@ CUDA_EXPORT void P2L(Derivatives<Real, 8>& L, Real mass, Vector3<Real> const& di
 template <>
 inline constexpr int kP2LFlops<7> = 318;
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 9) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 9)
 // FMM order 9.
@@ -2281,4 +2287,4 @@ CUDA_EXPORT void P2L(Derivatives<Real, 9>& L, Real mass, Vector3<Real> const& di
 template <>
 inline constexpr int kP2LFlops<8> = 441;
 #endif
-}    // namespace cosmictiger::gravity::cartesian::tracefree::detail
+}    // namespace cosmictiger::gravity::cartesian::detail

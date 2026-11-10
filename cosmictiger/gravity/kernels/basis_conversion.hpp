@@ -36,7 +36,7 @@ template <>
 inline constexpr int kSourceToSphericalConventionalFlops<3> = 2;
 template <class Real>
 CUDA_EXPORT void sourceToSpherical(
-    spherical::Multipole<Real, 3>& target, cartesian::tracefree::Multipole<Real, 3> const& source) {
+    spherical::Multipole<Real, 3>& target, cartesian::Multipole<Real, 3> const& source) {
     using namespace math;
     Real const t5 = source[1] * broadcast<Real>(-1.0 / 2.0);
     Real const t10 = broadcast<Real>(-1.0 / 2.0) * source[2];
@@ -52,7 +52,7 @@ template <>
 inline constexpr int kLocalToCartesianConventionalFlops<3> = 5;
 template <class Real>
 CUDA_EXPORT void localToCartesian(
-    cartesian::tracefree::Expansion<Real, 3>& target, spherical::Expansion<Real, 3> const& source) {
+    cartesian::Expansion<Real, 3>& target, spherical::Expansion<Real, 3> const& source) {
     using namespace math;
     Real const t8 = source[6] + source[8];
     Real const t10 = t8 * broadcast<Real>(-1.0 / 2.0);
@@ -71,6 +71,7 @@ CUDA_EXPORT void localToCartesian(
 }
 
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 4) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 4)
 template <>
@@ -79,7 +80,7 @@ template <>
 inline constexpr int kSourceToSphericalConventionalFlops<4> = 9;
 template <class Real>
 CUDA_EXPORT void sourceToSpherical(
-    spherical::Multipole<Real, 4>& target, cartesian::tracefree::Multipole<Real, 4> const& source) {
+    spherical::Multipole<Real, 4>& target, cartesian::Multipole<Real, 4> const& source) {
     using namespace math;
     Real const t5 = source[1] * broadcast<Real>(-1.0 / 2.0);
     Real const t10 = broadcast<Real>(-1.0 / 2.0) * source[2];
@@ -107,7 +108,7 @@ template <>
 inline constexpr int kLocalToCartesianConventionalFlops<4> = 20;
 template <class Real>
 CUDA_EXPORT void localToCartesian(
-    cartesian::tracefree::Expansion<Real, 4>& target, spherical::Expansion<Real, 4> const& source) {
+    cartesian::Expansion<Real, 4>& target, spherical::Expansion<Real, 4> const& source) {
     using namespace math;
     Fma const fma{};
     Real const t8 = source[6] + source[8];
@@ -148,6 +149,7 @@ CUDA_EXPORT void localToCartesian(
 }
 
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 5) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 5)
 template <>
@@ -156,7 +158,7 @@ template <>
 inline constexpr int kSourceToSphericalConventionalFlops<5> = 24;
 template <class Real>
 CUDA_EXPORT void sourceToSpherical(
-    spherical::Multipole<Real, 5>& target, cartesian::tracefree::Multipole<Real, 5> const& source) {
+    spherical::Multipole<Real, 5>& target, cartesian::Multipole<Real, 5> const& source) {
     using namespace math;
     Fma const fma{};
     Real const t5 = source[1] * broadcast<Real>(-1.0 / 2.0);
@@ -206,7 +208,7 @@ template <>
 inline constexpr int kLocalToCartesianConventionalFlops<5> = 47;
 template <class Real>
 CUDA_EXPORT void localToCartesian(
-    cartesian::tracefree::Expansion<Real, 5>& target, spherical::Expansion<Real, 5> const& source) {
+    cartesian::Expansion<Real, 5>& target, spherical::Expansion<Real, 5> const& source) {
     using namespace math;
     Fma const fma{};
     Real const t8 = source[6] + source[8];
@@ -278,6 +280,7 @@ CUDA_EXPORT void localToCartesian(
 }
 
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 6) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 6)
 template <>
@@ -286,7 +289,7 @@ template <>
 inline constexpr int kSourceToSphericalConventionalFlops<6> = 48;
 template <class Real>
 CUDA_EXPORT void sourceToSpherical(
-    spherical::Multipole<Real, 6>& target, cartesian::tracefree::Multipole<Real, 6> const& source) {
+    spherical::Multipole<Real, 6>& target, cartesian::Multipole<Real, 6> const& source) {
     using namespace math;
     Fma const fma{};
     Real const t5 = source[1] * broadcast<Real>(-1.0 / 2.0);
@@ -366,7 +369,7 @@ template <>
 inline constexpr int kLocalToCartesianConventionalFlops<6> = 91;
 template <class Real>
 CUDA_EXPORT void localToCartesian(
-    cartesian::tracefree::Expansion<Real, 6>& target, spherical::Expansion<Real, 6> const& source) {
+    cartesian::Expansion<Real, 6>& target, spherical::Expansion<Real, 6> const& source) {
     using namespace math;
     Fma const fma{};
     Real const t8 = source[6] + source[8];
@@ -482,6 +485,7 @@ CUDA_EXPORT void localToCartesian(
 }
 
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 7) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 7)
 template <>
@@ -490,7 +494,7 @@ template <>
 inline constexpr int kSourceToSphericalConventionalFlops<7> = 90;
 template <class Real>
 CUDA_EXPORT void sourceToSpherical(
-    spherical::Multipole<Real, 7>& target, cartesian::tracefree::Multipole<Real, 7> const& source) {
+    spherical::Multipole<Real, 7>& target, cartesian::Multipole<Real, 7> const& source) {
     using namespace math;
     Fma const fma{};
     Real const t5 = source[1] * broadcast<Real>(-1.0 / 2.0);
@@ -613,7 +617,7 @@ template <>
 inline constexpr int kLocalToCartesianConventionalFlops<7> = 156;
 template <class Real>
 CUDA_EXPORT void localToCartesian(
-    cartesian::tracefree::Expansion<Real, 7>& target, spherical::Expansion<Real, 7> const& source) {
+    cartesian::Expansion<Real, 7>& target, spherical::Expansion<Real, 7> const& source) {
     using namespace math;
     Fma const fma{};
     Real const t8 = source[6] + source[8];
@@ -789,6 +793,7 @@ CUDA_EXPORT void localToCartesian(
 }
 
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 8) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 8)
 template <>
@@ -797,7 +802,7 @@ template <>
 inline constexpr int kSourceToSphericalConventionalFlops<8> = 152;
 template <class Real>
 CUDA_EXPORT void sourceToSpherical(
-    spherical::Multipole<Real, 8>& target, cartesian::tracefree::Multipole<Real, 8> const& source) {
+    spherical::Multipole<Real, 8>& target, cartesian::Multipole<Real, 8> const& source) {
     using namespace math;
     Fma const fma{};
     Real const t5 = source[1] * broadcast<Real>(-1.0 / 2.0);
@@ -978,7 +983,7 @@ template <>
 inline constexpr int kLocalToCartesianConventionalFlops<8> = 246;
 template <class Real>
 CUDA_EXPORT void localToCartesian(
-    cartesian::tracefree::Expansion<Real, 8>& target, spherical::Expansion<Real, 8> const& source) {
+    cartesian::Expansion<Real, 8>& target, spherical::Expansion<Real, 8> const& source) {
     using namespace math;
     Fma const fma{};
     Real const t8 = source[6] + source[8];
@@ -1232,6 +1237,7 @@ CUDA_EXPORT void localToCartesian(
 }
 
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 9) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 9)
 template <>
@@ -1240,7 +1246,7 @@ template <>
 inline constexpr int kSourceToSphericalConventionalFlops<9> = 238;
 template <class Real>
 CUDA_EXPORT void sourceToSpherical(
-    spherical::Multipole<Real, 9>& target, cartesian::tracefree::Multipole<Real, 9> const& source) {
+    spherical::Multipole<Real, 9>& target, cartesian::Multipole<Real, 9> const& source) {
     using namespace math;
     Fma const fma{};
     Real const t5 = source[1] * broadcast<Real>(-1.0 / 2.0);
@@ -1496,7 +1502,7 @@ template <>
 inline constexpr int kLocalToCartesianConventionalFlops<9> = 365;
 template <class Real>
 CUDA_EXPORT void localToCartesian(
-    cartesian::tracefree::Expansion<Real, 9>& target, spherical::Expansion<Real, 9> const& source) {
+    cartesian::Expansion<Real, 9>& target, spherical::Expansion<Real, 9> const& source) {
     using namespace math;
     Fma const fma{};
     Real const t8 = source[6] + source[8];

@@ -27,13 +27,13 @@ The representations are generated and tested independently. The runtime walk,
 tree layout, checkpoint representation, and softening selection use Cartesian
 tracefree; the far-field mesh uses the spherical kernels.
 
-The public C++ namespaces are `cosmictiger::gravity::cartesian::tracefree` and
+The public C++ namespaces are `cosmictiger::gravity::cartesian` and
 `cosmictiger::gravity::spherical`. Each provides distinct `Multipole`, `Expansion`,
 and `Green` types and destination-first additive operators `P2M`, `M2M`, `M2L`,
 `M2P`, `P2L`, `L2L`, and `L2P`. All share `gravity::Field`, with acceleration
 being minus the potential gradient. There are no implicit conversions between
 representations. Existing STF callers must include `cartesian_tracefree_operators.hpp`
-and qualify `cartesian::tracefree` (or use ADL with its types).
+and qualify `cartesian` (or use ADL with its types).
 
 `Multipole<Real, order>` has source degree `order - 2`; `Expansion` and `Green`
 have degree `order - 1`. The generated implementation classes use degrees.

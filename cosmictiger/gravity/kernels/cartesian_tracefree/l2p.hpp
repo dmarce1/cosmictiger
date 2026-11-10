@@ -20,7 +20,7 @@
 #include <cosmictiger/gravity/fmm_types.hpp>
 #include <cosmictiger/gravity/kernels/cartesian_tracefree/geometry.hpp>
 
-namespace cosmictiger::gravity::cartesian::tracefree::detail {
+namespace cosmictiger::gravity::cartesian::detail {
 template <int degree>
 inline constexpr int kL2PFlops = 0;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 3) && \
@@ -72,6 +72,7 @@ CUDA_EXPORT void L2P(gravity::Field<Real>& field, Expansion<Real, 3> const& L,
 template <>
 inline constexpr int kL2PFlops<2> = 53;
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 4) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 4)
 // FMM order 4.
@@ -160,6 +161,7 @@ CUDA_EXPORT void L2P(gravity::Field<Real>& field, Expansion<Real, 4> const& L,
 template <>
 inline constexpr int kL2PFlops<3> = 113;
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 5) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 5)
 // FMM order 5.
@@ -306,6 +308,7 @@ CUDA_EXPORT void L2P(gravity::Field<Real>& field, Expansion<Real, 5> const& L,
 template <>
 inline constexpr int kL2PFlops<4> = 202;
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 6) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 6)
 // FMM order 6.
@@ -529,6 +532,7 @@ CUDA_EXPORT void L2P(gravity::Field<Real>& field, Expansion<Real, 6> const& L,
 template <>
 inline constexpr int kL2PFlops<5> = 322;
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 7) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 7)
 // FMM order 7.
@@ -863,6 +867,7 @@ CUDA_EXPORT void L2P(gravity::Field<Real>& field, Expansion<Real, 7> const& L,
 template <>
 inline constexpr int kL2PFlops<6> = 487;
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 8) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 8)
 // FMM order 8.
@@ -1347,6 +1352,7 @@ CUDA_EXPORT void L2P(gravity::Field<Real>& field, Expansion<Real, 8> const& L,
 template <>
 inline constexpr int kL2PFlops<7> = 707;
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 9) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 9)
 // FMM order 9.
@@ -2033,4 +2039,4 @@ CUDA_EXPORT void L2P(gravity::Field<Real>& field, Expansion<Real, 9> const& L,
 template <>
 inline constexpr int kL2PFlops<8> = 996;
 #endif
-}    // namespace cosmictiger::gravity::cartesian::tracefree::detail
+}    // namespace cosmictiger::gravity::cartesian::detail

@@ -28,8 +28,8 @@
 #include <cosmictiger/math/vector3.hpp>
 
 static_assert(
-    cosmictiger::gravity::cartesian::tracefree::kMinLocalDegree <= fmmLocalDegree(kFmmMinOrder) &&
-        cosmictiger::gravity::cartesian::tracefree::kMaxLocalDegree >= fmmLocalDegree(kFmmMaxOrder),
+    cosmictiger::gravity::cartesian::kMinLocalDegree <= fmmLocalDegree(kFmmMinOrder) &&
+        cosmictiger::gravity::cartesian::kMaxLocalDegree >= fmmLocalDegree(kFmmMaxOrder),
     "Generated Cartesian kernels do not cover the supported FMM orders; regenerate them");
 
 // Application coordinates are scaled at the boundary. The typed FMM API below
@@ -43,7 +43,7 @@ CUDA_EXPORT Vector3<Real> fmmScaleDisplacement(Vector3<Real> value) {
     return value;
 }
 
-namespace cosmictiger::gravity::cartesian::tracefree {
+namespace cosmictiger::gravity::cartesian {
 template <class Real, int order>
 CUDA_EXPORT int P2M(
     Multipole<Real, order>& target, Real mass, Vector3<Real> const& particleOffset) {
@@ -150,7 +150,7 @@ __device__ void L2LWarpInto(Real* target, Expansion<Real, order> const& source,
 }
 #endif
 
-}    // namespace cosmictiger::gravity::cartesian::tracefree
+}    // namespace cosmictiger::gravity::cartesian
 
 // Weighted walk-choice costs use conventional FLOP counts, not a representation
 // switch or measured runtime.
@@ -159,10 +159,10 @@ struct FmmHybridCost {
     static constexpr int kMultipoleDegree_ = FmmOrder<order>::kMultipoleDegree_;
     static constexpr int kLocalDegree_ = FmmOrder<order>::kLocalDegree_;
     static constexpr float kParticleCellPerParticle_ =
-        float(cosmictiger::gravity::cartesian::tracefree::detail::kM2PFlops<kMultipoleDegree_>) +
+        float(cosmictiger::gravity::cartesian::detail::kM2PFlops<kMultipoleDegree_>) +
         15.0f + 7.0f;
     static constexpr float kCellParticlePerParticle_ =
-        float(cosmictiger::gravity::cartesian::tracefree::detail::kP2LFlops<kLocalDegree_>) +
+        float(cosmictiger::gravity::cartesian::detail::kP2LFlops<kLocalDegree_>) +
         11.0f + 3.0f + float(FmmOrder<order>::kLocalCoefficients_);
     static constexpr float kHybridPerParticle_ =
         0.5f * (kParticleCellPerParticle_ + kCellParticlePerParticle_);
@@ -170,5 +170,5 @@ struct FmmHybridCost {
     // M2L arithmetic and displacement scaling, excluding SIMD padding and
     // reductions shared by a list. This is a work estimate, not a timing model.
     static constexpr float kCellCell_ =
-        float(cosmictiger::gravity::cartesian::tracefree::detail::kM2LFlops<kLocalDegree_>) + 10.0f;
+        float(cosmictiger::gravity::cartesian::detail::kM2LFlops<kLocalDegree_>) + 10.0f;
 };

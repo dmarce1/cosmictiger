@@ -31,6 +31,7 @@ public:
     }
 };
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 4) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 4)
 template <>
@@ -52,6 +53,7 @@ public:
     }
 };
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 5) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 5)
 template <>
@@ -73,6 +75,7 @@ public:
     }
 };
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 6) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 6)
 template <>
@@ -94,6 +97,7 @@ public:
     }
 };
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 7) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 7)
 template <>
@@ -115,6 +119,7 @@ public:
     }
 };
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 8) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 8)
 template <>
@@ -136,6 +141,7 @@ public:
     }
 };
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 9) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 9)
 template <>

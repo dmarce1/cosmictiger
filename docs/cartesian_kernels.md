@@ -1,7 +1,7 @@
 # Trace-free Cartesian gravity kernels
 
-`cosmictiger::gravity::cartesian::tracefree::Multipole<Real, order>` stores symmetric
-trace-free moments, and `cartesian::tracefree::Expansion<Real, order>` stores local
+`cosmictiger::gravity::cartesian::Multipole<Real, order>` stores symmetric
+trace-free moments, and `cartesian::Expansion<Real, order>` stores local
 coefficients. Their second template argument is the application
 internal FMM order: the multipole degree is `order - 2`, and the local degree is
 `order - 1`. The public potential expansion degree is `order - 1`.

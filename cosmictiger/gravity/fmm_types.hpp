@@ -53,9 +53,9 @@ struct Field : Array<Real, kDimensions + 1> {
 static_assert(sizeof(Field<float>) == (kDimensions + 1) * sizeof(float));
 }    // namespace cosmictiger::gravity
 
-static_assert(sizeof(cosmictiger::gravity::cartesian::tracefree::Multipole<float, 7>) ==
+static_assert(sizeof(cosmictiger::gravity::cartesian::Multipole<float, 7>) ==
     4 * fmmMultipoleCoefficientCount(7));
-static_assert(sizeof(cosmictiger::gravity::cartesian::tracefree::Expansion<float, 7>) ==
+static_assert(sizeof(cosmictiger::gravity::cartesian::Expansion<float, 7>) ==
     fmmLocalExpansionBytes(7));
 
 // Positioned multipole record. The center comes first so order-agnostic tree
@@ -72,7 +72,7 @@ struct MultipolePosition {
 template <int order>
 struct FmmMultiPos {
     Vector3<Position> pos;
-    cosmictiger::gravity::cartesian::tracefree::Multipole<float, order> multi;
+    cosmictiger::gravity::cartesian::Multipole<float, order> multi;
 };
 
 static_assert(std::is_standard_layout_v<FmmMultiPos<kFmmDefaultOrder>>);
@@ -81,9 +81,9 @@ static_assert(sizeof(FmmMultiPos<9>) == fmmPositionedMultipoleBytes(9));
 
 template <int order>
 constexpr bool fmmTypedLayout() {
-    using CartesianMultipole = cosmictiger::gravity::cartesian::tracefree::Multipole<float, order>;
-    using CartesianExpansion = cosmictiger::gravity::cartesian::tracefree::Expansion<float, order>;
-    using CartesianGreen = cosmictiger::gravity::cartesian::tracefree::Green<float, order>;
+    using CartesianMultipole = cosmictiger::gravity::cartesian::Multipole<float, order>;
+    using CartesianExpansion = cosmictiger::gravity::cartesian::Expansion<float, order>;
+    using CartesianGreen = cosmictiger::gravity::cartesian::Green<float, order>;
     using SphericalMultipole = cosmictiger::gravity::spherical::Multipole<float, order>;
     using SphericalExpansion = cosmictiger::gravity::spherical::Expansion<float, order>;
     using SphericalGreen = cosmictiger::gravity::spherical::Green<float, order>;
@@ -138,21 +138,21 @@ struct ExpansionBuffer {
         }
     }
     template <int order>
-    CUDA_EXPORT cosmictiger::gravity::cartesian::tracefree::Expansion<float, order>& expansion() {
+    CUDA_EXPORT cosmictiger::gravity::cartesian::Expansion<float, order>& expansion() {
         return *reinterpret_cast<
-            cosmictiger::gravity::cartesian::tracefree::Expansion<float, order>*>(
+            cosmictiger::gravity::cartesian::Expansion<float, order>*>(
             coefficients.data());
     }
     template <int order>
-    CUDA_EXPORT cosmictiger::gravity::cartesian::tracefree::Expansion<float, order> const&
+    CUDA_EXPORT cosmictiger::gravity::cartesian::Expansion<float, order> const&
     expansion() const {
         return *reinterpret_cast<
-            cosmictiger::gravity::cartesian::tracefree::Expansion<float, order> const*>(
+            cosmictiger::gravity::cartesian::Expansion<float, order> const*>(
             coefficients.data());
     }
     template <int order>
     CUDA_EXPORT void assign(
-        cosmictiger::gravity::cartesian::tracefree::Expansion<float, order> const& value) {
+        cosmictiger::gravity::cartesian::Expansion<float, order> const& value) {
         for (int i = 0; i < FmmOrder<order>::kLocalCoefficients_; i++) {
             coefficients[i] = value[i];
         }
@@ -185,21 +185,21 @@ struct MultipoleBuffer {
         }
     }
     template <int order>
-    CUDA_EXPORT cosmictiger::gravity::cartesian::tracefree::Multipole<float, order>& multipole() {
+    CUDA_EXPORT cosmictiger::gravity::cartesian::Multipole<float, order>& multipole() {
         return *reinterpret_cast<
-            cosmictiger::gravity::cartesian::tracefree::Multipole<float, order>*>(
+            cosmictiger::gravity::cartesian::Multipole<float, order>*>(
             coefficients.data());
     }
     template <int order>
-    CUDA_EXPORT cosmictiger::gravity::cartesian::tracefree::Multipole<float, order> const&
+    CUDA_EXPORT cosmictiger::gravity::cartesian::Multipole<float, order> const&
     multipole() const {
         return *reinterpret_cast<
-            cosmictiger::gravity::cartesian::tracefree::Multipole<float, order> const*>(
+            cosmictiger::gravity::cartesian::Multipole<float, order> const*>(
             coefficients.data());
     }
     template <int order>
     CUDA_EXPORT void assign(
-        cosmictiger::gravity::cartesian::tracefree::Multipole<float, order> const& value) {
+        cosmictiger::gravity::cartesian::Multipole<float, order> const& value) {
         for (int i = 0; i < FmmOrder<order>::kMultipoleCoefficients_; i++) {
             coefficients[i] = value[i];
         }

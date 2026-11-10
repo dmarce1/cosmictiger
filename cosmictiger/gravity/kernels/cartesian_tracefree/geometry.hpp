@@ -15,7 +15,7 @@
 #include <cosmictiger/math/simd_math.hpp>
 #include <cosmictiger/math/vector3.hpp>
 
-namespace cosmictiger::gravity::cartesian::tracefree::detail {
+namespace cosmictiger::gravity::cartesian::detail {
 // R is the separation radius; iR is its inverse, zero at coincident centers.
 template <class Real>
 CUDA_EXPORT Real inverseRadius(Vector3<Real> const& distance) {
@@ -28,4 +28,4 @@ CUDA_EXPORT Real inverseRadius(Vector3<Real> const& distance) {
     return select(R > broadcast<Real>(0), broadcast<Real>(1), broadcast<Real>(0)) /
         max(R, broadcast<Real>(1.0e-20));
 }
-}    // namespace cosmictiger::gravity::cartesian::tracefree::detail
+}    // namespace cosmictiger::gravity::cartesian::detail

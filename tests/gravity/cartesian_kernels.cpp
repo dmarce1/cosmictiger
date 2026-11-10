@@ -29,11 +29,11 @@ using Position = Vector3<double>;
 using Polynomial = std::map<Index, double>;
 using Field = cosmictiger::gravity::Field<double>;
 template <int order>
-using Multipole = cosmictiger::gravity::cartesian::tracefree::Multipole<double, order>;
+using Multipole = cosmictiger::gravity::cartesian::Multipole<double, order>;
 template <int order>
-using Expansion = cosmictiger::gravity::cartesian::tracefree::Expansion<double, order>;
+using Expansion = cosmictiger::gravity::cartesian::Expansion<double, order>;
 template <int order>
-using Green = cosmictiger::gravity::cartesian::tracefree::Green<double, order>;
+using Green = cosmictiger::gravity::cartesian::Green<double, order>;
 
 // The Cartesian oracles below carry full (non-compact) coefficients, so their
 // rounding grows with the rank through the harmonic projection's alternating
@@ -290,7 +290,7 @@ void testInteractions() {
                     1.7 * derivatives.at(a) * std::pow(targetScale, rank);
             }
         }
-        if constexpr (cosmictiger::gravity::cartesian::tracefree::kIndependentM2lRatios) {
+        if constexpr (cosmictiger::gravity::cartesian::kIndependentM2lRatios) {
             kernels::M2L(actual, source, separation, sourceScale * iR, targetScale * iR);
             compareRanks<kLocalDegree>(actual, expected, "M2L scaled Cartesian derivative oracle");
         } else {
@@ -502,7 +502,7 @@ template <int order, typename Real, int lanes>
 void testSimd() {
     using Pack = SimdVector<Real, lanes>;
     using Layout = KernelLayout<order>;
-    namespace cartesian = cosmictiger::gravity::cartesian::tracefree;
+    namespace cartesian = cosmictiger::gravity::cartesian;
     static_assert(std::is_trivially_copyable_v<cartesian::Multipole<Real, order>>);
     static_assert(std::is_trivially_copyable_v<cartesian::Expansion<Real, order>>);
     static_assert(std::is_trivially_copyable_v<cartesian::Green<Real, order>>);

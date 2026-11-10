@@ -71,7 +71,7 @@ FlopCounts treeComputeMultipole(MultipoleBuffer& multi, MultipoleBuffer const& l
     Vector3<double> const& rightCenter, Vector3<double> const& center) {
     constexpr int kMultipoleCoefficients = FmmOrder<order>::kMultipoleCoefficients_;
     Vector3<SimdDouble> mdx{};
-    cosmictiger::gravity::cartesian::tracefree::Multipole<SimdDouble, order> simdM{};
+    cosmictiger::gravity::cartesian::Multipole<SimdDouble, order> simdM{};
     for (int i = 0; i < kMultipoleCoefficients; i++) {
         simdSetLane(simdM[i], kLeftChild, left[i]);
         simdSetLane(simdM[i], kRightChild, right[i]);
@@ -81,8 +81,8 @@ FlopCounts treeComputeMultipole(MultipoleBuffer& multi, MultipoleBuffer const& l
         simdSetLane(mdx[dim], kRightChild, rightCenter[dim] - center[dim]);
     }
     auto const source = simdM;
-    simdM = cosmictiger::gravity::cartesian::tracefree::Multipole<SimdDouble, order>{};
-    cosmictiger::gravity::cartesian::tracefree::M2M(simdM, source, fmmScaleDisplacement(mdx));
+    simdM = cosmictiger::gravity::cartesian::Multipole<SimdDouble, order>{};
+    cosmictiger::gravity::cartesian::M2M(simdM, source, fmmScaleDisplacement(mdx));
     for (int i = 0; i < kMultipoleCoefficients; i++) {
         multi[i] = simdM[i][kLeftChild] + simdM[i][kRightChild];
     }
@@ -91,7 +91,7 @@ FlopCounts treeComputeMultipole(MultipoleBuffer& multi, MultipoleBuffer const& l
     FlopCounts counts;
     counts.singlePrecision = 0;
     counts.doublePrecision = 2 *
-            cosmictiger::gravity::cartesian::tracefree::detail::kM2MFlops<
+            cosmictiger::gravity::cartesian::detail::kM2MFlops<
                 FmmOrder<order>::kMultipoleDegree_> +
         12 + 4 * kMultipoleCoefficients;
     counts.unclassified = 0;
@@ -103,7 +103,7 @@ FlopCounts treeComputeMixedMultipoleImpl(Buffer& multi, Pair<ParticleInteger> pa
     Vector3<double> const& center, FmmSourceView const& sources) {
     constexpr int kMultipoleCoefficients = FmmOrder<order>::kMultipoleCoefficients_;
     static SimdFloat const toFloatFactor = kPositionToFloat;
-    cosmictiger::gravity::cartesian::tracefree::Multipole<double, order> mValue;
+    cosmictiger::gravity::cartesian::Multipole<double, order> mValue;
     for (int i = 0; i < kMultipoleCoefficients; i++) {
         mValue[i] = 0.0;
     }
@@ -135,8 +135,8 @@ FlopCounts treeComputeMixedMultipoleImpl(Buffer& multi, Pair<ParticleInteger> pa
             dx[dim] =
                 simdCast<SimdFloat>(simdPositionDifference(xValue[dim], y[dim])) * toFloatFactor;
         }
-        cosmictiger::gravity::cartesian::tracefree::Multipole<SimdFloat, order> m{};
-        cosmictiger::gravity::cartesian::tracefree::P2M(
+        cosmictiger::gravity::cartesian::Multipole<SimdFloat, order> m{};
+        cosmictiger::gravity::cartesian::P2M(
             m, math::broadcast<SimdFloat>(1), fmmScaleDisplacement(dx));
         for (int j = 0; j < kMultipoleCoefficients; j++) {
             m[j] *= mask;
@@ -167,7 +167,7 @@ FlopCounts treeComputeMixedMultipoleImpl(Buffer& multi, Pair<ParticleInteger> pa
     // coefficient widens and accumulates in double, then narrows into storage.
     FlopCounts counts;
     counts.singlePrecision = lanes *
-            (cosmictiger::gravity::cartesian::tracefree::detail::kP2MFlops<
+            (cosmictiger::gravity::cartesian::detail::kP2MFlops<
                  FmmOrder<order>::kMultipoleDegree_> +
                 6 + kMultipoleCoefficients) +
         (wideReduction ? 0 : packets * (kSimdFloatSize - 1) * kMultipoleCoefficients);
@@ -202,7 +202,7 @@ template <int order>
 FlopCounts treeComputeMultipole(SourceMultipoleBuffer& multi, TreeBuildMoments const& left,
     TreeBuildMoments const& right, Vector3<Position> const& leftCenter,
     Vector3<Position> const& rightCenter, Vector3<Position> const& center) {
-    namespace cartesian = cosmictiger::gravity::cartesian::tracefree;
+    namespace cartesian = cosmictiger::gravity::cartesian;
     constexpr int kCount = FmmOrder<order>::kMultipoleCoefficients_;
     cartesian::Multipole<SimdDouble, order> source{}, translated{};
     Vector3<SimdDouble> displacement{};
@@ -229,7 +229,7 @@ FlopCounts treeComputeMultipole(SourceMultipoleBuffer& multi, TreeBuildMoments c
 template <int order>
 FlopCounts treeComputeMultipole(SourceMultipoleBuffer& multi, Pair<ParticleInteger> particleRange,
     Vector3<Position> const& center, FmmSourceView const& sources) {
-    namespace cartesian = cosmictiger::gravity::cartesian::tracefree;
+    namespace cartesian = cosmictiger::gravity::cartesian;
     constexpr int kCount = FmmOrder<order>::kMultipoleCoefficients_;
     constexpr int kLanes = SimdDouble::size();
     for (int i = 0; i < kCount; ++i) {
@@ -263,7 +263,7 @@ FlopCounts treeComputeMultipole(SourceMultipoleBuffer& multi, Pair<ParticleInteg
 template <int order>
 FlopCount treeSourceToMesh(double* output, SourceMultipoleBuffer const& source,
     Vector3<Position> const& sourceCenter, Vector3<Position> const& meshCenter, int meshSize) {
-    namespace cartesian = cosmictiger::gravity::cartesian::tracefree;
+    namespace cartesian = cosmictiger::gravity::cartesian;
     namespace conversion = cosmictiger::gravity::basis_conversion;
     cartesian::Multipole<double, order> input{}, shifted{};
     cosmictiger::gravity::spherical::Multipole<double, order> spherical;

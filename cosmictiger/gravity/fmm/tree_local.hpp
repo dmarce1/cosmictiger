@@ -8,7 +8,7 @@
 #include <cosmictiger/math/fixed.hpp>
 
 namespace cosmictiger::gravity::tree_local {
-namespace cartesian = gravity::cartesian::tracefree;
+namespace cartesian = gravity::cartesian;
 
 // Derived boundary formulas, docs/fmm_basis_conversion.md:
 // H′ = H + 2βₘ U₂₀; Cₙ = κ⁻¹(κh)⁻ⁿ Bₙ Lₙ; Φ = H′ + Kz²/2.

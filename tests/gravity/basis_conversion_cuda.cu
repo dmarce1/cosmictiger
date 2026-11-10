@@ -23,10 +23,10 @@ namespace detail {
 template <class Real, int order>
 __device__ void convert(Real const* input, Real* output) {
     namespace gravity = cosmictiger::gravity;
-    gravity::cartesian::tracefree::Multipole<Real, order> source;
+    gravity::cartesian::Multipole<Real, order> source;
     gravity::spherical::Multipole<Real, order> sphericalSource;
     gravity::spherical::Expansion<Real, order> local;
-    gravity::cartesian::tracefree::Expansion<Real, order> cartesianLocal;
+    gravity::cartesian::Expansion<Real, order> cartesianLocal;
     for (int i = 0; i < source.size(); ++i) {
         source[i] = input[i];
     }
@@ -49,8 +49,8 @@ template <int order, class PositionType, class Real = double>
 CUDA_EXPORT void treeLocal(double const* input, double* output, bool doPotential, bool tiny) {
     namespace gravity = cosmictiger::gravity;
     namespace local = gravity::tree_local;
-    gravity::cartesian::tracefree::Expansion<double, order> initial{}, rootDouble{};
-    gravity::cartesian::tracefree::Expansion<Real, order> atRoot{}, shifted{};
+    gravity::cartesian::Expansion<double, order> initial{}, rootDouble{};
+    gravity::cartesian::Expansion<Real, order> atRoot{}, shifted{};
     Vector3<PositionType> first, second;
     for (int axis = 0; axis < kDimensions; ++axis) {
         first[axis] = input[axis];

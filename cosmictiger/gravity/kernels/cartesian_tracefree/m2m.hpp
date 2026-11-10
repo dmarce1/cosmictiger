@@ -19,7 +19,7 @@
 #include <cosmictiger/gravity/fmm_types.hpp>
 #include <cosmictiger/gravity/kernels/cartesian_tracefree/geometry.hpp>
 
-namespace cosmictiger::gravity::cartesian::tracefree::detail {
+namespace cosmictiger::gravity::cartesian::detail {
 template <int degree>
 inline constexpr int kM2MFlops = 0;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 3) && \
@@ -48,6 +48,7 @@ CUDA_EXPORT void M2M(Multipole<Real, 3>& targetM, Multipole<Real, 3> const& M,
 template <>
 inline constexpr int kM2MFlops<1> = 13;
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 4) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 4)
 // FMM order 4.
@@ -112,6 +113,7 @@ CUDA_EXPORT void M2M(Multipole<Real, 4>& targetM, Multipole<Real, 4> const& M,
 template <>
 inline constexpr int kM2MFlops<2> = 62;
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 5) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 5)
 // FMM order 5.
@@ -268,6 +270,7 @@ CUDA_EXPORT void M2M(Multipole<Real, 5>& targetM, Multipole<Real, 5> const& M,
 template <>
 inline constexpr int kM2MFlops<3> = 188;
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 6) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 6)
 // FMM order 6.
@@ -601,6 +604,7 @@ CUDA_EXPORT void M2M(Multipole<Real, 6>& targetM, Multipole<Real, 6> const& M,
 template <>
 inline constexpr int kM2MFlops<4> = 439;
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 7) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 7)
 // FMM order 7.
@@ -1250,6 +1254,7 @@ CUDA_EXPORT void M2M(Multipole<Real, 7>& targetM, Multipole<Real, 7> const& M,
 template <>
 inline constexpr int kM2MFlops<5> = 877;
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 8) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 8)
 // FMM order 8.
@@ -2382,6 +2387,7 @@ CUDA_EXPORT void M2M(Multipole<Real, 8>& targetM, Multipole<Real, 8> const& M,
 template <>
 inline constexpr int kM2MFlops<6> = 1562;
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 9) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 9)
 // FMM order 9.
@@ -4208,4 +4214,4 @@ CUDA_EXPORT void M2M(Multipole<Real, 9>& targetM, Multipole<Real, 9> const& M,
 template <>
 inline constexpr int kM2MFlops<7> = 2569;
 #endif
-}    // namespace cosmictiger::gravity::cartesian::tracefree::detail
+}    // namespace cosmictiger::gravity::cartesian::detail

@@ -17,14 +17,14 @@
 
 namespace detail {
 
-namespace kernels = cosmictiger::gravity::cartesian::tracefree::detail;
+namespace kernels = cosmictiger::gravity::cartesian::detail;
 
 // Every FMM order from kFmmMinOrder to kFmmMaxOrder is compiled into the
 // binary. An order selects the multipole degree p = order - 2 and the local
 // degree p + 1; the generated kernels must cover that whole range.
 static_assert(
-    cosmictiger::gravity::cartesian::tracefree::kMinLocalDegree <= fmmLocalDegree(kFmmMinOrder) &&
-        cosmictiger::gravity::cartesian::tracefree::kMaxLocalDegree >= fmmLocalDegree(kFmmMaxOrder),
+    cosmictiger::gravity::cartesian::kMinLocalDegree <= fmmLocalDegree(kFmmMinOrder) &&
+        cosmictiger::gravity::cartesian::kMaxLocalDegree >= fmmLocalDegree(kFmmMaxOrder),
     "The generated Cartesian kernels do not cover FMM orders 3 to 9");
 
 constexpr int kFieldCount = 4;
@@ -69,8 +69,8 @@ struct Coefficients {
 
 template <typename Real, int order>
 struct KernelInput {
-    cosmictiger::gravity::cartesian::tracefree::Multipole<Real, order> multipole{};
-    cosmictiger::gravity::cartesian::tracefree::Expansion<Real, order> local{};
+    cosmictiger::gravity::cartesian::Multipole<Real, order> multipole{};
+    cosmictiger::gravity::cartesian::Expansion<Real, order> local{};
     // Separation, center translation, translation scale ratio, particle mass,
     // and inverse local scale.
     Coefficients<Real, kGeometryCount> geometry;
@@ -83,9 +83,9 @@ template <typename Real, int order>
 CUDA_EXPORT void evaluateKernels(
     KernelInput<Real, order> const& input, KernelResult<Real, order>& result) {
     using Layout = KernelLayout<order>;
-    using Multipole = cosmictiger::gravity::cartesian::tracefree::Multipole<Real, order>;
-    using Expansion = cosmictiger::gravity::cartesian::tracefree::Expansion<Real, order>;
-    using Green = cosmictiger::gravity::cartesian::tracefree::Green<Real, order>;
+    using Multipole = cosmictiger::gravity::cartesian::Multipole<Real, order>;
+    using Expansion = cosmictiger::gravity::cartesian::Expansion<Real, order>;
+    using Green = cosmictiger::gravity::cartesian::Green<Real, order>;
     using Field = cosmictiger::gravity::Field<Real>;
     auto const& g = input.geometry;
     Vector3<Real> const separation{g[0], g[1], g[2]};

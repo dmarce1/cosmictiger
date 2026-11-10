@@ -180,8 +180,8 @@ def generate(minLocalDegree=2, maxLocalDegree=8):
                   f'(!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= {order})']
         for name, rows, target, source in (
                 ('sourceToSpherical', sourceRows(degree - 1), 'spherical::Multipole',
-                 'cartesian::tracefree::Multipole'),
-                ('localToCartesian', localRows(degree), 'cartesian::tracefree::Expansion',
+                 'cartesian::Multipole'),
+                ('localToCartesian', localRows(degree), 'cartesian::Expansion',
                  'spherical::Expansion')):
             code, counts = emit(name, order, rows, target, source)
             lines.append(code)

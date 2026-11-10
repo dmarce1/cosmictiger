@@ -28,7 +28,7 @@
 template <int order>
 struct CudaExpansionType {
     Vector3<Position> pos;
-    cosmictiger::gravity::cartesian::tracefree::Expansion<float, order> expansion;
+    cosmictiger::gravity::cartesian::Expansion<float, order> expansion;
 };
 
 struct SearchParameters {
@@ -141,7 +141,7 @@ struct CudaKickControl {
     float* sourceMass;
     char* multipoles;
     float* scratchExpansion;
-    cosmictiger::gravity::cartesian::tracefree::Expansion<float, order>* expansion;
+    cosmictiger::gravity::cartesian::Expansion<float, order>* expansion;
     Vector3<Position>* expansionPos;
     CudaKickForceTile forces;
     CudaKickArenaLayout layout;
@@ -168,7 +168,7 @@ struct CudaKickParameters {
     FmmGeometry geometry;
     ParticleInteger outputOffset;
     Vector3<Position> lpos;
-    cosmictiger::gravity::cartesian::tracefree::Expansion<float, order> lValue;
+    cosmictiger::gravity::cartesian::Expansion<float, order> lValue;
     int self;
     int* dchecks;
     int dcount;

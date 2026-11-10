@@ -18,9 +18,9 @@ void cosmictigerAssert(char const*, bool condition, char const*, int) {
 namespace {
 
 using CartesianMultipole =
-    cosmictiger::gravity::cartesian::tracefree::Multipole<double, kFmmDefaultOrder>;
+    cosmictiger::gravity::cartesian::Multipole<double, kFmmDefaultOrder>;
 using CartesianExpansion =
-    cosmictiger::gravity::cartesian::tracefree::Expansion<double, kFmmDefaultOrder>;
+    cosmictiger::gravity::cartesian::Expansion<double, kFmmDefaultOrder>;
 using SphericalMultipole = cosmictiger::gravity::spherical::Multipole<double, kFmmDefaultOrder>;
 using SphericalExpansion = cosmictiger::gravity::spherical::Expansion<double, kFmmDefaultOrder>;
 using Field = cosmictiger::gravity::Field<double>;
@@ -34,7 +34,7 @@ static_assert(!HasM2L<CartesianExpansion, SphericalMultipole>);
 static_assert(!HasM2L<SphericalExpansion, CartesianMultipole>);
 constexpr int kDifferentOrder = kFmmDefaultOrder == 9 ? 8 : kFmmDefaultOrder + 1;
 static_assert(
-    !HasM2L<cosmictiger::gravity::cartesian::tracefree::Expansion<double, kDifferentOrder>,
+    !HasM2L<cosmictiger::gravity::cartesian::Expansion<double, kDifferentOrder>,
         CartesianMultipole>);
 
 template <class Multipole, class Expansion>

@@ -40,10 +40,10 @@ struct ForceVectors {
 // Order-templated CPU operators; definitions live in gravity_cpu.hpp and are
 // instantiated once per FMM order by the per-order instance translation units.
 template <int order>
-void cpuGravityCc(cosmictiger::gravity::cartesian::tracefree::Expansion<float, order>&,
+void cpuGravityCc(cosmictiger::gravity::cartesian::Expansion<float, order>&,
     Vector<TreeId> const&, TreeId, bool doPhi, FmmGeometry const& geometry = {});
 template <int order>
-void cpuGravityCp(cosmictiger::gravity::cartesian::tracefree::Expansion<float, order>&,
+void cpuGravityCp(cosmictiger::gravity::cartesian::Expansion<float, order>&,
     Vector<TreeId> const&, TreeId, bool doPhi, FmmGeometry const& geometry = {});
 template <int order>
 void cpuGravityPc(

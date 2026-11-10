@@ -17,7 +17,7 @@
 
 #include <cosmictiger/core/containers.hpp>
 
-namespace cosmictiger::gravity::cartesian::tracefree {
+namespace cosmictiger::gravity::cartesian {
 namespace detail {
     struct CoefficientArrayInit {};
     template <class Real, int degree>
@@ -495,4 +495,4 @@ struct Green : detail::Coefficients<Real, order - 1> {
 };
 template <class Real, int order>
 using Derivatives = Green<Real, order>;
-}    // namespace cosmictiger::gravity::cartesian::tracefree
+}    // namespace cosmictiger::gravity::cartesian

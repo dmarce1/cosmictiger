@@ -92,6 +92,7 @@ public:
 };
 
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 4) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 4)
 // Selected variant 2: axial alignment (minimum weighted arithmetic count).
@@ -198,6 +199,7 @@ public:
 };
 
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 5) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 5)
 // Selected variant 2: axial alignment (minimum weighted arithmetic count).
@@ -356,6 +358,7 @@ public:
 };
 
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 6) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 6)
 // Selected variant 2: axial alignment (minimum weighted arithmetic count).
@@ -584,6 +587,7 @@ public:
 };
 
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 7) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 7)
 // Selected variant 1: azimuthal rotation (minimum weighted arithmetic count).
@@ -899,6 +903,7 @@ public:
 };
 
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 8) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 8)
 // Selected variant 1: azimuthal rotation (minimum weighted arithmetic count).
@@ -1311,6 +1316,7 @@ public:
 };
 
 #endif
+
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 9) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 9)
 // Selected variant 1: azimuthal rotation (minimum weighted arithmetic count).

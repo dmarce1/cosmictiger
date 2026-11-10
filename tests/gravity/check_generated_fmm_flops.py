@@ -120,18 +120,18 @@ def appendAvailabilityChecks(lines, report, minFmmOrder, maxFmmOrder):
     lines.extend([
         'template <typename Type> concept CompleteKernel = requires { sizeof(Type); };',
         'template <int order> concept HasCartesianM2L = requires(',
-        '    cosmictiger::gravity::cartesian::tracefree::Expansion<CountingReal, order>& L,',
-        '    cosmictiger::gravity::cartesian::tracefree::Multipole<CountingReal, order> const& M,',
+        '    cosmictiger::gravity::cartesian::Expansion<CountingReal, order>& L,',
+        '    cosmictiger::gravity::cartesian::Multipole<CountingReal, order> const& M,',
         '    Vector3<CountingReal> const& distance) {',
-        '    cosmictiger::gravity::cartesian::tracefree::detail::M2L(L, M, distance);',
+        '    cosmictiger::gravity::cartesian::detail::M2L(L, M, distance);',
         '};',
         'template <int order> concept HasSourceConversion = requires(',
         '    cosmictiger::gravity::spherical::Multipole<CountingReal, order>& S,',
-        '    cosmictiger::gravity::cartesian::tracefree::Multipole<CountingReal, order> const& C) {',
+        '    cosmictiger::gravity::cartesian::Multipole<CountingReal, order> const& C) {',
         '    cosmictiger::gravity::basis_conversion::sourceToSpherical(S, C);',
         '};',
         'template <int order> concept HasLocalConversion = requires(',
-        '    cosmictiger::gravity::cartesian::tracefree::Expansion<CountingReal, order>& C,',
+        '    cosmictiger::gravity::cartesian::Expansion<CountingReal, order>& C,',
         '    cosmictiger::gravity::spherical::Expansion<CountingReal, order> const& L) {',
         '    cosmictiger::gravity::basis_conversion::localToCartesian(C, L);',
         '};',
@@ -179,8 +179,8 @@ def appendCartesianChecks(lines, report, checks):
         label = f'Cartesian {name} degree {degree}'
         lines.extend([
             '    {',
-            '        using namespace cosmictiger::gravity::cartesian::tracefree;',
-            f'        static_assert(cosmictiger::gravity::cartesian::tracefree::detail::{constant}<{degree}> == {kernel["conventional_flops"]});',
+            '        using namespace cosmictiger::gravity::cartesian;',
+            f'        static_assert(cosmictiger::gravity::cartesian::detail::{constant}<{degree}> == {kernel["conventional_flops"]});',
             f'        Multipole<Real, {order}> M{{}}, targetM{{}};',
             f'        Expansion<Real, {order}> L{{}}, targetL{{}};',
             f'        Green<Real, {order}> D{{}};',
@@ -190,7 +190,7 @@ def appendCartesianChecks(lines, report, checks):
             '        Real::operations = 0;',
             '        Real::squareRoots = 0;',
             '        Real::fusedOperations = 0;',
-            f'        cosmictiger::gravity::cartesian::tracefree::detail::{call};',
+            f'        cosmictiger::gravity::cartesian::detail::{call};',
             f'        if (Real::operations != {expected} || Real::fusedOperations != {expectedFma}) {{',
             f'            std::fprintf(stderr, "{label}: got %d ops/%d FMAs, expected {expected}/{expectedFma}\\n",',
             '                Real::operations, Real::fusedOperations);',
@@ -240,8 +240,8 @@ def buildChecks(report, minFmmOrder, maxFmmOrder):
         name, order = kernel['operator'], kernel['fmm_order']
         constant = name[0].upper() + name[1:]
         sourceType, targetType = (
-            ('cartesian::tracefree::Multipole', 'spherical::Multipole') if name == 'sourceToSpherical'
-            else ('spherical::Expansion', 'cartesian::tracefree::Expansion'))
+            ('cartesian::Multipole', 'spherical::Multipole') if name == 'sourceToSpherical'
+            else ('spherical::Expansion', 'cartesian::Expansion'))
         expected = kernel['weighted_flops']
         fused = kernel['arithmetic'].get('fma', 0)
         if kernel['conventional_flops'] != expected + fused:

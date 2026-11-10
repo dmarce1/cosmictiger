@@ -27,7 +27,7 @@ void cosmictigerAssert(char const*, bool condition, char const*, int) {
 }
 
 namespace detail {
-namespace cartesian = cosmictiger::gravity::cartesian::tracefree;
+namespace cartesian = cosmictiger::gravity::cartesian;
 namespace spherical = cosmictiger::gravity::spherical;
 namespace conversion = cosmictiger::gravity::basis_conversion;
 using Point = Vector3<double>;

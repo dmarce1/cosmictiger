@@ -24,7 +24,7 @@ def generate_types(max_degree):
         '#pragma once', '',
         '#include <type_traits>', '',
         '#include <cosmictiger/core/containers.hpp>', '',
-        'namespace cosmictiger::gravity::cartesian::tracefree {',
+        'namespace cosmictiger::gravity::cartesian {',
         'namespace detail {',
         'struct CoefficientArrayInit {};',
         'template <class Real, int degree> struct CoefficientFields;',
@@ -118,6 +118,6 @@ def generate_types(max_degree):
         '};',
         'template <class Real, int order>',
         'using Derivatives = Green<Real, order>;',
-        '} // namespace cosmictiger::gravity::cartesian::tracefree',
+        '} // namespace cosmictiger::gravity::cartesian',
     ]
     return '\n'.join(lines) + '\n'
