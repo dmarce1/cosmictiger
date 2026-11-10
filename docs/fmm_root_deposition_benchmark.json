@@ -1,0 +1,395 @@
+{
+  "options": {
+    "gravity.cuda": "false",
+    "hydro.cuda": "false",
+    "drift.cuda": "false",
+    "initial.cuda": "false",
+    "sort.cuda": "false",
+    "gravity.enabled": "true",
+    "gravity.method.near": "fmm",
+    "gravity.meshSize": 16,
+    "gravity.pmmmNearWidth": 2,
+    "gravity.expansionDegree": 6,
+    "hydro.enabled": "false",
+    "chemistry.enabled": "false",
+    "starFormation.enabled": "false",
+    "run.timeIntegrator": "traditional",
+    "run.darkMatterParticleCount": 32768,
+    "run.gasParticleCount": 0,
+    "run.scenario": "plummer",
+    "run.endTime": 1e-05,
+    "run.numberOfSteps": 2,
+    "run.maxIterations": 2,
+    "run.minRung": 0,
+    "run.verbose": "false",
+    "checkpoint.readIndex": -1,
+    "checkpoint.intervalSeconds": 0,
+    "output.silo": "false",
+    "analysis.groups": "false",
+    "analysis.power": "false",
+    "analysis.views": "false",
+    "analysis.slice": "false",
+    "analysis.tracers": "false",
+    "lightcone.enabled": "false"
+  },
+  "runs": [
+    {
+      "name": "baseline",
+      "repeat": 0,
+      "wall_seconds": 8.076480471994728,
+      "phases": {
+        "pmmmKick.finishNearPipeline": {
+          "calls": 2,
+          "seconds": 6.75
+        },
+        "pmmmKick.prepare": {
+          "calls": 2,
+          "seconds": 0.71
+        },
+        "pmmmKick.transform": {
+          "calls": 2,
+          "seconds": 0.01
+        },
+        "pmmmKick.planGhosts": {
+          "calls": 2,
+          "seconds": 0.01
+        },
+        "pmmmKick.deposit": {
+          "calls": 2,
+          "seconds": 0.0
+        },
+        "pmmmKick.cleanup": {
+          "calls": 2,
+          "seconds": 0.0
+        },
+        "pmmmKick.startNearPipeline": {
+          "calls": 2,
+          "seconds": 0.0
+        },
+        "pmmmKick.diagnostics": {
+          "calls": 2,
+          "seconds": 0.0
+        },
+        "pmmmKick.particleCounts": {
+          "calls": 2,
+          "seconds": 0.0
+        }
+      },
+      "apex": {
+        "gravity.pmmm.depositMoments": {
+          "num samples/calls": "4",
+          "total": "5176167",
+          "inclusive (ns)": "5176167"
+        },
+        "gravity.pmmm.buildOwnedSourceCells": {
+          "num samples/calls": "4",
+          "total": "1942771",
+          "inclusive (ns)": "1942771"
+        },
+        "gravity.pmmm.buildCellTree": {
+          "num samples/calls": "671",
+          "total": "21243354",
+          "inclusive (ns)": "21243354"
+        }
+      }
+    },
+    {
+      "name": "root",
+      "repeat": 0,
+      "wall_seconds": 8.086925195064396,
+      "phases": {
+        "pmmmKick.finishNearPipeline": {
+          "calls": 2,
+          "seconds": 6.72
+        },
+        "pmmmKick.prepare": {
+          "calls": 2,
+          "seconds": 0.71
+        },
+        "pmmmKick.deposit": {
+          "calls": 2,
+          "seconds": 0.02
+        },
+        "pmmmKick.transform": {
+          "calls": 2,
+          "seconds": 0.01
+        },
+        "pmmmKick.planGhosts": {
+          "calls": 2,
+          "seconds": 0.01
+        },
+        "pmmmKick.cleanup": {
+          "calls": 2,
+          "seconds": 0.0
+        },
+        "pmmmKick.startNearPipeline": {
+          "calls": 2,
+          "seconds": 0.0
+        },
+        "pmmmKick.diagnostics": {
+          "calls": 2,
+          "seconds": 0.0
+        },
+        "pmmmKick.particleCounts": {
+          "calls": 2,
+          "seconds": 0.0
+        }
+      },
+      "apex": {
+        "gravity.pmmm.buildOwnedSourceCells": {
+          "num samples/calls": "4",
+          "total": "3901950",
+          "inclusive (ns)": "3901950"
+        },
+        "gravity.pmmm.buildCellTree": {
+          "num samples/calls": "671",
+          "total": "25982582",
+          "inclusive (ns)": "25982582"
+        }
+      }
+    },
+    {
+      "name": "baseline",
+      "repeat": 1,
+      "wall_seconds": 8.137145071057603,
+      "phases": {
+        "pmmmKick.finishNearPipeline": {
+          "calls": 2,
+          "seconds": 6.79
+        },
+        "pmmmKick.prepare": {
+          "calls": 2,
+          "seconds": 0.71
+        },
+        "pmmmKick.transform": {
+          "calls": 2,
+          "seconds": 0.01
+        },
+        "pmmmKick.planGhosts": {
+          "calls": 2,
+          "seconds": 0.01
+        },
+        "pmmmKick.deposit": {
+          "calls": 2,
+          "seconds": 0.0
+        },
+        "pmmmKick.cleanup": {
+          "calls": 2,
+          "seconds": 0.0
+        },
+        "pmmmKick.startNearPipeline": {
+          "calls": 2,
+          "seconds": 0.0
+        },
+        "pmmmKick.diagnostics": {
+          "calls": 2,
+          "seconds": 0.0
+        },
+        "pmmmKick.particleCounts": {
+          "calls": 2,
+          "seconds": 0.0
+        }
+      },
+      "apex": {
+        "gravity.pmmm.depositMoments": {
+          "num samples/calls": "4",
+          "total": "5263785",
+          "inclusive (ns)": "5263785"
+        },
+        "gravity.pmmm.buildOwnedSourceCells": {
+          "num samples/calls": "4",
+          "total": "1977765",
+          "inclusive (ns)": "1977765"
+        },
+        "gravity.pmmm.buildCellTree": {
+          "num samples/calls": "671",
+          "total": "22487632",
+          "inclusive (ns)": "22487632"
+        }
+      }
+    },
+    {
+      "name": "root",
+      "repeat": 1,
+      "wall_seconds": 8.028088578954339,
+      "phases": {
+        "pmmmKick.finishNearPipeline": {
+          "calls": 2,
+          "seconds": 6.67
+        },
+        "pmmmKick.prepare": {
+          "calls": 2,
+          "seconds": 0.71
+        },
+        "pmmmKick.deposit": {
+          "calls": 2,
+          "seconds": 0.02
+        },
+        "pmmmKick.transform": {
+          "calls": 2,
+          "seconds": 0.01
+        },
+        "pmmmKick.planGhosts": {
+          "calls": 2,
+          "seconds": 0.01
+        },
+        "pmmmKick.cleanup": {
+          "calls": 2,
+          "seconds": 0.0
+        },
+        "pmmmKick.startNearPipeline": {
+          "calls": 2,
+          "seconds": 0.0
+        },
+        "pmmmKick.diagnostics": {
+          "calls": 2,
+          "seconds": 0.0
+        },
+        "pmmmKick.particleCounts": {
+          "calls": 2,
+          "seconds": 0.0
+        }
+      },
+      "apex": {
+        "gravity.pmmm.buildOwnedSourceCells": {
+          "num samples/calls": "4",
+          "total": "4089670",
+          "inclusive (ns)": "4089670"
+        },
+        "gravity.pmmm.buildCellTree": {
+          "num samples/calls": "671",
+          "total": "26563264",
+          "inclusive (ns)": "26563264"
+        }
+      }
+    },
+    {
+      "name": "baseline",
+      "repeat": 2,
+      "wall_seconds": 8.09007463697344,
+      "phases": {
+        "pmmmKick.finishNearPipeline": {
+          "calls": 2,
+          "seconds": 6.75
+        },
+        "pmmmKick.prepare": {
+          "calls": 2,
+          "seconds": 0.71
+        },
+        "pmmmKick.transform": {
+          "calls": 2,
+          "seconds": 0.01
+        },
+        "pmmmKick.planGhosts": {
+          "calls": 2,
+          "seconds": 0.01
+        },
+        "pmmmKick.deposit": {
+          "calls": 2,
+          "seconds": 0.0
+        },
+        "pmmmKick.cleanup": {
+          "calls": 2,
+          "seconds": 0.0
+        },
+        "pmmmKick.startNearPipeline": {
+          "calls": 2,
+          "seconds": 0.0
+        },
+        "pmmmKick.particleCounts": {
+          "calls": 2,
+          "seconds": 0.0
+        },
+        "pmmmKick.diagnostics": {
+          "calls": 2,
+          "seconds": 0.0
+        }
+      },
+      "apex": {
+        "gravity.pmmm.depositMoments": {
+          "num samples/calls": "4",
+          "total": "5162375",
+          "inclusive (ns)": "5162375"
+        },
+        "gravity.pmmm.buildOwnedSourceCells": {
+          "num samples/calls": "4",
+          "total": "1876807",
+          "inclusive (ns)": "1876807"
+        },
+        "gravity.pmmm.buildCellTree": {
+          "num samples/calls": "671",
+          "total": "21784878",
+          "inclusive (ns)": "21784878"
+        }
+      }
+    },
+    {
+      "name": "root",
+      "repeat": 2,
+      "wall_seconds": 8.078433676040731,
+      "phases": {
+        "pmmmKick.finishNearPipeline": {
+          "calls": 2,
+          "seconds": 6.72
+        },
+        "pmmmKick.prepare": {
+          "calls": 2,
+          "seconds": 0.72
+        },
+        "pmmmKick.deposit": {
+          "calls": 2,
+          "seconds": 0.02
+        },
+        "pmmmKick.transform": {
+          "calls": 2,
+          "seconds": 0.01
+        },
+        "pmmmKick.planGhosts": {
+          "calls": 2,
+          "seconds": 0.01
+        },
+        "pmmmKick.cleanup": {
+          "calls": 2,
+          "seconds": 0.0
+        },
+        "pmmmKick.startNearPipeline": {
+          "calls": 2,
+          "seconds": 0.0
+        },
+        "pmmmKick.particleCounts": {
+          "calls": 2,
+          "seconds": 0.0
+        },
+        "pmmmKick.diagnostics": {
+          "calls": 2,
+          "seconds": 0.0
+        }
+      },
+      "apex": {
+        "gravity.pmmm.buildOwnedSourceCells": {
+          "num samples/calls": "4",
+          "total": "3836220",
+          "inclusive (ns)": "3836220"
+        },
+        "gravity.pmmm.buildCellTree": {
+          "num samples/calls": "671",
+          "total": "26218379",
+          "inclusive (ns)": "26218379"
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "date": "2026-11-09",
+    "head": "61c1e0ea3057c6652923ecdddc9a05a757c1b729",
+    "cpu_affinities": [
+      0,
+      1
+    ],
+    "baseline": "saved pre-Part3 application executable",
+    "baseline_sha256": "a0d50b0a3ebaa8e2d5223aadbc89bbf0703dc0cf2ad9790957cca24a642ba84b",
+    "root_sha256": "a58bdf8cf798f41506fbb184942fbfae6d49d9389bd6550bf8af6716fb8e946e",
+    "build": "Release, fixed32, compiled order 7, CPU only",
+    "note": "APEX intervals overlap/nest; coordinator rows are rounded to 0.01 s. No speedup claim."
+  }
+}
