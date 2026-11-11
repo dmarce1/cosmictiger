@@ -13,7 +13,7 @@
 #define COSMICTIGER_WITH_GRAVITY 1
 #endif
 #ifndef ORDER
-#error "ORDER (the default potential expansion degree plus one) must be defined"
+#error "ORDER (the build potential expansion degree plus one) must be defined"
 #endif
 
 namespace gravity {

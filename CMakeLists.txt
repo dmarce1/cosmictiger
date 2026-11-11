@@ -190,7 +190,7 @@ message(STATUS "cosmictiger position storage = ${COSMICTIGER_POSITION_TYPE}")
 message(STATUS "cosmictiger integration: hierarchical short gravity, outer long kicks, midpoint SPH")
 message(STATUS "cosmictiger gravity = ${COSMICTIGER_WITH_GRAVITY} (PMMM-FMM)")
 if(COSMICTIGER_WITH_GRAVITY)
-    message(STATUS "cosmictiger potential expansion degrees = ${COSMICTIGER_EXPANSION_DEGREE}")
+    message(STATUS "cosmictiger potential expansion degree = ${COSMICTIGER_EXPANSION_DEGREE}")
 endif()
 message(STATUS "cosmictiger maximum bucket size = ${COSMICTIGER_WITH_MAX_BUCKET}")
 
@@ -456,10 +456,10 @@ set_source_files_properties(
 set_source_files_properties(src/particles/domain.cpp tests/mesh_domains.cpp PROPERTIES
     COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
 
-# Checked-in kernels for potential degrees 2 through 8, regenerated only on
-# explicit request. Cartesian FMM and spherical PMMM share this degree range.
-# Ordinary builds use the source headers.
-set(COSMICTIGER_GENERATED_FMM_DIR ${PROJECT_SOURCE_DIR}/cosmictiger/gravity/kernels)
+# Each build owns one generated operator set. Distinct degree builds can coexist.
+set(COSMICTIGER_GENERATED_INCLUDE_DIR ${PROJECT_BINARY_DIR}/generated_fmm)
+set(COSMICTIGER_GENERATED_FMM_DIR ${COSMICTIGER_GENERATED_INCLUDE_DIR}/cosmictiger/gravity/kernels)
+include_directories(BEFORE ${COSMICTIGER_GENERATED_INCLUDE_DIR})
 set(COSMICTIGER_GENERATED_FMM_FILES
     ${COSMICTIGER_GENERATED_FMM_DIR}/spherical_types.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/basis_conversion.hpp
@@ -495,19 +495,26 @@ if(COSMICTIGER_WITH_GRAVITY)
     set_source_files_properties(src/cosmology/background_plot.cpp PROPERTIES
         INCLUDE_DIRECTORIES "${PROJECT_BINARY_DIR}/generated")
 endif()
-# Do not declare source headers as OUTPUT/BYPRODUCTS or mark them GENERATED:
-# build-system clean targets must never delete these version-controlled files.
-add_custom_target(generate_fmm_kernels
+file(GLOB_RECURSE cosmictiger_fmm_generator_sources CONFIGURE_DEPENDS
+    ${PROJECT_SOURCE_DIR}/tools/cartesian/*.py
+    ${PROJECT_SOURCE_DIR}/tools/fmm/*.py)
+add_custom_command(OUTPUT ${COSMICTIGER_GENERATED_FMM_FILES}
     COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/generate_fmm.py
-        --output-dir ${COSMICTIGER_GENERATED_FMM_DIR} --min-order 2 --max-order 8
+        --output-dir ${COSMICTIGER_GENERATED_FMM_DIR} --degree ${COSMICTIGER_EXPANSION_DEGREE}
+    DEPENDS ${PROJECT_SOURCE_DIR}/tools/generate_fmm.py
+        ${cosmictiger_fmm_generator_sources}
+        ${PROJECT_SOURCE_DIR}/tools/cartesian/generated_notice.txt
+        ${PROJECT_SOURCE_DIR}/.clang-format
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-    COMMENT "Regenerating Cartesian and Spherical kernels for potential degrees 2 through 8"
+    COMMENT "Generating FMM kernels for potential degree ${COSMICTIGER_EXPANSION_DEGREE}"
     VERBATIM)
+add_custom_target(generate_fmm_kernels DEPENDS ${COSMICTIGER_GENERATED_FMM_FILES})
 add_custom_target(generate_cartesian_kernels DEPENDS generate_fmm_kernels)
 add_custom_target(cosmictiger_generated_kernels DEPENDS generate_fmm_kernels)
 # Compile a target against the generated kernels and selected order/bucket cap.
 function(cosmictiger_use_generated_kernels target)
-    target_include_directories(${target} BEFORE PRIVATE ${PROJECT_SOURCE_DIR})
+    add_dependencies(${target} generate_fmm_kernels)
+    target_include_directories(${target} BEFORE PRIVATE ${COSMICTIGER_GENERATED_INCLUDE_DIR})
     target_compile_definitions(${target} PRIVATE ORDER=${cosmictiger_default_fmm_order}
         MAX_BUCKET_SIZE=${COSMICTIGER_WITH_MAX_BUCKET})
 endfunction()
@@ -1661,7 +1668,8 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             target_include_directories(${source_target} PRIVATE ${PROJECT_SOURCE_DIR})
             target_link_libraries(${source_target} PRIVATE HPX::hpx Boost::boost)
             target_compile_definitions(${source_target} PRIVATE ${source_capabilities}
-                COSMICTIGER_POSITION_BITS=${position_bits} ORDER=7 FMM_MIN_ORDER=3 FMM_MAX_ORDER=9)
+                COSMICTIGER_POSITION_BITS=${position_bits})
+            cosmictiger_use_generated_kernels(${source_target})
             target_compile_options(${source_target} PRIVATE -fno-fast-math -ffp-contract=off)
             add_test(NAME "tree_source_moments_fixed${position_bits}" COMMAND ${source_target})
             set_tests_properties("tree_source_moments_fixed${position_bits}" PROPERTIES
@@ -1682,7 +1690,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                 TIMEOUT 180 PROCESSORS 1 LABELS "fmm;generator;cpu")
         endforeach()
         # Splitting the spherical templates by degree bounds compiler memory use.
-        foreach(spherical_order IN LISTS COSMICTIGER_FMM_ORDERS)
+        foreach(spherical_order IN ITEMS ${cosmictiger_default_fmm_order})
             set(conversion_target "basis_conversion_order_${spherical_order}_test")
             add_executable(${conversion_target} tests/gravity/basis_conversion.cpp)
             target_include_directories(${conversion_target} PRIVATE ${PROJECT_SOURCE_DIR})
@@ -1710,7 +1718,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
     if(COSMICTIGER_WITH_GRAVITY)
         add_test(NAME generated_fmm_current COMMAND ${Python3_EXECUTABLE}
             ${PROJECT_SOURCE_DIR}/tools/generate_fmm.py --check
-            --output-dir ${COSMICTIGER_GENERATED_FMM_DIR} --min-order 2 --max-order 8)
+            --output-dir ${COSMICTIGER_GENERATED_FMM_DIR} --degree ${COSMICTIGER_EXPANSION_DEGREE})
         set_tests_properties(generated_fmm_current PROPERTIES
             TIMEOUT 180 PROCESSORS 1 LABELS "fmm;generator")
         add_test(NAME generated_fmm_constants COMMAND ${Python3_EXECUTABLE}
@@ -1720,8 +1728,8 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
         add_test(NAME generated_fmm_flops COMMAND ${Python3_EXECUTABLE}
             ${PROJECT_SOURCE_DIR}/tests/gravity/check_generated_fmm_flops.py
             --generated-dir ${COSMICTIGER_GENERATED_FMM_DIR}
-            --min-fmm-order ${COSMICTIGER_FMM_MIN_ORDER}
-            --max-fmm-order ${COSMICTIGER_FMM_MAX_ORDER}
+            --min-fmm-order ${cosmictiger_default_fmm_order}
+            --max-fmm-order ${cosmictiger_default_fmm_order}
             --compiler ${CMAKE_CXX_COMPILER})
         set_tests_properties(generated_fmm_flops PROPERTIES
             TIMEOUT 300 PROCESSORS 1 LABELS "fmm;generator")

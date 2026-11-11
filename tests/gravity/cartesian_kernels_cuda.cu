@@ -112,5 +112,5 @@ TEST_P(CartesianKernelsCuda, FloatMatchesHost) {
 }
 
 INSTANTIATE_TEST_SUITE_P(AllOrders, CartesianKernelsCuda,
-    ::testing::Range(kFmmMinOrder, kFmmMaxOrder + 1),
+    ::testing::Range(kFmmOrder, kFmmOrder + 1),
     [](::testing::TestParamInfo<int> const& info) { return "Order" + std::to_string(info.param); });

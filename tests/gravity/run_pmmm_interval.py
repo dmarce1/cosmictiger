@@ -173,7 +173,7 @@ def main():
     common = {"hpx:threads": 2, "hpx:bind": "none",
               "gravity.meshSize": mesh_size, "gravity.pmmmNearWidth": 2,
               "gravity.pmmmOuterInterval": "true",
-              "gravity.expansionDegree": args.order - 1,
+
               "gravity.enabled": "true",
               "gravity.cuda": "false", "drift.cuda": "false", "hydro.cuda": "false",
               "hydro.enabled": "false", "run.scenario": "plummer",

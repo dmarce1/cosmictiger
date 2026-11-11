@@ -113,7 +113,7 @@ def main():
     mesh_size = 30
     common = {"hpx:threads": 2, "hpx:bind": "none",
               "gravity.meshSize": mesh_size, "gravity.pmmmNearWidth": 2,
-              "gravity.expansionDegree": args.order - 1, "gravity.enabled": "true", "gravity.cuda": str(args.cuda).lower(),
+              "gravity.enabled": "true", "gravity.cuda": str(args.cuda).lower(),
               "drift.cuda": str(args.cuda).lower(),
               "compute.positionType": args.position_type,
               "run.darkMatterParticleCount": 512, "run.gasParticleCount": 512, "initial.closePack": "false",
@@ -154,8 +154,7 @@ def main():
             continue
         baseline = prepareCase(root, label + "_baseline")
         log = run(baseline, dict(options, **{"run.maxIterations": 4}))
-        for key, expected in (("run.timeIntegrator", args.time_integrator),
-                              ("gravity.expansionDegree", str(args.order - 1))):
+        for key, expected in (("run.timeIntegrator", args.time_integrator),):
             require(re.search(r"^" + re.escape(key) + r"\s*:\s*" + expected + r"\s*$",
                               log, re.MULTILINE), f"compiled variant differs from {key}={expected}")
         paths = sorted((path for path in baseline.glob("checkpoint.*") if path.is_dir() and

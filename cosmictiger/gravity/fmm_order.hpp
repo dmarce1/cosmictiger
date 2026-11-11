@@ -26,26 +26,14 @@
 // degree-8 expansions) is the largest: single precision gains nothing
 // measurable beyond it.
 //
-// COSMICTIGER_EXPANSION_DEGREE selects the compiled potential degree range.
-// fmmDispatch() selects its order at tree, CPU walk, and CUDA launch boundaries.
-// Runtime and serialized internal orders remain one greater than potential degree.
+// COSMICTIGER_EXPANSION_DEGREE selects one potential degree per executable.
+// Checkpoints retain the internal order (potential degree plus one).
 //
 // Coefficient counts use compact rank-major harmonic storage: a degree-d
 // tensor stores (d + 1)^2 coefficients. The known periodic background trace
 // is implicit and does not occupy another local coefficient.
 
-#ifndef FMM_MIN_ORDER
-#error "FMM_MIN_ORDER must be defined by the build configuration"
-#endif
-#ifndef FMM_MAX_ORDER
-#error "FMM_MAX_ORDER must be defined by the build configuration"
-#endif
-inline constexpr int kFmmMinOrder = FMM_MIN_ORDER;
-inline constexpr int kFmmMaxOrder = FMM_MAX_ORDER;
-
-inline constexpr int kFmmDefaultOrder = gravity::kBuildFmmOrder;
-static_assert(kFmmMinOrder <= kFmmDefaultOrder && kFmmDefaultOrder <= kFmmMaxOrder,
-    "The default expansion degree must be in the compiled range");
+inline constexpr int kFmmOrder = gravity::kBuildFmmOrder;
 
 /// Return the maximum source-multipole degree for this FMM order.
 CUDA_EXPORT constexpr int fmmMultipoleDegree(int order) {
@@ -103,8 +91,8 @@ CUDA_EXPORT constexpr int fmmLocalExpansionBytes(int order) {
     return int(sizeof(float)) * fmmLocalCoefficientCount(order);
 }
 
-inline constexpr int kFmmMaxMultipoleCoefficients = fmmMultipoleCoefficientCount(kFmmMaxOrder);
-inline constexpr int kFmmMaxLocalCoefficients = fmmLocalCoefficientCount(kFmmMaxOrder);
+inline constexpr int kFmmMultipoleCoefficients = fmmMultipoleCoefficientCount(kFmmOrder);
+inline constexpr int kFmmLocalCoefficients = fmmLocalCoefficientCount(kFmmOrder);
 
 static_assert(kPositionBits != 32 ||
     (fmmPositionedMultipoleBytes(3) == 28 && fmmPositionedMultipoleBytes(7) == 156 &&
@@ -127,7 +115,7 @@ static_assert(fmmLocalExpansionBytes(3) == 36 && fmmLocalExpansionBytes(7) == 19
 // Compile-time view of one order.
 template <int order>
 struct FmmOrder {
-    static_assert(order >= kFmmMinOrder && order <= kFmmMaxOrder, "Unsupported FMM order");
+    static_assert(order == kFmmOrder, "Unsupported FMM order");
     static constexpr int kOrder_ = order;
     static constexpr int kMultipoleDegree_ = fmmMultipoleDegree(order);
     static constexpr int kLocalDegree_ = fmmLocalDegree(order);
@@ -138,43 +126,6 @@ struct FmmOrder {
     static constexpr int kPositionedMultipoleStride_ = fmmPositionedMultipoleStride(order);
     static constexpr int kLocalExpansionBytes_ = fmmLocalExpansionBytes(order);
 };
-
-// The selected order is set before constructing trees, Ewald tables or PMMM
-// plans, and is synchronized across localities by setOptions().
-int fmmOrder();
-void setFmmOrder(int order);
-
-namespace detail {
-
-/// Recursively select the compile-time order matching the runtime value and invoke the
-/// callable.
-template <int candidate, class F>
-decltype(auto) dispatchFmmOrder(int order, F&& f) {
-    if constexpr (candidate < kFmmMaxOrder) {
-        if (order == candidate) {
-            return std::forward<F>(f)(std::integral_constant<int, candidate>{});
-        }
-        return dispatchFmmOrder<candidate + 1>(order, std::forward<F>(f));
-    } else {
-        ALWAYS_ASSERT(order == candidate);
-        return std::forward<F>(f)(std::integral_constant<int, candidate>{});
-    }
-}
-
-}    // namespace detail
-
-/// Validate a requested FMM order and dispatch the callable with its integral-constant tag.
-template <class F>
-decltype(auto) fmmDispatch(int order, F&& f) {
-    ALWAYS_ASSERT(order >= kFmmMinOrder && order <= kFmmMaxOrder);
-    return detail::dispatchFmmOrder<kFmmMinOrder>(order, std::forward<F>(f));
-}
-
-/// Dispatch the callable at the currently configured runtime FMM order.
-template <class F>
-decltype(auto) fmmDispatch(F&& f) {
-    return fmmDispatch(fmmOrder(), std::forward<F>(f));
-}
 
 // Internal normalized FMM coordinate scale. Physical lengths use the unit box.
 inline constexpr float kScaleFactor = 1.000000e+03f;

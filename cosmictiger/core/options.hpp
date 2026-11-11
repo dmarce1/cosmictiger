@@ -183,7 +183,6 @@ struct Gravity {
     bool pmmmOuterInterval{true};
     // Potential expansion degree + 1 of the far and near fields; template/storage
     // convention.
-    int fmmOrder{gravity::kBuildFmmOrder};
     std::string kernelFamily{"ferrers"};
     int kernelDegree{4};
     // Near-field FMM opening angle, derived from the neighbor cube geometry as
@@ -425,7 +424,6 @@ struct Options {
         arc & gravity.cudaKickHandoffBlocks;
         arc & gravity.cudaKickFineHandoffBlocks;
         arc & gravity.cudaKickListReserve;
-        arc & gravity.fmmOrder;
         arc & checkpoint.readIndex;
         arc & checkpoint.intervalSeconds;
         arc & run.maxIterations;

@@ -163,11 +163,9 @@ def castDeclarations(targetType, minLocalDegree, maxLocalDegree):
     lines = []
     for degree in range(minLocalDegree, maxLocalDegree + 1):
         order = degree + 1
-        lines += [f'#if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= {order}) && '
-                  f'(!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= {order})',
-                  '    /// Convert basis at the same center and coordinate scale.',
+        lines += ['    /// Convert basis at the same center and coordinate scale.',
                   f'    CUDA_EXPORT explicit operator {targetType}<Real, order>() const',
-                  f'        requires (order == {order});', '#endif']
+                  f'        requires (order == {order});']
     return lines
 
 
@@ -202,8 +200,6 @@ def generate(minLocalDegree=2, maxLocalDegree=8):
               'kernels': []}
     for degree in range(minLocalDegree, maxLocalDegree + 1):
         order = degree + 1
-        lines += [f'#if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= {order}) && '
-                  f'(!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= {order})']
         for name, rows, target, source in (
                 ('multipoleCast', sourceRows(degree - 1), 'spherical::Multipole',
                  'cartesian::Multipole'),
@@ -212,7 +208,6 @@ def generate(minLocalDegree=2, maxLocalDegree=8):
             code, counts = emit(name, order, rows, target, source)
             lines.append(code)
             report['kernels'].append(counts)
-        lines += ['#endif']
     lines += ['']
     return {'basis_conversion.hpp': '\n'.join(lines),
             'spherical_types.hpp': generateSphericalTypes(minLocalDegree, maxLocalDegree)}, report

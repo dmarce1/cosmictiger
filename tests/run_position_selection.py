@@ -36,8 +36,6 @@ def main():
               "--analysis.tracers=false", "--analysis.views=false", "--analysis.power=false",
               "--lightcone.enabled=false", "--output.silo=false", "--output.directory=."]
     common += ["--gravity.meshSize=8"]
-    if args.order is not None:
-        common.append(f"--gravity.expansionDegree={args.order - 1}")
     metadata = ["--run.test=checkpointState"]
 
     def selection(name, options, program=executable):
@@ -47,8 +45,6 @@ def main():
                          output, re.MULTILINE):
             raise RuntimeError(f"{name}: incorrect selected position representation")
         buildSettings = {"run.timeIntegrator": args.time_integrator,}
-        if args.order is not None:
-            buildSettings["gravity.expansionDegree"] = str(args.order - 1)
         for setting, expectedValue in buildSettings.items():
             if not re.search(r"^" + re.escape(setting) + r"\s*:\s*" + expectedValue + r"\s*$",
                              output, re.MULTILINE):

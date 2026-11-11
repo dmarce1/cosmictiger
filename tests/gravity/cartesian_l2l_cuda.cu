@@ -43,15 +43,9 @@ template <int order>
 using Canonical = std::array<double, FmmOrder<order>::kLocalCoefficients_>;
 
 // Visit every configured order without the application's runtime dispatcher.
-template <class F, int... offsets>
-void forEachOrderImpl(F&& f, std::integer_sequence<int, offsets...>) {
-    (f(std::integral_constant<int, kFmmMinOrder + offsets>{}), ...);
-}
-
 template <class F>
 void forEachOrder(F&& f) {
-    forEachOrderImpl(
-        std::forward<F>(f), std::make_integer_sequence<int, kFmmMaxOrder - kFmmMinOrder + 1>{});
+    std::forward<F>(f)(std::integral_constant<int, kFmmOrder>{});
 }
 
 // The two production cooperative translation entry points.

@@ -21,7 +21,7 @@
 
 // Order-templated multipole construction for treeCreate. treeCreate stays
 // order-agnostic and dispatches to exactly one of these per node through
-// fmmDispatch(). Both write the leading FmmOrder<order>::kMultipoleCoefficients_
+// the build order. Both write the leading FmmOrder<order>::kMultipoleCoefficients_
 // entries of `multi` and return the flop count.
 
 // Internal node: translate the children's multipoles to `center` and sum them.

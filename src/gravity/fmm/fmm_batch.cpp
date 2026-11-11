@@ -121,7 +121,7 @@ hpx::future<KickReturn> localBatchFork(KickParameters params, ExpansionBuffer co
         KickContext context;
         context.fork = localBatchFork;
         context.gpuExecutor = localBatchGpu;
-        return kickWalkDispatch(params, l, pos, self, std::move(direct), workspace, context);
+        return kickTreeWalk(params, l, pos, self, std::move(direct), workspace, context);
     };
     static std::atomic<int> threads{1};
     bool const eligible = threadme && treeGetNode(self)->numberOfParticles() > kMinKickThreadParts;

@@ -73,14 +73,12 @@ bool kickSourcesAreSingleRank(Vector<TreeId> const& checklist) {
 
 }    // namespace detail
 
-/// Select the compiled FMM order and invoke its typed tree-walk implementation.
-KickReturn kickWalkDispatch(KickParameters params, ExpansionBuffer l, Vector3<Position> pos,
+/// Invoke the tree walk at the build order.
+KickReturn kickTreeWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> pos,
     TreeId self, Vector<TreeId> direct, std::shared_ptr<KickWorkspace> workspace,
     KickContext const& context) {
-    return fmmDispatch([&](auto orderTag) {
-        return kickWalk<decltype(orderTag)::value>(
-            params, std::move(l), pos, self, std::move(direct), std::move(workspace), context);
-    });
+    return kickWalk<kFmmOrder>(
+        params, std::move(l), pos, self, std::move(direct), std::move(workspace), context);
 }
 
 HPX_PLAIN_ACTION(gravityBeginDeferredGasOpening, GravityBeginDeferredGasOpeningAction);

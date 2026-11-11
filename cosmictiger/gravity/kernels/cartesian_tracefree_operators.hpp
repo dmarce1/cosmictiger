@@ -28,8 +28,8 @@
 #include <cosmictiger/math/vector3.hpp>
 
 static_assert(
-    cosmictiger::gravity::cartesian::kMinLocalDegree <= fmmLocalDegree(kFmmMinOrder) &&
-        cosmictiger::gravity::cartesian::kMaxLocalDegree >= fmmLocalDegree(kFmmMaxOrder),
+    cosmictiger::gravity::cartesian::kMinLocalDegree <= fmmLocalDegree(kFmmOrder) &&
+        cosmictiger::gravity::cartesian::kMaxLocalDegree >= fmmLocalDegree(kFmmOrder),
     "Generated Cartesian kernels do not cover the supported FMM orders; regenerate them");
 
 // Application coordinates are scaled at the boundary. The typed FMM API below

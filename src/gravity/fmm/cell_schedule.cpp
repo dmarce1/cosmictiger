@@ -228,8 +228,8 @@ void computeReadyCells() {
                 // the host Fixed64 conversion separates two safe 32-bit limbs.
                 flops += kDimensions * (kPositionBits == 64 ? 13 : 8);
                 auto const root = state.sourceCells[sink]->ready.get();
-                fmmDispatch([&](auto tag) {
-                    constexpr int kOrder = decltype(tag)::value;
+                {
+                    constexpr int kOrder = kFmmOrder;
                     cosmictiger::gravity::cartesian::Expansion<double, kOrder> local;
                     flops += cosmictiger::gravity::tree_local::fromMesh(
                         local, coefficients.data(), localTrace, cache.meshSize);
@@ -252,7 +252,7 @@ void computeReadyCells() {
                     observe(PmmmCellEvent::FarLocalReady, cell.key);
                     descendFar(root.id, treeLocal, treeCurvature, fields, compact, result, flops,
                         singleFlops, kickFlops);
-                });
+                }
             }
             if (compact != fields.particleIndices.size()) {
                 throw std::runtime_error("PMMM batch output contains an unknown sink");

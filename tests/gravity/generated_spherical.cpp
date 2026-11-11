@@ -20,16 +20,8 @@
 
 namespace detail {
 
-#ifdef FMM_MIN_ORDER
-constexpr int kMinCompiledDegree = FMM_MIN_ORDER - 1;
-#else
-constexpr int kMinCompiledDegree = 2;
-#endif
-#ifdef FMM_MAX_ORDER
-constexpr int kMaxCompiledDegree = FMM_MAX_ORDER - 1;
-#else
-constexpr int kMaxCompiledDegree = 8;
-#endif
+constexpr int kMinCompiledDegree = ORDER - 1;
+constexpr int kMaxCompiledDegree = ORDER - 1;
 static_assert(
     2 <= kMinCompiledDegree && kMinCompiledDegree <= kMaxCompiledDegree && kMaxCompiledDegree <= 8);
 #ifdef GENERATED_SPHERICAL_TEST_DEGREE

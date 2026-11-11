@@ -16,16 +16,16 @@ namespace pmmm {
 /// count.
 inline FlopCount addMoments(
     int order, double* moments, double mass, Vector3<double> const& offset) {
-    if (order < kFmmMinOrder || order > kFmmMaxOrder) {
+    if (order < kFmmOrder || order > kFmmOrder) {
         throw std::invalid_argument("Unsupported PMMM reference order");
     }
     FlopCount count = 0;
-    fmmDispatch(order, [&](auto selectedOrder) {
-        constexpr int kDegree = decltype(selectedOrder)::value - 2;
+    {
+        constexpr int kDegree = kFmmOrder - 2;
         cosmictiger::gravity::spherical::detail::P2M<kDegree, double>(
             moments, mass, offset[0], offset[1], offset[2]);
         count = cosmictiger::gravity::spherical::detail::kP2MConventionalFlops<kDegree>;
-    });
+    };
     return count;
 }
 
@@ -92,10 +92,10 @@ inline void evaluate(int order, std::array<double, 4>& field, double const* coef
         throw std::invalid_argument("PMMM reference cell width must be positive");
     }
     field = {};
-    fmmDispatch(order, [&](auto tag) {
-        detail::addSphericalLocalReference<decltype(tag)::value - 1>(
+    {
+        detail::addSphericalLocalReference<kFmmOrder - 1>(
             field, coefficients, localTrace, cellOffset[0], cellOffset[1], cellOffset[2]);
-    });
+    };
     for (int component = 1; component < 4; ++component) {
         field[component] /= cellWidth;
     }

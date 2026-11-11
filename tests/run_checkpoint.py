@@ -476,6 +476,30 @@ def main():
 
     restart("truncated_payload", truncatePayload, expectSuccess=False)
 
+    def incompatibleExpansionDegree(checkpointDir):
+        from checkpoint_format import Header
+        import ctypes
+        rankFile = checkpointDir / "checkpoint.0.dat"
+        payload = bytearray(rankFile.read_bytes())
+        # The current algorithm block follows Header; its fourth uint64 is the
+        # FMM order. Change metadata only and repair the integrity manifest.
+        offset = ctypes.sizeof(Header) + 3 * 8
+        savedOrder = int.from_bytes(payload[offset:offset + 8], byteorder=sys.byteorder)
+        if not 3 <= savedOrder <= 9:
+            raise RuntimeError("fixture lacks an active gravity expansion order")
+        payload[offset:offset + 8] = (3 if savedOrder != 3 else 4).to_bytes(
+            8, byteorder=sys.byteorder)
+        rankFile.write_bytes(payload)
+        manifest = checkpointDir / "checkpoint.meta"
+        lines = manifest.read_text().splitlines()
+        lines[1] = f"0 {len(payload)} {fnv1a64(payload):016x}"
+        manifest.write_text("\n".join(lines) + "\n")
+
+    mismatch = restart("incompatible_expansion_degree", incompatibleExpansionDegree,
+                       expectSuccess=False)
+    if "expansion degree" not in mismatch:
+        raise RuntimeError("incompatible build degree lacked a checkpoint diagnostic")
+
     def unsupportedVersion(checkpointDir):
         rankFile = checkpointDir / "checkpoint.0.dat"
         payload = bytearray(rankFile.read_bytes())

@@ -64,8 +64,8 @@ void evaluateFar() {
         auto const coefficients = localExpansion(cell.key);
         KickReturn result;
         FlopCount flops = 0;
-        fmmDispatch([&](auto tag) {
-            constexpr int kOrder = decltype(tag)::value;
+        {
+            constexpr int kOrder = kFmmOrder;
             namespace cartesian = cosmictiger::gravity::cartesian;
             namespace local = cosmictiger::gravity::tree_local;
             auto const root = state.sourceCells[cellIndex]->ready.get();
@@ -137,7 +137,7 @@ void evaluateFar() {
                 }
             };
             descend(descend, root.id, rootLocal);
-        });
+        }
         addCpuFlops(flops, FlopPrecision::Double);
         std::lock_guard<MutexType> lock(state.queueMutex);
         state.kickResult += result;
@@ -145,7 +145,6 @@ void evaluateFar() {
     });
     state.boundaryTreeReady = true;
     state.boundaryMeshSize = cache.meshSize;
-    state.boundaryOrder = cache.order;
 }
 
 }    // namespace pmmm::detail

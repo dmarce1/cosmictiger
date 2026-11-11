@@ -265,11 +265,11 @@ struct FmmForceOutput {
 #ifdef USE_CUDA
 // Host-side FIFO executor; its HPX state is kept out of CUDA translation units.
 KickReturn kickRunCudaLaunch(std::function<KickReturn()> const& launch);
-// Dispatches to the per-order CUDA kick instantiation for fmmOrder().
+// Dispatches to the per-order CUDA kick instantiation for kFmmOrder.
 KickReturn cudaExecuteKicks(KickParameters params, Position*, Position*, Position*, TreeNode*,
     Vector<KickWorkitem> workitems, detail::FmmForceOutput output = {},
     float const* sourceMasses = nullptr);
-// Shared-memory policy of the runtime order's kick kernel (selected once per order).
+// Shared-memory policy of the build-order kick kernel.
 CudaKickArenaLayout const& kickArenaLayout();
 #endif
 // CPU/GPU handoff divisor (see kickBlockCount in kick.cu); measured, not

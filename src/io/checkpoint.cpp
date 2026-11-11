@@ -671,9 +671,9 @@ std::array<uint64_t, 11> pmmmCheckpointParameters(Options const& opts) {
     // stores the coarse mesh in that slot: with the base mesh it determines every
     // hierarchical stage mesh and the particle-domain cut granularity.
     return {5, static_cast<uint64_t>(opts.gravity.meshSize),
-        static_cast<uint64_t>(opts.gravity.fmmOrder),
+        static_cast<uint64_t>(gravity::kBuildFmmOrder),
         static_cast<uint64_t>(opts.gravity.pmmmNearWidth), static_cast<uint64_t>(opts.run.minRung),
-        timestepEtaBits, 1, 1U, static_cast<uint64_t>(opts.gravity.fmmOrder), openingAngleBits,
+        timestepEtaBits, 1, 1U, static_cast<uint64_t>(gravity::kBuildFmmOrder), openingAngleBits,
         static_cast<uint64_t>(pmmm::detail::resolvedCoarseMeshSize(
             opts.gravity.meshSize, opts.gravity.pmmmCoarseMeshSize, opts.gravity.pmmmNearWidth))};
 }
@@ -734,7 +734,7 @@ std::array<uint64_t, 12> readParticleMeshCheckpointParameters(FILE* fp) {
 std::array<uint64_t, 5> checkpointAlgorithms(Options const& opts) {
     bool const gravityEnabled = opts.gravity.enabled;
     return {1, gravityEnabled ? 2U : 0U, gravityEnabled ? 2U : 0U,
-        static_cast<uint64_t>(gravityEnabled ? opts.gravity.fmmOrder : 0),
+        static_cast<uint64_t>(gravityEnabled ? gravity::kBuildFmmOrder : 0),
         usesGlobalIntegration(opts.run) ? 2U : (usesHierarchicalIntegration(opts.run) ? 1U : 0U)};
 }
 
@@ -867,8 +867,8 @@ DriverParameters readDriverState(FILE* fp) {
             THROW_ERROR("Checkpoint particle storage differs: lower-dimensional builds require "
                         "compact D-component particle records\n");
         }
-        if ((header.flags & kRetiredParticleMesh) != 0U) {
-            THROW_ERROR("Ordinary PM gravity checkpoints are no longer supported\n");
+        if ((header.flags & (kRetiredParticleMesh | kParticleMeshInterval)) != 0U) {
+            THROW_ERROR("Scalar particle-mesh (pm, p3m) checkpoints are no longer supported\n");
         }
 #if !COSMICTIGER_WITH_SPH || !COSMICTIGER_ENABLE_CHEMISTRY
         if ((header.flags & kChemistry) != 0U) {
@@ -915,9 +915,6 @@ DriverParameters readDriverState(FILE* fp) {
                     "angle, neighbor width/method, gravity.pmmmCoarseMeshSize, timestep parameters "
                     "or force convention differs from the requested run\n");
             }
-        }
-        if ((header.flags & kParticleMeshInterval) != 0U) {
-            THROW_ERROR("Scalar particle-mesh (pm, p3m) checkpoints are no longer supported\n");
         }
         if ((header.flags & kIndependentParticleCounts) != 0U) {
             std::array<uint64_t, 2> counts{};
@@ -1075,82 +1072,6 @@ DriverParameters readDriverState(FILE* fp) {
 
 }    // namespace detail
 
-/// Inspect rank-zero checkpoint metadata to recover the saved solver and integration
-/// selections.
-CheckpointSelection readCheckpointSelection(std::string const& outputDirectory, int iteration) {
-    auto const path = detail::checkpointRankFile(
-        detail::fs::path(outputDirectory) / ("checkpoint." + std::to_string(iteration)), 0);
-    detail::CheckpointFile file(fopen(path.c_str(), "rb"));
-    if (!file) {
-        THROW_ERROR("Unable to read checkpoint algorithm selection from %s\n", path.c_str());
-    }
-    uint64_t magic;
-    FREAD(&magic, sizeof(magic), 1, file.get());
-    if (magic != detail::kCheckpointMagic) {
-        // A headerless legacy file: no near-field or integrator record to recover.
-        return {"hierarchical", 0};
-    }
-    rewind(file.get());
-    detail::CheckpointHeader header;
-    FREAD(&header, sizeof(header), 1, file.get());
-    if ((header.flags & (detail::kRetiredParticleMesh | detail::kParticleMeshInterval)) != 0U) {
-        THROW_ERROR("Scalar particle-mesh (pm, p3m) checkpoints are no longer supported\n");
-    }
-#if !COSMICTIGER_WITH_SPH || !COSMICTIGER_ENABLE_CHEMISTRY
-    if ((header.flags & detail::kChemistry) != 0U) {
-        THROW_ERROR("Chemistry checkpoints require COSMICTIGER_ENABLE_SPH=ON and "
-                    "COSMICTIGER_ENABLE_CHEMISTRY=ON\n");
-    }
-#endif
-    if (header.version != detail::kCheckpointVersion &&
-        header.version != detail::kLegacyDarkMatterCheckpointVersion) {
-        THROW_ERROR("Unsupported checkpoint for algorithm selection\n");
-    }
-    if ((header.flags & detail::kRuntimeAlgorithms) != 0U) {
-        auto algorithms = detail::readCheckpointAlgorithms(file.get());
-        if ((header.flags & 1U) != 0U) {
-            if ((header.flags & detail::kParticleMultipoleMesh) != 0U) {
-                detail::readPmmmCheckpointParameters(file.get());
-            }
-            if ((header.flags & detail::kIndependentParticleCounts) != 0U) {
-                std::array<uint64_t, 2> counts{};
-                FREAD(counts.data(), sizeof(uint64_t), counts.size(), file.get());
-            }
-            std::array<double, 13> sphParameters{};
-            FREAD(sphParameters.data(), sizeof(double), sphParameters.size(), file.get());
-            if (sphParameters.back() == 0.0) {
-                // Pre-canonical hydro-only files can name an unavailable gravity
-                // solver or expansion order even though neither was used.
-                algorithms[1] = algorithms[2] = algorithms[3] = 0;
-            }
-        }
-        if (algorithms[1] == 1 || algorithms[1] == 3 || algorithms[1] == 4) {
-            THROW_ERROR("The checkpoint was written by a retired gravity solver (global FMM, pm "
-                        "or p3m); only PMMM checkpoints restart\n");
-        }
-        CheckpointSelection selection;
-        if (algorithms[1] == 2 && algorithms[2] != 2) {
-            THROW_ERROR("The checkpoint selects the retired PP near solver; only PMMM-FMM "
-                        "checkpoints restart\n");
-        }
-        selection.timeIntegrator =
-            algorithms[4] == 2 ? "global" : (algorithms[4] == 1 ? "hierarchical" : "traditional");
-        selection.expansionOrder = static_cast<int>(algorithms[3]);
-        return selection;
-    }
-    CheckpointSelection result;
-    result.timeIntegrator = (header.flags & (1U << 6)) != 0U ? "hierarchical" : "traditional";
-    if ((header.flags & detail::kParticleMultipoleMesh) != 0U) {
-        auto const parameters = detail::readPmmmCheckpointParameters(file.get());
-        if (parameters[0] == 1 || parameters[7] != 1) {
-            THROW_ERROR("The checkpoint selects the retired PP near solver; only PMMM-FMM "
-                        "checkpoints restart\n");
-        }
-        result.expansionOrder = static_cast<int>(parameters[2]);
-    }
-    return result;
-}
-
 /// Exercise driver-state round trips and rejection of incompatible checkpoint modes and
 /// layouts.
 void checkpointStateTest() {
@@ -1221,7 +1142,6 @@ void checkpointStateTest() {
     auto hydroOnlyOptions = getOptions();
     hydroOnlyOptions.gravity.enabled = false;
     hydroOnlyOptions.hydro.enabled = true;
-    hydroOnlyOptions.gravity.fmmOrder = 9;
     {
         auto const algorithms = detail::checkpointAlgorithms(hydroOnlyOptions);
         ALWAYS_ASSERT(algorithms[1] == 0 && algorithms[2] == 0 && algorithms[3] == 0);
@@ -1249,8 +1169,9 @@ void checkpointStateTest() {
     changed.gravity.meshSize += 1;
     ALWAYS_ASSERT(pmmmParameters != detail::pmmmCheckpointParameters(changed));
     changed = getOptions();
-    changed.gravity.fmmOrder += 1;
-    ALWAYS_ASSERT(pmmmParameters != detail::pmmmCheckpointParameters(changed));
+    auto wrongOrderParameters = pmmmParameters;
+    ++wrongOrderParameters[2];
+    ALWAYS_ASSERT(!detail::pmmmCheckpointCompatible(wrongOrderParameters, changed));
     changed = getOptions();
     changed.gravity.openingAngle *= 0.5;
     ALWAYS_ASSERT(!detail::pmmmCheckpointCompatible(pmmmParameters, changed));
@@ -1285,7 +1206,7 @@ void checkpointStateTest() {
     ALWAYS_ASSERT(detail::pmmmCheckpointCompatible(legacyPmmmParameters, changed));
     changed.gravity.openingAngle *= 0.5;
     ALWAYS_ASSERT(detail::pmmmCheckpointCompatible(legacyPmmmParameters, changed));
-    changed.gravity.fmmOrder += 1;
+    ++legacyPmmmParameters[2];
     ALWAYS_ASSERT(!detail::pmmmCheckpointCompatible(legacyPmmmParameters, changed));
     // Versions three and four predate the coarse mesh and restart under any
     // requested coarse mesh; version four's retired prime-factor slot is ignored.

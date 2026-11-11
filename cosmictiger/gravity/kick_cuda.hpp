@@ -12,7 +12,7 @@
 // the host launch/layout code are templates defined in kick_cuda_kernel.hpp and
 // kick_cuda_launch.hpp and
 // instantiated once per FMM order by the CMake-generated instance translation
-// units (kick_cuda_instances.hpp). kick.cu dispatches on the runtime order.
+// units (kick_cuda_instances.hpp). kick.cu calls the build-order specialization directly.
 
 #include <cooperative_groups.h>
 #include <cuda/barrier>

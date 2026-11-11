@@ -14,7 +14,7 @@ import sys
 FEATURES = ("GRAVITY", "ROCKSTAR", "SPH", "CHEMISTRY",
             "STARS", "INTEGRATOR_TRADITIONAL", "INTEGRATOR_HIERARCHICAL", "INTEGRATOR_GLOBAL")
 FEATURE_DEFINITIONS = {"COSMICTIGER_ENABLE_" + feature for feature in FEATURES}
-FEATURE_DEFINITIONS.update({"ORDER", "FMM_MIN_ORDER", "FMM_MAX_ORDER",
+FEATURE_DEFINITIONS.update({"ORDER",
                             "COSMICTIGER_ENABLE_STAR_FORMATION",
                             "COSMICTIGER_POSITION_BITS", "COSMICTIGER_WITH_SPH",
                             "COSMICTIGER_WITH_GRAVITY"})
@@ -80,13 +80,9 @@ def readCache(path):
 
 
 def degreeRange(value):
-    match = re.fullmatch(r"([2-8])(?:-([2-8]))?", value)
-    if not match:
-        raise ValueError("invalid COSMICTIGER_EXPANSION_DEGREE; expected degree 2..8 or range")
-    low, high = int(match[1]), int(match[2] or match[1])
-    if low > high:
-        raise ValueError("invalid COSMICTIGER_EXPANSION_DEGREE; decreasing range")
-    return low, high
+    if not re.fullmatch(r"[2-8]", value):
+        raise ValueError("invalid COSMICTIGER_EXPANSION_DEGREE; expected one degree 2..8")
+    return int(value), int(value)
 
 
 def hasGravity(configuration):
@@ -115,8 +111,7 @@ def configurationDefinitions(configuration, bits, degrees):
     definitions["COSMICTIGER_ENABLE_CHEMISTRY"] = str(int(hasChemistry(configuration)))
     definitions["COSMICTIGER_ENABLE_STARS"] = str(int(hasStarFormation(configuration)))
     definitions["COSMICTIGER_ENABLE_STAR_FORMATION"] = str(int(hasStarFormation(configuration)))
-    definitions.update({"ORDER": str(high + 1), "FMM_MIN_ORDER": str(low + 1),
-                        "FMM_MAX_ORDER": str(high + 1), "COSMICTIGER_POSITION_BITS": str(bits),
+    definitions.update({"ORDER": str(high + 1), "COSMICTIGER_POSITION_BITS": str(bits),
                         "COSMICTIGER_WITH_SPH": str(int(configuration["SPH"])),
                         "COSMICTIGER_WITH_GRAVITY": str(int(hasGravity(configuration)))})
     return definitions
@@ -198,7 +193,7 @@ def sourceSelectionErrors(sources, configuration):
 def requiredSources(configuration, cuda):
     required = {"src/core/driver.cpp", "src/core/hpx.cpp", "src/particles/particles.cpp"}
     if hasGravity(configuration):
-        required.update({"src/gravity/fmm_order.cpp", "src/gravity/error.cpp", "src/gravity/reference_table.cpp"})
+        required.update({"src/gravity/error.cpp", "src/gravity/reference_table.cpp"})
     if hasRockstar(configuration):
         required.update({"src/analysis/bh.cpp", "src/analysis/compress.cpp", "src/analysis/group_entry.cpp",
                          "src/analysis/group_tree.cpp", "src/analysis/groups.cpp", "src/analysis/groups_find.cpp",

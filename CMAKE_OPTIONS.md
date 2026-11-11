@@ -9,10 +9,10 @@ instantiation units.
 cmake -S . -B build/release_cpu -DCMAKE_BUILD_TYPE=Release \
   -DCOSMICTIGER_WITH_CUDA=OFF -DBUILD_TESTING=OFF \
   -DCOSMICTIGER_ENABLE_GRAVITY=ON \
-  -DCOSMICTIGER_EXPANSION_DEGREE=4-6
+  -DCOSMICTIGER_EXPANSION_DEGREE=6
 cmake --build build/release_cpu --target cosmictiger --parallel 3
 build/release_cpu/cosmictiger --gravity.meshSize=16 \
-  --gravity.expansionDegree=6 --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
+  --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
 ```
 
 ## Small matrix algorithms
@@ -33,7 +33,7 @@ direct formulas. See [matrix algorithms and measurements](docs/matrix.md).
 | `COSMICTIGER_ENABLE_SPH` | `ON` | Compile SPH and hydro problems. |
 | `COSMICTIGER_ENABLE_CHEMISTRY` | `ON` | Compile equilibrium cooling when SPH is also enabled. Inactive with SPH disabled. |
 | `COSMICTIGER_ENABLE_STARS` | `OFF` | Compile GADGET-4 multiphase star formation. Requires equilibrium cooling; inactive with SPH disabled. |
-| `COSMICTIGER_EXPANSION_DEGREE` | `4-6` | Inclusive potential-degree range, or one degree such as `6`; supported degrees are 2 through 8. |
+| `COSMICTIGER_EXPANSION_DEGREE` | `6` | One potential degree per executable, from 2 through 8. |
 | `COSMICTIGER_POSITION_TYPE` | `fixed32` | `fixed32` or `fixed64` particle positions for the build. |
 | `COSMICTIGER_WITH_CUDA` | `ON` | Compile CUDA; requires a CUDA-enabled HPX installation. |
 | `COSMICTIGER_WITH_MAX_BUCKET` | `128` | Maximum tree leaf bucket: 32, 64, 128, 256, 512, or 1024. |
@@ -73,7 +73,7 @@ was `ON`; after migration, change `STARS` to select either value.
 
 PMMM-FMM is the sole gravity solver. Hierarchical short gravity, outer long kicks
 and midpoint SPH are automatic. `gravity.method.near` and `run.timeIntegrator`
-are retired. A restart can recover an omitted expansion degree.
+are retired. Restart requires the saved expansion degree to match the executable.
 
 `run.numberOfOutputs` counts equally spaced output phases including `t=0` and
 `t=end` (at least two). The spacing is physical code time for fixed scenarios
@@ -83,12 +83,13 @@ To retain a former interval count `M`, request `numberOfOutputs=M+1`. The
 checkpoint header continues storing `M`. Adaptive long steps round upward to an
 integer subdivision of the time remaining before the next output phase.
 
-`gravity.expansionDegree` defaults to the highest compiled degree. Potential
-degree d means source multipole degree d-1 and historical internal order d+1.
-The default degrees 4-6 therefore instantiate old orders 5-7. The PMMM far and near
-fields share the selected degree. Internal tensor and old checkpoint integers keep
-their historical order convention. PMMM formerly defaulted to old order 8
-(potential degree 7); request a range including 7 to retain that accuracy setting.
+`COSMICTIGER_EXPANSION_DEGREE` selects one degree at build time (default 6).
+Potential degree d means source multipole degree d-1 and internal order d+1.
+The PMMM far and near fields share this degree. Each build generates only its
+Cartesian and spherical operators under its own build directory; separate
+build directories can use different degrees without changing source headers.
+`gravity.expansionDegree` is no longer a CLI/INI option. Checkpoints retain the
+historical internal order and reject a binary compiled with a different degree.
 SPH-only builds instantiate no gravity expansions.
 
 Gravity-only builds omit hydro problems/tests; SPH-only builds omit gravity
@@ -179,7 +180,7 @@ itself built with CUDA may require CUDA toolchain discovery even when
 ## Using build.sh
 
 `./build.sh` offers an interactive menu for build mode, enabled physics (including stars), near
-methods, integrators, potential-degree range, CUDA, position storage, dependency
+methods, integrators, potential degree, CUDA, position storage, dependency
 paths, and tests. It builds `cosmictiger` in `build/<mode>_<cpu|cuda>`. Changing
 capabilities reconfigures that directory. Use separate directories for builds
 that need to remain available simultaneously. Local jobs are capped at half the

@@ -30,7 +30,6 @@ function(cosmictiger_feature_sources output)
 
     if(COSMICTIGER_WITH_GRAVITY)
         list(APPEND cosmictiger_source_files
-            src/gravity/fmm_order.cpp
             src/gravity/error.cpp
             src/gravity/error_cuda.cu
             src/gravity/reference_table.cpp

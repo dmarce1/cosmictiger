@@ -19,16 +19,14 @@ namespace detail {
 
 namespace kernels = cosmictiger::gravity::cartesian::detail;
 
-// Every FMM order from kFmmMinOrder to kFmmMaxOrder is compiled into the
-// binary. An order selects the multipole degree p = order - 2 and the local
-// degree p + 1; the generated kernels must cover that whole range.
-static_assert(cosmictiger::gravity::cartesian::kMinLocalDegree <= fmmLocalDegree(kFmmMinOrder) &&
-        cosmictiger::gravity::cartesian::kMaxLocalDegree >= fmmLocalDegree(kFmmMaxOrder),
+// Kernels and fixtures must agree on the single build degree.
+static_assert(cosmictiger::gravity::cartesian::kMinLocalDegree <= fmmLocalDegree(kFmmOrder) &&
+        cosmictiger::gravity::cartesian::kMaxLocalDegree >= fmmLocalDegree(kFmmOrder),
     "The generated Cartesian kernels do not cover FMM orders 3 to 9");
 
 constexpr int kFieldCount = 4;
 constexpr int kGeometryCount = 9;
-constexpr int kOrderCount = kFmmMaxOrder - kFmmMinOrder + 1;
+constexpr int kOrderCount = 1;
 
 // Compact rank-major Cartesian storage: (degree + 1)^2 harmonic coefficients.
 // Local expansions append one constant Laplacian (the periodic background trace).
@@ -142,16 +140,10 @@ KernelInput<Real, order> makeKernelInput(int sample) {
 }
 
 // Call f(std::integral_constant<int, order>{}) for every supported FMM order,
-// from kFmmMinOrder upward. The standalone tests do not link the application's
-// assertion handler, so they do not use fmmDispatch.
-template <class F, int... offsets>
-void forEachFmmOrderImpl(F&& f, std::integer_sequence<int, offsets...>) {
-    (f(std::integral_constant<int, kFmmMinOrder + offsets>{}), ...);
-}
-
+// at the build order.
 template <class F>
 void forEachFmmOrder(F&& f) {
-    forEachFmmOrderImpl(std::forward<F>(f), std::make_integer_sequence<int, kOrderCount>{});
+    std::forward<F>(f)(std::integral_constant<int, kFmmOrder>{});
 }
 
 }    // namespace detail

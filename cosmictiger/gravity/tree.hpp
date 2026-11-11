@@ -25,8 +25,8 @@
 #include <cosmictiger/particles/particles.hpp>
 
 // Tree multipoles live in an arena of build-order positioned records
-// (fmmPositionedMultipoleBytes(fmmOrder()) bytes each, stored
-// fmmPositionedMultipoleStride(fmmOrder()) bytes apart). Nodes point at the
+// (fmmPositionedMultipoleBytes(kFmmOrder) bytes each, stored
+// fmmPositionedMultipoleStride(kFmmOrder) bytes apart). Nodes point at the
 // order-agnostic position header; per-order code views the moments through
 // fmmMultiPos<order>(node.mpos).
 MultipolePosition* treeAddMultipole(Vector3<Position> const& pos, MultipoleBuffer const& multipole);

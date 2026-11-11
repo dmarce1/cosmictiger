@@ -386,7 +386,7 @@ template <class Real> struct Field {
         executable = root/'counts'
         subprocess.run([args.compiler, '-std=c++20', '-O0', '-fno-fast-math',
                         '-ffp-contract=off', '-I'+str(root), '-I'+str(projectRoot),
-                        '-DORDER=4', f'-DFMM_MIN_ORDER={minFmmOrder}', f'-DFMM_MAX_ORDER={maxFmmOrder}',
+                        f'-DORDER={minFmmOrder}',
                         str(source), '-o', str(executable)], check=True)
         subprocess.run([str(executable)], check=True)
 

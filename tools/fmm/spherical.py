@@ -478,12 +478,10 @@ def generate(minLocalDegree=2,maxLocalDegree=8):
               'description':'Exact live emitted arithmetic per lane, including geometry and output accumulation. Unary signs, copies, comparisons and selects cost zero. Division by square root costs eight. These weighted costs are not measured timings.',
               'kernels':[],'selections':[]}
     for localDegree in range(minLocalDegree,maxLocalDegree+1):
-        guard = (f'#if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= {localDegree + 1}) && '
-                 f'(!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= {localDegree + 1})')
         for operation in ('P2m','Greens'):
             degree = localDegree-1 if operation=='P2m' else localDegree
             code,stats = generateSimple(operation,degree)
-            parts[operation].extend((guard, code, '#endif'))
+            parts[operation].append(code)
             report['kernels'].append(stats)
         candidates = []
         implementations = []
@@ -494,9 +492,9 @@ def generate(minLocalDegree=2,maxLocalDegree=8):
             candidates.append(stats['weighted_flops'])
         selected = min(range(3),key=lambda variant:candidates[variant])
         description = ('no rotation', 'azimuthal rotation', 'axial alignment')[selected]
-        parts['L2p'].extend((guard,
+        parts['L2p'].append(
             f'// Selected variant {selected}: {description} (minimum weighted arithmetic count).\n'
-            + implementations[selected], '#endif'))
+            + implementations[selected])
         report['selections'].append(dict(operator='L2p',fmm_order=localDegree+1,degree=localDegree,
                                          candidate_flops=candidates,selected_variant=selected,weighted_flops=candidates[selected]))
     output = {}

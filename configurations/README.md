@@ -24,7 +24,8 @@ selected automatically; `gravity.method.near` and `run.timeIntegrator` are retir
 Restart recovers an omitted expansion degree from the checkpoint.
 
 `COSMICTIGER_EXPANSION_DEGREE=4-6` compiles potential degrees 4, 5, and 6 by default.
-`gravity.expansionDegree` chooses a compiled degree and defaults to the largest.
+`COSMICTIGER_EXPANSION_DEGREE` fixes the degree at build time (default 6);
+`gravity.expansionDegree` is no longer a CLI/INI option.
 The implementation's historical order is one greater than potential degree.
 The near-field opening angle is derived as `sqrt(3)/(gravity.pmmmNearWidth+1)`.
 PMMM requires an explicit positive integer `gravity.meshSize`; arbitrary

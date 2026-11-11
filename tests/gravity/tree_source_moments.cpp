@@ -13,12 +13,11 @@
 
 // Instantiate only the source construction definitions, independently of the
 // application's walk, particle arena, configured order and position width.
-#define COSMICTIGER_FMM_INSTANCE_ORDER 7
+#define COSMICTIGER_FMM_INSTANCE_ORDER ORDER
 #include <cosmictiger/gravity/kernels/spherical/p2m.hpp>
 #include <cosmictiger/gravity/tree_multipole.hpp>
 
 namespace detail {
-int selectedOrder = 3;
 size_t checks = 0;
 double worst = 0;
 void check(double actual, double expected, double scale) {
@@ -27,15 +26,12 @@ void check(double actual, double expected, double scale) {
     worst = std::max(worst, error);
     if (!std::isfinite(error) || error > 3.e-12) {
         std::fprintf(stderr, "source q=%d fixed%d: %.17g != %.17g scale %.3e error %.3e\n",
-            selectedOrder, kPositionBits, actual, expected, scale, error);
+            kFmmOrder, kPositionBits, actual, expected, scale, error);
         throw std::runtime_error("owned-source arithmetic mismatch");
     }
 }
 }    // namespace detail
 
-int fmmOrder() {
-    return detail::selectedOrder;
-}
 void cosmictigerAssert(char const*, bool value, char const*, int) {
     if (!value) {
         std::abort();
@@ -166,7 +162,7 @@ void cloud(int meshSize, bool subDoubleCenters) {
 void transport() {
     TreeBuildMoments value;
     value.useDouble();
-    int const count = fmmMultipoleCoefficientCount(fmmOrder());
+    int const count = fmmMultipoleCoefficientCount(kFmmOrder);
     for (int i = 0; i < count; ++i) {
         value.precise()[i] = i + .125 + std::ldexp(1., -36);
     }
@@ -198,19 +194,14 @@ void transport() {
 
 int main() {
     try {
-        for (int order = 3; order <= 9; ++order) {
-            detail::selectedOrder = order;
-            detail::transport();
-            fmmDispatch(order, [](auto tag) {
-                detail::frozenCloud<decltype(tag)::value>();
-                for (int meshSize : {1, 2, 3, 4, 5, 7, 8, 12, 30, 32, 1024}) {
-                    detail::cloud<decltype(tag)::value>(meshSize, false);
-                }
-                detail::cloud<decltype(tag)::value>(1, true);
-            });
+        detail::transport();
+        detail::frozenCloud<kFmmOrder>();
+        for (int meshSize : {1, 2, 3, 4, 5, 7, 8, 12, 30, 32, 1024}) {
+            detail::cloud<kFmmOrder>(meshSize, false);
         }
+        detail::cloud<kFmmOrder>(1, true);
         std::printf(
-            "Owned source fixed%d q=3..9: %zu checks passed, worst rank-scaled error %.3e\n",
+            "Owned source fixed%d build order: %zu checks passed, worst rank-scaled error %.3e\n",
             kPositionBits, detail::checks, detail::worst);
         return 0;
     } catch (std::exception const& error) {

@@ -208,9 +208,7 @@ def generate(minLocalDegree=2,maxLocalDegree=8):
     counts = {}
     for degree in range(minLocalDegree,maxLocalDegree+1):
         greenCode, report = emitDegree(degree)
-        guard = (f'#if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= {degree + 1}) && '
-                 f'(!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= {degree + 1})')
-        green.extend((guard, *greenCode, '#endif'))
+        green.extend(greenCode)
         counts[str(degree+1)] = report
     green.append('} // namespace cosmictiger::gravity::spherical')
     outputs['spherical/ewald_green.hpp'] = '\n'.join(green) + '\n'

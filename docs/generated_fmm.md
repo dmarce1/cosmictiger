@@ -7,22 +7,17 @@
 | Cartesian tracefree | `(d + 1)^2` symmetric trace-free coefficients | PMMM near-field FMM |
 | Spherical | `(d + 1)^2` real slots for complex-conjugate harmonic coefficients | PMMM far field: free-space and periodic Ewald kernels |
 
-The checked-in headers contain both families for local degrees 2 through 8,
-source degrees 1 through 7, corresponding to application FMM orders 3 through 9.
-The Cartesian near-field M2L uses the generated trace-free expansion. The PMMM
-far field contracts spherical source moments with the cached Green filter in
-Fourier space. `--min-order` and `--max-order` retain the
-existing generator convention: their arguments are **local degrees**, not the
-application FMM order.
+Each build generates both families for its single potential degree, selected by
+`COSMICTIGER_EXPANSION_DEGREE` (default 6, supported values 2 through 8).
+Degree d uses source degree d-1 and internal FMM order d+1. Runtime order
+selection is removed. Checkpoints retain the internal order for compatibility
+validation. A different degree requires another build.
 
-New CMake configurations compile potential degrees 4 through 6 by default
-(FMM orders 5 through 7); the runtime default is the highest compiled degree.
-`COSMICTIGER_EXPANSION_DEGREE` selects one degree or a range, and CMake derives
-`FMM_MIN_ORDER`/`FMM_MAX_ORDER` as degree plus one. Other orders remain in the
-source headers but are excluded from compilation. Use
-`-DCOSMICTIGER_EXPANSION_DEGREE=2-8` to compile every available degree.
-When reusing an older cache, remove the retired options with
-`-U COSMICTIGER_FMM_MIN_ORDER -U COSMICTIGER_FMM_MAX_ORDER`.
+Generated build headers live under `generated_fmm/cosmictiger/gravity/kernels`
+and take precedence over the checked-in default-degree reference headers.
+The generator's `--degree` argument selects one potential degree; without it,
+it regenerates the degree-6 reference headers. Build generation never modifies
+the source tree, so independent builds may use different degrees concurrently.
 
 The representations are generated and tested independently. The runtime walk,
 tree layout, checkpoint representation, and softening selection use Cartesian
@@ -67,7 +62,7 @@ Generated headers and their operation report are checked in under
 `cosmictiger/gravity/kernels/`:
 
 - `cartesian_tracefree_types.hpp` contains named STF coefficient structs;
-  `cartesian_tracefree_config.hpp` records the generated degree range.
+  `cartesian_tracefree_config.hpp` records the generated degree.
 - `cartesian_tracefree/{p2m,p2l,m2m,m2l,m2p,l2l,l2p,l2l_warp}.hpp`
   contains one Cartesian operator per header, with `geometry.hpp` for radius work.
 - `spherical_kernels.hpp` and `spherical_ewald_kernels.hpp` contain the
@@ -82,27 +77,12 @@ configuration. Use `--output-dir` to write a separate copy. Never hand-edit
 generated headers; update their generators and regenerate them. `--check`
 compares the expected output with the existing files without changing them.
 
-CMake's explicit `generate_fmm_kernels` target always regenerates every family
-for orders 3 through 9 in the source tree, independently of the selected build
-range. `generate_cartesian_kernels` and `cosmictiger_generated_kernels`
-remain aliases to the same command. Ordinary builds compile the checked-in
-headers directly and do not regenerate or modify them. Regeneration requires
-Python 3 and clang-format.
-
-The numerical tests follow the selected build range: CMake creates
-`generated_spherical_degree_<degree>` for each selected degree when gravity
-is enabled, and
-`generated_spherical_ewald`, `cartesian_kernels`, and the corresponding CUDA
-tests exercise that range. `generated_fmm_current` checks reproducibility of
-the complete source output. CTest's `generated_fmm_flops` passes the configured
-range through `--min-fmm-order` and `--max-fmm-order`, compiling and executing
-the selected Cartesian and spherical arithmetic specializations with an
-independent counting scalar. Its availability checks verify that selected
-Cartesian overloads and spherical kernel classes are defined, while excluded
-orders are unavailable. Cartesian checks cover
-the single M2L source degree and verify FMA counts under both
-operation-count conventions. The direct Python counting command above omits
-the range options and checks all generated orders 3 through 9.
+CMake automatically generates one operator set before compilation; the explicit
+`generate_fmm_kernels` target and its aliases use the same dependency rule.
+Changing the degree or generator reruns generation. Python 3 and clang-format
+are required. The numerical tests and `generated_fmm_current` check that build's
+single order. `generated_fmm_flops` independently counts executed arithmetic
+for the selected Cartesian and spherical operators.
 
 ## Cartesian tracefree fused arithmetic
 

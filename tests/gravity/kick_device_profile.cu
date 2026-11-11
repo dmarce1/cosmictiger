@@ -37,7 +37,7 @@ void cosmictigerAssert(char const* condition, bool value, char const* file, int 
 
 namespace detail {
 
-constexpr int kOrder = kFmmDefaultOrder;
+constexpr int kOrder = kFmmOrder;
 constexpr int kParticleCount = 4;
 constexpr int kItemCount = 5;
 constexpr int kOutputCount = kParticleCount * kItemCount;

@@ -11,7 +11,7 @@
 // Explicit instantiations of the order-templated CPU code for the order named
 // by COSMICTIGER_FMM_INSTANCE_ORDER (one translation unit per order, generated
 // by CMake from src/gravity/fmm_instance_cpu.cpp.in). The dispatchers in gravity.cpp,
-// kick.cpp and tree.cpp call these through fmmDispatch().
+// kick.cpp and tree.cpp call these directly at the build order.
 
 #ifndef COSMICTIGER_FMM_INSTANCE_ORDER
 #error "COSMICTIGER_FMM_INSTANCE_ORDER must name the instantiated FMM order"
@@ -23,8 +23,7 @@
 #include <cosmictiger/gravity/tree_multipole.hpp>
 #include <cosmictiger/math/vector3.hpp>
 
-static_assert(COSMICTIGER_FMM_INSTANCE_ORDER >= kFmmMinOrder &&
-    COSMICTIGER_FMM_INSTANCE_ORDER <= kFmmMaxOrder);
+static_assert(COSMICTIGER_FMM_INSTANCE_ORDER == kFmmOrder);
 
 // CPU gravity operators (gravity_cpu.hpp).
 template void cpuGravityCc<COSMICTIGER_FMM_INSTANCE_ORDER>(

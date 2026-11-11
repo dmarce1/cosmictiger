@@ -112,7 +112,6 @@ struct SourceCell {
 // Persistent FFT allocation and immutable configuration.
 struct MeshCache {
     int meshSize = 0;
-    int order = 0;
     int nearWidth = 0;
     int sourceCount = 0;
     int localCount = 0;
@@ -168,7 +167,6 @@ struct SolveState {
     // Reuse is explicit in the driver, never inferred across particle mutation.
     bool boundaryTreeReady = false;
     int boundaryMeshSize = 0;
-    int boundaryOrder = 0;
     std::vector<char> stageRungs;
     std::unordered_map<uint64_t, size_t> ownedCells;
     std::vector<std::shared_ptr<SourceCell>> sourceCells;

@@ -18,8 +18,7 @@
 
 #include <cosmictiger/gravity/kick_cuda_launch.hpp>
 
-static_assert(COSMICTIGER_FMM_INSTANCE_ORDER >= kFmmMinOrder &&
-    COSMICTIGER_FMM_INSTANCE_ORDER <= kFmmMaxOrder);
+static_assert(COSMICTIGER_FMM_INSTANCE_ORDER == kFmmOrder);
 
 template __global__ void cudaKickKernel<COSMICTIGER_FMM_INSTANCE_ORDER>(
     KickReturn*, KickParameters, CudaKickData, CudaKickParameters<COSMICTIGER_FMM_INSTANCE_ORDER>*,

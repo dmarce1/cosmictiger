@@ -84,7 +84,7 @@ void requirePmmm(bool condition, std::string const& message) {
 void checkSourceMomentSerialization() {
     TreeBuildMoments input;
     input.useDouble();
-    int const count = fmmMultipoleCoefficientCount(fmmOrder());
+    int const count = fmmMultipoleCoefficientCount(kFmmOrder);
     for (int i = 0; i < count; ++i) {
         input.precise()[i] = .125 + i + std::ldexp(1., -36);
     }
@@ -140,8 +140,8 @@ void checkGhostMassPermutation() {
     }
     // Exercise the production double leaf/M2M/root-conversion arithmetic with
     // explicit unequal masses, independently of the coupled-hydro solver gate.
-    fmmDispatch([&](auto tag) {
-        constexpr int order = decltype(tag)::value;
+    {
+        constexpr int order = kFmmOrder;
         Vector3<Position> const center{.5, .5, .5};
         TreeBuildMoments left, right;
         left.useDouble();
@@ -164,7 +164,7 @@ void checkGhostMassPermutation() {
             requirePmmm(std::abs(mapped[i] - direct[i]) < 2.e-13,
                 "unequal-mass double root differs from direct spherical P2M");
         }
-    });
+    };
 }
 
 void reservePmmmCudaFixture() {
@@ -578,8 +578,8 @@ PrecisionMoments sourcePrecision(TreeId id) {
 }
 
 void checkSourcePrecision(TreeCellRoot const& root) {
-    fmmDispatch([&](auto tag) {
-        constexpr int order = decltype(tag)::value;
+    [&]() {
+        constexpr int order = kFmmOrder;
         int const side = getOptions().gravity.meshSize;
         auto const* node = treeGetNode(root.id);
         auto const variants = sourcePrecision<order>(root.id);
@@ -649,7 +649,7 @@ void checkSourcePrecision(TreeCellRoot const& root) {
                   << coefficientError[1] << "/" << coefficientError[2] << "/" << coefficientError[3]
                   << " field=" << fieldError[0] << "/" << fieldError[1] << "/" << fieldError[2]
                   << "/" << fieldError[3] << '\n';
-    });
+    }();
 }
 
 // Inspect the actual slab moments after a solve, independently accumulating the
@@ -675,14 +675,14 @@ void verifyDepositedMoments(Vector<PmmmSample> const& samples) {
             offset[axis] = positionDomainCoordinate(position) * mesh.meshSize - (cell[axis] + .5);
             radial += sample.mass * offset[axis] * offset[axis];
         }
-        pmmm::addMoments(mesh.order,
+        pmmm::addMoments(kFmmOrder,
             expected.data() + mesh.cellIndex(sample.cellKey) * mesh.sourceCount, sample.mass,
             offset);
     }
     for (size_t cell = 0; cell < mesh.cellCount(); ++cell) {
         double const mass = expected[cell * mesh.sourceCount];
         double scale = mass;
-        for (int n = 0; n <= mesh.order - 2; ++n) {
+        for (int n = 0; n <= kFmmOrder - 2; ++n) {
             if (n) {
                 scale *= .5 / n;
             }
@@ -892,15 +892,13 @@ std::array<double, 4> directPmmmExpansionReferenceOrder(
 }
 
 std::array<double, 4> directPmmmExpansionReference(size_t sink, Vector<PmmmSample> const& samples) {
-    return fmmDispatch([&](auto order) {
-        return directPmmmExpansionReferenceOrder<decltype(order)::value>(sink, samples);
-    });
+    return directPmmmExpansionReferenceOrder<kFmmOrder>(sink, samples);
 }
 
 double verifyPmmmReference(Vector<PmmmSample> const& samples) {
     auto const& options = getOptions();
     std::string const context = " mesh=" + std::to_string(options.gravity.meshSize) +
-        " order=" + std::to_string(options.gravity.fmmOrder) +
+        " order=" + std::to_string(gravity::kBuildFmmOrder) +
         " width=" + std::to_string(options.gravity.pmmmNearWidth);
     // Potential/force truncation budgets for these off-center fixtures, measured
     // against the independent Ewald sum with a direct double expansion for both
@@ -911,7 +909,7 @@ double verifyPmmmReference(Vector<PmmmSample> const& samples) {
     constexpr std::array<std::array<double, 2>, 7> kTruncationBudgets{
         {{3.0e-2, 6.0e-2}, {1.5e-3, 2.5e-2}, {3.5e-4, 7.5e-3}, {6.0e-5, 2.0e-3}, {3.0e-5, 5.0e-4},
             {8.0e-6, 1.25e-4}, {3.0e-6, 5.0e-5}}};
-    auto const budget = kTruncationBudgets[fmmOrder() - 3];
+    auto const budget = kTruncationBudgets[kFmmOrder - 3];
     constexpr double kNumericalTolerance = 2.0e-5;
     double maximumError = 0.0;
     Vector3<double> momentum{};
@@ -981,7 +979,7 @@ void comparePmmmSamples(
     Vector<PmmmSample> const& first, Vector<PmmmSample> const& second, bool potential = true) {
     auto const& options = getOptions();
     std::string const context = " near=fmm mesh=" + std::to_string(options.gravity.meshSize) +
-        " fmmOrder=" + std::to_string(options.gravity.fmmOrder) +
+        " fmmOrder=" + std::to_string(gravity::kBuildFmmOrder) +
         " width=" + std::to_string(options.gravity.pmmmNearWidth) +
         " theta=" + std::to_string(options.gravity.openingAngle) +
         " cuda=" + std::to_string(options.gravity.cuda);
@@ -1052,7 +1050,7 @@ std::array<double, 4> readEndpointAudit(bool checkField) {
                     meshSize;
             }
             std::array<double, 4> expected{};
-            pmmm::evaluate(fmmOrder(), expected, coefficients.data(), trace, offset, h);
+            pmmm::evaluate(kFmmOrder, expected, coefficients.data(), trace, offset, h);
             double norm = 0;
             for (int axis = 0; axis < kDimensions; ++axis) {
                 double const acceleration = gm * expected[axis + 1];
@@ -1543,7 +1541,6 @@ void checkPmmmStreamedStages() {
     options.gravity.meshSize = 16;
     options.gravity.pmmmCoarseMeshSize = 8;
     options.gravity.pmmmNearWidth = 2;
-    options.gravity.fmmOrder = fmmOrder();
     options.gravity.openingAngle = 0.02;
     options.analysis.saveForce = false;
     options.analysis.saveAcceleration = false;
@@ -1701,7 +1698,6 @@ void checkPmmmStageMeshes() {
     options.gravity.meshSize = 16;
     options.gravity.pmmmCoarseMeshSize = 8;
     options.gravity.pmmmNearWidth = 2;
-    options.gravity.fmmOrder = fmmOrder();
     options.gravity.openingAngle = 0.02;
     options.analysis.saveForce = false;
     options.analysis.saveAcceleration = false;
@@ -1855,7 +1851,6 @@ void checkPmmmCoarseMeshes() {
     options.gravity.meshSize = 16;
     options.gravity.pmmmCoarseMeshSize = 8;
     options.gravity.pmmmNearWidth = 2;
-    options.gravity.fmmOrder = fmmOrder();
     options.gravity.openingAngle = 0.02;
     options.analysis.saveForce = false;
     options.analysis.saveAcceleration = false;
@@ -1978,7 +1973,6 @@ void checkPmmmCellOverlap() {
     auto options = saved;
     options.gravity.meshSize = 8;
     options.gravity.pmmmNearWidth = 1;
-    options.gravity.fmmOrder = fmmOrder();
     options.gravity.pmmmBatchParticles = 1;
     options.gravity.openingAngle = 0.02;
     pmmmDestroy();
@@ -2146,7 +2140,6 @@ void checkPmmmFmmNear() {
     // and near-field algebra are covered independently above.
     options.hydro.enabled = false;
     options.compute.bucketSize = 8;
-    options.gravity.fmmOrder = fmmOrder();
     options.gravity.pmmmNearWidth = 1;
     options.gravity.smoothingLength = 0.001;
     if (saved.gravity.cuda) {
@@ -2198,7 +2191,7 @@ void checkPmmmFmmNear() {
         // a useful multipole approximation and convergence toward direct PP.
         // Dipole-only sources need a tighter acceptance angle to meet the
         // same approximation budget; the q>=4 fixture retains its original angle.
-        options.gravity.openingAngle = fmmOrder() == 3 ? 0.2 : 0.4;
+        options.gravity.openingAngle = kFmmOrder == 3 ? 0.2 : 0.4;
         setOptions(options);
         pmmmSolve(true);
         auto const loose = gatherPmmmSamples();
@@ -2258,7 +2251,7 @@ void checkPmmmFmmNear() {
         }
         std::cout << std::format("PMMM FMM-near n={:d} order={:d} loose={:e} strict={:e} "
                                  "repartitioned={:e} CPU accepted={:d} direct={:d}\n",
-                         side, options.gravity.fmmOrder, looseError, strictError, repartitionError,
+                         side, gravity::kBuildFmmOrder, looseError, strictError, repartitionError,
                          static_cast<unsigned long long>(looseCounts.nearCpuAcceptedMultipoles),
                          static_cast<unsigned long long>(strictCounts.nearCpuDirectPairs))
                   << std::flush;
@@ -2331,7 +2324,6 @@ void pmmmTest() {
     options.hydro.enabled = false;
     options.gravity.gm = 0.125;
     options.gravity.smoothingLength = 0.001;
-    options.gravity.fmmOrder = fmmOrder();
     options.gravity.openingAngle = 0.05;
     options.analysis.saveForce = true;
     options.analysis.tracers = false;
@@ -2460,7 +2452,7 @@ void pmmmTest() {
             std::cout
                 << std::format(
                        "PMMM Ewald oracle n={:d} order={:d} near={:d} fixture={:d} error={:e}\n",
-                       configuration[0], fmmOrder(), configuration[1], fixture, error)
+                       configuration[0], kFmmOrder, configuration[1], fixture, error)
                 << std::flush;
         }
     }
@@ -2475,6 +2467,6 @@ void pmmmTest() {
     detail::checkPmmmCellOverlap();
     std::cout << std::format("PMMM periodic force, mass, self, ownership, and cache checks passed "
                              "at order {:d} with {:s} near interactions\n",
-                     fmmOrder(), "fmm")
+                     kFmmOrder, "fmm")
               << std::flush;
 }

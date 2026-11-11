@@ -101,54 +101,9 @@ class Expansion : public detail::Coefficients<Real, (order - 1)> {
 
 public:
     using Base::operator=;
-#if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 3) && \
-    (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 3)
-    /// Convert basis at the same center and coordinate scale.
-    CUDA_EXPORT explicit operator cartesian::Expansion<Real, order>() const
-        requires(order == 3);
-#endif
-
-#if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 4) && \
-    (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 4)
-    /// Convert basis at the same center and coordinate scale.
-    CUDA_EXPORT explicit operator cartesian::Expansion<Real, order>() const
-        requires(order == 4);
-#endif
-
-#if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 5) && \
-    (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 5)
-    /// Convert basis at the same center and coordinate scale.
-    CUDA_EXPORT explicit operator cartesian::Expansion<Real, order>() const
-        requires(order == 5);
-#endif
-
-#if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 6) && \
-    (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 6)
-    /// Convert basis at the same center and coordinate scale.
-    CUDA_EXPORT explicit operator cartesian::Expansion<Real, order>() const
-        requires(order == 6);
-#endif
-
-#if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 7) && \
-    (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 7)
     /// Convert basis at the same center and coordinate scale.
     CUDA_EXPORT explicit operator cartesian::Expansion<Real, order>() const
         requires(order == 7);
-#endif
-
-#if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 8) && \
-    (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 8)
-    /// Convert basis at the same center and coordinate scale.
-    CUDA_EXPORT explicit operator cartesian::Expansion<Real, order>() const
-        requires(order == 8);
-#endif
-
-#if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 9) && \
-    (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 9)
-    /// Convert basis at the same center and coordinate scale.
-    CUDA_EXPORT explicit operator cartesian::Expansion<Real, order>() const
-        requires(order == 9);
-#endif
 };
 
 template <class Real, int order>

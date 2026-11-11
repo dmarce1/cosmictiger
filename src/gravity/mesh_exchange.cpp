@@ -91,13 +91,13 @@ std::vector<double> readExpansion(uint64_t key) {
         coefficients[component] = normalization * cache.localReal[padded + component];
     }
     double const traceFactor = (4 * std::numbers::pi / 3) / (double(n) * n);
-    if (cache.order >= 4) {
+    if (kFmmOrder >= 4) {
         coefficients[0] -= 0.5 * traceFactor * state.background[4];
     }
     coefficients[3] -= 2 * traceFactor * state.background[1];
     coefficients[1] -= 2 * traceFactor * state.background[2];
     coefficients[2] -= traceFactor * state.background[3];
-    addCpuFlops(3 + 2 * cache.localCount + 10 + (cache.order >= 4 ? 3 : 0), FlopPrecision::Double);
+    addCpuFlops(3 + 2 * cache.localCount + 10 + (kFmmOrder >= 4 ? 3 : 0), FlopPrecision::Double);
     return coefficients;
 }
 
@@ -148,10 +148,8 @@ CellData rootMoments(size_t cellIndex, TreeCreateReturn const& root) {
     CellData cell;
     cell.key = range.key;
     cell.coefficients.resize(cache.sourceCount);
-    FlopCount flops = fmmDispatch([&](auto tag) {
-        return treeSourceToMesh<decltype(tag)::value>(cell.coefficients.data(),
-            root.multi.precise(), root.pos, center, cache.meshSize, centerCorrection);
-    });
+    FlopCount flops = treeSourceToMesh<kFmmOrder>(cell.coefficients.data(), root.multi.precise(),
+        root.pos, center, cache.meshSize, centerCorrection);
     // Independent radial summary about the mesh center. No source trace is
     // inferred from the STF moments, and no second harmonic P2M is performed.
     for (ParticleInteger i = range.begin; i < range.end; ++i) {

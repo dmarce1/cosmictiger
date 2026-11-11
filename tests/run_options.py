@@ -78,8 +78,6 @@ def main():
             selected = {}
             if not gravity_compiled:
                 selected["gravity.enabled"] = "false"
-            else:
-                selected["gravity.expansionDegree"] = args.order - 1
             options = options + [f"--{key}={value}" for key, value in selected.items()
                                  if not any(option.startswith(f"--{key}=") for option in options)]
         # Most cases inspect unrelated options; supply the required mesh size.
@@ -164,7 +162,7 @@ def main():
                 "starFormation.criticalOverDensity",
                 "starFormation.evaporationFactor", "starFormation.starFormationTimeGyr"}
     required.update({
-                     "gravity.expansionDegree", "hydro.viscosityCoefficientMin",
+                     "hydro.viscosityCoefficientMin",
                      "hydro.viscosityDecay", "hydro.balsaraSoundSpeedCoefficient"})
     required.update({"scenario.cosmology.gadget4Restart", "scenario.cosmology.useGlass",
                      "scenario.cosmology.twoLpt", "scenario.plummer.radius",
@@ -258,7 +256,7 @@ def main():
                        "initial.darkMatterParticleCount", "initial.gasParticleCount", "gravity.method",
                        "gravity.method.far", "gravity.cloud", "gravity.p3mSplitCells",
                        "gravity.p3mCutoff", "gravity.openingAngle", "gravity.openingSchedule",
-                       "gravity.pmmmNearMethod", "gravity.pmmmOrder", "gravity.fmmOrder",
+                       "gravity.pmmmNearMethod", "gravity.pmmmOrder", "gravity.fmmOrder", "gravity.expansionDegree",
                        "run.hierarchicalGravity", "initial.createGlass", "initial.plummer",
                        "hydro.pressureOperator", "hydro.balsaraSwitch", "chemistry.network", "chemistry.initialization",
                        "chemistry.initialTemperature", "chemistry.radiationFile", "chemistry.radiationTable",
@@ -392,26 +390,16 @@ mapSize = 8
                      metadata_options + [f"--{key}={value}"], success=False)
         if key not in output:
             raise RuntimeError(f"invalid {key} lacked a selection diagnostic")
-    degree_range = re.search(r"Potential expansion degrees: (\d+) through (\d+)", help_text)
-    if degree_range is None:
-        raise RuntimeError("help omitted the compiled potential degree range")
-    for degree in range(int(degree_range[1]), int(degree_range[2]) + 1):
-        output = run(f"selection_degree_{degree}",
-                     metadata_options + [f"--gravity.expansionDegree={degree}"])
-        assertNumericSetting(output, "gravity.expansionDegree", degree)
-    selected_options = [f"--gravity.expansionDegree={args.order - 1}"]
+    degree = re.search(r"Potential expansion degree: (\d+)", help_text)
+    if degree is None or int(degree[1]) != args.order - 1:
+        raise RuntimeError("help omitted the build's single potential degree")
+    selected_options = []
     selection_config = args.workdir / "algorithm_selection.ini"
-    selection_config.write_text(
-        "[gravity]\n"
-        f"expansionDegree = {args.order - 1}\n")
-    output = run("selection_ini", metadata_options + [
-        f"--configuration={selection_config.resolve()}"], selectors=False)
-    assertNumericSetting(output, "gravity.expansionDegree", args.order - 1)
-    default_degree_options = [option for option in selected_options if not option.startswith(
-        "--gravity.expansionDegree=")]
-    output = run("selection_default_degree", metadata_options + default_degree_options,
-                 selectors=False)
-    assertNumericSetting(output, "gravity.expansionDegree", int(degree_range[2]))
+    selection_config.write_text("[gravity]\nexpansionDegree = 6\n")
+    output = run("removed_degree_ini", metadata_options + [
+        f"--configuration={selection_config.resolve()}"], success=False, selectors=False)
+    if "expansionDegree" not in output:
+        raise RuntimeError("removed INI degree lacked a diagnostic")
     for key, label, choices in (
             ("run.timeIntegrator", "Time integrators", ("traditional", "hierarchical", "global")),):
         compiled = re.search(r"^\s*" + label + r":([^\n]*)", help_text, re.MULTILINE)
@@ -595,7 +583,6 @@ mapSize = 8
             if not re.search(r"^" + re.escape(key) + r"\s*:\s*" + value + r"\s*$",
                              output, re.MULTILINE):
                 raise RuntimeError(f"compiled metadata did not retain {key}={value}")
-        assertNumericSetting(output, "gravity.expansionDegree", args.order - 1)
         if not re.search(r"^build\.chemistry\s*:\s*" + ("T" if chemistryAvailable else "F") + r"\s*$",
                          output, re.MULTILINE):
             raise RuntimeError("build metadata did not identify the compiled equilibrium cooling capability")
@@ -1348,7 +1335,6 @@ mapSize = 8
     root = Path(__file__).resolve().parents[1]
     optional_keys = {"compute.positionType", "compute.bucketSize",
                      "gravity.smoothingLength",
-                     "gravity.expansionDegree",
                      "units.boxLength",
                      "scenario.disc.centralSmoothingLength"}
     public_keys = set(option_names) - {"help", "configuration"}

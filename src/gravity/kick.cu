@@ -23,18 +23,14 @@ KickReturn cudaExecuteKicks(KickParameters params, Position* devX, Position* dev
     TreeNode* devTreeNodes, Vector<KickWorkitem> workitems, detail::FmmForceOutput output,
     float const* sourceMasses) {
     return kickRunCudaLaunch([&]() {
-        return fmmDispatch([&](auto order) {
-            return cudaExecuteKicksImpl<order.value>(
-                params, devX, devY, devZ, devTreeNodes, std::move(workitems), output, sourceMasses);
-        });
+        return cudaExecuteKicksImpl<kFmmOrder>(
+            params, devX, devY, devZ, devTreeNodes, std::move(workitems), output, sourceMasses);
     });
 }
 
-/// Return the CUDA arena layout for the selected runtime FMM order.
+/// Return the CUDA arena layout for the build FMM order.
 CudaKickArenaLayout const& kickArenaLayout() {
-    return fmmDispatch([](auto order) -> CudaKickArenaLayout const& {
-        return kickArenaLayoutImpl<order.value>();
-    });
+    return kickArenaLayoutImpl<kFmmOrder>();
 }
 
 // CPU/GPU handoff divisor: the CPU walk hands a subtree to the GPU once it

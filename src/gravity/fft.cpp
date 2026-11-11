@@ -34,7 +34,6 @@ struct MeshCachePool {
     int requestedMeshSize = 0;
     int baseMeshSize = 0;
     int coarseMeshSize = 0;
-    int order = 0;
     int nearWidth = 0;
     double byteBudget = 0;
     uint64_t nextUse = 0;
@@ -104,7 +103,6 @@ void initialize(int meshSize) {
         resolvedCoarseMeshSize(options.meshSize, options.pmmmCoarseMeshSize, options.pmmmNearWidth);
     if (baseMeshSize < 1 || options.pmmmNearWidth < 1 || options.pmmmNearWidth > 4 ||
         coarseMeshSize < 1 || coarseMeshSize > baseMeshSize || baseMeshSize % coarseMeshSize != 0 ||
-        options.fmmOrder < kFmmMinOrder || options.fmmOrder > kFmmMaxOrder ||
         !(options.smoothingLength > 0) ||
         options.smoothingLength > double(options.pmmmNearWidth) / baseMeshSize ||
         meshSize < coarseMeshSize || meshSize > baseMeshSize || baseMeshSize % meshSize != 0 ||
@@ -115,7 +113,6 @@ void initialize(int meshSize) {
         if (meshCachePool.requestedMeshSize != options.meshSize ||
             meshCachePool.baseMeshSize != baseMeshSize ||
             meshCachePool.coarseMeshSize != coarseMeshSize ||
-            meshCachePool.order != options.fmmOrder ||
             meshCachePool.nearWidth != options.pmmmNearWidth) {
             throw std::runtime_error("PMMM configuration changed without destroying its plans");
         }
@@ -123,7 +120,6 @@ void initialize(int meshSize) {
         meshCachePool.requestedMeshSize = options.meshSize;
         meshCachePool.baseMeshSize = baseMeshSize;
         meshCachePool.coarseMeshSize = coarseMeshSize;
-        meshCachePool.order = options.fmmOrder;
         meshCachePool.nearWidth = options.pmmmNearWidth;
     }
     if (cache.communicator != MPI_COMM_NULL && !cache.initialized) {
@@ -155,10 +151,9 @@ void initialize(int meshSize) {
     }
     cache.meshSize = meshSize;
     cache.lastUsed = ++meshCachePool.nextUse;
-    cache.order = getOptions().gravity.fmmOrder;
     cache.nearWidth = options.pmmmNearWidth;
-    cache.sourceCount = fmmMultipoleCoefficientCount(cache.order);
-    cache.localCount = fmmLocalHarmonicCoefficientCount(cache.order);
+    cache.sourceCount = fmmMultipoleCoefficientCount(kFmmOrder);
+    cache.localCount = fmmLocalHarmonicCoefficientCount(kFmmOrder);
     int const n = cache.meshSize;
     uint64_t const limit = std::min(uint64_t(std::numeric_limits<ptrdiff_t>::max()),
                                uint64_t(std::numeric_limits<size_t>::max() / sizeof(double))) /
@@ -366,7 +361,7 @@ void initialize(int meshSize) {
             cache.slabOwner.end()) {
             throw std::runtime_error("PMMM FFTW slabs do not cover the mesh");
         }
-        cache.terms = contractionTerms(cache.order);
+        cache.terms = contractionTerms(kFmmOrder);
     });
     cache.initialized = true;
 }
@@ -392,7 +387,7 @@ void initializeGreen() {
                 bool const near =
                     std::max({std::abs(x), std::abs(y), std::abs(dz)}) <= cache.nearWidth;
                 flops +=
-                    3 + green(cache.order, coefficients.data(), {x * h, y * h, dz * h}, h, near);
+                    3 + green(kFmmOrder, coefficients.data(), {x * h, y * h, dz * h}, h, near);
                 size_t const begin = (row * (2 * (n / 2 + 1)) + z) * cache.localCount;
                 for (int component = 0; component < cache.localCount; ++component) {
                     if (!std::isfinite(coefficients[component]) ||
@@ -460,8 +455,8 @@ void transform() {
         size_t const modes = size_t(cache.spectralSize) * n * (n / 2 + 1);
         parallelFor(modes, "gravity.pmmm.contractFourier", [&](size_t mode) {
             // Complexify the real spherical bilinear map. No Fourier conjugation.
-            std::array<double, kFmmMaxLocalCoefficients> real{};
-            std::array<double, kFmmMaxLocalCoefficients> imaginary{};
+            std::array<double, kFmmLocalCoefficients> real{};
+            std::array<double, kFmmLocalCoefficients> imaginary{};
             for (auto const& term : cache.terms) {
                 auto const& source = cache.sourceSpectrum[mode * cache.sourceCount + term.source];
                 auto const& kernel = cache.greenSpectrum[mode * cache.localCount + term.green];

@@ -60,11 +60,6 @@ struct Field : Array<Real, kDimensions + 1> {
 static_assert(sizeof(Field<float>) == (kDimensions + 1) * sizeof(float));
 }    // namespace cosmictiger::gravity
 
-static_assert(sizeof(cosmictiger::gravity::cartesian::Multipole<float, 7>) ==
-    4 * fmmMultipoleCoefficientCount(7));
-static_assert(
-    sizeof(cosmictiger::gravity::cartesian::Expansion<float, 7>) == fmmLocalExpansionBytes(7));
-
 // Positioned multipole record. The center comes first so order-agnostic tree
 // code reads it through MultipolePosition; the per-order view adds the moments.
 static_assert(sizeof(Vector3<Position>) == kDimensions * sizeof(Position));
@@ -82,9 +77,8 @@ struct FmmMultiPos {
     cosmictiger::gravity::cartesian::Multipole<float, order> multi;
 };
 
-static_assert(std::is_standard_layout_v<FmmMultiPos<kFmmDefaultOrder>>);
-static_assert(sizeof(FmmMultiPos<7>) == fmmPositionedMultipoleBytes(7));
-static_assert(sizeof(FmmMultiPos<9>) == fmmPositionedMultipoleBytes(9));
+static_assert(std::is_standard_layout_v<FmmMultiPos<kFmmOrder>>);
+static_assert(sizeof(FmmMultiPos<kFmmOrder>) == fmmPositionedMultipoleBytes(kFmmOrder));
 
 /// Check coefficient counts, transport sizes, alignment assumptions, and trivial
 /// typed-storage layout at compile time.
@@ -116,8 +110,7 @@ constexpr bool fmmTypedLayout() {
         std::is_trivially_copyable_v<SphericalMultipole> &&
         std::is_trivially_copyable_v<SphericalExpansion>;
 }
-static_assert(fmmTypedLayout<3>() && fmmTypedLayout<4>() && fmmTypedLayout<5>() &&
-    fmmTypedLayout<6>() && fmmTypedLayout<7>() && fmmTypedLayout<8>() && fmmTypedLayout<9>());
+static_assert(fmmTypedLayout<kFmmOrder>());
 
 /// Interpret an aligned positioned-multipole record at its actual compile-time FMM order.
 template <int order>
@@ -131,11 +124,11 @@ CUDA_EXPORT inline FmmMultiPos<order> const& fmmMultiPos(MultipolePosition const
     return *reinterpret_cast<FmmMultiPos<order> const*>(record);
 }
 
-// Transport buffers sized for the largest order. Order-agnostic interfaces
+// Transport buffers sized exactly for the build order. Shared interfaces
 // (kick work items, HPX actions, tree returns) pass these; the per-order code
 // views the leading coefficients through expansion<order>() / multipole<order>().
 struct ExpansionBuffer {
-    Array<float, kFmmMaxLocalCoefficients> coefficients;
+    Array<float, kFmmLocalCoefficients> coefficients;
 
     /// Access a coefficient by its packed storage index.
     CUDA_EXPORT float& operator[](int i) {
@@ -145,9 +138,9 @@ struct ExpansionBuffer {
     CUDA_EXPORT float const& operator[](int i) const {
         return coefficients[i];
     }
-    /// Clear the complete maximum-capacity coefficient buffer.
+    /// Clear the build-sized coefficient buffer.
     CUDA_EXPORT void zero() {
-        for (int i = 0; i < kFmmMaxLocalCoefficients; i++) {
+        for (int i = 0; i < kFmmLocalCoefficients; i++) {
             coefficients[i] = 0.0f;
         }
     }
@@ -175,19 +168,16 @@ struct ExpansionBuffer {
     /// Archive `coefficients` in transport order.
     template <class A>
     void serialize(A&& arc, unsigned) {
-        fmmDispatch([&](auto orderTag) {
-            constexpr int order = decltype(orderTag)::value;
-            for (int i = 0; i < fmmLocalCoefficientCount(order); i++) {
-                arc& coefficients[i];
-            }
-        });
+        for (int i = 0; i < kFmmLocalCoefficients; i++) {
+            arc& coefficients[i];
+        }
     }
 };
 
-static_assert(sizeof(ExpansionBuffer) == sizeof(float) * kFmmMaxLocalCoefficients);
+static_assert(sizeof(ExpansionBuffer) == sizeof(float) * kFmmLocalCoefficients);
 
 struct MultipoleBuffer {
-    Array<float, kFmmMaxMultipoleCoefficients> coefficients;
+    Array<float, kFmmMultipoleCoefficients> coefficients;
 
     /// Access a coefficient by its packed storage index.
     CUDA_EXPORT float& operator[](int i) {
@@ -197,9 +187,9 @@ struct MultipoleBuffer {
     CUDA_EXPORT float const& operator[](int i) const {
         return coefficients[i];
     }
-    /// Clear the complete maximum-capacity coefficient buffer.
+    /// Clear the build-sized coefficient buffer.
     CUDA_EXPORT void zero() {
-        for (int i = 0; i < kFmmMaxMultipoleCoefficients; i++) {
+        for (int i = 0; i < kFmmMultipoleCoefficients; i++) {
             coefficients[i] = 0.0f;
         }
     }
@@ -227,11 +217,8 @@ struct MultipoleBuffer {
     /// Archive `coefficients` in transport order.
     template <class A>
     void serialize(A&& arc, unsigned) {
-        fmmDispatch([&](auto orderTag) {
-            constexpr int order = decltype(orderTag)::value;
-            for (int i = 0; i < fmmMultipoleCoefficientCount(order); i++) {
-                arc& coefficients[i];
-            }
-        });
+        for (int i = 0; i < kFmmMultipoleCoefficients; i++) {
+            arc& coefficients[i];
+        }
     }
 };

@@ -8,7 +8,7 @@
 // Double arithmetic and transport during the owned upward build only. Persistent
 // tree/ghost records and all walk inputs continue to use MultipoleBuffer.
 struct SourceMultipoleBuffer {
-    Array<double, kFmmMaxMultipoleCoefficients> coefficients{};
+    Array<double, kFmmMultipoleCoefficients> coefficients{};
     /// Access a coefficient in the double-precision source buffer.
     double& operator[](int i) {
         return coefficients[i];
@@ -20,11 +20,9 @@ struct SourceMultipoleBuffer {
     /// Archive this record in the field order required by distributed transport.
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
-        fmmDispatch([&](auto tag) {
-            for (int i = 0; i < FmmOrder<decltype(tag)::value>::kMultipoleCoefficients_; ++i) {
-                archive& coefficients[i];
-            }
-        });
+        for (int i = 0; i < FmmOrder<kFmmOrder>::kMultipoleCoefficients_; ++i) {
+            archive& coefficients[i];
+        }
     }
 };
 
@@ -76,11 +74,9 @@ public:
             return single();
         }
         MultipoleBuffer result{};
-        fmmDispatch([&](auto tag) {
-            for (int i = 0; i < FmmOrder<decltype(tag)::value>::kMultipoleCoefficients_; ++i) {
-                result[i] = precise()[i];
-            }
-        });
+        for (int i = 0; i < FmmOrder<kFmmOrder>::kMultipoleCoefficients_; ++i) {
+            result[i] = precise()[i];
+        }
         return result;
     }
     /// Replace retained double-precision moments with their single-precision copy.

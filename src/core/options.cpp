@@ -393,9 +393,6 @@ void setOptions(Options const& requested) {
         throw std::invalid_argument(
             "The sole integrator is hierarchical gravity with midpoint SPH");
     }
-#if COSMICTIGER_WITH_GRAVITY
-    setFmmOrder(opts.gravity.fmmOrder);
-#endif
     terminal::setVerbose(opts.run.verbose);
     std::vector<hpx::future<void>> futs;
     for (auto c : hpxChildren()) {
@@ -543,8 +540,6 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"gravity.pmmmNearWidth", options.gravity.pmmmNearWidth},
         {"gravity.pmmmBatchParticles", options.gravity.pmmmBatchParticles},
         {"gravity.pmmmOuterInterval", options.gravity.pmmmOuterInterval},
-        {"gravity.expansionDegree",
-            options.gravity.fmmOrder > 0 ? options.gravity.fmmOrder - 1 : 0},
         {"gravity.kernelFamily", options.gravity.kernelFamily},
         {"gravity.kernelDegree", options.gravity.kernelDegree},
         {"gravity.openingAngle", options.gravity.openingAngle},
@@ -663,8 +658,6 @@ bool processOptions(int argc, char* argv[]) {
     double boxLength = 0.0;
     std::string omegaLambdaInput;
     std::string starFormationSeedInput;
-    int expansionDegree = gravity::kBuildFmmOrder > 0 ? gravity::kBuildFmmOrder - 1 : 0;
-    CheckpointSelection checkpointSelection;
     namespace po = hpx::program_options;
     bool rc;
     po::options_description runOpts("Run control");
@@ -895,10 +888,7 @@ bool processOptions(int argc, char* argv[]) {
     gravityOpts.add_options()("gravity.cuda",
         po::value<bool>(&opts.gravity.cuda)->default_value(false),
         "use CUDA for gravitational forces");
-    gravityOpts.add_options()("gravity.expansionDegree",
-        po::value<int>(&expansionDegree)->default_value(expansionDegree),
-        "maximum degree of the potential expansion; must be in the compiled degree range")(
-        "gravity.enabled",
+    gravityOpts.add_options()("gravity.enabled",
         po::value<bool>(&opts.gravity.enabled)->default_value(gravity::kBuildHasGravity),
         "enable gravity")("gravity.errorInterval",
         po::value<int>(&opts.gravity.errorInterval)->default_value(0),
@@ -1110,8 +1100,7 @@ bool processOptions(int argc, char* argv[]) {
         std::cout << "  ROCKSTAR and lightcones: "
                   << (COSMICTIGER_ENABLE_ROCKSTAR ? "enabled" : "disabled") << "\n";
 #if COSMICTIGER_WITH_GRAVITY
-        std::cout << "  Potential expansion degrees: " << kFmmMinOrder - 1 << " through "
-                  << kFmmMaxOrder - 1 << "\n";
+        std::cout << "  Potential expansion degree: " << kFmmOrder - 1 << "\n";
 #endif
         std::cout << "\n";
         auto sortedOptions = commandOpts.options();
@@ -1232,30 +1221,6 @@ bool processOptions(int argc, char* argv[]) {
             opts.output.directory = "./output/" + opts.run.scenario;
         }
     }
-    bool const checkpointSelectionNeeded =
-        gravity::kBuildHasGravity && !isExplicit("gravity.expansionDegree");
-    if (opts.checkpoint.readIndex >= 0 && checkpointSelectionNeeded) {
-        checkpointSelection = readCheckpointSelection(
-            opts.run.test.empty() ? opts.output.directory : "", opts.checkpoint.readIndex);
-        if (!isExplicit("gravity.expansionDegree") && checkpointSelection.expansionOrder > 0) {
-            expansionDegree = checkpointSelection.expansionOrder - 1;
-        }
-        // The integrator is fixed. readCheckpoint validates the saved scheme;
-        // checkpoint metadata cannot select a different runtime algorithm.
-    }
-#if COSMICTIGER_WITH_GRAVITY
-    if (expansionDegree < kFmmMinOrder - 1 || expansionDegree > kFmmMaxOrder - 1) {
-        detail::throwOptionError(
-            "gravity.expansionDegree must be in this build's compiled range [%i,%i]\n",
-            kFmmMinOrder - 1, kFmmMaxOrder - 1);
-    }
-    opts.gravity.fmmOrder = expansionDegree + 1;
-#else
-    if (isExplicit("gravity.expansionDegree")) {
-        detail::throwOptionError("gravity.expansionDegree requires a gravity-enabled build\n");
-    }
-    opts.gravity.fmmOrder = 0;
-#endif
 #if COSMICTIGER_WITH_GRAVITY
     if (opts.gravity.enabled) {
         // The near-field FMM angle follows from the neighbor cube geometry.

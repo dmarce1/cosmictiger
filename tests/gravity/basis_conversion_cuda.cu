@@ -17,7 +17,7 @@
 #include <cosmictiger/gravity/fmm/tree_local.hpp>
 
 // Compile only: nvcc -dc -std=c++20 -arch=sm_86 -I. \
-//   -DORDER=7 -DFMM_MIN_ORDER=3 -DFMM_MAX_ORDER=9 -DCOSMICTIGER_DIMENSION_COUNT=3 \
+//   -DORDER=7 -DCOSMICTIGER_DIMENSION_COUNT=3 \
 //   tests/gravity/basis_conversion_cuda.cu -o /tmp/basis_conversion_cuda.o
 namespace detail {
 template <class Real, int order>
@@ -39,7 +39,7 @@ __device__ void convert(Real const* input, Real* output) {
     for (int i = 0; i < cartesianLocal.size(); ++i) {
         output[(order - 1) * (order - 1) + i] = cartesianLocal[i];
     }
-    if constexpr (order < FMM_MAX_ORDER) {
+    if constexpr (order < ORDER) {
         convert<Real, order + 1>(input, output + 2 * order * order);
     }
 }
@@ -74,35 +74,35 @@ CUDA_EXPORT void treeLocal(double const* input, double* output, bool doPotential
     for (int component = 0; component < 4; ++component) {
         output[component] = field[component];
     }
-    if constexpr (order < FMM_MAX_ORDER) {
+    if constexpr (order < ORDER) {
         treeLocal<order + 1, PositionType, Real>(input, output + 4, doPotential, tiny);
     }
 }
 }    // namespace detail
 
 __global__ void basisConversionFloat(float const* input, float* output) {
-    detail::convert<float, FMM_MIN_ORDER>(input, output);
+    detail::convert<float, ORDER>(input, output);
 }
 
 __global__ void basisConversionDouble(double const* input, double* output) {
-    detail::convert<double, FMM_MIN_ORDER>(input, output);
+    detail::convert<double, ORDER>(input, output);
 }
 
 __global__ void treeLocalFixed32(
     double const* input, double* output, bool doPotential, bool tiny, bool single) {
     if (single) {
-        detail::treeLocal<FMM_MIN_ORDER, Fixed32, float>(input, output, doPotential, tiny);
+        detail::treeLocal<ORDER, Fixed32, float>(input, output, doPotential, tiny);
     } else {
-        detail::treeLocal<FMM_MIN_ORDER, Fixed32>(input, output, doPotential, tiny);
+        detail::treeLocal<ORDER, Fixed32>(input, output, doPotential, tiny);
     }
 }
 
 __global__ void treeLocalFixed64(
     double const* input, double* output, bool doPotential, bool tiny, bool single) {
     if (single) {
-        detail::treeLocal<FMM_MIN_ORDER, Fixed64, float>(input, output, doPotential, tiny);
+        detail::treeLocal<ORDER, Fixed64, float>(input, output, doPotential, tiny);
     } else {
-        detail::treeLocal<FMM_MIN_ORDER, Fixed64>(input, output, doPotential, tiny);
+        detail::treeLocal<ORDER, Fixed64>(input, output, doPotential, tiny);
     }
 }
 
@@ -132,11 +132,11 @@ int main() {
         if (properties.multiProcessorCount < 4) {
             throw std::runtime_error("one SM exceeds the quarter-device test budget");
         }
-        std::array<double, FMM_MAX_ORDER * FMM_MAX_ORDER> input;
+        std::array<double, ORDER * ORDER> input;
         for (size_t i = 0; i < input.size(); ++i) {
             input[i] = .1 + .01 * i;
         }
-        constexpr size_t kOutputs = 4 * (FMM_MAX_ORDER - FMM_MIN_ORDER + 1);
+        constexpr size_t kOutputs = 4 * (ORDER - ORDER + 1);
         std::array<double, kOutputs> output{}, expected{};
         double* deviceInput = nullptr;
         double* deviceOutput = nullptr;
@@ -151,20 +151,20 @@ int main() {
                     for (bool doPotential : {false, true}) {
                         if (wide) {
                             if (single) {
-                                detail::treeLocal<FMM_MIN_ORDER, Fixed64, float>(
+                                detail::treeLocal<ORDER, Fixed64, float>(
                                     input.data(), expected.data(), doPotential, tiny);
                             } else {
-                                detail::treeLocal<FMM_MIN_ORDER, Fixed64>(
+                                detail::treeLocal<ORDER, Fixed64>(
                                     input.data(), expected.data(), doPotential, tiny);
                             }
                             treeLocalFixed64<<<1, 1>>>(
                                 deviceInput, deviceOutput, doPotential, tiny, single);
                         } else {
                             if (single) {
-                                detail::treeLocal<FMM_MIN_ORDER, Fixed32, float>(
+                                detail::treeLocal<ORDER, Fixed32, float>(
                                     input.data(), expected.data(), doPotential, tiny);
                             } else {
-                                detail::treeLocal<FMM_MIN_ORDER, Fixed32>(
+                                detail::treeLocal<ORDER, Fixed32>(
                                     input.data(), expected.data(), doPotential, tiny);
                             }
                             treeLocalFixed32<<<1, 1>>>(
@@ -191,7 +191,7 @@ int main() {
         checkCuda(cudaFree(deviceInput));
         std::printf("Tree local CUDA parity q=%d..%d: %zu checks, max error %.3e; %d SMs, "
                     "16 serialized launches of 1 block x 1 thread\n",
-            FMM_MIN_ORDER, FMM_MAX_ORDER, checks, worst, properties.multiProcessorCount);
+            ORDER, ORDER, checks, worst, properties.multiProcessorCount);
     } catch (std::exception const& error) {
         std::fprintf(stderr, "%s\n", error.what());
         return 1;

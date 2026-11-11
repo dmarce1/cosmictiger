@@ -20,16 +20,11 @@ The FMM uses the generator imported from
 at commit `7ba8f1829fdede7348a1418b7cb36c0e7a955302`. Its Boost license is retained
 in `tools/cartesian/LICENSE`; the surrounding application remains GPL.
 
-Kernels are generated for every supported FMM order, 3 through 9: source
-degrees 1 through 7 paired with local degrees 2 through 8. CMake's
-`COSMICTIGER_EXPANSION_DEGREE` selects one potential degree or an inclusive
-range, defaulting to `4-6`; these map to internal orders 5 through 7.
-The corresponding `FMM_MIN_ORDER` and
-`FMM_MAX_ORDER` preprocessor guards exclude other orders from compilation while
-retaining all orders in the source headers. A run selects one compiled
-potential degree with `gravity.expansionDegree`, defaulting to the largest
-enabled degree, six in the default range. `fmmDispatch()` switches to the
-corresponding internal order's instantiation at coarse boundaries.
+CMake generates one operator set for `COSMICTIGER_EXPANSION_DEGREE` (default 6,
+supported values 2 through 8). Degree d uses source degree d-1, local degree d,
+and internal order d+1. Tree and CUDA calls use this order directly; there is
+no runtime selector or order dispatcher. Generated headers reside in each
+build directory, allowing independent builds with different degrees.
 At potential degree 6 (internal order 7) the source stores 36 coefficients and the local stores 49 Cartesian
 coefficients; in general a degree-`d` tensor stores
 `(d + 1)^2` coefficients. Indices are rank-major, with `nz=0` followed by `nz=1`.
@@ -102,8 +97,8 @@ cmake --build build --target generate_fmm_kernels
 
 The generator defaults to the source header directory and uses the repository's
 clang-format configuration. It emits Cartesian and spherical families for FMM
-orders 3 through 9. `kernels/cartesian_tracefree_config.hpp` records the generated
-range. Cartesian operators live in `kernels/cartesian_tracefree/m2l.hpp`,
+the requested `--degree` (default 6). `kernels/cartesian_tracefree_config.hpp`
+records the generated degree. Cartesian operators live in `kernels/cartesian_tracefree/m2l.hpp`,
 `m2m.hpp`, `l2l.hpp`, `p2m.hpp`, `p2l.hpp`, `m2p.hpp`, and `l2p.hpp`;
 the cooperative CUDA translation is in `l2l_warp.hpp`. Spherical operators are in
 `kernels/spherical_kernels.hpp` and `kernels/spherical_ewald_kernels.hpp`.
@@ -112,18 +107,18 @@ The same Python entry point emits the spherical Ewald Green evaluator used to
 build the PMMM filter.
 The compatibility targets `generate_cartesian_kernels` and
 `cosmictiger_generated_kernels` invoke the same explicit regeneration command.
-This command always emits orders 3 through 9, regardless of the selected
-compiled range.
+CMake generates only the configured degree in its build directory, automatically
+before compilation; direct generator invocation updates the source references.
 Regeneration requires Python 3 and clang-format. Never hand-edit generated
 headers; `--check` verifies them without writing, and CTest's
-`generated_fmm_current` runs that comparison against the source headers.
+`generated_fmm_current` runs that comparison against the generated build headers.
 
 `cartesian_kernels` checks independent Cartesian polynomial references, translations,
 nonzero dipoles, the truncated direct-particle remainder
-series, and SIMD lanes for every order in the selected compiled range,
-printing one pass line per order with the worst normalized discrepancy it saw.
+series, and SIMD lanes for the build order,
+printing a pass line with the worst normalized discrepancy it saw.
 `cartesian_kernels_cuda` executes the same operations on the device in float,
-one launch per order. The PMMM gravity tests compare periodic forces
+at the build order. The PMMM gravity tests compare periodic forces
 and potentials with an independent Ewald sum.
 
 `cartesian_l2l_cuda` independently checks every coefficient and every lane after one

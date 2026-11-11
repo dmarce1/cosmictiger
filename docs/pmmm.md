@@ -9,7 +9,7 @@ through six. A gravity-only configuration is:
 
 ```sh
 cmake -S . -B build_pmmm -DCOSMICTIGER_ENABLE_SPH=OFF \
-  -DCOSMICTIGER_EXPANSION_DEGREE=4-6
+  -DCOSMICTIGER_EXPANSION_DEGREE=6
 cmake --build build_pmmm --parallel 12
 ```
 
@@ -20,8 +20,8 @@ PMMM-FMM is the only gravity solver; `gravity.method.near` is retired.
 
 The sole integration scheme is hierarchical short gravity with mandatory outer
 long kicks and midpoint SPH, selected automatically.
-`gravity.expansionDegree` selects a compiled potential degree and defaults to
-the largest enabled degree, six in the default range.
+`COSMICTIGER_EXPANSION_DEGREE` selects the single build-time potential degree
+(default six). There is no runtime degree selector.
 
 PMMM's forward, inverse, and cached Green-function FFTs run their parallel jobs
 on the existing HPX worker pool through FFTW's threading callback. They share
@@ -36,7 +36,6 @@ threads so waiting for the shared planner lock cannot block HPX workers.
 
 ```sh
 ./build_pmmm/cosmictiger \
-  --gravity.expansionDegree=6 \
   --gravity.meshSize=32 --gravity.pmmmNearWidth=2 \
   --run.darkMatterParticleCount=32768 --run.gasParticleCount=32768 --hydro.enabled=false \
   --gravity.cuda=false --hpx:threads=12
@@ -49,7 +48,6 @@ The runtime settings can also be supplied in an INI file:
 numberOfOutputs = 99 # includes both endpoint states
 
 [gravity]
-expansionDegree = 6
 meshSize = 32
 pmmmNearWidth = 2
 
@@ -106,7 +104,7 @@ migration or particle permutation may intervene between the two passes.
 Production has no direct spherical particle-to-mesh P2M or mesh-to-particle L2P
 path. Their former wrappers survive only as independent test references.
 
-`gravity.expansionDegree` sets the shared PMMM and near FMM potential degree.
+`COSMICTIGER_EXPANSION_DEGREE` fixes the shared PMMM and near FMM potential degree.
 PMMM derives the near-field opening angle `gravity.openingAngle` as
 `sqrt(3)/(w+1)`; it is not a configurable option. At the
 default ghost width of two, theta is approximately 0.577350269. This theta stays
@@ -118,7 +116,7 @@ distribution. With the near FMM capability enabled:
 ```sh
 ./build_pmmm/cosmictiger \
   --gravity.meshSize=32 --gravity.pmmmNearWidth=2 \
-  --gravity.expansionDegree=6 --compute.bucketSize=32 \
+  --compute.bucketSize=32 \
   --hydro.enabled=false --gravity.cuda=false
 ```
 
@@ -153,8 +151,8 @@ the complete ownership and generated-code layout.
 ## Expansion degrees and coefficient conventions
 
 The PMMM far field and near FMM share a potential-degree convention and total-degree truncation.
-`COSMICTIGER_EXPANSION_DEGREE=d` compiles one degree; an inclusive range such as
-`4-6` compiles every degree in that range. Supported degrees are two through
+`COSMICTIGER_EXPANSION_DEGREE=d` generates and compiles exactly one degree.
+Supported degrees are two through
 eight. For potential degree `d`, source multipoles have degree `S=d-1`, local
 expansions have degree `L=d`, and a contraction retains only terms with source
 degree plus local degree at most `d`. The internal historical order is
@@ -586,10 +584,9 @@ and momentum against a split PMMM run with shorter outer intervals over the same
 Checkpoints identify PMMM separately from FMM and record its requested mesh size,
 coarse mesh size, expansion degree (in the historical internal order
 convention), near width, fixed FMM solver identity, and timestep compatibility parameters.
-Omitted runtime algorithm, degree, and integrator selectors inherit the saved
-degree on restart. Incompatible selections are rejected. The saved near-field
-identity must be FMM; PP checkpoints are retired. A larger compiled degree range
-does not invalidate a checkpoint.
+The executable must match the saved expansion degree and fixed integration
+scheme; incompatible restarts are rejected. The saved near-field identity must
+be FMM; PP checkpoints are retired.
 Historical ordinary PM checkpoints are unsupported. Checkpoints do not store
 FFTW plans or Green spectra: the first solve after restart reconstructs the
 cache, then reuses it for later steps.

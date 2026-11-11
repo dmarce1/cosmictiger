@@ -403,14 +403,14 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
             }
             flops += 3;
         }
-        multipoleFlops += fmmDispatch([&](auto orderTag) {
+        multipoleFlops += [&]() {
             if (multi.isDouble()) {
-                return treeComputeMultipole<decltype(orderTag)::value>(
+                return treeComputeMultipole<kFmmOrder>(
                     multi.precise(), ml, mr, xl, xr, centerPosition, sources.geometry);
             }
-            return treeComputeMultipole<decltype(orderTag)::value>(
+            return treeComputeMultipole<kFmmOrder>(
                 multi.single(), ml.single(), mr.single(), xlValue, xrValue, xcValue);
-        });
+        }();
         children[kLeftChild] = rcl.id;
         children[kRightChild] = rcr.id;
     } else {
@@ -484,14 +484,13 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
         }
         flops += 4;    // Square root and three center-to-fixed conversions below.
         children[kLeftChild].index = children[kRightChild].index = -1;
-        multipoleFlops += fmmDispatch([&](auto orderTag) {
+        multipoleFlops += [&]() {
             if (multi.isDouble()) {
-                return treeComputeMultipole<decltype(orderTag)::value>(
+                return treeComputeMultipole<kFmmOrder>(
                     multi.precise(), particleRange, centerPosition, sources);
             }
-            return treeComputeMultipole<decltype(orderTag)::value>(
-                multi.single(), particleRange, xcValue, sources);
-        });
+            return treeComputeMultipole<kFmmOrder>(multi.single(), particleRange, xcValue, sources);
+        }();
         for (int dim = 0; dim < kDimensions; dim++) {
             centerPosition[dim] = xcValue[dim];
             // P2M counts its own center conversion; this is the stored center.
@@ -525,7 +524,7 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
     node.leaf = isleaf;
     treeStoreNode(index, node, multi.narrow());
     if (multi.isDouble()) {
-        flops += fmmMultipoleCoefficientCount(fmmOrder());
+        flops += fmmMultipoleCoefficientCount(kFmmOrder);
     }
     rc.id.index = index;
     rc.id.proc = hpxRank();

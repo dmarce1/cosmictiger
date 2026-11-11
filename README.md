@@ -113,14 +113,16 @@ physics:
 cmake -S . -B build/release_cpu -DCMAKE_BUILD_TYPE=Release \
   -DCOSMICTIGER_WITH_CUDA=OFF -DBUILD_TESTING=OFF \
   -DCOSMICTIGER_ENABLE_GRAVITY=ON \
-  -DCOSMICTIGER_EXPANSION_DEGREE=4-6
+  -DCOSMICTIGER_EXPANSION_DEGREE=6
 cmake --build build/release_cpu --target cosmictiger --parallel 3
 build/release_cpu/cosmictiger --gravity.meshSize=16 \
   --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
 ```
 
 Fresh defaults enable PMMM gravity, SPH, equilibrium cooling, ROCKSTAR, and
-potential expansion degrees 4-6. The sole integration scheme uses hierarchical
+potential expansion degree 6. Each executable generates and compiles one degree;
+change COSMICTIGER_EXPANSION_DEGREE and rebuild to use another (2 through 8).
+The sole integration scheme uses hierarchical
 short gravity kicks, long kicks at outer-interval boundaries, and midpoint SPH.
 
 The gravity solver is PMMM: a periodic FFT far field with an FMM near field.

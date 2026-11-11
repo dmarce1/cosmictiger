@@ -127,9 +127,8 @@ void checkUnitsOutputCommandLine(DBfile* file) {
         "CLI effective radius units");
     requireUnitsOutputClose(
         readUnitsOutputScalar(file, "/cli/gravity/timestepEta"), 0.3, "CLI timestep eta");
-    requireUnitsOutput(readUnitsOutputInteger(file, "/cli/gravity/expansionDegree") ==
-            getOptions().gravity.fmmOrder - 1,
-        "CLI potential expansion degree");
+    requireUnitsOutput(DBInqVarExists(file, "/cli/gravity/expansionDegree") == 0,
+        "retired CLI potential expansion degree is absent");
     requireUnitsOutputClose(
         readUnitsOutputScalar(file, "/cli/hydro/minSmoothingLength"), 0.2, "CLI minimum support");
     requireUnitsOutputClose(

@@ -548,8 +548,6 @@ def generateCartesianTracefree(minLocalDegree=2, maxLocalDegree=8, independentM2
                  'p2l':'kP2LFlops', 'm2p':'kM2PFlops', 'l2p':'kL2PFlops'}
     for localDegree in range(minLocalDegree, maxLocalDegree + 1):
         sourceDegree = localDegree - 1
-        guard = (f'#if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= {localDegree + 1}) && '
-                 f'(!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= {localDegree + 1})')
         direct, directStats = emitKernel(localDegree, independentM2lRatios)
         statistics.append(directStats)
         translations, translationStats = generateTranslations(sourceDegree, localDegree, sys.modules[__name__])
@@ -569,15 +567,13 @@ def generateCartesianTracefree(minLocalDegree=2, maxLocalDegree=8, independentM2
                 'm2p': [(particles[2], particleStats[2], 'm2p')],
                 'l2p': [(particles[3], particleStats[3], 'l2p')]}
         for operator, variants in code.items():
-            parts[operator].append(guard)
             parts[operator].append(f'// FMM order {localDegree + 1}.')
             for body, counts, variant in variants:
                 parts[operator].append(replaceCartesianFields(body, sourceDegree, localDegree))
                 parts[operator].append(f'template <> inline constexpr int '
                                        f'{flopNames[variant]}<{localDegree if operator in ("m2l", "l2l", "p2l", "l2p") else sourceDegree}> = '
                                        f'{counts["conventional_flops"]};')
-            parts[operator].append('#endif')
-        parts['l2l_warp'] += [guard, warp, '#endif']
+        parts['l2l_warp'].append(warp)
     outputs = {}
     for operator, definitions in parts.items():
         root = f'cartesian_tracefree/{operator}.hpp'
@@ -786,10 +782,8 @@ def useUnqualifiedMathInGeneratedFunctions(cpp):
 def main():
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--check',action='store_true',help='fail if the files in --output-dir differ')
-    ap.add_argument('--min-order',dest='minLocalDegree',type=int,default=2,
-                    help='smallest local degree to emit; FMM order is local degree + 1 (default: 2)')
-    ap.add_argument('--max-order',dest='maxLocalDegree',type=int,default=8,
-                    help='largest local degree to emit (default: 8)')
+    ap.add_argument('--degree', type=int, default=6, choices=range(2, 9),
+                    help='single potential expansion degree to emit (default: 6)')
     ap.add_argument('--output-dir',dest='outputDir',type=Path,default=outputDirectory,
                     help='directory receiving the generated headers and operation counts '
                          '(default: cosmictiger/gravity/kernels in the source tree)')
@@ -798,13 +792,9 @@ def main():
     ap.add_argument('--no-format',dest='noFormat',action='store_true',
                     help='skip clang-format for temporary output; source headers use formatting')
     args=ap.parse_args()
-    if args.minLocalDegree < 2 or args.maxLocalDegree < args.minLocalDegree:
-        ap.error('local degrees must form an inclusive range starting at 2 or more')
-    if args.maxLocalDegree > 8:
-        ap.error('local degree must be at most 8 (FMM order 9), the supported production range')
     from fmm.constants import hoistConstants
 
-    outputs=generate(args.minLocalDegree,args.maxLocalDegree,args.independentM2lRatios)
+    outputs=generate(args.degree,args.degree,args.independentM2lRatios)
     notice = (projectRoot / 'tools/cartesian/generated_notice.txt').read_text()
     for name, cpp in list(outputs.items()):
         if not name.endswith('.hpp'):
@@ -823,9 +813,6 @@ def main():
         if not args.noFormat:
             cpp = subprocess.run(['clang-format', '--style=file', '--assume-filename=' + str(outputDirectory / name)],
                                  input=cpp, text=True, capture_output=True, check=True).stdout
-        # Separate adjacent FMM-order guards in every generated kernel family.
-        cpp = cpp.replace('#endif\n#if (!defined(FMM_MIN_ORDER)',
-                          '#endif\n\n#if (!defined(FMM_MIN_ORDER)')
         outputs[name] = notice + '\n' + cpp
 
     failed=[]
@@ -839,10 +826,7 @@ def main():
                 path.write_text(text)
     if failed: ap.exit(1,'Stale generated files: '+', '.join(failed)+'\n')
     print('Generated files are current.' if args.check else
-          f'Generated Cartesian and Spherical operators '
-          f'for local degrees {args.minLocalDegree}..{args.maxLocalDegree} '
-          f'(available FMM orders {args.minLocalDegree + 1}..{args.maxLocalDegree + 1}; '
-          'compiled runtime range is set by CMake).')
+          f'Generated Cartesian and Spherical operators for potential degree {args.degree}.')
 
 
 if __name__=='__main__': main()

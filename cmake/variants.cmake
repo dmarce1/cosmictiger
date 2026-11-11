@@ -1,5 +1,8 @@
 # Build one application with the configured capabilities.
 add_library(cosmictiger_platform INTERFACE)
+if(COSMICTIGER_WITH_GRAVITY)
+    add_dependencies(cosmictiger_platform generate_fmm_kernels)
+endif()
 # Kernel tables in the shared core have dimension-dependent layouts too.
 target_compile_definitions(cosmictiger_platform INTERFACE
     COSMICTIGER_DIMENSION_COUNT=${COSMICTIGER_DIMENSION_COUNT})
@@ -54,8 +57,6 @@ target_compile_definitions(cosmictiger_default_config INTERFACE
     COSMICTIGER_DIMENSION_COUNT=${COSMICTIGER_DIMENSION_COUNT}
     COSMICTIGER_POSITION_BITS=${COSMICTIGER_POSITION_BITS}
     ORDER=${cosmictiger_default_fmm_order}
-    FMM_MIN_ORDER=${COSMICTIGER_FMM_MIN_ORDER}
-    FMM_MAX_ORDER=${COSMICTIGER_FMM_MAX_ORDER}
     MAX_BUCKET_SIZE=${COSMICTIGER_WITH_MAX_BUCKET})
 
 if(COSMICTIGER_WITH_GRAVITY)
@@ -109,22 +110,21 @@ if(COSMICTIGER_WITH_CUDA AND COSMICTIGER_WITH_STARS)
     set_target_properties(cosmictiger_star_formation_cuda PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 endif()
 if(COSMICTIGER_WITH_GRAVITY)
-    foreach(order IN LISTS COSMICTIGER_FMM_ORDERS)
-        set(FMM_INSTANCE_ORDER ${order})
-        configure_file(src/gravity/fmm_instance_cpu.cpp.in
-            ${PROJECT_BINARY_DIR}/instances/fmm_instance_cpu_${order}.cpp @ONLY)
+    set(order ${cosmictiger_default_fmm_order})
+    set(FMM_INSTANCE_ORDER ${order})
+    configure_file(src/gravity/fmm_instance_cpu.cpp.in
+        ${PROJECT_BINARY_DIR}/instances/fmm_instance_cpu_${order}.cpp @ONLY)
+    list(APPEND cosmictiger_enabled_sources
+        ${PROJECT_BINARY_DIR}/instances/fmm_instance_cpu_${order}.cpp)
+    if(COSMICTIGER_WITH_CUDA)
+        configure_file(src/gravity/fmm_instance_cuda.cu.in
+            ${PROJECT_BINARY_DIR}/instances/fmm_instance_cuda_${order}.cu @ONLY)
         list(APPEND cosmictiger_enabled_sources
-            ${PROJECT_BINARY_DIR}/instances/fmm_instance_cpu_${order}.cpp)
-        if(COSMICTIGER_WITH_CUDA)
-            configure_file(src/gravity/fmm_instance_cuda.cu.in
-                ${PROJECT_BINARY_DIR}/instances/fmm_instance_cuda_${order}.cu @ONLY)
-            list(APPEND cosmictiger_enabled_sources
-                ${PROJECT_BINARY_DIR}/instances/fmm_instance_cuda_${order}.cu)
-        endif()
-    endforeach()
+            ${PROJECT_BINARY_DIR}/instances/fmm_instance_cuda_${order}.cu)
+    endif()
 endif()
 add_library(cosmictiger_objects OBJECT ${cosmictiger_enabled_sources}
-    ${cosmictiger_header_files} ${COSMICTIGER_GENERATED_FMM_FILES})
+    ${cosmictiger_header_files})
 target_link_libraries(cosmictiger_objects PUBLIC cosmictiger_core cosmictiger_default_config)
 if(COSMICTIGER_WITH_GRAVITY)
     target_include_directories(cosmictiger_objects SYSTEM PUBLIC

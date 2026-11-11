@@ -110,11 +110,10 @@ namespace detail {
 class PmmmKernelFlops : public ::testing::TestWithParam<int> {};
 
 TEST_P(PmmmKernelFlops, SourceOperationsMatchExecutedArithmetic) {
-    fmmDispatch(GetParam(), [](auto selectedOrder) {
-        pmmm_test::detail::checkKernelCounts<decltype(selectedOrder)::value>();
-    });
+    {
+        pmmm_test::detail::checkKernelCounts<kFmmOrder>();
+    };
 }
 
-INSTANTIATE_TEST_SUITE_P(AllOrders, PmmmKernelFlops,
-    ::testing::Range(kFmmMinOrder, kFmmMaxOrder + 1),
+INSTANTIATE_TEST_SUITE_P(AllOrders, PmmmKernelFlops, ::testing::Range(kFmmOrder, kFmmOrder + 1),
     [](::testing::TestParamInfo<int> const& info) { return "Order" + std::to_string(info.param); });

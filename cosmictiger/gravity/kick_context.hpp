@@ -17,5 +17,5 @@ struct KickContext {
     void (*publishReturn)(KickReturn) = nullptr;
     KickGpuExecutor gpuExecutor = nullptr;
 };
-KickReturn kickWalkDispatch(KickParameters, ExpansionBuffer, Vector3<Position>, TreeId,
+KickReturn kickTreeWalk(KickParameters, ExpansionBuffer, Vector3<Position>, TreeId,
     Vector<TreeId>, std::shared_ptr<KickWorkspace>, KickContext const&);

@@ -21,10 +21,10 @@
 namespace pmmm {
 namespace detail {
 
-    /// Reject a mesh expansion order outside the compiled FMM range.
+    /// Require the mesh order to match the executable.
     void checkOrder(int order) {
-        if (order < kFmmMinOrder || order > kFmmMaxOrder) {
-            throw std::invalid_argument("PMMM order is outside the compiled FMM order range");
+        if (order != kFmmOrder) {
+            throw std::invalid_argument("PMMM order does not match the build order");
         }
     }
 
@@ -118,8 +118,8 @@ FlopCount green(int order, double* coefficients, Vector3<double> const& boxOffse
         throw std::invalid_argument("PMMM primary origin must be excluded by the near-field mask");
     }
     FlopCount count = 0;
-    fmmDispatch(order, [&](auto selectedOrder) {
-        constexpr int kDegree = decltype(selectedOrder)::value - 1;
+    {
+        constexpr int kDegree = kFmmOrder - 1;
         double trace = 0.0;
         cosmictiger::gravity::spherical::evaluateEwaldGreen<kDegree, double>(
             coefficients, trace, boxOffset[0], boxOffset[1], boxOffset[2]);
@@ -142,7 +142,7 @@ FlopCount green(int order, double* coefficients, Vector3<double> const& boxOffse
             scale *= cellWidth;
         }
         count += (kDegree + 1) * (kDegree + 1) + (kDegree + 1);
-    });
+    }
     return count;
 }
 

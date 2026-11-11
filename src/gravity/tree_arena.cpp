@@ -47,7 +47,7 @@ static Vector<TreeAllocator*> allocatorList;
 static thread_local TreeAllocator allocator;
 static TreeNode* nodes = nullptr;
 // Positioned multipole arena: one record of multipoleStride bytes per node slot,
-// sized for the runtime FMM order when the arena is (re)allocated. The stride
+// sized for the build FMM order when the arena is (re)allocated. The stride
 // is the record size rounded up to 16 bytes (fmmPositionedMultipoleStride), so
 // the CUDA kick stages whole records with 16-byte asynchronous copies.
 static char* multis = nullptr;
@@ -79,8 +79,8 @@ long long treeNodesSize() {
     return nodesSize;
 }
 // The coefficients follow the position header without padding for every order.
-static_assert(offsetof(FmmMultiPos<kFmmMinOrder>, multi) == sizeof(MultipolePosition) &&
-        offsetof(FmmMultiPos<kFmmMaxOrder>, multi) == sizeof(MultipolePosition),
+static_assert(offsetof(FmmMultiPos<kFmmOrder>, multi) == sizeof(MultipolePosition) &&
+        offsetof(FmmMultiPos<kFmmOrder>, multi) == sizeof(MultipolePosition),
     "Positioned multipole coefficients must directly follow the position");
 
 /// Locate a node's variable-stride multipole record in the coefficient arena.
@@ -101,7 +101,7 @@ static float const* treeMultipoleCoefficients(MultipolePosition const* record) {
 
 /// Copy the active-order coefficients and zero transport padding in the destination record.
 static void treeWriteMultipole(MultipolePosition* record, MultipoleBuffer const& multipole) {
-    int const count = fmmMultipoleCoefficientCount(fmmOrder());
+    int const count = fmmMultipoleCoefficientCount(kFmmOrder);
     int const slots = int((multipoleStride - sizeof(MultipolePosition)) / sizeof(float));
     float* coefficients = treeMultipoleCoefficients(record);
     for (int i = 0; i < count; i++) {
@@ -122,7 +122,7 @@ MultipolePosition* treeAddMultipole(
     for (int dim = 0; dim < kDimensions; ++dim) {
         empty = empty && pos[dim].raw() == 0;
     }
-    for (int coefficient = 0; coefficient < fmmMultipoleCoefficientCount(fmmOrder());
+    for (int coefficient = 0; coefficient < fmmMultipoleCoefficientCount(kFmmOrder);
         ++coefficient) {
         empty = empty && multipole[coefficient] == 0.0f;
     }
@@ -153,7 +153,7 @@ MultipolePosition* treeAddMultipole(
 
 /// Copy the active-order packed coefficients into a multipole buffer.
 void treeReadMultipole(MultipolePosition const* record, MultipoleBuffer& multipole) {
-    int const count = fmmMultipoleCoefficientCount(fmmOrder());
+    int const count = fmmMultipoleCoefficientCount(kFmmOrder);
     float const* coefficients = treeMultipoleCoefficients(record);
     for (int i = 0; i < count; i++) {
         multipole[i] = coefficients[i];
@@ -290,7 +290,7 @@ void treeAllocateNodesLocal(size_t capacity) {
     if (sz > size_t(std::numeric_limits<int>::max() - treeAllocLineSize)) {
         throw std::overflow_error("Tree arena exceeds TreeId index range");
     }
-    size_t const stride = fmmPositionedMultipoleStride(fmmOrder());
+    size_t const stride = fmmPositionedMultipoleStride(kFmmOrder);
     std::vector<unsigned char> freshPopulation(sz, 0);
     if (nodesSize < sz || multipoleStride != stride) {
         TreeNode* freshNodes =

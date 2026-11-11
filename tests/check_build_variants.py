@@ -26,10 +26,10 @@ class BuildFeaturesTest(unittest.TestCase):
     def configure(self, **changes):
         self.features = {feature: feature in ("GRAVITY", "ROCKSTAR", "SPH", "CHEMISTRY", "INTEGRATOR_HIERARCHICAL") for feature in FEATURES}
         self.features.update(changes)
-        self.degrees = (4, 6)
+        self.degrees = (6, 6)
         self.commands = []
         self.cache = {"CMAKE_HOME_DIRECTORY": str(self.sourceDirectory), "CMAKE_GENERATOR": "Unix Makefiles",
-                      "COSMICTIGER_EXPANSION_DEGREE": "4-6", "COSMICTIGER_POSITION_TYPE": "fixed32",
+                      "COSMICTIGER_EXPANSION_DEGREE": "6", "COSMICTIGER_POSITION_TYPE": "fixed32",
                       "COSMICTIGER_WITH_CUDA": "OFF", "BUILD_TESTING": "OFF"}
         self.cache.update({"COSMICTIGER_ENABLE_" + key: "ON" if value else "OFF"
                            for key, value in self.features.items()})
@@ -204,7 +204,7 @@ class BuildFeaturesTest(unittest.TestCase):
 
     def testDefaultRange(self):
         self.assertIn("one application", self.check())
-        self.assertIn("potential degrees=4-6", self.check())
+        self.assertIn("potential degrees=6-6", self.check())
 
     def testSoleIntegrator(self):
         self.configure(INTEGRATOR_HIERARCHICAL=True, INTEGRATOR_GLOBAL=False, INTEGRATOR_TRADITIONAL=False)
@@ -219,17 +219,15 @@ class BuildFeaturesTest(unittest.TestCase):
         self.assertIn("Build features passed", self.check())
         self.assertEqual(self.definitions["ORDER"], "0")
 
-    def testSingleDegree(self):
-        self.cache["COSMICTIGER_EXPANSION_DEGREE"] = "6"
-        self.commands = [entry for entry in self.commands if not any(
-            entry["file"].endswith(f"fmm_instance_cpu_{order}.cpp") for order in (5, 6))]
-        for entry in self.commands:
-            entry["arguments"] = [arg.replace("FMM_MIN_ORDER=5", "FMM_MIN_ORDER=7") for arg in entry["arguments"]]
-        self.assertIn("potential degrees=6-6", self.check())
+    def testExtraOrderRejected(self):
+        self.addCompilation("cosmictiger_objects", "instances/fmm_instance_cpu_5.cpp", self.definitions)
+        with self.assertRaises(ValueError):
+            self.check()
 
     def testBounds(self):
-        self.assertEqual(degreeRange("2-8"), (2, 8))
-        for invalid in ("1", "9", "6-4", "4;5;6", "4--6", "4-9", ""):
+        self.assertEqual(degreeRange("2"), (2, 2))
+        self.assertEqual(degreeRange("8"), (8, 8))
+        for invalid in ("1", "9", "2-8", "4-6", "6-4", "4;5;6", "4--6", "4-9", ""):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
                 degreeRange(invalid)
 
@@ -428,7 +426,7 @@ class BuildFeaturesTest(unittest.TestCase):
             self.check()
 
     def testMissingDegreeInstantiation(self):
-        self.commands = [entry for entry in self.commands if not entry["file"].endswith("fmm_instance_cpu_6.cpp")]
+        self.commands = [entry for entry in self.commands if not entry["file"].endswith("fmm_instance_cpu_7.cpp")]
         with self.assertRaisesRegex(ValueError, "generated FMM instances"):
             self.check()
 
@@ -549,7 +547,7 @@ class FeatureConfigurationTest(unittest.TestCase):
             script.write_text("\n".join(f"set({key} {value} CACHE STRING \"test\")"
                                         for key, value in values.items()) +
                               f'\ninclude("{source}")\n' +
-                              'message(STATUS "range=${COSMICTIGER_FMM_MIN_ORDER}-${COSMICTIGER_FMM_MAX_ORDER}")\n'
+                              'message(STATUS "range=${cosmictiger_default_fmm_order}-${cosmictiger_default_fmm_order}")\n'
                               'message(STATUS "gravity=${COSMICTIGER_WITH_GRAVITY}")\n'
                               'message(STATUS "gravity_option=${COSMICTIGER_ENABLE_GRAVITY}")\n'
                               'message(STATUS "chemistry=${COSMICTIGER_ENABLE_CHEMISTRY}")\n'
@@ -564,7 +562,7 @@ class FeatureConfigurationTest(unittest.TestCase):
     def testDefaultRange(self):
         result = self.configure({})
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("range=5-7", result.stdout)
+        self.assertIn("range=7-7", result.stdout)
         self.assertIn("gravity_option=ON", result.stdout)
         self.assertIn("gravity=ON", result.stdout)
         self.assertIn("chemistry=ON", result.stdout)
@@ -725,14 +723,14 @@ class FeatureConfigurationTest(unittest.TestCase):
                     self.assertEqual(path in selected, effective and testing, path)
 
     def testSingleAndBoundaryDegrees(self):
-        for value, orders in (("2", "3-3"), ("8", "9-9"), ("2-8", "3-9")):
+        for value, orders in (("2", "3-3"), ("8", "9-9")):
             with self.subTest(value=value):
                 result = self.configure({"COSMICTIGER_EXPANSION_DEGREE": value})
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertIn("range=" + orders, result.stdout)
 
     def testInvalidRangesFailBeforeDependencies(self):
-        for value in ("1", "9", "6-4", "4-9", "4--6"):
+        for value in ("1", "9", "2-8", "4-6", "6-4", "4-9", "4--6"):
             with self.subTest(value=value):
                 result = self.configure({"COSMICTIGER_EXPANSION_DEGREE": value})
                 self.assertNotEqual(result.returncode, 0)
@@ -763,7 +761,7 @@ class FeatureConfigurationTest(unittest.TestCase):
                 result = self.configure({"COSMICTIGER_ENABLE_GRAVITY": "ON" if gravity else "OFF"})
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertIn("gravity=" + ("ON" if gravity else "OFF"), result.stdout)
-                self.assertIn("range=" + ("5-7" if gravity else "0-0"), result.stdout)
+                self.assertIn("range=" + ("7-7" if gravity else "0-0"), result.stdout)
 
     def testGravityControlsActualSourceSelection(self):
         source = Path(__file__).resolve().parents[1]

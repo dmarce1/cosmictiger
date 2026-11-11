@@ -17,20 +17,18 @@ void cosmictigerAssert(char const*, bool condition, char const*, int) {
 
 namespace {
 
-using CartesianMultipole = cosmictiger::gravity::cartesian::Multipole<double, kFmmDefaultOrder>;
-using CartesianExpansion = cosmictiger::gravity::cartesian::Expansion<double, kFmmDefaultOrder>;
-using SphericalMultipole = cosmictiger::gravity::spherical::Multipole<double, kFmmDefaultOrder>;
+using CartesianMultipole = cosmictiger::gravity::cartesian::Multipole<double, kFmmOrder>;
+using CartesianExpansion = cosmictiger::gravity::cartesian::Expansion<double, kFmmOrder>;
+using SphericalMultipole = cosmictiger::gravity::spherical::Multipole<double, kFmmOrder>;
 using Field = cosmictiger::gravity::Field<double>;
-static_assert(cosmictiger::gravity::spherical::Multipole<double, 3>::kCount_ == 4);
+static_assert(cosmictiger::gravity::spherical::Multipole<double, kFmmOrder>::kCount_ ==
+    (kFmmOrder - 1) * (kFmmOrder - 1));
 
 template <class Target, class Source>
 concept HasM2L = requires(Target& target, Source const& source,
     Vector3<double> const& displacement) { M2L(target, source, displacement); };
 
 static_assert(!HasM2L<CartesianExpansion, SphericalMultipole>);
-constexpr int kDifferentOrder = kFmmDefaultOrder == 9 ? 8 : kFmmDefaultOrder + 1;
-static_assert(!HasM2L<cosmictiger::gravity::cartesian::Expansion<double, kDifferentOrder>,
-    CartesianMultipole>);
 
 template <class Multipole, class Expansion>
 void checkPointFields() {
@@ -77,7 +75,7 @@ TEST(FmmApi, CartesianPointFields) {
 TEST(FmmApi, SphericalDipolePacking) {
     SphericalMultipole moments{};
     Vector3<double> const offset{0.4, -0.3, 0.2};
-    cosmictiger::gravity::spherical::detail::P2M<kFmmDefaultOrder - 2, double>(
+    cosmictiger::gravity::spherical::detail::P2M<kFmmOrder - 2, double>(
         moments, 2.0, offset[0], offset[1], offset[2]);
     EXPECT_DOUBLE_EQ(moments.real(0, 0), 2.0);
     EXPECT_DOUBLE_EQ(moments.real(1, 0), -0.4);

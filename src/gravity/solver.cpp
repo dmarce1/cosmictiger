@@ -50,8 +50,8 @@ void prepare(SolveRequest const& request) {
         if (request.reuseBoundaryTree) {
             if (!state.boundaryTreeReady || !frozenNearRequest(request) ||
                 !request.parameters.refreshMembership ||
-                state.boundaryMeshSize != request.meshSize || state.boundaryOrder != fmmOrder() ||
-                state.activeRange.first != 0 || state.activeRange.second != particlesOwnedSize()) {
+                state.boundaryMeshSize != request.meshSize || state.activeRange.first != 0 ||
+                state.activeRange.second != particlesOwnedSize()) {
                 throw std::runtime_error("PMMM opening kick has no matching endpoint tree");
             }
             state.boundaryTreeReady = false;

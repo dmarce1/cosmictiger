@@ -23,7 +23,7 @@
 #include <cosmictiger/gravity/pmmm_kernels.hpp>
 #include <cosmictiger/math/vector3.hpp>
 
-// This numerical test has no HPX runtime; fmmDispatch's failure branch still
+// This numerical test has no HPX runtime; kernel assertions still
 // needs an assertion implementation even though the public API checks orders.
 void cosmictigerAssert(char const* condition, bool satisfied, char const* file, int line) {
     if (!satisfied) {
@@ -299,7 +299,7 @@ TEST(PmmmKernels, MomentsUseNegativeCellOffsetAndAccumulate) {
     std::array<detail::Point, 3> const offsets{
         {{0.25, -0.375, 0.125}, {-0.2, 0.1, -0.3}, {0, 0, 0}}};
     std::array<double, 3> const masses{1.5, 0.75, 2.0};
-    for (int order = kFmmMinOrder; order <= kFmmMaxOrder; ++order) {
+    for (int order = kFmmOrder; order <= kFmmOrder; ++order) {
         int const degree = order - 2;
         std::vector<double> moments((degree + 1) * (degree + 1), 0.125);
         std::vector<double> expected = moments;
@@ -328,7 +328,7 @@ TEST(PmmmKernels, MomentsUseNegativeCellOffsetAndAccumulate) {
 }
 
 TEST(PmmmKernels, RealContractionMatchesComplexSumAndTotalDegreeTruncation) {
-    for (int order = kFmmMinOrder; order <= kFmmMaxOrder; ++order) {
+    for (int order = kFmmOrder; order <= kFmmOrder; ++order) {
         std::vector<double> moments((order - 1) * (order - 1));
         std::vector<double> greens(order * order);
         for (size_t slot = 0; slot < moments.size(); ++slot) {
@@ -359,7 +359,7 @@ TEST(PmmmKernels, RealContractionMatchesComplexSumAndTotalDegreeTruncation) {
 
 TEST(PmmmKernels, FourierProductsMatchDirectPeriodicCellConvolution) {
     constexpr int kCells = 5;
-    for (int order = kFmmMinOrder; order <= kFmmMaxOrder; ++order) {
+    for (int order = kFmmOrder; order <= kFmmOrder; ++order) {
         int const sourceCount = (order - 1) * (order - 1);
         int const localCount = order * order;
         std::vector<std::vector<double>> moments(kCells, std::vector<double>(sourceCount));
@@ -421,7 +421,7 @@ TEST(PmmmKernels, GreenNearExclusionParityOriginAndCellScaling) {
     detail::Point const negative{-point[0], -point[1], -point[2]};
     constexpr double kCellWidth = 0.125;
     double const radius = std::hypot(point[0], point[1], point[2]);
-    for (int order = kFmmMinOrder; order <= kFmmMaxOrder; ++order) {
+    for (int order = kFmmOrder; order <= kFmmOrder; ++order) {
         int const degree = order - 1;
         std::vector<double> full(order * order), near(order * order), opposite(order * order),
             scaled(order * order), origin(order * order);
@@ -465,7 +465,7 @@ TEST(PmmmKernels, EvaluationMatchesIndependentPolynomialAndPhysicalGradient) {
     constexpr double kCellWidth = 0.125;
     constexpr double kTrace = 0.7;
     constexpr double kStep = 2e-5;
-    for (int order = kFmmMinOrder; order <= kFmmMaxOrder; ++order) {
+    for (int order = kFmmOrder; order <= kFmmOrder; ++order) {
         std::vector<double> local(order * order);
         for (size_t slot = 0; slot < local.size(); ++slot) {
             local[slot] = std::sin(0.27 * double(slot + 1));
@@ -491,7 +491,7 @@ TEST(PmmmKernels, BackgroundUsesDipolesAndSourceTraceAndCancelsSelfGradient) {
     constexpr double kCellWidth = 0.125;
     constexpr double kBackground = 4.0 * std::numbers::pi / 3.0 * kCellWidth * kCellWidth;
     detail::Point const offset{0.25, -0.125, 0.375};
-    for (int order = std::max(4, kFmmMinOrder); order <= kFmmMaxOrder; ++order) {
+    for (int order = std::max(4, kFmmOrder); order <= kFmmOrder; ++order) {
         std::vector<double> moments((order - 1) * (order - 1));
         std::vector<double> local(order * order);
         pmmm::addMoments(order, moments.data(), kMass, offset);
@@ -510,14 +510,14 @@ TEST(PmmmKernels, BackgroundUsesDipolesAndSourceTraceAndCancelsSelfGradient) {
 }
 
 TEST(PmmmKernels, RejectsInvalidOrderWidthAndPrimaryOrigin) {
-    EXPECT_THROW(pmmm::contractionTerms(kFmmMinOrder - 1), std::invalid_argument);
-    EXPECT_THROW(pmmm::contractionTerms(kFmmMaxOrder + 1), std::invalid_argument);
-    std::vector<double> coefficients(kFmmMaxOrder * kFmmMaxOrder);
-    EXPECT_THROW(pmmm::green(kFmmMinOrder, coefficients.data(), {0, 0, 0}, 0.125, false),
+    EXPECT_THROW(pmmm::contractionTerms(kFmmOrder - 1), std::invalid_argument);
+    EXPECT_THROW(pmmm::contractionTerms(kFmmOrder + 1), std::invalid_argument);
+    std::vector<double> coefficients(kFmmOrder * kFmmOrder);
+    EXPECT_THROW(pmmm::green(kFmmOrder, coefficients.data(), {0, 0, 0}, 0.125, false),
         std::invalid_argument);
-    EXPECT_THROW(pmmm::green(kFmmMinOrder, coefficients.data(), {0, 0, 0}, 0.0, true),
-        std::invalid_argument);
-    EXPECT_THROW(pmmm::green(kFmmMinOrder, coefficients.data(), {0.6, 0, 0}, 0.125, true),
+    EXPECT_THROW(
+        pmmm::green(kFmmOrder, coefficients.data(), {0, 0, 0}, 0.0, true), std::invalid_argument);
+    EXPECT_THROW(pmmm::green(kFmmOrder, coefficients.data(), {0.6, 0, 0}, 0.125, true),
         std::invalid_argument);
 }
 
