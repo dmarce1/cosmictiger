@@ -207,6 +207,13 @@ def buildChecks(report, minFmmOrder, maxFmmOrder):
              '#include <cosmictiger/gravity/kernels/cartesian_tracefree/l2p.hpp>',
              '#include <cosmictiger/gravity/kernels/spherical_kernels.hpp>',
              '#include <cosmictiger/gravity/kernels/spherical_ewald_kernels.hpp>', '']
+    for stem in ('basis_conversion', 'cartesian_tracefree_geometry',
+                 'cartesian_tracefree_p2m', 'cartesian_tracefree_p2l',
+                 'cartesian_tracefree_m2m', 'cartesian_tracefree_m2l',
+                 'cartesian_tracefree_m2p', 'cartesian_tracefree_l2l',
+                 'cartesian_tracefree_l2p', 'spherical_p2m', 'spherical_l2p',
+                 'spherical_green', 'spherical_ewald_green'):
+        lines.append(f'#include <cosmictiger/gravity/kernels/instrumentation/{stem}.cpp>')
     appendAvailabilityChecks(lines, report, minFmmOrder, maxFmmOrder)
     lines.extend(['struct CountingRadial {',
                   '    template <int radial, int traces>',
@@ -376,7 +383,7 @@ template <class Real> struct Field {
 ''')
         includeDir = root/'cosmictiger/gravity/kernels'
         includeDir.mkdir(parents=True)
-        for path in generated.rglob('*.hpp'):
+        for path in list(generated.rglob('*.hpp')) + list((generated/'instrumentation').glob('*.cpp')):
             name = path.relative_to(generated)
             destination = includeDir/name
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -386,7 +393,7 @@ template <class Real> struct Field {
         executable = root/'counts'
         subprocess.run([args.compiler, '-std=c++20', '-O0', '-fno-fast-math',
                         '-ffp-contract=off', '-I'+str(root), '-I'+str(projectRoot),
-                        f'-DORDER={minFmmOrder}',
+                        f'-DORDER={minFmmOrder}', '-DCOSMICTIGER_FMM_COUNTING_ONLY',
                         str(source), '-o', str(executable)], check=True)
         subprocess.run([str(executable)], check=True)
 

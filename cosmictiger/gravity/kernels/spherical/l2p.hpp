@@ -30,303 +30,62 @@ inline constexpr int kL2PFlops<6> = 274;
 template <>
 inline constexpr int kL2PConventionalFlops<6> = 447;
 /// Accumulate the local expansion potential and negative gradient at the supplied point.
+template <int degree, typename Real>
+    requires(degree == 6)
+CUDA_EXPORT void L2P(Real* output, Real const* source, Real x, Real y, Real z);
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+template <>
+CUDA_EXPORT void L2P<6, float>(float* output, float const* source, float x, float y, float z);
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+template <>
+CUDA_EXPORT void L2P<6, double>(double* output, double const* source, double x, double y, double z);
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+#ifndef __CUDACC__
+template <>
+CUDA_EXPORT void L2P<6, SimdVector<float, 8>>(SimdVector<float, 8>* output,
+    SimdVector<float, 8> const* source, SimdVector<float, 8> x, SimdVector<float, 8> y,
+    SimdVector<float, 8> z);
+#endif
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+#ifndef __CUDACC__
+template <>
+CUDA_EXPORT void L2P<6, SimdVector<double, 2>>(SimdVector<double, 2>* output,
+    SimdVector<double, 2> const* source, SimdVector<double, 2> x, SimdVector<double, 2> y,
+    SimdVector<double, 2> z);
+#endif
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+#ifndef __CUDACC__
+template <>
+CUDA_EXPORT void L2P<6, SimdVector<float, 4>>(SimdVector<float, 4>* output,
+    SimdVector<float, 4> const* source, SimdVector<float, 4> x, SimdVector<float, 4> y,
+    SimdVector<float, 4> z);
+#endif
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+#ifndef __CUDACC__
+template <>
+CUDA_EXPORT void L2P<6, SimdVector<double, 4>>(SimdVector<double, 4>* output,
+    SimdVector<double, 4> const* source, SimdVector<double, 4> x, SimdVector<double, 4> y,
+    SimdVector<double, 4> z);
+#endif
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+#ifndef __CUDACC__
+template <>
+CUDA_EXPORT void L2P<6, SimdVector<double, 8>>(SimdVector<double, 8>* output,
+    SimdVector<double, 8> const* source, SimdVector<double, 8> x, SimdVector<double, 8> y,
+    SimdVector<double, 8> z);
+#endif
+#endif
 template <int degree, typename Real, typename Output, typename Source>
     requires(degree == 6)
 CUDA_EXPORT void L2P(Output& output, Source const& source, Real x, Real y, Real z) {
     using namespace math;
-    Fma const fma{};
-    using Scalar = SimdScalar<Real>;
-    constexpr auto k00 = static_cast<Scalar>(0.000000000000000000E+00);
-    constexpr auto k01 = static_cast<Scalar>(3.125000000000000000E-02);
-    constexpr auto k02 = static_cast<Scalar>(6.250000000000000000E-02);
-    constexpr auto k03 = static_cast<Scalar>(1.250000000000000000E-01);
-    constexpr auto k04 = static_cast<Scalar>(1.562500000000000000E-01);
-    constexpr auto k05 = static_cast<Scalar>(1.666666666666666667E-01);
-    constexpr auto k06 = static_cast<Scalar>(1.875000000000000000E-01);
-    constexpr auto k07 = static_cast<Scalar>(2.000000000000000000E-01);
-    constexpr auto k08 = static_cast<Scalar>(2.500000000000000000E-01);
-    constexpr auto k09 = static_cast<Scalar>(3.125000000000000000E-01);
-    constexpr auto k10 = static_cast<Scalar>(3.333333333333333333E-01);
-    constexpr auto k11 = static_cast<Scalar>(3.750000000000000000E-01);
-    constexpr auto k12 = static_cast<Scalar>(4.687500000000000000E-01);
-    constexpr auto k13 = static_cast<Scalar>(5.000000000000000000E-01);
-    constexpr auto k14 = static_cast<Scalar>(6.250000000000000000E-01);
-    constexpr auto k15 = static_cast<Scalar>(7.500000000000000000E-01);
-    constexpr auto k16 = static_cast<Scalar>(1.000000000000000000E+00);
-    Real const t54 = z * z;
-    Real const t56 = t54 * broadcast<Real>(k13);
-    Real const t57 = z * t56;
-    Real const t59 = t57 * broadcast<Real>(k10);
-    Real const t60 = z * t59;
-    Real const t62 = t60 * broadcast<Real>(k08);
-    Real const t63 = z * t62;
-    Real const t65 = t63 * broadcast<Real>(k07);
-    Real const t66 = z * t65;
-    Real const t68 = t66 * broadcast<Real>(k05);
-    Real const t91 = fma(z, source[2], source[0]);
-    Real const t92 = fma(source[6], t56, t91);
-    Real const t93 = fma(source[12], t59, t92);
-    Real const t94 = fma(source[20], t62, t93);
-    Real const t95 = fma(source[30], t65, t94);
-    Real const t96 = fma(source[42], t68, t95);
-    Real const t97 = fma(z, source[6], source[2]);
-    Real const t98 = fma(source[12], t56, t97);
-    Real const t99 = fma(source[20], t59, t98);
-    Real const t100 = fma(source[30], t62, t99);
-    Real const t101 = fma(source[42], t65, t100);
-    Real const t102 = fma(z, source[7], source[3]);
-    Real const t103 = fma(source[13], t56, t102);
-    Real const t104 = fma(source[21], t59, t103);
-    Real const t105 = fma(source[31], t62, t104);
-    Real const t106 = fma(source[43], t65, t105);
-    Real const t107 = fma(z, source[5], source[1]);
-    Real const t108 = fma(source[11], t56, t107);
-    Real const t109 = fma(source[19], t59, t108);
-    Real const t110 = fma(source[29], t62, t109);
-    Real const t111 = fma(source[41], t65, t110);
-    Real const t112 = fma(z, source[12], source[6]);
-    Real const t113 = fma(source[20], t56, t112);
-    Real const t114 = fma(source[30], t59, t113);
-    Real const t115 = fma(source[42], t62, t114);
-    Real const t116 = fma(z, source[13], source[7]);
-    Real const t117 = fma(source[21], t56, t116);
-    Real const t118 = fma(source[31], t59, t117);
-    Real const t119 = fma(source[43], t62, t118);
-    Real const t120 = fma(z, source[11], source[5]);
-    Real const t121 = fma(source[19], t56, t120);
-    Real const t122 = fma(source[29], t59, t121);
-    Real const t123 = fma(source[41], t62, t122);
-    Real const t124 = fma(z, source[14], source[8]);
-    Real const t125 = fma(source[22], t56, t124);
-    Real const t126 = fma(source[32], t59, t125);
-    Real const t127 = fma(source[44], t62, t126);
-    Real const t128 = fma(z, source[10], source[4]);
-    Real const t129 = fma(source[18], t56, t128);
-    Real const t130 = fma(source[28], t59, t129);
-    Real const t131 = fma(source[40], t62, t130);
-    Real const t132 = fma(z, source[20], source[12]);
-    Real const t133 = fma(source[30], t56, t132);
-    Real const t134 = fma(source[42], t59, t133);
-    Real const t135 = fma(z, source[21], source[13]);
-    Real const t136 = fma(source[31], t56, t135);
-    Real const t137 = fma(source[43], t59, t136);
-    Real const t138 = fma(z, source[19], source[11]);
-    Real const t139 = fma(source[29], t56, t138);
-    Real const t140 = fma(source[41], t59, t139);
-    Real const t141 = fma(z, source[22], source[14]);
-    Real const t142 = fma(source[32], t56, t141);
-    Real const t143 = fma(source[44], t59, t142);
-    Real const t144 = fma(z, source[18], source[10]);
-    Real const t145 = fma(source[28], t56, t144);
-    Real const t146 = fma(source[40], t59, t145);
-    Real const t147 = fma(z, source[23], source[15]);
-    Real const t148 = fma(source[33], t56, t147);
-    Real const t149 = fma(source[45], t59, t148);
-    Real const t150 = fma(z, source[17], source[9]);
-    Real const t151 = fma(source[27], t56, t150);
-    Real const t152 = fma(source[39], t59, t151);
-    Real const t153 = fma(z, source[30], source[20]);
-    Real const t154 = fma(source[42], t56, t153);
-    Real const t155 = fma(z, source[31], source[21]);
-    Real const t156 = fma(source[43], t56, t155);
-    Real const t157 = fma(z, source[29], source[19]);
-    Real const t158 = fma(source[41], t56, t157);
-    Real const t159 = fma(z, source[32], source[22]);
-    Real const t160 = fma(source[44], t56, t159);
-    Real const t161 = fma(z, source[28], source[18]);
-    Real const t162 = fma(source[40], t56, t161);
-    Real const t163 = fma(z, source[33], source[23]);
-    Real const t164 = fma(source[45], t56, t163);
-    Real const t165 = fma(z, source[27], source[17]);
-    Real const t166 = fma(source[39], t56, t165);
-    Real const t167 = fma(z, source[34], source[24]);
-    Real const t168 = fma(source[46], t56, t167);
-    Real const t169 = fma(z, source[26], source[16]);
-    Real const t170 = fma(source[38], t56, t169);
-    Real const t171 = fma(z, source[42], source[30]);
-    Real const t172 = fma(z, source[43], source[31]);
-    Real const t173 = fma(z, source[41], source[29]);
-    Real const t174 = fma(z, source[44], source[32]);
-    Real const t175 = fma(z, source[40], source[28]);
-    Real const t176 = fma(z, source[45], source[33]);
-    Real const t177 = fma(z, source[39], source[27]);
-    Real const t178 = fma(z, source[46], source[34]);
-    Real const t179 = fma(z, source[38], source[26]);
-    Real const t180 = fma(z, source[47], source[35]);
-    Real const t181 = fma(z, source[37], source[25]);
-    Real const t182 = y * y;
-    Real const t183 = fma(x, x, t182);
-    Real const t184 = select(t183 == broadcast<Real>(k00), broadcast<Real>(k16), t183);
-    Real const t185 = sqrt(t184);
-    Real const t186 = broadcast<Real>(k16) / t185;
-    Real const t187 = t183 * t186;
-    Real const t188 = x * t186;
-    Real const t189 = select(t183 == broadcast<Real>(k00), broadcast<Real>(k16), t188);
-    Real const t190 = y * t186;
-    Real const t192 = t190 * t190;
-    Real const t194 = fma(t189, t189, (-t192));
-    Real const t195 = t189 * t190;
-    Real const t197 = fma(t189, (-t190), (-t195));
-    Real const t198 = t190 * t197;
-    Real const t200 = fma(t189, t194, t198);
-    Real const t201 = t189 * t197;
-    Real const t202 = fma((-t190), t194, t201);
-    Real const t203 = t190 * t202;
-    Real const t205 = fma(t189, t200, t203);
-    Real const t206 = t189 * t202;
-    Real const t207 = fma((-t190), t200, t206);
-    Real const t208 = t190 * t207;
-    Real const t210 = fma(t189, t205, t208);
-    Real const t211 = t189 * t207;
-    Real const t212 = fma((-t190), t205, t211);
-    Real const t213 = t190 * t212;
-    Real const t215 = fma(t189, t210, t213);
-    Real const t216 = t189 * t212;
-    Real const t217 = fma((-t190), t210, t216);
-    Real const t218 = t111 * t190;
-    Real const t220 = fma(t106, t189, t218);
-    Real const t221 = t111 * t189;
-    Real const t222 = fma(t106, (-t190), t221);
-    Real const t223 = t123 * t190;
-    Real const t225 = fma(t119, t189, t223);
-    Real const t228 = t131 * t197;
-    Real const t230 = fma(t127, t194, (-t228));
-    Real const t231 = t131 * t194;
-    Real const t232 = fma(t127, t197, t231);
-    Real const t233 = t140 * t190;
-    Real const t235 = fma(t137, t189, t233);
-    Real const t236 = t140 * t189;
-    Real const t237 = fma(t137, (-t190), t236);
-    Real const t238 = t146 * t197;
-    Real const t240 = fma(t143, t194, (-t238));
-    Real const t243 = t152 * t202;
-    Real const t245 = fma(t149, t200, (-t243));
-    Real const t246 = t152 * t200;
-    Real const t247 = fma(t149, t202, t246);
-    Real const t248 = t158 * t190;
-    Real const t250 = fma(t156, t189, t248);
-    Real const t253 = t162 * t197;
-    Real const t255 = fma(t160, t194, (-t253));
-    Real const t256 = t162 * t194;
-    Real const t257 = fma(t160, t197, t256);
-    Real const t258 = t166 * t202;
-    Real const t260 = fma(t164, t200, (-t258));
-    Real const t263 = t170 * t207;
-    Real const t265 = fma(t168, t205, (-t263));
-    Real const t266 = t170 * t205;
-    Real const t267 = fma(t168, t207, t266);
-    Real const t268 = t173 * t190;
-    Real const t270 = fma(t172, t189, t268);
-    Real const t271 = t173 * t189;
-    Real const t272 = fma(t172, (-t190), t271);
-    Real const t273 = t175 * t197;
-    Real const t275 = fma(t174, t194, (-t273));
-    Real const t278 = t177 * t202;
-    Real const t280 = fma(t176, t200, (-t278));
-    Real const t281 = t177 * t200;
-    Real const t282 = fma(t176, t202, t281);
-    Real const t283 = t179 * t207;
-    Real const t285 = fma(t178, t205, (-t283));
-    Real const t288 = t181 * t212;
-    Real const t290 = fma(t180, t210, (-t288));
-    Real const t291 = t181 * t210;
-    Real const t292 = fma(t180, t212, t291);
-    Real const t293 = source[41] * t190;
-    Real const t295 = fma(source[43], t189, t293);
-    Real const t298 = source[40] * t197;
-    Real const t300 = fma(source[44], t194, (-t298));
-    Real const t301 = source[40] * t194;
-    Real const t302 = fma(source[44], t197, t301);
-    Real const t303 = source[39] * t202;
-    Real const t305 = fma(source[45], t200, (-t303));
-    Real const t308 = source[38] * t207;
-    Real const t310 = fma(source[46], t205, (-t308));
-    Real const t311 = source[38] * t205;
-    Real const t312 = fma(source[46], t207, t311);
-    Real const t313 = source[37] * t212;
-    Real const t315 = fma(source[47], t210, (-t313));
-    Real const t318 = source[36] * t217;
-    Real const t320 = fma(source[48], t215, (-t318));
-    Real const t321 = source[36] * t215;
-    Real const t322 = fma(source[48], t217, t321);
-    Real const t324 = t115 * -broadcast<Real>(k13);
-    Real const t325 = fma(broadcast<Real>(k13), t230, t324);
-    Real const t326 = broadcast<Real>(k13) * t232;
-    Real const t333 = t235 * -broadcast<Real>(k15);
-    Real const t334 = fma(broadcast<Real>(k08), t245, t333);
-    Real const t335 = t134 * -broadcast<Real>(k13);
-    Real const t336 = fma(broadcast<Real>(k13), t240, t335);
-    Real const t338 = t237 * -broadcast<Real>(k08);
-    Real const t339 = fma(broadcast<Real>(k08), t247, t338);
-    Real const t350 = t154 * broadcast<Real>(k11);
-    Real const t351 = fma(t255, -broadcast<Real>(k13), t350);
-    Real const t353 = fma(t265, broadcast<Real>(k03), t351);
-    Real const t354 = t250 * -broadcast<Real>(k15);
-    Real const t355 = fma(broadcast<Real>(k08), t260, t354);
-    Real const t356 = t257 * -broadcast<Real>(k08);
-    Real const t357 = fma(t267, broadcast<Real>(k03), t356);
-    Real const t379 = t270 * broadcast<Real>(k14);
-    Real const t381 = fma(t280, -broadcast<Real>(k09), t379);
-    Real const t383 = fma(t290, broadcast<Real>(k02), t381);
-    Real const t384 = t171 * broadcast<Real>(k11);
-    Real const t385 = fma(t275, -broadcast<Real>(k13), t384);
-    Real const t386 = fma(t285, broadcast<Real>(k03), t385);
-    Real const t387 = t272 * broadcast<Real>(k03);
-    Real const t389 = fma(t282, -broadcast<Real>(k06), t387);
-    Real const t390 = fma(t292, broadcast<Real>(k02), t389);
-    Real const t423 = source[42] * -broadcast<Real>(k09);
-    Real const t425 = fma(t300, broadcast<Real>(k12), t423);
-    Real const t426 = fma(t310, -broadcast<Real>(k06), t425);
-    Real const t428 = fma(t320, broadcast<Real>(k01), t426);
-    Real const t429 = t295 * broadcast<Real>(k14);
-    Real const t430 = fma(t305, -broadcast<Real>(k09), t429);
-    Real const t431 = fma(t315, broadcast<Real>(k02), t430);
-    Real const t433 = t302 * broadcast<Real>(k04);
-    Real const t435 = fma(t312, -broadcast<Real>(k03), t433);
-    Real const t436 = fma(t322, broadcast<Real>(k01), t435);
-    Real const t487 = t187 * t187;
-    Real const t488 = broadcast<Real>(k13) * t487;
-    Real const t489 = t187 * t488;
-    Real const t490 = broadcast<Real>(k10) * t489;
-    Real const t491 = t187 * t490;
-    Real const t492 = broadcast<Real>(k08) * t491;
-    Real const t493 = t187 * t492;
-    Real const t494 = broadcast<Real>(k07) * t493;
-    Real const t495 = t187 * t494;
-    Real const t496 = broadcast<Real>(k05) * t495;
-    Real const t518 = fma(t187, t220, t96);
-    Real const t519 = fma(t325, t488, t518);
-    Real const t520 = fma(t334, t490, t519);
-    Real const t521 = fma(t353, t492, t520);
-    Real const t522 = fma(t383, t494, t521);
-    Real const t523 = fma(t428, t496, t522);
-    Real const t524 = fma(t187, t325, t220);
-    Real const t525 = fma(t334, t488, t524);
-    Real const t526 = fma(t353, t490, t525);
-    Real const t527 = fma(t383, t492, t526);
-    Real const t528 = fma(t428, t494, t527);
-    Real const t529 = fma(t187, t225, t101);
-    Real const t530 = fma(t336, t488, t529);
-    Real const t531 = fma(t355, t490, t530);
-    Real const t532 = fma(t386, t492, t531);
-    Real const t533 = fma(t431, t494, t532);
-    Real const t534 = fma(t187, t326, t222);
-    Real const t535 = fma(t339, t488, t534);
-    Real const t536 = fma(t357, t490, t535);
-    Real const t537 = fma(t390, t492, t536);
-    Real const t538 = fma(t436, t494, t537);
-    Real const t539 = t190 * t538;
-    Real const t541 = fma(t189, t528, (-t539));
-    Real const t542 = t189 * t538;
-    Real const t543 = fma(t190, t528, t542);
-    Real const t548 = t523 + output[0];
-    Real const t550 = output[1] - t541;
-    Real const t552 = output[2] - t543;
-    Real const t554 = output[3] - t533;
-    output[0] = t548;
-    output[1] = t550;
-    output[2] = t552;
-    output[3] = t554;
+    L2P<degree, Real>(&output[0], &source[0], x, y, z);
 }
 
 }    // namespace cosmictiger::gravity::spherical::detail

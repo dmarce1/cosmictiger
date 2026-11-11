@@ -47,7 +47,7 @@ for the weighted M2L costs including geometry.
 
 CUDA L2L has a generated cooperative schedule in `tools/cartesian/cuda.py`.
 It emits order-specific `L2LWarp` and `L2LWarpInto` functions for local
-degrees 2 through 8; the schedule table, the per-phase target table, the
+degree selected by the build; the schedule table, the per-phase target table, the
 basis register count, the lane-group widths and the phase code are compile-time
 constants of that degree. All 32 lanes translate one expansion using aligned
 power-of-two lane groups. Each 32-bit schedule entry packs three 8-bit
@@ -147,3 +147,7 @@ analysis scripts are archived in the Git stash named
 The [measured results](stf_benchmark_results.md) remain as historical CPU, CUDA,
 and cooperative L2L performance and numerical comparisons. The CUDA L2L
 correctness checks remain in `tests/gravity/cartesian_l2l_cuda.cu`.
+
+Generated arithmetic and CUDA schedule tables are compiled in `cosmictiger_fmm`;
+operator headers contain declarations. See [compiled FMM library](generated_fmm.md#compiled-library)
+for supported concrete types and CPU/CUDA linking.

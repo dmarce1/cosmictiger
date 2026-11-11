@@ -482,6 +482,36 @@ set(COSMICTIGER_GENERATED_FMM_FILES
     ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/ewald_common.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/spherical/ewald_green.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/operation_counts.json)
+set(cosmictiger_fmm_operator_stems
+    basis_conversion cartesian_tracefree_geometry
+    cartesian_tracefree_p2m cartesian_tracefree_p2l cartesian_tracefree_m2m
+    cartesian_tracefree_m2l cartesian_tracefree_m2p cartesian_tracefree_l2l
+    cartesian_tracefree_l2p spherical_p2m spherical_l2p spherical_green
+    spherical_ewald_green)
+set(cosmictiger_fmm_library_sources)
+foreach(stem IN LISTS cosmictiger_fmm_operator_stems)
+    foreach(suffix IN ITEMS scalar.cpp simd.cpp scalar.cu)
+        list(APPEND COSMICTIGER_GENERATED_FMM_FILES
+            ${COSMICTIGER_GENERATED_FMM_DIR}/sources/${stem}_${suffix})
+    endforeach()
+    list(APPEND COSMICTIGER_GENERATED_FMM_FILES
+        ${COSMICTIGER_GENERATED_FMM_DIR}/instrumentation/${stem}.cpp)
+    list(APPEND cosmictiger_fmm_library_sources
+        ${COSMICTIGER_GENERATED_FMM_DIR}/sources/${stem}_simd.cpp)
+    if(COSMICTIGER_WITH_CUDA)
+        list(APPEND cosmictiger_fmm_library_sources
+            ${COSMICTIGER_GENERATED_FMM_DIR}/sources/${stem}_scalar.cu)
+    else()
+        list(APPEND cosmictiger_fmm_library_sources
+            ${COSMICTIGER_GENERATED_FMM_DIR}/sources/${stem}_scalar.cpp)
+    endif()
+endforeach()
+list(APPEND COSMICTIGER_GENERATED_FMM_FILES
+    ${COSMICTIGER_GENERATED_FMM_DIR}/sources/cartesian_tracefree_l2l_warp_scalar.cu)
+if(COSMICTIGER_WITH_CUDA)
+    list(APPEND cosmictiger_fmm_library_sources
+        ${COSMICTIGER_GENERATED_FMM_DIR}/sources/cartesian_tracefree_l2l_warp_scalar.cu)
+endif()
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 if(COSMICTIGER_WITH_GRAVITY)
     # Embed the renderer so copied executables do not depend on the source tree.
@@ -513,8 +543,14 @@ add_custom_target(generate_cartesian_kernels DEPENDS generate_fmm_kernels)
 add_custom_target(cosmictiger_generated_kernels DEPENDS generate_fmm_kernels)
 # Compile a target against the generated kernels and selected order/bucket cap.
 function(cosmictiger_use_generated_kernels target)
-    add_dependencies(${target} generate_fmm_kernels)
-    target_include_directories(${target} BEFORE PRIVATE ${COSMICTIGER_GENERATED_INCLUDE_DIR})
+    if(COSMICTIGER_WITH_GRAVITY)
+        add_dependencies(${target} generate_fmm_kernels)
+        target_link_libraries(${target} PRIVATE cosmictiger_fmm)
+        if(COSMICTIGER_WITH_CUDA)
+            set_target_properties(${target} PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+        endif()
+        target_include_directories(${target} BEFORE PRIVATE ${COSMICTIGER_GENERATED_INCLUDE_DIR})
+    endif()
     target_compile_definitions(${target} PRIVATE ORDER=${cosmictiger_default_fmm_order}
         MAX_BUCKET_SIZE=${COSMICTIGER_WITH_MAX_BUCKET})
 endfunction()

@@ -17,20 +17,20 @@ def coefficient(expression):
     return value / Fraction(denominator[0].strip()) if denominator else value
 
 
-def scientific(value):
-    """Round an exact rational to 18 fractional digits, nearest with ties to even.
+def scientific(value, precision=18):
+    """Round an exact rational to the requested precision, nearest with ties to even.
 
     Integer quotient/remainder arithmetic avoids intermediate decimal rounding,
     including values arbitrarily close to a rounding midpoint.
     """
     if not value:
-        return '0.000000000000000000E+00'
+        return '0.' + '0' * precision + 'E+00'
     numerator, denominator = abs(value.numerator), value.denominator
     exponent = len(str(numerator)) - len(str(denominator))
     if (numerator < denominator * 10**exponent if exponent >= 0 else
             numerator * 10**(-exponent) < denominator):
         exponent -= 1
-    shift = 18 - exponent
+    shift = precision - exponent
     if shift >= 0:
         numerator *= 10**shift
     else:
@@ -38,7 +38,7 @@ def scientific(value):
     digits, remainder = divmod(numerator, denominator)
     if 2 * remainder > denominator or (2 * remainder == denominator and digits % 2):
         digits += 1
-    if digits == 10**19:
+    if digits == 10**(precision + 1):
         digits //= 10
         exponent += 1
     mantissa = str(digits)
@@ -46,7 +46,7 @@ def scientific(value):
     return f'{sign}{mantissa[0]}.{mantissa[1:]}E{exponent:+03d}'
 
 
-def hoistConstants(cpp):
+def hoistConstants(cpp, scalar=None):
     """Hoist numerical broadcast arguments, leaving runtime indices untouched.
 
     SimdScalar<Real> is Real for scalar/CUDA instantiations and the lane type
@@ -89,8 +89,12 @@ def hoistConstants(cpp):
             sign = '-' if value < 0 else ''
             return f'{sign}math::broadcast<Real>({names[abs(value)]})'
         body = broadcast.sub(replace, body)
+        def literal(value):
+            if scalar is None:
+                return scientific(value)
+            return scientific(value, 8 if scalar == 'float' else 17).lower()
         declarations = ''.join(
-            f'\n    constexpr auto {name} = static_cast<Scalar>({scientific(value)});'
+            f'\n    constexpr {scalar or "auto"} {name} = static_cast<Scalar>({literal(value)});'
             for value, name in names.items())
         alias = '\n    using Scalar = SimdScalar<Real>;' if names else ''
         output.append(cpp[position:opening + 1] + alias + declarations + body + '}')

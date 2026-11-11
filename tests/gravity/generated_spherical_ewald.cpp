@@ -14,6 +14,7 @@
 #include <vector>
 
 #include <cosmictiger/gravity/fmm/tree_local.hpp>
+#include <cosmictiger/gravity/kernels/instrumentation/spherical_ewald_green.cpp>
 #include <cosmictiger/gravity/kernels/spherical_ewald_kernels.hpp>
 #include <cosmictiger/math/simd_math.hpp>
 #include <cosmictiger/math/vector3.hpp>

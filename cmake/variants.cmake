@@ -60,6 +60,30 @@ target_compile_definitions(cosmictiger_default_config INTERFACE
     MAX_BUCKET_SIZE=${COSMICTIGER_WITH_MAX_BUCKET})
 
 if(COSMICTIGER_WITH_GRAVITY)
+    add_library(cosmictiger_fmm STATIC ${cosmictiger_fmm_library_sources})
+    add_dependencies(cosmictiger_fmm generate_fmm_kernels)
+    target_include_directories(cosmictiger_fmm PUBLIC
+        ${COSMICTIGER_GENERATED_INCLUDE_DIR} ${PROJECT_SOURCE_DIR})
+    target_compile_definitions(cosmictiger_fmm PUBLIC
+        ORDER=${cosmictiger_default_fmm_order} MAX_BUCKET_SIZE=${COSMICTIGER_WITH_MAX_BUCKET})
+    # Preserve the emitted arithmetic graph and Ewald compensated sums. Only
+    # explicit math::fma calls may fuse, independent of consumer build flags.
+    target_compile_options(cosmictiger_fmm PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:-fno-fast-math;-ffp-contract=off>)
+    # SIMD callers and definitions must agree on the target ISA and pack ABI.
+    if(COMPILER_SUPPORTS_MARCH_NATIVE)
+        target_compile_options(cosmictiger_fmm PUBLIC $<$<COMPILE_LANGUAGE:CXX>:-march=native>)
+    endif()
+    if(COSMICTIGER_WITH_CUDA)
+        set_target_properties(cosmictiger_fmm PROPERTIES
+            CUDA_SEPARABLE_COMPILATION ON CUDA_RESOLVE_DEVICE_SYMBOLS OFF)
+        target_compile_options(cosmictiger_fmm PRIVATE
+            $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr;--use_fast_math;--fmad=false;-Xcompiler=-fno-fast-math,-ffp-contract=off>)
+        target_link_libraries(cosmictiger_fmm PUBLIC CUDA::cudart)
+    endif()
+endif()
+
+if(COSMICTIGER_WITH_GRAVITY)
     # These physics libraries are absent from hydrodynamics-only builds. Keep
     # the background/Einstein-Boltzmann solve, distributed transform, and power
     # analysis separate from the capability-independent utility library.
@@ -130,7 +154,7 @@ if(COSMICTIGER_WITH_GRAVITY)
     target_include_directories(cosmictiger_objects SYSTEM PUBLIC
         ${CHEALPIX_INCLUDE_DIR})
     target_link_libraries(cosmictiger_objects PUBLIC
-        cosmictiger_cosmology cosmictiger_power ${CHEALPIX_LIBRARY})
+        cosmictiger_fmm cosmictiger_cosmology cosmictiger_power ${CHEALPIX_LIBRARY})
 endif()
 if(COSMICTIGER_WITH_ROCKSTAR)
     target_include_directories(cosmictiger_objects SYSTEM PUBLIC ${HEALPIX_CXX_INCLUDE_DIR})

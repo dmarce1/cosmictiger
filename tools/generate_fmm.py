@@ -785,22 +785,26 @@ def main():
     ap.add_argument('--degree', type=int, default=6, choices=range(2, 9),
                     help='single potential expansion degree to emit (default: 6)')
     ap.add_argument('--output-dir',dest='outputDir',type=Path,default=outputDirectory,
-                    help='directory receiving the generated headers and operation counts '
+                    help='directory receiving generated declarations, sources and operation counts '
                          '(default: cosmictiger/gravity/kernels in the source tree)')
     ap.add_argument('--independent-m2l-ratios',dest='independentM2lRatios',
                     action='store_true',help='emit independent Cartesian M2L source/target scale ratios')
     ap.add_argument('--no-format',dest='noFormat',action='store_true',
-                    help='skip clang-format for temporary output; source headers use formatting')
+                    help='skip clang-format for temporary output; checked-in C++ uses formatting')
     args=ap.parse_args()
     from fmm.constants import hoistConstants
+    from fmm.sources import splitSources
 
     outputs=generate(args.degree,args.degree,args.independentM2lRatios)
+    outputs = {name: unnameUnusedGeneratedParameters(code) if name.endswith('.hpp') else code
+               for name, code in outputs.items()}
+    outputs = splitSources(outputs, args.degree)
     notice = (projectRoot / 'tools/cartesian/generated_notice.txt').read_text()
     for name, cpp in list(outputs.items()):
-        if not name.endswith('.hpp'):
+        if not name.endswith(('.hpp', '.cpp', '.cu')):
             continue
-        cpp = hoistConstants(cpp)
-        cpp = unnameUnusedGeneratedParameters(cpp)
+        if name.endswith('.hpp'):
+            cpp = hoistConstants(cpp)
         # The lightweight coefficient storage has no math calls and must also
         # compile before any header declares namespace math.
         if name not in ('cartesian_tracefree_types.hpp', 'spherical_types.hpp'):

@@ -12,14 +12,18 @@
 #include <gtest/gtest.h>
 
 #include <cosmictiger/gravity/fmm_order.hpp>
+#include <cosmictiger/gravity/kernels/instrumentation/spherical_ewald_green.cpp>
+#include <cosmictiger/gravity/kernels/instrumentation/spherical_green.cpp>
+#include <cosmictiger/gravity/kernels/instrumentation/spherical_p2m.cpp>
 #include <cosmictiger/gravity/kernels/spherical_ewald_kernels.hpp>
 #include <cosmictiger/gravity/pmmm_kernels.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <tests/flop_counting_real.hpp>
 
+#include "pmmm_reference.hpp"
+
 // The generated scalar/SIMD adapters use std math internally. Specialize only
 // those adapters so the execution oracle also observes each elementary result.
-#include "pmmm_reference.hpp"
 
 namespace cosmictiger::gravity::spherical::detail {
 

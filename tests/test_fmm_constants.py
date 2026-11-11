@@ -33,6 +33,44 @@ class GravityConstants(unittest.TestCase):
         self.assertEqual(scientific(Fraction(1, 10**100)), '1.000000000000000000E-100')
         self.assertEqual(scientific(Fraction(10**100)), '1.000000000000000000E+100')
 
+    def test_concrete_precision(self):
+        source = 'CUDA_EXPORT void kernel(Real x) { x *= math::broadcast<Real>(4.0 / 3.0); }'
+        self.assertIn('constexpr double k0 = static_cast<Scalar>(1.33333333333333333e+00);',
+                      hoistConstants(source, 'double'))
+        self.assertIn('constexpr float k0 = static_cast<Scalar>(1.33333333e+00);',
+                      hoistConstants(source, 'float'))
+        for digits in (8, 17):
+            midpoint = Fraction(1) + Fraction(5, 10**(digits + 1))
+            delta = Fraction(1, 10**200)
+            self.assertEqual(scientific(midpoint, digits), '1.' + '0' * digits + 'E+00')
+            self.assertEqual(scientific(midpoint - delta, digits), '1.' + '0' * digits + 'E+00')
+            self.assertEqual(scientific(midpoint + delta, digits),
+                             '1.' + '0' * (digits - 1) + '1E+00')
+
+    def test_compiled_source_constants(self):
+        root = Path(__file__).resolve().parents[1] / 'cosmictiger/gravity/kernels/sources'
+        paths = list(root.glob('*.cpp')) + list(root.glob('*.cu'))
+        self.assertGreater(len(paths), 0)
+        counts = {'float': 0, 'double': 0}
+        for path in paths:
+            code = path.read_text()
+            self.assertNotRegex(code, r'constexpr auto k\d+')
+            for table in code.split('using Scalar = SimdScalar<Real>;')[1:]:
+                declarations = re.findall(
+                    r'constexpr (float|double) (k\d+) = static_cast<Scalar>\(([^)]+)\);', table)
+                self.assertTrue(declarations, path.name)
+                values = []
+                width = len(str(len(declarations) - 1))
+                for index, (scalar, name, literal) in enumerate(declarations):
+                    counts[scalar] += 1
+                    digits = 8 if scalar == 'float' else 17
+                    self.assertRegex(literal, rf'^\d\.\d{{{digits}}}e[+-]\d{{2,}}$')
+                    self.assertEqual(name, f'k{index:0{width}d}')
+                    self.assertRegex(table, rf'broadcast<Real>\({name}\)')
+                    values.append(Decimal(literal))
+                self.assertEqual(values, sorted(set(values)))
+        self.assertTrue(all(counts.values()))
+
     def test_sorted_magnitudes_and_padding(self):
         for count in (1, 9, 10, 15, 100, 101):
             with self.subTest(count=count):

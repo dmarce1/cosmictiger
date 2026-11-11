@@ -18,18 +18,49 @@
 namespace cosmictiger::gravity::cartesian::detail {
 // R is the separation radius; iR is its inverse, zero at coincident centers.
 template <class Real>
-CUDA_EXPORT Real inverseRadius(Vector3<Real> const& distance) {
-    using namespace math;
-    Fma const fma{};
-    using Scalar = SimdScalar<Real>;
-    constexpr auto k0 = static_cast<Scalar>(0.000000000000000000E+00);
-    constexpr auto k1 = static_cast<Scalar>(1.000000000000000000E-20);
-    constexpr auto k2 = static_cast<Scalar>(1.000000000000000000E+00);
-    Real const dx = distance[0];
-    Real const dy = distance[1];
-    Real const dz = distance[2];
-    Real const R = sqrt(fma(dx, dx, fma(dy, dy, dz * dz)));
-    return select(R > broadcast<Real>(k0), broadcast<Real>(k2), broadcast<Real>(k0)) /
-        max(R, broadcast<Real>(k1));
-}
+CUDA_EXPORT Real inverseRadius(Vector3<Real> const& distance);
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+template <>
+CUDA_EXPORT float inverseRadius<float>(Vector3<float> const& distance);
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+template <>
+CUDA_EXPORT double inverseRadius<double>(Vector3<double> const& distance);
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+#ifndef __CUDACC__
+template <>
+CUDA_EXPORT SimdVector<float, 8> inverseRadius<SimdVector<float, 8>>(
+    Vector3<SimdVector<float, 8>> const& distance);
+#endif
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+#ifndef __CUDACC__
+template <>
+CUDA_EXPORT SimdVector<double, 2> inverseRadius<SimdVector<double, 2>>(
+    Vector3<SimdVector<double, 2>> const& distance);
+#endif
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+#ifndef __CUDACC__
+template <>
+CUDA_EXPORT SimdVector<float, 4> inverseRadius<SimdVector<float, 4>>(
+    Vector3<SimdVector<float, 4>> const& distance);
+#endif
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+#ifndef __CUDACC__
+template <>
+CUDA_EXPORT SimdVector<double, 4> inverseRadius<SimdVector<double, 4>>(
+    Vector3<SimdVector<double, 4>> const& distance);
+#endif
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+#ifndef __CUDACC__
+template <>
+CUDA_EXPORT SimdVector<double, 8> inverseRadius<SimdVector<double, 8>>(
+    Vector3<SimdVector<double, 8>> const& distance);
+#endif
+#endif
+
 }    // namespace cosmictiger::gravity::cartesian::detail

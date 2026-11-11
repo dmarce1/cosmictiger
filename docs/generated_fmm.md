@@ -13,10 +13,10 @@ Degree d uses source degree d-1 and internal FMM order d+1. Runtime order
 selection is removed. Checkpoints retain the internal order for compatibility
 validation. A different degree requires another build.
 
-Generated build headers live under `generated_fmm/cosmictiger/gravity/kernels`
+Generated build declarations and sources live under `generated_fmm/cosmictiger/gravity/kernels`
 and take precedence over the checked-in default-degree reference headers.
 The generator's `--degree` argument selects one potential degree; without it,
-it regenerates the degree-6 reference headers. Build generation never modifies
+it regenerates the degree-6 reference declarations and sources. Build generation never modifies
 the source tree, so independent builds may use different degrees concurrently.
 
 The representations are generated and tested independently. The runtime walk,
@@ -43,12 +43,41 @@ Numerical coefficients are declared at each kernel function's entry in ascending
 order of nonnegative magnitude, using `Scalar = SimdScalar<Real>` so they remain
 scalar `constexpr` values for both scalar and SIMD instantiations. Names use
 equal-width indices within each function: `k0` through `k8` for nine constants,
-or `k00` through `k14` for fifteen. Literals have no leading plus, use uppercase
-`E`, and have 18 digits after the decimal point. Exact rational coefficients
+or `k00` through `k14` for fifteen. Concrete implementations declare
+`constexpr float` constants with `%14.8e` literals or `constexpr double`
+constants with `%23.17e` literals (8 or 17 fractional digits, lowercase `e`).
+SIMD implementations use the precision of their lanes. Exact rational coefficients
 are rounded to nearest, with ties to even, using integer arithmetic before
 conversion to `Scalar`. Opposite signs share one magnitude, with negation at
 the use site.
 Integer indices, template arguments, and loop bounds are not coefficients.
+
+## Compiled library
+
+`cosmictiger_fmm` is a static library containing the generated arithmetic in
+`sources/`. CPU builds compile scalar and SIMD `.cpp` files. CUDA builds compile
+the SIMD `.cpp` files and scalar `.cu` units; NVCC supplies both host and device
+scalar symbols, so host scalar definitions are not compiled a second time.
+The warp L2L functions and both schedule tables live in one CUDA unit. CUDA
+callers use separable compilation and resolve device symbols at executable link.
+The library disables implicit multiply-add contraction; generated explicit
+`math::fma` calls remain fused, preserving the emitted arithmetic graph and
+Ewald compensated sums regardless of consumer flags.
+Link this target when using the generated operators; including a header alone
+no longer supplies their arithmetic implementations.
+
+Concrete implementations cover `float`, `double`, `SimdVector<float, 8>` and
+`SimdVector<double, 2>` used by the solver, plus four-lane float/double packs
+used by numerical reference tests and eight-lane double for Ewald working
+precision. CUDA supports float/double. The public template declarations retain
+the existing call syntax. Spherical container adapters forward coefficient
+addresses without copying or changing layouts.
+
+`instrumentation/*.cpp` contains generic definitions solely for counting-scalar
+tests. Those tests explicitly include the relevant source definitions; normal
+headers and production targets never include them. Concrete specializations in
+those test executables still link to the library. The standalone FLOP audit uses
+`COSMICTIGER_FMM_COUNTING_ONLY` with its replacement arithmetic backend.
 
 ## Generate and verify
 
@@ -58,23 +87,23 @@ python3 tools/generate_fmm.py --check
 python3 tests/gravity/check_generated_fmm_flops.py --generated-dir cosmictiger/gravity/kernels --compiler c++
 ```
 
-Generated headers and their operation report are checked in under
+Generated declarations, sources and their operation report are checked in under
 `cosmictiger/gravity/kernels/`:
 
 - `cartesian_tracefree_types.hpp` contains named STF coefficient structs;
   `cartesian_tracefree_config.hpp` records the generated degree.
 - `cartesian_tracefree/{p2m,p2l,m2m,m2l,m2p,l2l,l2p,l2l_warp}.hpp`
-  contains one Cartesian operator per header, with `geometry.hpp` for radius work.
+  declares one Cartesian operator per header, with `geometry.hpp` for radius work.
 - `spherical_kernels.hpp` and `spherical_ewald_kernels.hpp` contain the
-  spherical kernels.
-- `basis_conversion.hpp` defines the explicit coefficient casts; both type headers
-  include these definitions. `spherical_types.hpp` is generated with its cast declarations.
+  spherical declarations and thin contiguous-storage adapters.
+- `basis_conversion.hpp` declares the explicit coefficient cast specializations; both type headers
+  include these declarations. `spherical_types.hpp` is generated with its cast declarations.
 - `operation_counts.json` records the generated arithmetic counts and selections.
 
 The generator defaults to this source directory and emits both families for
-FMM orders 3 through 9, formatting headers with the repository's clang-format
+the selected degree (default 6), formatting C++ with the repository's clang-format
 configuration. Use `--output-dir` to write a separate copy. Never hand-edit
-generated headers; update their generators and regenerate them. `--check`
+generated files; update their generators and regenerate them. `--check`
 compares the expected output with the existing files without changing them.
 
 CMake automatically generates one operator set before compilation; the explicit
