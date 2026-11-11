@@ -75,20 +75,20 @@ FlopCounts treeComputeMultipole(MultipoleBuffer& multi, MultipoleBuffer const& l
     Vector3<double> const& rightCenter, Vector3<double> const& center) {
     constexpr int kMultipoleCoefficients = FmmOrder<order>::kMultipoleCoefficients_;
     Vector3<SimdDouble> mdx{};
-    cosmictiger::gravity::cartesian::Multipole<SimdDouble> simdM{};
+    cosmictiger::gravity::cartesian::Multipole<SimdDouble> Mo{};
     for (int i = 0; i < kMultipoleCoefficients; i++) {
-        simdSetLane(simdM[i], kLeftChild, left[i]);
-        simdSetLane(simdM[i], kRightChild, right[i]);
+        simdSetLane(Mo[i], kLeftChild, left[i]);
+        simdSetLane(Mo[i], kRightChild, right[i]);
     }
     for (int dim = 0; dim < kDimensions; dim++) {
         simdSetLane(mdx[dim], kLeftChild, leftCenter[dim] - center[dim]);
         simdSetLane(mdx[dim], kRightChild, rightCenter[dim] - center[dim]);
     }
-    auto const source = simdM;
-    simdM = cosmictiger::gravity::cartesian::Multipole<SimdDouble>{};
-    cosmictiger::gravity::cartesian::M2M(source, fmmScaleDisplacement(mdx), simdM);
+    auto const Mi = Mo;
+    Mo = cosmictiger::gravity::cartesian::Multipole<SimdDouble>{};
+    cosmictiger::gravity::cartesian::M2M(Mi, fmmScaleDisplacement(mdx), Mo);
     for (int i = 0; i < kMultipoleCoefficients; i++) {
-        multi[i] = simdM[i][kLeftChild] + simdM[i][kRightChild];
+        multi[i] = Mo[i][kLeftChild] + Mo[i][kRightChild];
     }
     // M2M is double, including two input widenings and one output narrowing
     // per stored coefficient. Only the two populated SIMD lanes are counted.
@@ -217,12 +217,12 @@ FlopCounts treeComputeMultipole(SourceMultipoleBuffer& multi, TreeBuildMoments c
     FmmGeometry const& geometry) {
     namespace cartesian = cosmictiger::gravity::cartesian;
     constexpr int kCount = FmmOrder<order>::kMultipoleCoefficients_;
-    cartesian::Multipole<SimdDouble> source{}, translated{};
+    cartesian::Multipole<SimdDouble> Mi{}, Mo{};
     Vector3<SimdDouble> displacement{};
     FlopCounts frameFlops{};
     for (int i = 0; i < kCount; ++i) {
-        simdSetLane(source[i], kLeftChild, left[i]);
-        simdSetLane(source[i], kRightChild, right[i]);
+        simdSetLane(Mi[i], kLeftChild, left[i]);
+        simdSetLane(Mi[i], kRightChild, right[i]);
     }
     for (int dim = 0; dim < kDimensions; ++dim) {
         auto difference = [&](Position point) {
@@ -234,9 +234,9 @@ FlopCounts treeComputeMultipole(SourceMultipoleBuffer& multi, TreeBuildMoments c
         simdSetLane(displacement[dim], kLeftChild, difference(leftCenter[dim]));
         simdSetLane(displacement[dim], kRightChild, difference(rightCenter[dim]));
     }
-    cartesian::M2M(source, fmmScaleDisplacement(displacement), translated);
+    cartesian::M2M(Mi, fmmScaleDisplacement(displacement), Mo);
     for (int i = 0; i < kCount; ++i) {
-        multi[i] = translated[i][kLeftChild] + translated[i][kRightChild];
+        multi[i] = Mo[i][kLeftChild] + Mo[i][kRightChild];
     }
     FlopCounts counts{};
     counts.doublePrecision = 2 * cartesian::kM2MFlops<order - 2> + 18 +
@@ -304,9 +304,9 @@ FlopCount treeSourceToMesh(double* output, SourceMultipoleBuffer const& source,
     Vector3<double> const& meshCenterCorrection) {
     namespace cartesian = cosmictiger::gravity::cartesian;
     namespace conversion = cosmictiger::gravity::basis_conversion;
-    cartesian::Multipole<double> input{}, shifted{};
-    for (int i = 0; i < input.size(); ++i) {
-        input[i] = source[i];
+    cartesian::Multipole<double> Mi{}, Mo{};
+    for (int i = 0; i < Mi.size(); ++i) {
+        Mi[i] = source[i];
     }
     Vector3<double> displacement;
     for (int dim = 0; dim < kDimensions; ++dim) {
@@ -315,8 +315,8 @@ FlopCount treeSourceToMesh(double* output, SourceMultipoleBuffer const& source,
         displacement[dim] =
             unwrappedDoubleDistance(sourceCenter[dim], meshCenter[dim]) + meshCenterCorrection[dim];
     }
-    cartesian::M2M(input, fmmScaleDisplacement(displacement), shifted);
-    auto const spherical = static_cast<cosmictiger::gravity::spherical::Multipole<double>>(shifted);
+    cartesian::M2M(Mi, fmmScaleDisplacement(displacement), Mo);
+    auto const spherical = static_cast<cosmictiger::gravity::spherical::Multipole<double>>(Mo);
     // Derived boundary conversion (docs/fmm_basis_conversion.md):
     // Sₙ(mesh) = (κh)⁻ⁿ Aₙ Cₙ(tree), h=1/meshSize, κ=kScaleFactor.
     // Symbol directory: S is a spherical moment; C is a Cartesian STF moment;
@@ -333,7 +333,7 @@ FlopCount treeSourceToMesh(double* output, SourceMultipoleBuffer const& source,
         }
     }
     return cartesian::kM2MFlops<order - 2> + conversion::kMultipoleCastConventionalFlops<order> +
-        12 + input.size() + order - 2;
+        12 + Mi.size() + order - 2;
 }
 
 #endif

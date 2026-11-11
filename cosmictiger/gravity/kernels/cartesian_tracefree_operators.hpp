@@ -6,7 +6,7 @@
 
 // Symbol directory (typed Cartesian FMM operators):
 // R: source-target separation radius; iR: 1/R.
-// M: source or destination multipole; L: source or destination local expansion.
+// M: multipole; L: local expansion; Mi/Mo and Li/Lo: translation inputs/outputs.
 // u: separation divided by R; G: derivatives of the negative Newtonian Green function.
 // Particle and center displacements use the same coordinates as M and L.
 
@@ -60,12 +60,12 @@ CUDA_EXPORT int P2L(
 /// Accumulate translated moments at unit scale ratio; source and target must be distinct.
 template <class Real>
 CUDA_EXPORT int M2M(
-    Multipole<Real> const& source, Vector3<Real> const& displacement, Multipole<Real>& target) {
+    Multipole<Real> const& Mi, Vector3<Real> const& displacement, Multipole<Real>& Mo) {
     using Scalar = SimdScalar<Real>;
     constexpr auto k0 = static_cast<Scalar>(1.000000000000000000E+00);
     using namespace math;
-    ASSERT(&target != &source);
-    M2M(source, displacement, broadcast<Real>(k0), target);
+    ASSERT(&Mo != &Mi);
+    M2M(Mi, displacement, broadcast<Real>(k0), Mo);
     return kM2MFlops<kFmmOrder - 2>;
 }
 
@@ -109,16 +109,16 @@ CUDA_EXPORT int M2P(Multipole<Real> const& source, Vector3<Real> const& displace
 
 /// Accumulate a translated local expansion; source and target must be distinct.
 template <class Real>
-CUDA_EXPORT int L2L(Expansion<Real> const& source, Vector3<Real> const& displacement,
-    bool doPotential, Expansion<Real>& target) {
+CUDA_EXPORT int L2L(Expansion<Real> const& Li, Vector3<Real> const& displacement, bool doPotential,
+    Expansion<Real>& Lo) {
     using Scalar = SimdScalar<Real>;
     constexpr auto k0 = static_cast<Scalar>(1.000000000000000000E+00);
     using namespace math;
-    ASSERT(&target != &source);
-    Real const oldPotential = target[0];
-    L2L(source, displacement, broadcast<Real>(k0), target);
+    ASSERT(&Lo != &Li);
+    Real const oldPotential = Lo[0];
+    L2L(Li, displacement, broadcast<Real>(k0), Lo);
     if (!doPotential) {
-        target[0] = oldPotential;
+        Lo[0] = oldPotential;
     }
     return kL2LFlops<kFmmOrder - 1>;
 }
@@ -140,8 +140,8 @@ CUDA_EXPORT int L2P(Expansion<Real> const& source, Vector3<Real> const& displace
 /// Accumulate all components, including the potential.
 template <class Real>
 CUDA_EXPORT int L2L(
-    Expansion<Real> const& source, Vector3<Real> const& displacement, Expansion<Real>& target) {
-    return L2L(source, displacement, true, target);
+    Expansion<Real> const& Li, Vector3<Real> const& displacement, Expansion<Real>& Lo) {
+    return L2L(Li, displacement, true, Lo);
 }
 
 }    // namespace cosmictiger::gravity::cartesian

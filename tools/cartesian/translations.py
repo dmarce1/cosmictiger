@@ -110,7 +110,7 @@ def m2mDirect(order, algebra):
     g = algebra.Dag()
     displacement = [g.symbol(name) for name in ('dx', 'dy', 'dz')]
     ratio = coordinatePowers(g, g.symbol('scaleRatio'), order)
-    scaled = {a: g.mul(ratio[n], g.symbol(f'M[{algebra.index(a)}]'))
+    scaled = {a: g.mul(ratio[n], g.symbol(f'Mi[{algebra.index(a)}]'))
               for n in range(order+1) for a in algebra.indices(n)}
     result = {}
     for n in range(order+1):
@@ -155,7 +155,7 @@ def m2mCompact(order, algebra):
     displacement = [g.symbol(name) for name in ('dx', 'dy', 'dz')]
     ratio = coordinatePowers(g, g.symbol('scaleRatio'), order)
     basis = algebra.dualBasis(g, displacement, order)
-    scaled = {a: g.mul(ratio[n], g.symbol(f'M[{algebra.index(a)}]'))
+    scaled = {a: g.mul(ratio[n], g.symbol(f'Mi[{algebra.index(a)}]'))
               for n in range(order+1) for a in algebra.indices(n)}
     equivalent = {}
     for n in range(order):
@@ -199,7 +199,7 @@ def l2l(order, algebra):
     displacement = [g.symbol(name) for name in ('dx', 'dy', 'dz')]
     ratio = coordinatePowers(g, g.symbol('scaleRatio'), order)
     basis = algebra.dualBasis(g, displacement, order)
-    source = {a: g.symbol(f'L[{algebra.index(a)}]')
+    source = {a: g.symbol(f'Li[{algebra.index(a)}]')
               for n in range(order+1) for a in algebra.indices(n)}
     get = algebra.accessor(g, source)
     result = {}
@@ -217,14 +217,14 @@ def l2l(order, algebra):
 def emit(operator, order, algebra):
     if operator == 'M2M':
         g, result = m2m(order, algebra)
-        destination = 'targetM'
-        source = 'M'
+        destination = 'Mo'
+        source = 'Mi'
         data_type = 'Multipole'
         fmm_order = order + 2
     else:
         g, result = l2l(order, algebra)
-        destination = 'targetL'
-        source = 'L'
+        destination = 'Lo'
+        source = 'Li'
         data_type = 'Expansion'
         fmm_order = order + 1
     g, signed = algebra.normalizeSigns(g, list(result.values()))

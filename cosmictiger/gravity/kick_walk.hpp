@@ -250,13 +250,13 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                 params.geometry.meshSize, &geometryFlops) :
             unwrappedDoubleDistance(selfPtr->pos[dim], pos[dim]);
     }
-    cosmictiger::gravity::cartesian::Expansion<float> translated{};
+    auto const& Li = expansion;
+    cosmictiger::gravity::cartesian::Expansion<float> Lo{};
     if (!params.doPhi) {
-        translated[0] = expansion[0];
+        Lo[0] = Li[0];
     }
-    cosmictiger::gravity::cartesian::L2L(
-        expansion, fmmScaleDisplacement(ldx), params.doPhi, translated);
-    expansion = translated;
+    cosmictiger::gravity::cartesian::L2L(Li, fmmScaleDisplacement(ldx), params.doPhi, Lo);
+    expansion = Lo;
     flops += cosmictiger::gravity::cartesian::kL2LFlops<kLocalDegree> + 5;
     // Box scaling stays double; each local displacement scales in double and
     // narrows before the float L2L coordinate scaling. Two reciprocals are float.

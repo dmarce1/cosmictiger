@@ -70,13 +70,12 @@ CUDA_EXPORT Vector3<Real> displacement(
 // K is the known residual curvature, carried once per solve, not in each local.
 // Code names: curvature = K.
 template <class Real>
-CUDA_EXPORT int translate(cartesian::Expansion<Real>& target,
-    cartesian::Expansion<Real> const& source, Vector3<Real> const& d, Real curvature,
-    bool doPotential) {
-    int const flops = cartesian::L2L(source, d, doPotential, target);
-    target(0, 0, 1) += curvature * d[2];
+CUDA_EXPORT int translate(cartesian::Expansion<Real>& Lo, cartesian::Expansion<Real> const& Li,
+    Vector3<Real> const& d, Real curvature, bool doPotential) {
+    int const flops = cartesian::L2L(Li, d, doPotential, Lo);
+    Lo(0, 0, 1) += curvature * d[2];
     if (doPotential) {
-        target[0] += Real(.5) * curvature * d[2] * d[2];
+        Lo[0] += Real(.5) * curvature * d[2] * d[2];
     }
     return flops + (doPotential ? 6 : 2);
 }

@@ -515,8 +515,10 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                 {
                     // Cooperative translation into the scratch expansion, then
                     // publish it as the active expansion at this node's center.
+                    auto const& Li = expansion;
+                    auto* Lo = scratch;
                     cosmictiger::gravity::cartesian::L2LWarpInto(
-                        expansion, fmmScaleDisplacement(dx), globalParams.doPhi, scratch);
+                        Li, fmmScaleDisplacement(dx), globalParams.doPhi, Lo);
                     detail::cudaCopyExpansion<order>(&expansion[0], scratch);
                     if (tid < kDimensions) {
                         expansionPos[tid] = self.pos[tid];

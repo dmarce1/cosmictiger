@@ -152,8 +152,8 @@ def appendCartesianChecks(lines, report, checks):
     cartesian = report['representations']['cartesianTracefree']
     operations = {
         'M2L': ('kM2LFlops', 'M2L(M, distance, L)', 11),
-        'M2M': ('kM2MFlops', 'M2M(M, distance, ratio, targetM)', 0),
-        'L2L': ('kL2LFlops', 'L2L(L, distance, ratio, targetL)', 0),
+        'M2M': ('kM2MFlops', 'M2M(Mi, distance, ratio, Mo)', 0),
+        'L2L': ('kL2LFlops', 'L2L(Li, distance, ratio, Lo)', 0),
         'P2M': ('kP2MFlops', 'P2M(mass, distance, targetM)', 0),
         'P2L': ('kP2LFlops', 'P2L(mass, distance, L)', 11),
         'M2P': ('kM2PFlops', 'M2P(M, distance, field)', 11),
@@ -175,8 +175,8 @@ def appendCartesianChecks(lines, report, checks):
             '    {',
             '        using namespace cosmictiger::gravity::cartesian;',
             f'        static_assert(cosmictiger::gravity::cartesian::{constant}<{degree}> == {kernel["conventional_flops"]});',
-            f'        Multipole<Real> M{{}}, targetM{{}};',
-            f'        Expansion<Real> L{{}}, targetL{{}};',
+            f'        Multipole<Real> {"Mi{}, Mo{}" if name == "M2M" else "M{}, targetM{}"};',
+            f'        Expansion<Real> {"Li{}, Lo{}" if name == "L2L" else "L{}, targetL{}"};',
             '        cosmictiger::gravity::Field<Real> field{};',
             '        Vector3<Real> const distance{Real(0.3), Real(-0.2), Real(0.4)};',
             '        Real const mass(0.7), ratio(0.6);',

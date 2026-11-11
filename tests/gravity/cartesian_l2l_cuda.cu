@@ -172,11 +172,11 @@ Canonical<order> translateReference(
 
 template <int order>
 __device__ LocalExpansion<order> warpTranslate(
-    LocalExpansion<order> const& source, Vector3<float> position, bool doPhi) {
-    LocalExpansion<order> result{};
+    LocalExpansion<order> const& Li, Vector3<float> position, bool doPhi) {
+    LocalExpansion<order> Lo{};
     auto const scaled = fmmScaleDisplacement(position);
-    cosmictiger::gravity::cartesian::L2LWarp(source, scaled, doPhi, result);
-    return result;
+    cosmictiger::gravity::cartesian::L2LWarp(Li, scaled, doPhi, Lo);
+    return Lo;
 }
 
 template <int order>
@@ -222,10 +222,9 @@ __global__ void validateWarp(Fixture<order> const* input, LocalExpansion<order>*
 // the source; the production wrapper ends with a warp barrier, so every lane
 // may read the completed target immediately after the call.
 template <int order>
-__device__ void warpTranslateInto(LocalExpansion<order>& target,
-    LocalExpansion<order> const& source, Vector3<float> const& position, bool doPhi) {
-    cosmictiger::gravity::cartesian::L2LWarpInto(
-        source, fmmScaleDisplacement(position), doPhi, &target[0]);
+__device__ void warpTranslateInto(LocalExpansion<order>& Lo, LocalExpansion<order> const& Li,
+    Vector3<float> const& position, bool doPhi) {
+    cosmictiger::gravity::cartesian::L2LWarpInto(Li, fmmScaleDisplacement(position), doPhi, &Lo[0]);
 }
 
 template <int order>
@@ -356,13 +355,14 @@ void validate(Fixture<order> const* deviceInput, std::vector<Fixture<order>> con
                         normalized[d] = double(shift[d] * kScaleFactor);
                     }
                     expected = translateReference<order>(expected, normalized, doPhi);
-                    LocalExpansion<order> translated{};
+                    auto const& Li = scalar;
+                    LocalExpansion<order> Lo{};
                     if (!doPhi) {
-                        translated[0] = scalar[0];
+                        Lo[0] = Li[0];
                     }
                     cosmictiger::gravity::cartesian::L2L(
-                        scalar, fmmScaleDisplacement(shift), doPhi, translated);
-                    scalar = translated;
+                        Li, fmmScaleDisplacement(shift), doPhi, Lo);
+                    scalar = Lo;
                 }
                 auto const scalarCanonical = canonical<order>(scalar);
                 double checksum = 0;

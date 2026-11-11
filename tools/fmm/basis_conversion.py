@@ -16,7 +16,7 @@ from math import gcd, lcm, isqrt
 from cartesian.translations import (
     cartesianMonomial, indexFactorial, reduceSourceIndex, tensorIndices,
 )
-from cartesian.types import indices
+from cartesian.types import indices, names as componentNames
 from .spherical import Dag, index
 
 
@@ -125,11 +125,15 @@ def localRows(degree):
 
 
 def emit(name, order, rows, targetType, sourceType):
+    fields = componentNames(order - 1)
+    sourceName = 'Mi' if sourceType.endswith('::Multipole') else 'Li'
+    targetName = 'Mo' if targetType.endswith('::Multipole') else 'Lo'
+
     def access(name, kind, slot):
         if kind.startswith('spherical::'):
             l = isqrt(slot)
             return f'{name}({l}, {slot - l * l - l})'
-        return f'{name}[{slot}]'
+        return f'{name}.{fields[slot]}'
 
     graph = Dag()
     roots = []
@@ -142,7 +146,7 @@ def emit(name, order, rows, targetType, sourceType):
         value = graph.zero
         for slot, coefficient in sorted(row.items()):
             value = graph.fma(graph.constant(coefficient / common),
-                              graph.symbol(access('source', sourceType, slot)), value)
+                              graph.symbol(access(sourceName, sourceType, slot)), value)
         roots.append(graph.scale(value, common))
     code, arithmetic, weighted = graph.emit(roots)
     conventional = weighted + arithmetic.get('fma', 0)
@@ -156,11 +160,11 @@ def emit(name, order, rows, targetType, sourceType):
              'template <class Real, int order>',
              f'CUDA_EXPORT {sourceClass}<Real, order>::operator {targetType}<Real, order>() const',
              f'    requires (order == {order}) {{',
-             f'    {targetType}<Real, order> target{{}};',
-             '    auto const& source = *this;', *code]
+             f'    {targetType}<Real, order> {targetName}{{}};',
+             f'    auto const& {sourceName} = *this;', *code]
     for slot, root in zip(sorted(rows), roots):
-        lines.append(f'    {access("target", targetType, slot)} = {graph.expression(root)};')
-    lines += ['    return target;', '}', '}', '']
+        lines.append(f'    {access(targetName, targetType, slot)} = {graph.expression(root)};')
+    lines += [f'    return {targetName};', '}', '}', '']
     return '\n'.join(lines), dict(operator=name, fmm_order=order, arithmetic=arithmetic,
         weighted_flops=weighted, conventional_flops=conventional)
 

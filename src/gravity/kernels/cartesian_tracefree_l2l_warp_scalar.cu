@@ -94,7 +94,7 @@ static __device__ unsigned char const l2lWarpTargets6[3][32] = {
 };
 }    // namespace cosmictiger::gravity::cartesian
 namespace cosmictiger::gravity::cartesian {
-__device__ void executeL2LWarp(Expansion<float>& targetL, Expansion<float> const& L, float const dx,
+__device__ void executeL2LWarp(Expansion<float>& Lo, Expansion<float> const& Li, float const dx,
     float const dy, float const dz, bool doPhi) {
     using namespace math;
     Fma const fma{};
@@ -447,7 +447,7 @@ __device__ void executeL2LWarp(Expansion<float>& targetL, Expansion<float> const
             int const secondaryIndex = (entry >> 16) & 255u;
             int const kind = (entry >> 24) & 3u;
             float const sourceValue =
-                L[primaryIndex] + static_cast<float>(kind == 2) * L[secondaryIndex];
+                Li[primaryIndex] + static_cast<float>(kind == 2) * Li[secondaryIndex];
             float const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
             float const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
             float const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
@@ -462,16 +462,16 @@ __device__ void executeL2LWarp(Expansion<float>& targetL, Expansion<float> const
         partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : k00;
         bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
         if (leader) {
-            partial += L[targetIndex];
+            partial += Li[targetIndex];
         }
         if constexpr (kReplicate) {
-            targetL[0] = __shfl_sync(kMask, partial, 0);
-            targetL[1] = __shfl_sync(kMask, partial, 8);
-            targetL[2] = __shfl_sync(kMask, partial, 16);
-            targetL[3] = __shfl_sync(kMask, partial, 24);
+            Lo[0] = __shfl_sync(kMask, partial, 0);
+            Lo[1] = __shfl_sync(kMask, partial, 8);
+            Lo[2] = __shfl_sync(kMask, partial, 16);
+            Lo[3] = __shfl_sync(kMask, partial, 24);
         } else {
             if (leader) {
-                targetL[targetIndex] = partial;
+                Lo[targetIndex] = partial;
             }
         }
     }
@@ -488,7 +488,7 @@ __device__ void executeL2LWarp(Expansion<float>& targetL, Expansion<float> const
             int const secondaryIndex = (entry >> 16) & 255u;
             int const kind = (entry >> 24) & 3u;
             float const sourceValue =
-                L[primaryIndex] + static_cast<float>(kind == 2) * L[secondaryIndex];
+                Li[primaryIndex] + static_cast<float>(kind == 2) * Li[secondaryIndex];
             float const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
             float const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
             float const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
@@ -501,23 +501,23 @@ __device__ void executeL2LWarp(Expansion<float>& targetL, Expansion<float> const
         partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : k00;
         bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
         if (leader) {
-            partial += L[targetIndex];
+            partial += Li[targetIndex];
         }
         if constexpr (kReplicate) {
-            targetL[4] = __shfl_sync(kMask, partial, 0);
-            targetL[5] = __shfl_sync(kMask, partial, 4);
-            targetL[6] = __shfl_sync(kMask, partial, 8);
-            targetL[7] = __shfl_sync(kMask, partial, 12);
-            targetL[8] = __shfl_sync(kMask, partial, 16);
-            targetL[9] = __shfl_sync(kMask, partial, 20);
-            targetL[10] = __shfl_sync(kMask, partial, 22);
-            targetL[11] = __shfl_sync(kMask, partial, 24);
-            targetL[12] = __shfl_sync(kMask, partial, 26);
-            targetL[13] = __shfl_sync(kMask, partial, 28);
-            targetL[14] = __shfl_sync(kMask, partial, 30);
+            Lo[4] = __shfl_sync(kMask, partial, 0);
+            Lo[5] = __shfl_sync(kMask, partial, 4);
+            Lo[6] = __shfl_sync(kMask, partial, 8);
+            Lo[7] = __shfl_sync(kMask, partial, 12);
+            Lo[8] = __shfl_sync(kMask, partial, 16);
+            Lo[9] = __shfl_sync(kMask, partial, 20);
+            Lo[10] = __shfl_sync(kMask, partial, 22);
+            Lo[11] = __shfl_sync(kMask, partial, 24);
+            Lo[12] = __shfl_sync(kMask, partial, 26);
+            Lo[13] = __shfl_sync(kMask, partial, 28);
+            Lo[14] = __shfl_sync(kMask, partial, 30);
         } else {
             if (leader) {
-                targetL[targetIndex] = partial;
+                Lo[targetIndex] = partial;
             }
         }
     }
@@ -534,7 +534,7 @@ __device__ void executeL2LWarp(Expansion<float>& targetL, Expansion<float> const
             int const secondaryIndex = (entry >> 16) & 255u;
             int const kind = (entry >> 24) & 3u;
             float const sourceValue =
-                L[primaryIndex] + static_cast<float>(kind == 2) * L[secondaryIndex];
+                Li[primaryIndex] + static_cast<float>(kind == 2) * Li[secondaryIndex];
             float const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
             float const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
             float const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
@@ -545,71 +545,71 @@ __device__ void executeL2LWarp(Expansion<float>& targetL, Expansion<float> const
         partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : k00;
         bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 31;
         if (leader) {
-            partial += L[targetIndex];
+            partial += Li[targetIndex];
         }
         if constexpr (kReplicate) {
-            targetL[15] = __shfl_sync(kMask, partial, 0);
-            targetL[16] = __shfl_sync(kMask, partial, 2);
-            targetL[17] = __shfl_sync(kMask, partial, 4);
-            targetL[18] = __shfl_sync(kMask, partial, 6);
-            targetL[19] = __shfl_sync(kMask, partial, 8);
-            targetL[20] = __shfl_sync(kMask, partial, 10);
-            targetL[21] = __shfl_sync(kMask, partial, 12);
-            targetL[22] = __shfl_sync(kMask, partial, 14);
-            targetL[23] = __shfl_sync(kMask, partial, 16);
-            targetL[24] = __shfl_sync(kMask, partial, 18);
-            targetL[25] = __shfl_sync(kMask, partial, 20);
-            targetL[26] = __shfl_sync(kMask, partial, 21);
-            targetL[27] = __shfl_sync(kMask, partial, 22);
-            targetL[28] = __shfl_sync(kMask, partial, 23);
-            targetL[29] = __shfl_sync(kMask, partial, 24);
-            targetL[30] = __shfl_sync(kMask, partial, 25);
-            targetL[31] = __shfl_sync(kMask, partial, 26);
-            targetL[32] = __shfl_sync(kMask, partial, 27);
-            targetL[33] = __shfl_sync(kMask, partial, 28);
-            targetL[34] = __shfl_sync(kMask, partial, 29);
-            targetL[35] = __shfl_sync(kMask, partial, 30);
+            Lo[15] = __shfl_sync(kMask, partial, 0);
+            Lo[16] = __shfl_sync(kMask, partial, 2);
+            Lo[17] = __shfl_sync(kMask, partial, 4);
+            Lo[18] = __shfl_sync(kMask, partial, 6);
+            Lo[19] = __shfl_sync(kMask, partial, 8);
+            Lo[20] = __shfl_sync(kMask, partial, 10);
+            Lo[21] = __shfl_sync(kMask, partial, 12);
+            Lo[22] = __shfl_sync(kMask, partial, 14);
+            Lo[23] = __shfl_sync(kMask, partial, 16);
+            Lo[24] = __shfl_sync(kMask, partial, 18);
+            Lo[25] = __shfl_sync(kMask, partial, 20);
+            Lo[26] = __shfl_sync(kMask, partial, 21);
+            Lo[27] = __shfl_sync(kMask, partial, 22);
+            Lo[28] = __shfl_sync(kMask, partial, 23);
+            Lo[29] = __shfl_sync(kMask, partial, 24);
+            Lo[30] = __shfl_sync(kMask, partial, 25);
+            Lo[31] = __shfl_sync(kMask, partial, 26);
+            Lo[32] = __shfl_sync(kMask, partial, 27);
+            Lo[33] = __shfl_sync(kMask, partial, 28);
+            Lo[34] = __shfl_sync(kMask, partial, 29);
+            Lo[35] = __shfl_sync(kMask, partial, 30);
         } else {
             if (leader) {
-                targetL[targetIndex] = partial;
+                Lo[targetIndex] = partial;
             }
         }
     }
     if constexpr (kReplicate) {
-        targetL[36] = L[36];
-        targetL[37] = L[37];
-        targetL[38] = L[38];
-        targetL[39] = L[39];
-        targetL[40] = L[40];
-        targetL[41] = L[41];
-        targetL[42] = L[42];
-        targetL[43] = L[43];
-        targetL[44] = L[44];
-        targetL[45] = L[45];
-        targetL[46] = L[46];
-        targetL[47] = L[47];
-        targetL[48] = L[48];
+        Lo[36] = Li[36];
+        Lo[37] = Li[37];
+        Lo[38] = Li[38];
+        Lo[39] = Li[39];
+        Lo[40] = Li[40];
+        Lo[41] = Li[41];
+        Lo[42] = Li[42];
+        Lo[43] = Li[43];
+        Lo[44] = Li[44];
+        Lo[45] = Li[45];
+        Lo[46] = Li[46];
+        Lo[47] = Li[47];
+        Lo[48] = Li[48];
         if (!doPhi) {
-            targetL[0] = L[0];
+            Lo[0] = Li[0];
         }
     } else {
         // Top-rank coefficients copy through unchanged.
         for (int index = 36 + lane; index < 49; index += 32) {
-            targetL[index] = L[index];
+            Lo[index] = Li[index];
         }
         // Lane zero led the potential group, so this restore is same-thread.
         if (!doPhi && lane == 0) {
-            targetL[0] = L[0];
+            Lo[0] = Li[0];
         }
     }
-    // The caller may overwrite shared L storage from lane zero on
-    // return. Finish EVERY lane L read (and every targetL write)
+    // The caller may overwrite shared Li storage from lane zero on
+    // return. Finish EVERY lane Li read (and every Lo write)
     // before permitting that write.
     __syncwarp(kMask);
 }
 }    // namespace cosmictiger::gravity::cartesian
 namespace cosmictiger::gravity::cartesian {
-__device__ void executeL2LWarp(float*& targetL, Expansion<float> const& L, float const dx,
+__device__ void executeL2LWarp(float*& Lo, Expansion<float> const& Li, float const dx,
     float const dy, float const dz, bool doPhi) {
     using namespace math;
     Fma const fma{};
@@ -962,7 +962,7 @@ __device__ void executeL2LWarp(float*& targetL, Expansion<float> const& L, float
             int const secondaryIndex = (entry >> 16) & 255u;
             int const kind = (entry >> 24) & 3u;
             float const sourceValue =
-                L[primaryIndex] + static_cast<float>(kind == 2) * L[secondaryIndex];
+                Li[primaryIndex] + static_cast<float>(kind == 2) * Li[secondaryIndex];
             float const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
             float const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
             float const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
@@ -977,16 +977,16 @@ __device__ void executeL2LWarp(float*& targetL, Expansion<float> const& L, float
         partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : k00;
         bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
         if (leader) {
-            partial += L[targetIndex];
+            partial += Li[targetIndex];
         }
         if constexpr (kReplicate) {
-            targetL[0] = __shfl_sync(kMask, partial, 0);
-            targetL[1] = __shfl_sync(kMask, partial, 8);
-            targetL[2] = __shfl_sync(kMask, partial, 16);
-            targetL[3] = __shfl_sync(kMask, partial, 24);
+            Lo[0] = __shfl_sync(kMask, partial, 0);
+            Lo[1] = __shfl_sync(kMask, partial, 8);
+            Lo[2] = __shfl_sync(kMask, partial, 16);
+            Lo[3] = __shfl_sync(kMask, partial, 24);
         } else {
             if (leader) {
-                targetL[targetIndex] = partial;
+                Lo[targetIndex] = partial;
             }
         }
     }
@@ -1003,7 +1003,7 @@ __device__ void executeL2LWarp(float*& targetL, Expansion<float> const& L, float
             int const secondaryIndex = (entry >> 16) & 255u;
             int const kind = (entry >> 24) & 3u;
             float const sourceValue =
-                L[primaryIndex] + static_cast<float>(kind == 2) * L[secondaryIndex];
+                Li[primaryIndex] + static_cast<float>(kind == 2) * Li[secondaryIndex];
             float const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
             float const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
             float const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
@@ -1016,23 +1016,23 @@ __device__ void executeL2LWarp(float*& targetL, Expansion<float> const& L, float
         partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : k00;
         bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
         if (leader) {
-            partial += L[targetIndex];
+            partial += Li[targetIndex];
         }
         if constexpr (kReplicate) {
-            targetL[4] = __shfl_sync(kMask, partial, 0);
-            targetL[5] = __shfl_sync(kMask, partial, 4);
-            targetL[6] = __shfl_sync(kMask, partial, 8);
-            targetL[7] = __shfl_sync(kMask, partial, 12);
-            targetL[8] = __shfl_sync(kMask, partial, 16);
-            targetL[9] = __shfl_sync(kMask, partial, 20);
-            targetL[10] = __shfl_sync(kMask, partial, 22);
-            targetL[11] = __shfl_sync(kMask, partial, 24);
-            targetL[12] = __shfl_sync(kMask, partial, 26);
-            targetL[13] = __shfl_sync(kMask, partial, 28);
-            targetL[14] = __shfl_sync(kMask, partial, 30);
+            Lo[4] = __shfl_sync(kMask, partial, 0);
+            Lo[5] = __shfl_sync(kMask, partial, 4);
+            Lo[6] = __shfl_sync(kMask, partial, 8);
+            Lo[7] = __shfl_sync(kMask, partial, 12);
+            Lo[8] = __shfl_sync(kMask, partial, 16);
+            Lo[9] = __shfl_sync(kMask, partial, 20);
+            Lo[10] = __shfl_sync(kMask, partial, 22);
+            Lo[11] = __shfl_sync(kMask, partial, 24);
+            Lo[12] = __shfl_sync(kMask, partial, 26);
+            Lo[13] = __shfl_sync(kMask, partial, 28);
+            Lo[14] = __shfl_sync(kMask, partial, 30);
         } else {
             if (leader) {
-                targetL[targetIndex] = partial;
+                Lo[targetIndex] = partial;
             }
         }
     }
@@ -1049,7 +1049,7 @@ __device__ void executeL2LWarp(float*& targetL, Expansion<float> const& L, float
             int const secondaryIndex = (entry >> 16) & 255u;
             int const kind = (entry >> 24) & 3u;
             float const sourceValue =
-                L[primaryIndex] + static_cast<float>(kind == 2) * L[secondaryIndex];
+                Li[primaryIndex] + static_cast<float>(kind == 2) * Li[secondaryIndex];
             float const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
             float const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
             float const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
@@ -1060,72 +1060,72 @@ __device__ void executeL2LWarp(float*& targetL, Expansion<float> const& L, float
         partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : k00;
         bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 31;
         if (leader) {
-            partial += L[targetIndex];
+            partial += Li[targetIndex];
         }
         if constexpr (kReplicate) {
-            targetL[15] = __shfl_sync(kMask, partial, 0);
-            targetL[16] = __shfl_sync(kMask, partial, 2);
-            targetL[17] = __shfl_sync(kMask, partial, 4);
-            targetL[18] = __shfl_sync(kMask, partial, 6);
-            targetL[19] = __shfl_sync(kMask, partial, 8);
-            targetL[20] = __shfl_sync(kMask, partial, 10);
-            targetL[21] = __shfl_sync(kMask, partial, 12);
-            targetL[22] = __shfl_sync(kMask, partial, 14);
-            targetL[23] = __shfl_sync(kMask, partial, 16);
-            targetL[24] = __shfl_sync(kMask, partial, 18);
-            targetL[25] = __shfl_sync(kMask, partial, 20);
-            targetL[26] = __shfl_sync(kMask, partial, 21);
-            targetL[27] = __shfl_sync(kMask, partial, 22);
-            targetL[28] = __shfl_sync(kMask, partial, 23);
-            targetL[29] = __shfl_sync(kMask, partial, 24);
-            targetL[30] = __shfl_sync(kMask, partial, 25);
-            targetL[31] = __shfl_sync(kMask, partial, 26);
-            targetL[32] = __shfl_sync(kMask, partial, 27);
-            targetL[33] = __shfl_sync(kMask, partial, 28);
-            targetL[34] = __shfl_sync(kMask, partial, 29);
-            targetL[35] = __shfl_sync(kMask, partial, 30);
+            Lo[15] = __shfl_sync(kMask, partial, 0);
+            Lo[16] = __shfl_sync(kMask, partial, 2);
+            Lo[17] = __shfl_sync(kMask, partial, 4);
+            Lo[18] = __shfl_sync(kMask, partial, 6);
+            Lo[19] = __shfl_sync(kMask, partial, 8);
+            Lo[20] = __shfl_sync(kMask, partial, 10);
+            Lo[21] = __shfl_sync(kMask, partial, 12);
+            Lo[22] = __shfl_sync(kMask, partial, 14);
+            Lo[23] = __shfl_sync(kMask, partial, 16);
+            Lo[24] = __shfl_sync(kMask, partial, 18);
+            Lo[25] = __shfl_sync(kMask, partial, 20);
+            Lo[26] = __shfl_sync(kMask, partial, 21);
+            Lo[27] = __shfl_sync(kMask, partial, 22);
+            Lo[28] = __shfl_sync(kMask, partial, 23);
+            Lo[29] = __shfl_sync(kMask, partial, 24);
+            Lo[30] = __shfl_sync(kMask, partial, 25);
+            Lo[31] = __shfl_sync(kMask, partial, 26);
+            Lo[32] = __shfl_sync(kMask, partial, 27);
+            Lo[33] = __shfl_sync(kMask, partial, 28);
+            Lo[34] = __shfl_sync(kMask, partial, 29);
+            Lo[35] = __shfl_sync(kMask, partial, 30);
         } else {
             if (leader) {
-                targetL[targetIndex] = partial;
+                Lo[targetIndex] = partial;
             }
         }
     }
     if constexpr (kReplicate) {
-        targetL[36] = L[36];
-        targetL[37] = L[37];
-        targetL[38] = L[38];
-        targetL[39] = L[39];
-        targetL[40] = L[40];
-        targetL[41] = L[41];
-        targetL[42] = L[42];
-        targetL[43] = L[43];
-        targetL[44] = L[44];
-        targetL[45] = L[45];
-        targetL[46] = L[46];
-        targetL[47] = L[47];
-        targetL[48] = L[48];
+        Lo[36] = Li[36];
+        Lo[37] = Li[37];
+        Lo[38] = Li[38];
+        Lo[39] = Li[39];
+        Lo[40] = Li[40];
+        Lo[41] = Li[41];
+        Lo[42] = Li[42];
+        Lo[43] = Li[43];
+        Lo[44] = Li[44];
+        Lo[45] = Li[45];
+        Lo[46] = Li[46];
+        Lo[47] = Li[47];
+        Lo[48] = Li[48];
         if (!doPhi) {
-            targetL[0] = L[0];
+            Lo[0] = Li[0];
         }
     } else {
         // Top-rank coefficients copy through unchanged.
         for (int index = 36 + lane; index < 49; index += 32) {
-            targetL[index] = L[index];
+            Lo[index] = Li[index];
         }
         // Lane zero led the potential group, so this restore is same-thread.
         if (!doPhi && lane == 0) {
-            targetL[0] = L[0];
+            Lo[0] = Li[0];
         }
     }
-    // The caller may overwrite shared L storage from lane zero on
-    // return. Finish EVERY lane L read (and every targetL write)
+    // The caller may overwrite shared Li storage from lane zero on
+    // return. Finish EVERY lane Li read (and every Lo write)
     // before permitting that write.
     __syncwarp(kMask);
 }
 }    // namespace cosmictiger::gravity::cartesian
 namespace cosmictiger::gravity::cartesian {
-__device__ void executeL2LWarp(Expansion<double>& targetL, Expansion<double> const& L,
-    double const dx, double const dy, double const dz, bool doPhi) {
+__device__ void executeL2LWarp(Expansion<double>& Lo, Expansion<double> const& Li, double const dx,
+    double const dy, double const dz, bool doPhi) {
     using namespace math;
     Fma const fma{};
     constexpr bool kReplicate = true;
@@ -1477,7 +1477,7 @@ __device__ void executeL2LWarp(Expansion<double>& targetL, Expansion<double> con
             int const secondaryIndex = (entry >> 16) & 255u;
             int const kind = (entry >> 24) & 3u;
             double const sourceValue =
-                L[primaryIndex] + static_cast<double>(kind == 2) * L[secondaryIndex];
+                Li[primaryIndex] + static_cast<double>(kind == 2) * Li[secondaryIndex];
             double const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
             double const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
             double const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
@@ -1492,16 +1492,16 @@ __device__ void executeL2LWarp(Expansion<double>& targetL, Expansion<double> con
         partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : k00;
         bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
         if (leader) {
-            partial += L[targetIndex];
+            partial += Li[targetIndex];
         }
         if constexpr (kReplicate) {
-            targetL[0] = __shfl_sync(kMask, partial, 0);
-            targetL[1] = __shfl_sync(kMask, partial, 8);
-            targetL[2] = __shfl_sync(kMask, partial, 16);
-            targetL[3] = __shfl_sync(kMask, partial, 24);
+            Lo[0] = __shfl_sync(kMask, partial, 0);
+            Lo[1] = __shfl_sync(kMask, partial, 8);
+            Lo[2] = __shfl_sync(kMask, partial, 16);
+            Lo[3] = __shfl_sync(kMask, partial, 24);
         } else {
             if (leader) {
-                targetL[targetIndex] = partial;
+                Lo[targetIndex] = partial;
             }
         }
     }
@@ -1518,7 +1518,7 @@ __device__ void executeL2LWarp(Expansion<double>& targetL, Expansion<double> con
             int const secondaryIndex = (entry >> 16) & 255u;
             int const kind = (entry >> 24) & 3u;
             double const sourceValue =
-                L[primaryIndex] + static_cast<double>(kind == 2) * L[secondaryIndex];
+                Li[primaryIndex] + static_cast<double>(kind == 2) * Li[secondaryIndex];
             double const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
             double const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
             double const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
@@ -1531,23 +1531,23 @@ __device__ void executeL2LWarp(Expansion<double>& targetL, Expansion<double> con
         partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : k00;
         bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
         if (leader) {
-            partial += L[targetIndex];
+            partial += Li[targetIndex];
         }
         if constexpr (kReplicate) {
-            targetL[4] = __shfl_sync(kMask, partial, 0);
-            targetL[5] = __shfl_sync(kMask, partial, 4);
-            targetL[6] = __shfl_sync(kMask, partial, 8);
-            targetL[7] = __shfl_sync(kMask, partial, 12);
-            targetL[8] = __shfl_sync(kMask, partial, 16);
-            targetL[9] = __shfl_sync(kMask, partial, 20);
-            targetL[10] = __shfl_sync(kMask, partial, 22);
-            targetL[11] = __shfl_sync(kMask, partial, 24);
-            targetL[12] = __shfl_sync(kMask, partial, 26);
-            targetL[13] = __shfl_sync(kMask, partial, 28);
-            targetL[14] = __shfl_sync(kMask, partial, 30);
+            Lo[4] = __shfl_sync(kMask, partial, 0);
+            Lo[5] = __shfl_sync(kMask, partial, 4);
+            Lo[6] = __shfl_sync(kMask, partial, 8);
+            Lo[7] = __shfl_sync(kMask, partial, 12);
+            Lo[8] = __shfl_sync(kMask, partial, 16);
+            Lo[9] = __shfl_sync(kMask, partial, 20);
+            Lo[10] = __shfl_sync(kMask, partial, 22);
+            Lo[11] = __shfl_sync(kMask, partial, 24);
+            Lo[12] = __shfl_sync(kMask, partial, 26);
+            Lo[13] = __shfl_sync(kMask, partial, 28);
+            Lo[14] = __shfl_sync(kMask, partial, 30);
         } else {
             if (leader) {
-                targetL[targetIndex] = partial;
+                Lo[targetIndex] = partial;
             }
         }
     }
@@ -1564,7 +1564,7 @@ __device__ void executeL2LWarp(Expansion<double>& targetL, Expansion<double> con
             int const secondaryIndex = (entry >> 16) & 255u;
             int const kind = (entry >> 24) & 3u;
             double const sourceValue =
-                L[primaryIndex] + static_cast<double>(kind == 2) * L[secondaryIndex];
+                Li[primaryIndex] + static_cast<double>(kind == 2) * Li[secondaryIndex];
             double const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
             double const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
             double const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
@@ -1575,71 +1575,71 @@ __device__ void executeL2LWarp(Expansion<double>& targetL, Expansion<double> con
         partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : k00;
         bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 31;
         if (leader) {
-            partial += L[targetIndex];
+            partial += Li[targetIndex];
         }
         if constexpr (kReplicate) {
-            targetL[15] = __shfl_sync(kMask, partial, 0);
-            targetL[16] = __shfl_sync(kMask, partial, 2);
-            targetL[17] = __shfl_sync(kMask, partial, 4);
-            targetL[18] = __shfl_sync(kMask, partial, 6);
-            targetL[19] = __shfl_sync(kMask, partial, 8);
-            targetL[20] = __shfl_sync(kMask, partial, 10);
-            targetL[21] = __shfl_sync(kMask, partial, 12);
-            targetL[22] = __shfl_sync(kMask, partial, 14);
-            targetL[23] = __shfl_sync(kMask, partial, 16);
-            targetL[24] = __shfl_sync(kMask, partial, 18);
-            targetL[25] = __shfl_sync(kMask, partial, 20);
-            targetL[26] = __shfl_sync(kMask, partial, 21);
-            targetL[27] = __shfl_sync(kMask, partial, 22);
-            targetL[28] = __shfl_sync(kMask, partial, 23);
-            targetL[29] = __shfl_sync(kMask, partial, 24);
-            targetL[30] = __shfl_sync(kMask, partial, 25);
-            targetL[31] = __shfl_sync(kMask, partial, 26);
-            targetL[32] = __shfl_sync(kMask, partial, 27);
-            targetL[33] = __shfl_sync(kMask, partial, 28);
-            targetL[34] = __shfl_sync(kMask, partial, 29);
-            targetL[35] = __shfl_sync(kMask, partial, 30);
+            Lo[15] = __shfl_sync(kMask, partial, 0);
+            Lo[16] = __shfl_sync(kMask, partial, 2);
+            Lo[17] = __shfl_sync(kMask, partial, 4);
+            Lo[18] = __shfl_sync(kMask, partial, 6);
+            Lo[19] = __shfl_sync(kMask, partial, 8);
+            Lo[20] = __shfl_sync(kMask, partial, 10);
+            Lo[21] = __shfl_sync(kMask, partial, 12);
+            Lo[22] = __shfl_sync(kMask, partial, 14);
+            Lo[23] = __shfl_sync(kMask, partial, 16);
+            Lo[24] = __shfl_sync(kMask, partial, 18);
+            Lo[25] = __shfl_sync(kMask, partial, 20);
+            Lo[26] = __shfl_sync(kMask, partial, 21);
+            Lo[27] = __shfl_sync(kMask, partial, 22);
+            Lo[28] = __shfl_sync(kMask, partial, 23);
+            Lo[29] = __shfl_sync(kMask, partial, 24);
+            Lo[30] = __shfl_sync(kMask, partial, 25);
+            Lo[31] = __shfl_sync(kMask, partial, 26);
+            Lo[32] = __shfl_sync(kMask, partial, 27);
+            Lo[33] = __shfl_sync(kMask, partial, 28);
+            Lo[34] = __shfl_sync(kMask, partial, 29);
+            Lo[35] = __shfl_sync(kMask, partial, 30);
         } else {
             if (leader) {
-                targetL[targetIndex] = partial;
+                Lo[targetIndex] = partial;
             }
         }
     }
     if constexpr (kReplicate) {
-        targetL[36] = L[36];
-        targetL[37] = L[37];
-        targetL[38] = L[38];
-        targetL[39] = L[39];
-        targetL[40] = L[40];
-        targetL[41] = L[41];
-        targetL[42] = L[42];
-        targetL[43] = L[43];
-        targetL[44] = L[44];
-        targetL[45] = L[45];
-        targetL[46] = L[46];
-        targetL[47] = L[47];
-        targetL[48] = L[48];
+        Lo[36] = Li[36];
+        Lo[37] = Li[37];
+        Lo[38] = Li[38];
+        Lo[39] = Li[39];
+        Lo[40] = Li[40];
+        Lo[41] = Li[41];
+        Lo[42] = Li[42];
+        Lo[43] = Li[43];
+        Lo[44] = Li[44];
+        Lo[45] = Li[45];
+        Lo[46] = Li[46];
+        Lo[47] = Li[47];
+        Lo[48] = Li[48];
         if (!doPhi) {
-            targetL[0] = L[0];
+            Lo[0] = Li[0];
         }
     } else {
         // Top-rank coefficients copy through unchanged.
         for (int index = 36 + lane; index < 49; index += 32) {
-            targetL[index] = L[index];
+            Lo[index] = Li[index];
         }
         // Lane zero led the potential group, so this restore is same-thread.
         if (!doPhi && lane == 0) {
-            targetL[0] = L[0];
+            Lo[0] = Li[0];
         }
     }
-    // The caller may overwrite shared L storage from lane zero on
-    // return. Finish EVERY lane L read (and every targetL write)
+    // The caller may overwrite shared Li storage from lane zero on
+    // return. Finish EVERY lane Li read (and every Lo write)
     // before permitting that write.
     __syncwarp(kMask);
 }
 }    // namespace cosmictiger::gravity::cartesian
 namespace cosmictiger::gravity::cartesian {
-__device__ void executeL2LWarp(double*& targetL, Expansion<double> const& L, double const dx,
+__device__ void executeL2LWarp(double*& Lo, Expansion<double> const& Li, double const dx,
     double const dy, double const dz, bool doPhi) {
     using namespace math;
     Fma const fma{};
@@ -1992,7 +1992,7 @@ __device__ void executeL2LWarp(double*& targetL, Expansion<double> const& L, dou
             int const secondaryIndex = (entry >> 16) & 255u;
             int const kind = (entry >> 24) & 3u;
             double const sourceValue =
-                L[primaryIndex] + static_cast<double>(kind == 2) * L[secondaryIndex];
+                Li[primaryIndex] + static_cast<double>(kind == 2) * Li[secondaryIndex];
             double const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
             double const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
             double const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
@@ -2007,16 +2007,16 @@ __device__ void executeL2LWarp(double*& targetL, Expansion<double> const& L, dou
         partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : k00;
         bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
         if (leader) {
-            partial += L[targetIndex];
+            partial += Li[targetIndex];
         }
         if constexpr (kReplicate) {
-            targetL[0] = __shfl_sync(kMask, partial, 0);
-            targetL[1] = __shfl_sync(kMask, partial, 8);
-            targetL[2] = __shfl_sync(kMask, partial, 16);
-            targetL[3] = __shfl_sync(kMask, partial, 24);
+            Lo[0] = __shfl_sync(kMask, partial, 0);
+            Lo[1] = __shfl_sync(kMask, partial, 8);
+            Lo[2] = __shfl_sync(kMask, partial, 16);
+            Lo[3] = __shfl_sync(kMask, partial, 24);
         } else {
             if (leader) {
-                targetL[targetIndex] = partial;
+                Lo[targetIndex] = partial;
             }
         }
     }
@@ -2033,7 +2033,7 @@ __device__ void executeL2LWarp(double*& targetL, Expansion<double> const& L, dou
             int const secondaryIndex = (entry >> 16) & 255u;
             int const kind = (entry >> 24) & 3u;
             double const sourceValue =
-                L[primaryIndex] + static_cast<double>(kind == 2) * L[secondaryIndex];
+                Li[primaryIndex] + static_cast<double>(kind == 2) * Li[secondaryIndex];
             double const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
             double const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
             double const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
@@ -2046,23 +2046,23 @@ __device__ void executeL2LWarp(double*& targetL, Expansion<double> const& L, dou
         partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : k00;
         bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
         if (leader) {
-            partial += L[targetIndex];
+            partial += Li[targetIndex];
         }
         if constexpr (kReplicate) {
-            targetL[4] = __shfl_sync(kMask, partial, 0);
-            targetL[5] = __shfl_sync(kMask, partial, 4);
-            targetL[6] = __shfl_sync(kMask, partial, 8);
-            targetL[7] = __shfl_sync(kMask, partial, 12);
-            targetL[8] = __shfl_sync(kMask, partial, 16);
-            targetL[9] = __shfl_sync(kMask, partial, 20);
-            targetL[10] = __shfl_sync(kMask, partial, 22);
-            targetL[11] = __shfl_sync(kMask, partial, 24);
-            targetL[12] = __shfl_sync(kMask, partial, 26);
-            targetL[13] = __shfl_sync(kMask, partial, 28);
-            targetL[14] = __shfl_sync(kMask, partial, 30);
+            Lo[4] = __shfl_sync(kMask, partial, 0);
+            Lo[5] = __shfl_sync(kMask, partial, 4);
+            Lo[6] = __shfl_sync(kMask, partial, 8);
+            Lo[7] = __shfl_sync(kMask, partial, 12);
+            Lo[8] = __shfl_sync(kMask, partial, 16);
+            Lo[9] = __shfl_sync(kMask, partial, 20);
+            Lo[10] = __shfl_sync(kMask, partial, 22);
+            Lo[11] = __shfl_sync(kMask, partial, 24);
+            Lo[12] = __shfl_sync(kMask, partial, 26);
+            Lo[13] = __shfl_sync(kMask, partial, 28);
+            Lo[14] = __shfl_sync(kMask, partial, 30);
         } else {
             if (leader) {
-                targetL[targetIndex] = partial;
+                Lo[targetIndex] = partial;
             }
         }
     }
@@ -2079,7 +2079,7 @@ __device__ void executeL2LWarp(double*& targetL, Expansion<double> const& L, dou
             int const secondaryIndex = (entry >> 16) & 255u;
             int const kind = (entry >> 24) & 3u;
             double const sourceValue =
-                L[primaryIndex] + static_cast<double>(kind == 2) * L[secondaryIndex];
+                Li[primaryIndex] + static_cast<double>(kind == 2) * Li[secondaryIndex];
             double const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
             double const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
             double const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
@@ -2090,94 +2090,94 @@ __device__ void executeL2LWarp(double*& targetL, Expansion<double> const& L, dou
         partial += (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : k00;
         bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 31;
         if (leader) {
-            partial += L[targetIndex];
+            partial += Li[targetIndex];
         }
         if constexpr (kReplicate) {
-            targetL[15] = __shfl_sync(kMask, partial, 0);
-            targetL[16] = __shfl_sync(kMask, partial, 2);
-            targetL[17] = __shfl_sync(kMask, partial, 4);
-            targetL[18] = __shfl_sync(kMask, partial, 6);
-            targetL[19] = __shfl_sync(kMask, partial, 8);
-            targetL[20] = __shfl_sync(kMask, partial, 10);
-            targetL[21] = __shfl_sync(kMask, partial, 12);
-            targetL[22] = __shfl_sync(kMask, partial, 14);
-            targetL[23] = __shfl_sync(kMask, partial, 16);
-            targetL[24] = __shfl_sync(kMask, partial, 18);
-            targetL[25] = __shfl_sync(kMask, partial, 20);
-            targetL[26] = __shfl_sync(kMask, partial, 21);
-            targetL[27] = __shfl_sync(kMask, partial, 22);
-            targetL[28] = __shfl_sync(kMask, partial, 23);
-            targetL[29] = __shfl_sync(kMask, partial, 24);
-            targetL[30] = __shfl_sync(kMask, partial, 25);
-            targetL[31] = __shfl_sync(kMask, partial, 26);
-            targetL[32] = __shfl_sync(kMask, partial, 27);
-            targetL[33] = __shfl_sync(kMask, partial, 28);
-            targetL[34] = __shfl_sync(kMask, partial, 29);
-            targetL[35] = __shfl_sync(kMask, partial, 30);
+            Lo[15] = __shfl_sync(kMask, partial, 0);
+            Lo[16] = __shfl_sync(kMask, partial, 2);
+            Lo[17] = __shfl_sync(kMask, partial, 4);
+            Lo[18] = __shfl_sync(kMask, partial, 6);
+            Lo[19] = __shfl_sync(kMask, partial, 8);
+            Lo[20] = __shfl_sync(kMask, partial, 10);
+            Lo[21] = __shfl_sync(kMask, partial, 12);
+            Lo[22] = __shfl_sync(kMask, partial, 14);
+            Lo[23] = __shfl_sync(kMask, partial, 16);
+            Lo[24] = __shfl_sync(kMask, partial, 18);
+            Lo[25] = __shfl_sync(kMask, partial, 20);
+            Lo[26] = __shfl_sync(kMask, partial, 21);
+            Lo[27] = __shfl_sync(kMask, partial, 22);
+            Lo[28] = __shfl_sync(kMask, partial, 23);
+            Lo[29] = __shfl_sync(kMask, partial, 24);
+            Lo[30] = __shfl_sync(kMask, partial, 25);
+            Lo[31] = __shfl_sync(kMask, partial, 26);
+            Lo[32] = __shfl_sync(kMask, partial, 27);
+            Lo[33] = __shfl_sync(kMask, partial, 28);
+            Lo[34] = __shfl_sync(kMask, partial, 29);
+            Lo[35] = __shfl_sync(kMask, partial, 30);
         } else {
             if (leader) {
-                targetL[targetIndex] = partial;
+                Lo[targetIndex] = partial;
             }
         }
     }
     if constexpr (kReplicate) {
-        targetL[36] = L[36];
-        targetL[37] = L[37];
-        targetL[38] = L[38];
-        targetL[39] = L[39];
-        targetL[40] = L[40];
-        targetL[41] = L[41];
-        targetL[42] = L[42];
-        targetL[43] = L[43];
-        targetL[44] = L[44];
-        targetL[45] = L[45];
-        targetL[46] = L[46];
-        targetL[47] = L[47];
-        targetL[48] = L[48];
+        Lo[36] = Li[36];
+        Lo[37] = Li[37];
+        Lo[38] = Li[38];
+        Lo[39] = Li[39];
+        Lo[40] = Li[40];
+        Lo[41] = Li[41];
+        Lo[42] = Li[42];
+        Lo[43] = Li[43];
+        Lo[44] = Li[44];
+        Lo[45] = Li[45];
+        Lo[46] = Li[46];
+        Lo[47] = Li[47];
+        Lo[48] = Li[48];
         if (!doPhi) {
-            targetL[0] = L[0];
+            Lo[0] = Li[0];
         }
     } else {
         // Top-rank coefficients copy through unchanged.
         for (int index = 36 + lane; index < 49; index += 32) {
-            targetL[index] = L[index];
+            Lo[index] = Li[index];
         }
         // Lane zero led the potential group, so this restore is same-thread.
         if (!doPhi && lane == 0) {
-            targetL[0] = L[0];
+            Lo[0] = Li[0];
         }
     }
-    // The caller may overwrite shared L storage from lane zero on
-    // return. Finish EVERY lane L read (and every targetL write)
+    // The caller may overwrite shared Li storage from lane zero on
+    // return. Finish EVERY lane Li read (and every Lo write)
     // before permitting that write.
     __syncwarp(kMask);
 }
 }    // namespace cosmictiger::gravity::cartesian
 namespace cosmictiger::gravity::cartesian {
-__device__ void L2LWarp(Expansion<float> const& L, Vector3<float> const& distance, bool doPhi,
-    Expansion<float>& targetL) {
+__device__ void L2LWarp(
+    Expansion<float> const& Li, Vector3<float> const& distance, bool doPhi, Expansion<float>& Lo) {
     using namespace math;
-    executeL2LWarp(targetL, L, distance[0], distance[1], distance[2], doPhi);
+    executeL2LWarp(Lo, Li, distance[0], distance[1], distance[2], doPhi);
 }
 }    // namespace cosmictiger::gravity::cartesian
 namespace cosmictiger::gravity::cartesian {
-__device__ void L2LWarp(Expansion<double> const& L, Vector3<double> const& distance, bool doPhi,
-    Expansion<double>& targetL) {
+__device__ void L2LWarp(Expansion<double> const& Li, Vector3<double> const& distance, bool doPhi,
+    Expansion<double>& Lo) {
     using namespace math;
-    executeL2LWarp(targetL, L, distance[0], distance[1], distance[2], doPhi);
-}
-}    // namespace cosmictiger::gravity::cartesian
-namespace cosmictiger::gravity::cartesian {
-__device__ void L2LWarpInto(
-    Expansion<float> const& L, Vector3<float> const& distance, bool doPhi, float* targetL) {
-    using namespace math;
-    executeL2LWarp(targetL, L, distance[0], distance[1], distance[2], doPhi);
+    executeL2LWarp(Lo, Li, distance[0], distance[1], distance[2], doPhi);
 }
 }    // namespace cosmictiger::gravity::cartesian
 namespace cosmictiger::gravity::cartesian {
 __device__ void L2LWarpInto(
-    Expansion<double> const& L, Vector3<double> const& distance, bool doPhi, double* targetL) {
+    Expansion<float> const& Li, Vector3<float> const& distance, bool doPhi, float* Lo) {
     using namespace math;
-    executeL2LWarp(targetL, L, distance[0], distance[1], distance[2], doPhi);
+    executeL2LWarp(Lo, Li, distance[0], distance[1], distance[2], doPhi);
+}
+}    // namespace cosmictiger::gravity::cartesian
+namespace cosmictiger::gravity::cartesian {
+__device__ void L2LWarpInto(
+    Expansion<double> const& Li, Vector3<double> const& distance, bool doPhi, double* Lo) {
+    using namespace math;
+    executeL2LWarp(Lo, Li, distance[0], distance[1], distance[2], doPhi);
 }
 }    // namespace cosmictiger::gravity::cartesian

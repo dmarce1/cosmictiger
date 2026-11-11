@@ -224,11 +224,11 @@ void testParticleMomentsAndTranslation() {
     constexpr int kMultipoleDegree = KernelLayout<order>::kMultipoleDegree_;
     auto const particles = particleCloud();
     auto const expected = projectedMoments<order>(particles);
-    Multipole<order> actual{};
+    Multipole<order> Mi{};
     for (auto const& particle : particles) {
-        kernels::P2M(particle.mass, particle.position, actual);
+        kernels::P2M(particle.mass, particle.position, Mi);
     }
-    compareRanks<kMultipoleDegree>(actual, expected, "P2M independent harmonic projection");
+    compareRanks<kMultipoleDegree>(Mi, expected, "P2M independent harmonic projection");
     Position const displacement{.13, -.17, .09};
     auto shifted = particles;
     for (auto& particle : shifted) {
@@ -237,10 +237,9 @@ void testParticleMomentsAndTranslation() {
         }
     }
     auto const translatedExpected = projectedMoments<order>(shifted);
-    Multipole<order> translated{};
-    kernels::M2M(actual, displacement, 1.0, translated);
-    compareRanks<kMultipoleDegree>(
-        translated, translatedExpected, "M2M independent particle re-expansion");
+    Multipole<order> Mo{};
+    kernels::M2M(Mi, displacement, 1.0, Mo);
+    compareRanks<kMultipoleDegree>(Mo, translatedExpected, "M2M independent particle re-expansion");
 }
 
 template <int order>
@@ -370,13 +369,13 @@ void testLocalTranslation() {
     double const background = 0;
     auto const polynomial = potentialPolynomial(kLocalDegree, background);
     Position const displacement{.13, -.17, .09};
-    auto const source = localAt<order>(polynomial, {});
+    auto const Li = localAt<order>(polynomial, {});
     auto const expected = localAt<order>(polynomial, displacement);
-    Expansion<order> actual{};
-    kernels::L2L(source, displacement, 1.0, actual);
-    compareRanks<kLocalDegree>(actual, expected, "L2L direct Cartesian polynomial translation");
+    Expansion<order> Lo{};
+    kernels::L2L(Li, displacement, 1.0, Lo);
+    compareRanks<kLocalDegree>(Lo, expected, "L2L direct Cartesian polynomial translation");
     Field field{};
-    kernels::L2P(source, displacement, field);
+    kernels::L2P(Li, displacement, field);
     near(field[0], polynomialDerivative(polynomial, {}, displacement), 1,
         "L2P direct polynomial potential");
     for (int d = 0; d < 3; ++d) {

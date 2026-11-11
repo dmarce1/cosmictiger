@@ -524,8 +524,8 @@ def replaceCartesianFields(cpp, sourceDegree, localDegree):
         return component_name(next(a for rank in range(degree + 1)
                                    for a in indices(rank) if index(a) == number))
     # Emitted straight-line arithmetic names each coefficient directly.
-    for variable, degree in (('targetM', sourceDegree), ('M', sourceDegree),
-                             ('targetL', localDegree), ('L', localDegree)):
+    for variable, degree in (('Mi', sourceDegree), ('Mo', sourceDegree), ('M', sourceDegree),
+                             ('Li', localDegree), ('Lo', localDegree), ('L', localDegree)):
         def replacement(match):
             number = int(match.group(1))
             name = field(number, degree)
@@ -558,8 +558,8 @@ def generateCartesianTracefree(minLocalDegree=2, maxLocalDegree=8, independentM2
             f'Expansion<Real, {localDegree+1}>& L',
             f'Derivatives<Real, {localDegree+1}>& L')
         warp, warpStats = generateWarpL2l(localDegree, sys.modules[__name__])
-        warp = re.sub(r'\bsource\b', 'L', warp)
-        warp = re.sub(r'\btarget\b', 'targetL', warp)
+        warp = re.sub(r'\bsource\b', 'Li', warp)
+        warp = re.sub(r'\btarget\b', 'Lo', warp)
         operatorStats += translationStats + particleStats + [warpStats]
         code = {'m2l': [(direct, directStats, 'm2l')],
                 'm2m': [(translations[0], translationStats[0], 'm2m')],
@@ -707,7 +707,7 @@ SYMBOL_DIRECTORIES = {
 // dx, dy, dz: target-minus-source displacement; R: its radius; iR: inverse radius.
 """,
     'cartesian_tracefree/l2l_warp.hpp': """// Symbol directory (cooperative Cartesian L2L):
-// L: source local expansion; targetL: translated local expansion.
+// Li: input local expansion; Lo: output local expansion.
 // dx, dy, dz: center displacement; basis: distributed Taylor polynomial values.
 """,
     'cartesian_tracefree/m2l.hpp': """// Symbol directory (Cartesian M2L):
@@ -716,11 +716,11 @@ SYMBOL_DIRECTORIES = {
 // Stored tensor fields are named by Cartesian indices; zz and other z-pairs follow from trace-free symmetry.
 """,
     'cartesian_tracefree/m2m.hpp': """// Symbol directory (Cartesian M2M):
-// M: source multipole; targetM: translated multipole; dx, dy, dz: center displacement.
+// Mi: input multipole; Mo: output multipole; dx, dy, dz: center displacement.
 // scaleRatio: source scale divided by target scale.
 """,
     'cartesian_tracefree/l2l.hpp': """// Symbol directory (Cartesian L2L):
-// L: source local expansion; targetL: translated local expansion; dx, dy, dz: center displacement.
+// Li: input local expansion; Lo: output local expansion; dx, dy, dz: center displacement.
 // scaleRatio: target scale divided by source scale.
 """,
     'cartesian_tracefree/p2m.hpp': """// Symbol directory (Cartesian P2M):
