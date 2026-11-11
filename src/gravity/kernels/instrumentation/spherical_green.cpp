@@ -10,7 +10,7 @@
 #include <cosmictiger/gravity/kernels/spherical/green.hpp>
 namespace cosmictiger::gravity::spherical::detail {
 template <typename Real>
-CUDA_EXPORT void evaluateGreen(Real x, Real y, Real z, Real* output) {
+void evaluateGreen(Real x, Real y, Real z, Real* output) {
     using namespace math;
     Fma const fma{};
     using Scalar = SimdScalar<Real>;

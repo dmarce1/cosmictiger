@@ -28,44 +28,73 @@ inline constexpr int kM2LFlops = 0;
 /// Accumulate Newtonian local coefficients from the source multipole and displacement.
 #if defined(COSMICTIGER_FMM_COUNTING_ONLY) || defined(COSMICTIGER_FMM_INSTRUMENTATION)
 template <class Real>
-CUDA_EXPORT void M2L(Multipole<Real> const& M, Vector3<Real> const& distance, Expansion<Real>& L);
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void M2L(Multipole<Real> const& M, Vector3<Real> const& distance, Expansion<Real>& L);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
-CUDA_EXPORT void M2L(
-    Multipole<float> const& M, Vector3<float> const& distance, Expansion<float>& L);
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void M2L(Multipole<float> const& M, Vector3<float> const& distance, Expansion<float>& L);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
-CUDA_EXPORT void M2L(
-    Multipole<double> const& M, Vector3<double> const& distance, Expansion<double>& L);
+
+#ifdef __CUDA_ARCH__
+__device__
 #endif
-#ifndef COSMICTIGER_FMM_COUNTING_ONLY
-#ifndef __CUDACC__
-CUDA_EXPORT void M2L(Multipole<SimdVector<float, 8>> const& M,
-    Vector3<SimdVector<float, 8>> const& distance, Expansion<SimdVector<float, 8>>& L);
-#endif
-#endif
-#ifndef COSMICTIGER_FMM_COUNTING_ONLY
-#ifndef __CUDACC__
-CUDA_EXPORT void M2L(Multipole<SimdVector<double, 2>> const& M,
-    Vector3<SimdVector<double, 2>> const& distance, Expansion<SimdVector<double, 2>>& L);
-#endif
+    void M2L(Multipole<double> const& M, Vector3<double> const& distance, Expansion<double>& L);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-CUDA_EXPORT void M2L(Multipole<SimdVector<float, 4>> const& M,
-    Vector3<SimdVector<float, 4>> const& distance, Expansion<SimdVector<float, 4>>& L);
+
+#ifdef __CUDA_ARCH__
+__device__
 #endif
-#endif
-#ifndef COSMICTIGER_FMM_COUNTING_ONLY
-#ifndef __CUDACC__
-CUDA_EXPORT void M2L(Multipole<SimdVector<double, 4>> const& M,
-    Vector3<SimdVector<double, 4>> const& distance, Expansion<SimdVector<double, 4>>& L);
+    void M2L(Multipole<SimdVector<float, 8>> const& M,
+        Vector3<SimdVector<float, 8>> const& distance, Expansion<SimdVector<float, 8>>& L);
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-CUDA_EXPORT void M2L(Multipole<SimdVector<double, 8>> const& M,
-    Vector3<SimdVector<double, 8>> const& distance, Expansion<SimdVector<double, 8>>& L);
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void M2L(Multipole<SimdVector<double, 2>> const& M,
+        Vector3<SimdVector<double, 2>> const& distance, Expansion<SimdVector<double, 2>>& L);
+#endif
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+#ifndef __CUDACC__
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void M2L(Multipole<SimdVector<float, 4>> const& M,
+        Vector3<SimdVector<float, 4>> const& distance, Expansion<SimdVector<float, 4>>& L);
+#endif
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+#ifndef __CUDACC__
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void M2L(Multipole<SimdVector<double, 4>> const& M,
+        Vector3<SimdVector<double, 4>> const& distance, Expansion<SimdVector<double, 4>>& L);
+#endif
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+#ifndef __CUDACC__
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void M2L(Multipole<SimdVector<double, 8>> const& M,
+        Vector3<SimdVector<double, 8>> const& distance, Expansion<SimdVector<double, 8>>& L);
 #endif
 #endif
 

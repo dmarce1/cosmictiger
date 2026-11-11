@@ -27,50 +27,81 @@ inline constexpr int kL2PFlops = 0;
 /// Accumulate the local potential and negative gradient, scaling acceleration by inverseScale.
 #if defined(COSMICTIGER_FMM_COUNTING_ONLY) || defined(COSMICTIGER_FMM_INSTRUMENTATION)
 template <class Real>
-CUDA_EXPORT void L2P(Expansion<Real> const& L, Vector3<Real> const& distance, Real inverseScale,
-    gravity::Field<Real>& field);
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void L2P(Expansion<Real> const& L, Vector3<Real> const& distance, Real inverseScale,
+        gravity::Field<Real>& field);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
-CUDA_EXPORT void L2P(Expansion<float> const& L, Vector3<float> const& distance, float inverseScale,
-    gravity::Field<float>& field);
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void L2P(Expansion<float> const& L, Vector3<float> const& distance, float inverseScale,
+        gravity::Field<float>& field);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
-CUDA_EXPORT void L2P(Expansion<double> const& L, Vector3<double> const& distance,
-    double inverseScale, gravity::Field<double>& field);
+
+#ifdef __CUDA_ARCH__
+__device__
 #endif
-#ifndef COSMICTIGER_FMM_COUNTING_ONLY
-#ifndef __CUDACC__
-CUDA_EXPORT void L2P(Expansion<SimdVector<float, 8>> const& L,
-    Vector3<SimdVector<float, 8>> const& distance, SimdVector<float, 8> inverseScale,
-    gravity::Field<SimdVector<float, 8>>& field);
-#endif
-#endif
-#ifndef COSMICTIGER_FMM_COUNTING_ONLY
-#ifndef __CUDACC__
-CUDA_EXPORT void L2P(Expansion<SimdVector<double, 2>> const& L,
-    Vector3<SimdVector<double, 2>> const& distance, SimdVector<double, 2> inverseScale,
-    gravity::Field<SimdVector<double, 2>>& field);
-#endif
+    void L2P(Expansion<double> const& L, Vector3<double> const& distance, double inverseScale,
+        gravity::Field<double>& field);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-CUDA_EXPORT void L2P(Expansion<SimdVector<float, 4>> const& L,
-    Vector3<SimdVector<float, 4>> const& distance, SimdVector<float, 4> inverseScale,
-    gravity::Field<SimdVector<float, 4>>& field);
+
+#ifdef __CUDA_ARCH__
+__device__
 #endif
-#endif
-#ifndef COSMICTIGER_FMM_COUNTING_ONLY
-#ifndef __CUDACC__
-CUDA_EXPORT void L2P(Expansion<SimdVector<double, 4>> const& L,
-    Vector3<SimdVector<double, 4>> const& distance, SimdVector<double, 4> inverseScale,
-    gravity::Field<SimdVector<double, 4>>& field);
+    void L2P(Expansion<SimdVector<float, 8>> const& L,
+        Vector3<SimdVector<float, 8>> const& distance, SimdVector<float, 8> inverseScale,
+        gravity::Field<SimdVector<float, 8>>& field);
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-CUDA_EXPORT void L2P(Expansion<SimdVector<double, 8>> const& L,
-    Vector3<SimdVector<double, 8>> const& distance, SimdVector<double, 8> inverseScale,
-    gravity::Field<SimdVector<double, 8>>& field);
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void L2P(Expansion<SimdVector<double, 2>> const& L,
+        Vector3<SimdVector<double, 2>> const& distance, SimdVector<double, 2> inverseScale,
+        gravity::Field<SimdVector<double, 2>>& field);
+#endif
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+#ifndef __CUDACC__
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void L2P(Expansion<SimdVector<float, 4>> const& L,
+        Vector3<SimdVector<float, 4>> const& distance, SimdVector<float, 4> inverseScale,
+        gravity::Field<SimdVector<float, 4>>& field);
+#endif
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+#ifndef __CUDACC__
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void L2P(Expansion<SimdVector<double, 4>> const& L,
+        Vector3<SimdVector<double, 4>> const& distance, SimdVector<double, 4> inverseScale,
+        gravity::Field<SimdVector<double, 4>>& field);
+#endif
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+#ifndef __CUDACC__
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void L2P(Expansion<SimdVector<double, 8>> const& L,
+        Vector3<SimdVector<double, 8>> const& distance, SimdVector<double, 8> inverseScale,
+        gravity::Field<SimdVector<double, 8>>& field);
 #endif
 #endif
 

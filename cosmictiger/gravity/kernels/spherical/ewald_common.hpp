@@ -34,7 +34,10 @@ namespace detail {
 #endif
     /// Convert an Ewald working value between scalar or corresponding SIMD precisions.
     template <typename Destination, typename Source>
-    CUDA_EXPORT inline Destination ewaldConvert(Source const& value) {
+#ifdef __CUDA_ARCH__
+    __device__
+#endif
+        inline Destination ewaldConvert(Source const& value) {
         using namespace math;
         if constexpr (std::is_same_v<Destination, Source>) {
             return value;
@@ -48,7 +51,10 @@ namespace detail {
     }
     /// Evaluate exp for a scalar or independently in each SIMD lane.
     template <typename Real>
-    CUDA_EXPORT inline Real ewaldExp(Real const& value) {
+#ifdef __CUDA_ARCH__
+    __device__
+#endif
+        inline Real ewaldExp(Real const& value) {
         using namespace math;
         if constexpr (std::is_arithmetic_v<Real>) {
             return std::exp(value);
@@ -58,7 +64,10 @@ namespace detail {
     }
     /// Evaluate erfc for a scalar or independently in each SIMD lane.
     template <typename Real>
-    CUDA_EXPORT inline Real ewaldErfc(Real const& value) {
+#ifdef __CUDA_ARCH__
+    __device__
+#endif
+        inline Real ewaldErfc(Real const& value) {
         using namespace math;
         if constexpr (std::is_arithmetic_v<Real>) {
             return std::erfc(value);
@@ -68,7 +77,10 @@ namespace detail {
     }
     /// Evaluate cos for a scalar or independently in each SIMD lane.
     template <typename Real>
-    CUDA_EXPORT inline Real ewaldCos(Real const& value) {
+#ifdef __CUDA_ARCH__
+    __device__
+#endif
+        inline Real ewaldCos(Real const& value) {
         using namespace math;
         if constexpr (std::is_arithmetic_v<Real>) {
             return std::cos(value);
@@ -78,7 +90,10 @@ namespace detail {
     }
     /// Evaluate sin for a scalar or independently in each SIMD lane.
     template <typename Real>
-    CUDA_EXPORT inline Real ewaldSin(Real const& value) {
+#ifdef __CUDA_ARCH__
+    __device__
+#endif
+        inline Real ewaldSin(Real const& value) {
         using namespace math;
         if constexpr (std::is_arithmetic_v<Real>) {
             return std::sin(value);
@@ -88,7 +103,10 @@ namespace detail {
     }
     /// Add a lattice contribution with Kahan compensation, updating sum and correction.
     template <typename Real>
-    CUDA_EXPORT inline void ewaldAccumulate(Real& sum, Real& correction, Real value) {
+#ifdef __CUDA_ARCH__
+    __device__
+#endif
+        inline void ewaldAccumulate(Real& sum, Real& correction, Real value) {
         using namespace math;
         Real const adjusted = value - correction;
         Real const next = sum + adjusted;

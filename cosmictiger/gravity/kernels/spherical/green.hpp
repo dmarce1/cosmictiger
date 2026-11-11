@@ -31,46 +31,81 @@ inline constexpr int kGreenConventionalFlops<6> = 156;
 /// Assign singular solid harmonics for the supplied displacement.
 #if defined(COSMICTIGER_FMM_COUNTING_ONLY) || defined(COSMICTIGER_FMM_INSTRUMENTATION)
 template <typename Real>
-CUDA_EXPORT void evaluateGreen(Real x, Real y, Real z, Real* output);
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void evaluateGreen(Real x, Real y, Real z, Real* output);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
-CUDA_EXPORT void evaluateGreen(float x, float y, float z, float* output);
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void evaluateGreen(float x, float y, float z, float* output);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
-CUDA_EXPORT void evaluateGreen(double x, double y, double z, double* output);
+
+#ifdef __CUDA_ARCH__
+__device__
 #endif
-#ifndef COSMICTIGER_FMM_COUNTING_ONLY
-#ifndef __CUDACC__
-CUDA_EXPORT void evaluateGreen(SimdVector<float, 8> x, SimdVector<float, 8> y,
-    SimdVector<float, 8> z, SimdVector<float, 8>* output);
-#endif
-#endif
-#ifndef COSMICTIGER_FMM_COUNTING_ONLY
-#ifndef __CUDACC__
-CUDA_EXPORT void evaluateGreen(SimdVector<double, 2> x, SimdVector<double, 2> y,
-    SimdVector<double, 2> z, SimdVector<double, 2>* output);
-#endif
-#endif
-#ifndef COSMICTIGER_FMM_COUNTING_ONLY
-#ifndef __CUDACC__
-CUDA_EXPORT void evaluateGreen(SimdVector<float, 4> x, SimdVector<float, 4> y,
-    SimdVector<float, 4> z, SimdVector<float, 4>* output);
-#endif
+    void evaluateGreen(double x, double y, double z, double* output);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-CUDA_EXPORT void evaluateGreen(SimdVector<double, 4> x, SimdVector<double, 4> y,
-    SimdVector<double, 4> z, SimdVector<double, 4>* output);
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void evaluateGreen(SimdVector<float, 8> x, SimdVector<float, 8> y, SimdVector<float, 8> z,
+        SimdVector<float, 8>* output);
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-CUDA_EXPORT void evaluateGreen(SimdVector<double, 8> x, SimdVector<double, 8> y,
-    SimdVector<double, 8> z, SimdVector<double, 8>* output);
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void evaluateGreen(SimdVector<double, 2> x, SimdVector<double, 2> y, SimdVector<double, 2> z,
+        SimdVector<double, 2>* output);
+#endif
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+#ifndef __CUDACC__
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void evaluateGreen(SimdVector<float, 4> x, SimdVector<float, 4> y, SimdVector<float, 4> z,
+        SimdVector<float, 4>* output);
+#endif
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+#ifndef __CUDACC__
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void evaluateGreen(SimdVector<double, 4> x, SimdVector<double, 4> y, SimdVector<double, 4> z,
+        SimdVector<double, 4>* output);
+#endif
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+#ifndef __CUDACC__
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void evaluateGreen(SimdVector<double, 8> x, SimdVector<double, 8> y, SimdVector<double, 8> z,
+        SimdVector<double, 8>* output);
 #endif
 #endif
 template <typename Real, typename Output>
-CUDA_EXPORT void evaluateGreen(Real x, Real y, Real z, Output& output) {
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void evaluateGreen(Real x, Real y, Real z, Output& output) {
     using namespace math;
     evaluateGreen(x, y, z, &output[0]);
 }

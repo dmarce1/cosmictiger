@@ -10,7 +10,7 @@
 #include <cosmictiger/gravity/kernels/cartesian_tracefree/p2m.hpp>
 namespace cosmictiger::gravity::cartesian::detail {
 template <class Real>
-CUDA_EXPORT void P2M(Real mass, Vector3<Real> const& distance, Multipole<Real>& M) {
+void P2M(Real mass, Vector3<Real> const& distance, Multipole<Real>& M) {
     using namespace math;
     Fma const fma{};
     using Scalar = SimdScalar<Real>;

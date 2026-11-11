@@ -498,13 +498,11 @@ foreach(stem IN LISTS cosmictiger_fmm_operator_stems)
     list(APPEND COSMICTIGER_GENERATED_FMM_FILES
         ${COSMICTIGER_GENERATED_FMM_SOURCE_DIR}/instrumentation/${stem}.cpp)
     list(APPEND cosmictiger_fmm_library_sources
+        ${COSMICTIGER_GENERATED_FMM_SOURCE_DIR}/${stem}_scalar.cpp
         ${COSMICTIGER_GENERATED_FMM_SOURCE_DIR}/${stem}_simd.cpp)
     if(COSMICTIGER_WITH_CUDA)
         list(APPEND cosmictiger_fmm_library_sources
             ${COSMICTIGER_GENERATED_FMM_SOURCE_DIR}/${stem}_scalar.cu)
-    else()
-        list(APPEND cosmictiger_fmm_library_sources
-            ${COSMICTIGER_GENERATED_FMM_SOURCE_DIR}/${stem}_scalar.cpp)
     endif()
 endforeach()
 list(APPEND COSMICTIGER_GENERATED_FMM_FILES

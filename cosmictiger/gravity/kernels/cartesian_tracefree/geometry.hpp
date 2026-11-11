@@ -19,37 +19,68 @@ namespace cosmictiger::gravity::cartesian::detail {
 // R is the separation radius; iR is its inverse, zero at coincident centers.
 #if defined(COSMICTIGER_FMM_COUNTING_ONLY) || defined(COSMICTIGER_FMM_INSTRUMENTATION)
 template <class Real>
-CUDA_EXPORT Real inverseRadius(Vector3<Real> const& distance);
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    Real inverseRadius(Vector3<Real> const& distance);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
-CUDA_EXPORT float inverseRadius(Vector3<float> const& distance);
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    float inverseRadius(Vector3<float> const& distance);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
-CUDA_EXPORT double inverseRadius(Vector3<double> const& distance);
+
+#ifdef __CUDA_ARCH__
+__device__
 #endif
-#ifndef COSMICTIGER_FMM_COUNTING_ONLY
-#ifndef __CUDACC__
-CUDA_EXPORT SimdVector<float, 8> inverseRadius(Vector3<SimdVector<float, 8>> const& distance);
-#endif
-#endif
-#ifndef COSMICTIGER_FMM_COUNTING_ONLY
-#ifndef __CUDACC__
-CUDA_EXPORT SimdVector<double, 2> inverseRadius(Vector3<SimdVector<double, 2>> const& distance);
-#endif
-#endif
-#ifndef COSMICTIGER_FMM_COUNTING_ONLY
-#ifndef __CUDACC__
-CUDA_EXPORT SimdVector<float, 4> inverseRadius(Vector3<SimdVector<float, 4>> const& distance);
-#endif
+    double inverseRadius(Vector3<double> const& distance);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-CUDA_EXPORT SimdVector<double, 4> inverseRadius(Vector3<SimdVector<double, 4>> const& distance);
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    SimdVector<float, 8> inverseRadius(Vector3<SimdVector<float, 8>> const& distance);
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-CUDA_EXPORT SimdVector<double, 8> inverseRadius(Vector3<SimdVector<double, 8>> const& distance);
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    SimdVector<double, 2> inverseRadius(Vector3<SimdVector<double, 2>> const& distance);
+#endif
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+#ifndef __CUDACC__
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    SimdVector<float, 4> inverseRadius(Vector3<SimdVector<float, 4>> const& distance);
+#endif
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+#ifndef __CUDACC__
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    SimdVector<double, 4> inverseRadius(Vector3<SimdVector<double, 4>> const& distance);
+#endif
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+#ifndef __CUDACC__
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    SimdVector<double, 8> inverseRadius(Vector3<SimdVector<double, 8>> const& distance);
 #endif
 #endif
 

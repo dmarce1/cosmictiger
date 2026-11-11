@@ -10,7 +10,7 @@
 #include <cosmictiger/gravity/kernels/spherical/ewald_green.hpp>
 namespace cosmictiger::gravity::spherical {
 template <typename Real>
-CUDA_EXPORT void ewaldRegular(Real x, Real y, Real z, Real radiusSquared, Real* output) {
+void ewaldRegular(Real x, Real y, Real z, Real radiusSquared, Real* output) {
     using namespace math;
     Fma const fma{};
     using Scalar = SimdScalar<Real>;
@@ -105,7 +105,7 @@ CUDA_EXPORT void ewaldRegular(Real x, Real y, Real z, Real radiusSquared, Real* 
 }    // namespace cosmictiger::gravity::spherical
 namespace cosmictiger::gravity::spherical {
 template <typename Real>
-CUDA_EXPORT void evaluateEwaldWorking(Real& greenTrace, Real x, Real y, Real z, Real* output) {
+void evaluateEwaldWorking(Real& greenTrace, Real x, Real y, Real z, Real* output) {
     using namespace math;
     Fma const fma{};
     using Scalar = SimdScalar<Real>;
@@ -1176,7 +1176,7 @@ CUDA_EXPORT void evaluateEwaldWorking(Real& greenTrace, Real x, Real y, Real z, 
 }    // namespace cosmictiger::gravity::spherical
 namespace cosmictiger::gravity::spherical {
 template <typename Real>
-CUDA_EXPORT void evaluateEwaldGreen(Real& greenTrace, Real x, Real y, Real z, Real* output) {
+void evaluateEwaldGreen(Real& greenTrace, Real x, Real y, Real z, Real* output) {
     using namespace math;
     using Working = typename detail::EwaldWorkingType<Real>::Type;
     Working temporary[49];

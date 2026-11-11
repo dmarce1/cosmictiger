@@ -10,7 +10,7 @@
 #include <cosmictiger/gravity/kernels/basis_conversion.hpp>
 namespace cosmictiger::gravity::cartesian {
 template <class Real>
-CUDA_EXPORT Multipole<Real>::operator spherical::Multipole<Real>() const {
+Multipole<Real>::operator spherical::Multipole<Real>() const {
     using namespace math;
     Fma const fma{};
     using Scalar = SimdScalar<Real>;
@@ -156,7 +156,7 @@ CUDA_EXPORT Multipole<Real>::operator spherical::Multipole<Real>() const {
 }    // namespace cosmictiger::gravity::cartesian
 namespace cosmictiger::gravity::spherical {
 template <class Real>
-CUDA_EXPORT Expansion<Real>::operator cartesian::Expansion<Real>() const {
+Expansion<Real>::operator cartesian::Expansion<Real>() const {
     using namespace math;
     Fma const fma{};
     using Scalar = SimdScalar<Real>;

@@ -100,7 +100,11 @@ class Expansion : public detail::Coefficients<Real, (6)> {
 public:
     using Base::operator=;
     /// Convert basis at the same center and coordinate scale.
-    CUDA_EXPORT explicit operator cartesian::Expansion<Real>() const;
+
+#ifdef __CUDA_ARCH__
+    __device__
+#endif
+        explicit operator cartesian::Expansion<Real>() const;
 };
 
 template <class Real>

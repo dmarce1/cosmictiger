@@ -10,7 +10,7 @@
 #include <cosmictiger/gravity/kernels/spherical/l2p.hpp>
 namespace cosmictiger::gravity::spherical::detail {
 template <typename Real>
-CUDA_EXPORT void L2P(Real const* source, Real x, Real y, Real z, Real* output) {
+void L2P(Real const* source, Real x, Real y, Real z, Real* output) {
     using namespace math;
     Fma const fma{};
     using Scalar = SimdScalar<Real>;

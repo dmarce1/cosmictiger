@@ -57,7 +57,13 @@ class GravityConstants(unittest.TestCase):
             self.assertNotRegex(code, r'constexpr auto k\d+')
             self.assertNotRegex(code, r'\b(?:Real|Scalar)\b')
             self.assertNotRegex(code, r'broadcast<(?:float|double)>')
-            for table in re.split(r'\bCUDA_EXPORT\b|\b__device__\b', code)[1:]:
+            self.assertNotIn('CUDA_EXPORT', code)
+            self.assertNotRegex(code, r'#include[^\n]*\.cpp')
+            if path.suffix == '.cpp':
+                self.assertNotIn('__device__', code)
+            else:
+                self.assertIn('__device__', code)
+            for table in re.split(r'namespace [\w:]+ \{', code)[1:]:
                 declarations = re.findall(
                     r'constexpr (float|double) (k\d+) = ([^;]+);', table)
                 if not declarations:

@@ -10,7 +10,7 @@
 #include <cosmictiger/gravity/kernels/cartesian_tracefree/geometry.hpp>
 namespace cosmictiger::gravity::cartesian::detail {
 template <class Real>
-CUDA_EXPORT Real inverseRadius(Vector3<Real> const& distance) {
+Real inverseRadius(Vector3<Real> const& distance) {
     using namespace math;
     Fma const fma{};
     using Scalar = SimdScalar<Real>;

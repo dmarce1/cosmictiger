@@ -39,45 +39,68 @@ namespace cosmictiger::gravity::cartesian {
 /// Return the equivalent coefficients in the destination basis at the same spatial scale.
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 template <>
-CUDA_EXPORT Multipole<float>::operator spherical::Multipole<float>() const;
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    Multipole<float>::operator spherical::Multipole<float>() const;
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 template <>
-CUDA_EXPORT Multipole<double>::operator spherical::Multipole<double>() const;
+
+#ifdef __CUDA_ARCH__
+__device__
 #endif
-#ifndef COSMICTIGER_FMM_COUNTING_ONLY
-#ifndef __CUDACC__
-template <>
-CUDA_EXPORT Multipole<SimdVector<float, 8>>::operator spherical::Multipole<SimdVector<float, 8>>()
-    const;
-#endif
-#endif
-#ifndef COSMICTIGER_FMM_COUNTING_ONLY
-#ifndef __CUDACC__
-template <>
-CUDA_EXPORT Multipole<SimdVector<double, 2>>::operator spherical::Multipole<SimdVector<double, 2>>()
-    const;
-#endif
+    Multipole<double>::operator spherical::Multipole<double>() const;
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
 template <>
-CUDA_EXPORT Multipole<SimdVector<float, 4>>::operator spherical::Multipole<SimdVector<float, 4>>()
-    const;
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    Multipole<SimdVector<float, 8>>::operator spherical::Multipole<SimdVector<float, 8>>() const;
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
 template <>
-CUDA_EXPORT Multipole<SimdVector<double, 4>>::operator spherical::Multipole<SimdVector<double, 4>>()
-    const;
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    Multipole<SimdVector<double, 2>>::operator spherical::Multipole<SimdVector<double, 2>>() const;
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
 template <>
-CUDA_EXPORT Multipole<SimdVector<double, 8>>::operator spherical::Multipole<SimdVector<double, 8>>()
-    const;
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    Multipole<SimdVector<float, 4>>::operator spherical::Multipole<SimdVector<float, 4>>() const;
+#endif
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+#ifndef __CUDACC__
+template <>
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    Multipole<SimdVector<double, 4>>::operator spherical::Multipole<SimdVector<double, 4>>() const;
+#endif
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+#ifndef __CUDACC__
+template <>
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    Multipole<SimdVector<double, 8>>::operator spherical::Multipole<SimdVector<double, 8>>() const;
 #endif
 #endif
 
@@ -93,45 +116,68 @@ namespace cosmictiger::gravity::spherical {
 /// Return the equivalent coefficients in the destination basis at the same spatial scale.
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 template <>
-CUDA_EXPORT Expansion<float>::operator cartesian::Expansion<float>() const;
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    Expansion<float>::operator cartesian::Expansion<float>() const;
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 template <>
-CUDA_EXPORT Expansion<double>::operator cartesian::Expansion<double>() const;
+
+#ifdef __CUDA_ARCH__
+__device__
 #endif
-#ifndef COSMICTIGER_FMM_COUNTING_ONLY
-#ifndef __CUDACC__
-template <>
-CUDA_EXPORT Expansion<SimdVector<float, 8>>::operator cartesian::Expansion<SimdVector<float, 8>>()
-    const;
-#endif
-#endif
-#ifndef COSMICTIGER_FMM_COUNTING_ONLY
-#ifndef __CUDACC__
-template <>
-CUDA_EXPORT Expansion<SimdVector<double, 2>>::operator cartesian::Expansion<SimdVector<double, 2>>()
-    const;
-#endif
+    Expansion<double>::operator cartesian::Expansion<double>() const;
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
 template <>
-CUDA_EXPORT Expansion<SimdVector<float, 4>>::operator cartesian::Expansion<SimdVector<float, 4>>()
-    const;
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    Expansion<SimdVector<float, 8>>::operator cartesian::Expansion<SimdVector<float, 8>>() const;
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
 template <>
-CUDA_EXPORT Expansion<SimdVector<double, 4>>::operator cartesian::Expansion<SimdVector<double, 4>>()
-    const;
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    Expansion<SimdVector<double, 2>>::operator cartesian::Expansion<SimdVector<double, 2>>() const;
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
 template <>
-CUDA_EXPORT Expansion<SimdVector<double, 8>>::operator cartesian::Expansion<SimdVector<double, 8>>()
-    const;
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    Expansion<SimdVector<float, 4>>::operator cartesian::Expansion<SimdVector<float, 4>>() const;
+#endif
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+#ifndef __CUDACC__
+template <>
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    Expansion<SimdVector<double, 4>>::operator cartesian::Expansion<SimdVector<double, 4>>() const;
+#endif
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+#ifndef __CUDACC__
+template <>
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    Expansion<SimdVector<double, 8>>::operator cartesian::Expansion<SimdVector<double, 8>>() const;
 #endif
 #endif
 

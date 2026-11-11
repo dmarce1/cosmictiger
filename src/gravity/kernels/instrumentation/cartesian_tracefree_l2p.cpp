@@ -10,7 +10,7 @@
 #include <cosmictiger/gravity/kernels/cartesian_tracefree/l2p.hpp>
 namespace cosmictiger::gravity::cartesian::detail {
 template <class Real>
-CUDA_EXPORT void L2P(Expansion<Real> const& L, Vector3<Real> const& distance, Real inverseScale,
+void L2P(Expansion<Real> const& L, Vector3<Real> const& distance, Real inverseScale,
     gravity::Field<Real>& field) {
     using namespace math;
     Fma const fma{};

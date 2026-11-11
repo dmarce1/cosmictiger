@@ -10,7 +10,7 @@
 #include <cosmictiger/gravity/kernels/basis_conversion.hpp>
 namespace cosmictiger::gravity::cartesian {
 template <>
-CUDA_EXPORT Multipole<float>::operator spherical::Multipole<float>() const {
+Multipole<float>::operator spherical::Multipole<float>() const {
     using namespace math;
     Fma const fma{};
     constexpr float k00 = 2.60416667e-04f;
@@ -155,7 +155,7 @@ CUDA_EXPORT Multipole<float>::operator spherical::Multipole<float>() const {
 }    // namespace cosmictiger::gravity::cartesian
 namespace cosmictiger::gravity::cartesian {
 template <>
-CUDA_EXPORT Multipole<double>::operator spherical::Multipole<double>() const {
+Multipole<double>::operator spherical::Multipole<double>() const {
     using namespace math;
     Fma const fma{};
     constexpr double k00 = 2.60416666666666667e-04;
@@ -300,7 +300,7 @@ CUDA_EXPORT Multipole<double>::operator spherical::Multipole<double>() const {
 }    // namespace cosmictiger::gravity::cartesian
 namespace cosmictiger::gravity::spherical {
 template <>
-CUDA_EXPORT Expansion<float>::operator cartesian::Expansion<float>() const {
+Expansion<float>::operator cartesian::Expansion<float>() const {
     using namespace math;
     Fma const fma{};
     constexpr float k00 = 3.12500000e-02f;
@@ -492,7 +492,7 @@ CUDA_EXPORT Expansion<float>::operator cartesian::Expansion<float>() const {
 }    // namespace cosmictiger::gravity::spherical
 namespace cosmictiger::gravity::spherical {
 template <>
-CUDA_EXPORT Expansion<double>::operator cartesian::Expansion<double>() const {
+Expansion<double>::operator cartesian::Expansion<double>() const {
     using namespace math;
     Fma const fma{};
     constexpr double k00 = 3.12500000000000000e-02;

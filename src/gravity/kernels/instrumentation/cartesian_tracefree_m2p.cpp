@@ -10,8 +10,7 @@
 #include <cosmictiger/gravity/kernels/cartesian_tracefree/m2p.hpp>
 namespace cosmictiger::gravity::cartesian::detail {
 template <class Real>
-CUDA_EXPORT void M2P(
-    Multipole<Real> const& M, Vector3<Real> const& distance, gravity::Field<Real>& field) {
+void M2P(Multipole<Real> const& M, Vector3<Real> const& distance, gravity::Field<Real>& field) {
     using namespace math;
     Fma const fma{};
     using Scalar = SimdScalar<Real>;

@@ -32,46 +32,81 @@ inline constexpr int kL2PConventionalFlops<6> = 447;
 /// Accumulate the local expansion potential and negative gradient at the supplied point.
 #if defined(COSMICTIGER_FMM_COUNTING_ONLY) || defined(COSMICTIGER_FMM_INSTRUMENTATION)
 template <typename Real>
-CUDA_EXPORT void L2P(Real const* source, Real x, Real y, Real z, Real* output);
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void L2P(Real const* source, Real x, Real y, Real z, Real* output);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
-CUDA_EXPORT void L2P(float const* source, float x, float y, float z, float* output);
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void L2P(float const* source, float x, float y, float z, float* output);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
-CUDA_EXPORT void L2P(double const* source, double x, double y, double z, double* output);
+
+#ifdef __CUDA_ARCH__
+__device__
 #endif
-#ifndef COSMICTIGER_FMM_COUNTING_ONLY
-#ifndef __CUDACC__
-CUDA_EXPORT void L2P(SimdVector<float, 8> const* source, SimdVector<float, 8> x,
-    SimdVector<float, 8> y, SimdVector<float, 8> z, SimdVector<float, 8>* output);
-#endif
-#endif
-#ifndef COSMICTIGER_FMM_COUNTING_ONLY
-#ifndef __CUDACC__
-CUDA_EXPORT void L2P(SimdVector<double, 2> const* source, SimdVector<double, 2> x,
-    SimdVector<double, 2> y, SimdVector<double, 2> z, SimdVector<double, 2>* output);
-#endif
-#endif
-#ifndef COSMICTIGER_FMM_COUNTING_ONLY
-#ifndef __CUDACC__
-CUDA_EXPORT void L2P(SimdVector<float, 4> const* source, SimdVector<float, 4> x,
-    SimdVector<float, 4> y, SimdVector<float, 4> z, SimdVector<float, 4>* output);
-#endif
+    void L2P(double const* source, double x, double y, double z, double* output);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-CUDA_EXPORT void L2P(SimdVector<double, 4> const* source, SimdVector<double, 4> x,
-    SimdVector<double, 4> y, SimdVector<double, 4> z, SimdVector<double, 4>* output);
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void L2P(SimdVector<float, 8> const* source, SimdVector<float, 8> x, SimdVector<float, 8> y,
+        SimdVector<float, 8> z, SimdVector<float, 8>* output);
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-CUDA_EXPORT void L2P(SimdVector<double, 8> const* source, SimdVector<double, 8> x,
-    SimdVector<double, 8> y, SimdVector<double, 8> z, SimdVector<double, 8>* output);
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void L2P(SimdVector<double, 2> const* source, SimdVector<double, 2> x, SimdVector<double, 2> y,
+        SimdVector<double, 2> z, SimdVector<double, 2>* output);
+#endif
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+#ifndef __CUDACC__
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void L2P(SimdVector<float, 4> const* source, SimdVector<float, 4> x, SimdVector<float, 4> y,
+        SimdVector<float, 4> z, SimdVector<float, 4>* output);
+#endif
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+#ifndef __CUDACC__
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void L2P(SimdVector<double, 4> const* source, SimdVector<double, 4> x, SimdVector<double, 4> y,
+        SimdVector<double, 4> z, SimdVector<double, 4>* output);
+#endif
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+#ifndef __CUDACC__
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void L2P(SimdVector<double, 8> const* source, SimdVector<double, 8> x, SimdVector<double, 8> y,
+        SimdVector<double, 8> z, SimdVector<double, 8>* output);
 #endif
 #endif
 template <typename Real, typename Output, typename Source>
-CUDA_EXPORT void L2P(Source const& source, Real x, Real y, Real z, Output& output) {
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void L2P(Source const& source, Real x, Real y, Real z, Output& output) {
     using namespace math;
     L2P(&source[0], x, y, z, &output[0]);
 }

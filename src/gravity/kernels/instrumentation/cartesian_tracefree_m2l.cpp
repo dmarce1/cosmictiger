@@ -10,7 +10,7 @@
 #include <cosmictiger/gravity/kernels/cartesian_tracefree/m2l.hpp>
 namespace cosmictiger::gravity::cartesian::detail {
 template <class Real>
-CUDA_EXPORT void M2L(Multipole<Real> const& M, Vector3<Real> const& distance, Expansion<Real>& L) {
+void M2L(Multipole<Real> const& M, Vector3<Real> const& distance, Expansion<Real>& L) {
     using namespace math;
     Fma const fma{};
     using Scalar = SimdScalar<Real>;

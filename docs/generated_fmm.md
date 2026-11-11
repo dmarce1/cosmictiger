@@ -61,9 +61,13 @@ Integer indices, template arguments, and loop bounds are not coefficients.
 ## Compiled library
 
 `cosmictiger_fmm` is a static library containing the generated arithmetic in
-`src/gravity/kernels/`. CPU builds compile scalar and SIMD `.cpp` files. CUDA builds compile
-the SIMD `.cpp` files and scalar `.cu` units; NVCC supplies both host and device
-scalar symbols, so host scalar definitions are not compiled a second time.
+`src/gravity/kernels/`. Every build compiles scalar and SIMD `.cpp` files with
+ordinary CPU-only definitions. CUDA builds additionally compile scalar `.cu`
+files with explicit `__device__` definitions. Each file contains complete function
+bodies; neither includes the other. Declarations select the host or device
+execution space for the current compiler pass. CUDA host calls link the same
+C++ definitions as other CPU callers. Concrete bodies spell out their types;
+scalar constants are used directly and only SIMD values use broadcasts.
 The warp L2L functions and both schedule tables live in one CUDA unit. CUDA
 callers use separable compilation and resolve device symbols at executable link.
 The library disables implicit multiply-add contraction; generated explicit

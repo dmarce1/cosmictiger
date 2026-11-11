@@ -10,7 +10,7 @@
 #include <cosmictiger/gravity/kernels/cartesian_tracefree/p2l.hpp>
 namespace cosmictiger::gravity::cartesian::detail {
 template <class Real>
-CUDA_EXPORT void P2L(Real mass, Vector3<Real> const& distance, Expansion<Real>& L) {
+void P2L(Real mass, Vector3<Real> const& distance, Expansion<Real>& L) {
     using namespace math;
     Fma const fma{};
     using Scalar = SimdScalar<Real>;
@@ -196,7 +196,7 @@ CUDA_EXPORT void P2L(Real mass, Vector3<Real> const& distance, Expansion<Real>& 
 }    // namespace cosmictiger::gravity::cartesian::detail
 namespace cosmictiger::gravity::cartesian::detail {
 template <class Real>
-CUDA_EXPORT void P2L(Real mass, Vector3<Real> const& distance, Derivatives<Real>& L) {
+void P2L(Real mass, Vector3<Real> const& distance, Derivatives<Real>& L) {
     using namespace math;
     Fma const fma{};
     using Scalar = SimdScalar<Real>;

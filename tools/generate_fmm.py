@@ -800,7 +800,7 @@ def main():
         args.sourceDir = (sourceDirectory if args.outputDir.resolve() == outputDirectory
                           else args.outputDir / 'sources')
     from fmm.constants import hoistConstants
-    from fmm.sources import singleOrderApi, splitSources
+    from fmm.sources import executionSpace, singleOrderApi, splitSources
 
     outputs=generate(args.degree,args.degree,args.independentM2lRatios)
     outputs = {name: unnameUnusedGeneratedParameters(code) if name.endswith('.hpp') else code
@@ -821,6 +821,7 @@ def main():
         if name not in ('cartesian_tracefree_types.hpp', 'spherical_types.hpp'):
             cpp = re.sub(r'\bstruct (\w+(?:<[^{}]*>)?)\s*\{', r'class \1 {\npublic:', cpp)
             cpp = re.sub(r'\bstruct (\w+);', r'class \1;', cpp)
+        cpp = executionSpace(cpp, name)
         if not args.noFormat:
             cpp = subprocess.run(['clang-format', '--style=file', '--assume-filename=' + str(outputDirectory / name)],
                                  input=cpp, text=True, capture_output=True, check=True).stdout

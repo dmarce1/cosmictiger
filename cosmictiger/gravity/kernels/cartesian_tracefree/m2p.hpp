@@ -26,45 +26,78 @@ inline constexpr int kM2PFlops = 0;
 /// Accumulate potential and acceleration from all retained multipole ranks.
 #if defined(COSMICTIGER_FMM_COUNTING_ONLY) || defined(COSMICTIGER_FMM_INSTRUMENTATION)
 template <class Real>
-CUDA_EXPORT void M2P(
-    Multipole<Real> const& M, Vector3<Real> const& distance, gravity::Field<Real>& field);
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void M2P(Multipole<Real> const& M, Vector3<Real> const& distance, gravity::Field<Real>& field);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
-CUDA_EXPORT void M2P(
-    Multipole<float> const& M, Vector3<float> const& distance, gravity::Field<float>& field);
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void M2P(
+        Multipole<float> const& M, Vector3<float> const& distance, gravity::Field<float>& field);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
-CUDA_EXPORT void M2P(
-    Multipole<double> const& M, Vector3<double> const& distance, gravity::Field<double>& field);
+
+#ifdef __CUDA_ARCH__
+__device__
 #endif
-#ifndef COSMICTIGER_FMM_COUNTING_ONLY
-#ifndef __CUDACC__
-CUDA_EXPORT void M2P(Multipole<SimdVector<float, 8>> const& M,
-    Vector3<SimdVector<float, 8>> const& distance, gravity::Field<SimdVector<float, 8>>& field);
-#endif
-#endif
-#ifndef COSMICTIGER_FMM_COUNTING_ONLY
-#ifndef __CUDACC__
-CUDA_EXPORT void M2P(Multipole<SimdVector<double, 2>> const& M,
-    Vector3<SimdVector<double, 2>> const& distance, gravity::Field<SimdVector<double, 2>>& field);
-#endif
+    void M2P(
+        Multipole<double> const& M, Vector3<double> const& distance, gravity::Field<double>& field);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-CUDA_EXPORT void M2P(Multipole<SimdVector<float, 4>> const& M,
-    Vector3<SimdVector<float, 4>> const& distance, gravity::Field<SimdVector<float, 4>>& field);
+
+#ifdef __CUDA_ARCH__
+__device__
 #endif
-#endif
-#ifndef COSMICTIGER_FMM_COUNTING_ONLY
-#ifndef __CUDACC__
-CUDA_EXPORT void M2P(Multipole<SimdVector<double, 4>> const& M,
-    Vector3<SimdVector<double, 4>> const& distance, gravity::Field<SimdVector<double, 4>>& field);
+    void M2P(Multipole<SimdVector<float, 8>> const& M,
+        Vector3<SimdVector<float, 8>> const& distance, gravity::Field<SimdVector<float, 8>>& field);
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-CUDA_EXPORT void M2P(Multipole<SimdVector<double, 8>> const& M,
-    Vector3<SimdVector<double, 8>> const& distance, gravity::Field<SimdVector<double, 8>>& field);
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void M2P(Multipole<SimdVector<double, 2>> const& M,
+        Vector3<SimdVector<double, 2>> const& distance,
+        gravity::Field<SimdVector<double, 2>>& field);
+#endif
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+#ifndef __CUDACC__
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void M2P(Multipole<SimdVector<float, 4>> const& M,
+        Vector3<SimdVector<float, 4>> const& distance, gravity::Field<SimdVector<float, 4>>& field);
+#endif
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+#ifndef __CUDACC__
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void M2P(Multipole<SimdVector<double, 4>> const& M,
+        Vector3<SimdVector<double, 4>> const& distance,
+        gravity::Field<SimdVector<double, 4>>& field);
+#endif
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+#ifndef __CUDACC__
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void M2P(Multipole<SimdVector<double, 8>> const& M,
+        Vector3<SimdVector<double, 8>> const& distance,
+        gravity::Field<SimdVector<double, 8>>& field);
 #endif
 #endif
 

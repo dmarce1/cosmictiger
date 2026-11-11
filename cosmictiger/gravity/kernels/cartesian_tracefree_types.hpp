@@ -225,7 +225,11 @@ template <class Real>
 struct Multipole : detail::Coefficients<Real, 5> {
     using detail::Coefficients<Real, 5>::operator=;
     /// Convert basis at the same center and coordinate scale.
-    CUDA_EXPORT explicit operator spherical::Multipole<Real>() const;
+
+#ifdef __CUDA_ARCH__
+    __device__
+#endif
+        explicit operator spherical::Multipole<Real>() const;
 };
 template <class Real>
 struct Expansion : detail::Coefficients<Real, 6> {

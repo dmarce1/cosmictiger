@@ -26,50 +26,81 @@ inline constexpr int kL2LFlops = 0;
 /// Accumulate translated local coefficients, applying the target-to-source scale ratio.
 #if defined(COSMICTIGER_FMM_COUNTING_ONLY) || defined(COSMICTIGER_FMM_INSTRUMENTATION)
 template <class Real>
-CUDA_EXPORT void L2L(Expansion<Real> const& L, Vector3<Real> const& distance, Real scaleRatio,
-    Expansion<Real>& targetL);
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void L2L(Expansion<Real> const& L, Vector3<Real> const& distance, Real scaleRatio,
+        Expansion<Real>& targetL);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
-CUDA_EXPORT void L2L(Expansion<float> const& L, Vector3<float> const& distance, float scaleRatio,
-    Expansion<float>& targetL);
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void L2L(Expansion<float> const& L, Vector3<float> const& distance, float scaleRatio,
+        Expansion<float>& targetL);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
-CUDA_EXPORT void L2L(Expansion<double> const& L, Vector3<double> const& distance, double scaleRatio,
-    Expansion<double>& targetL);
+
+#ifdef __CUDA_ARCH__
+__device__
 #endif
-#ifndef COSMICTIGER_FMM_COUNTING_ONLY
-#ifndef __CUDACC__
-CUDA_EXPORT void L2L(Expansion<SimdVector<float, 8>> const& L,
-    Vector3<SimdVector<float, 8>> const& distance, SimdVector<float, 8> scaleRatio,
-    Expansion<SimdVector<float, 8>>& targetL);
-#endif
-#endif
-#ifndef COSMICTIGER_FMM_COUNTING_ONLY
-#ifndef __CUDACC__
-CUDA_EXPORT void L2L(Expansion<SimdVector<double, 2>> const& L,
-    Vector3<SimdVector<double, 2>> const& distance, SimdVector<double, 2> scaleRatio,
-    Expansion<SimdVector<double, 2>>& targetL);
-#endif
+    void L2L(Expansion<double> const& L, Vector3<double> const& distance, double scaleRatio,
+        Expansion<double>& targetL);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-CUDA_EXPORT void L2L(Expansion<SimdVector<float, 4>> const& L,
-    Vector3<SimdVector<float, 4>> const& distance, SimdVector<float, 4> scaleRatio,
-    Expansion<SimdVector<float, 4>>& targetL);
+
+#ifdef __CUDA_ARCH__
+__device__
 #endif
-#endif
-#ifndef COSMICTIGER_FMM_COUNTING_ONLY
-#ifndef __CUDACC__
-CUDA_EXPORT void L2L(Expansion<SimdVector<double, 4>> const& L,
-    Vector3<SimdVector<double, 4>> const& distance, SimdVector<double, 4> scaleRatio,
-    Expansion<SimdVector<double, 4>>& targetL);
+    void L2L(Expansion<SimdVector<float, 8>> const& L,
+        Vector3<SimdVector<float, 8>> const& distance, SimdVector<float, 8> scaleRatio,
+        Expansion<SimdVector<float, 8>>& targetL);
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-CUDA_EXPORT void L2L(Expansion<SimdVector<double, 8>> const& L,
-    Vector3<SimdVector<double, 8>> const& distance, SimdVector<double, 8> scaleRatio,
-    Expansion<SimdVector<double, 8>>& targetL);
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void L2L(Expansion<SimdVector<double, 2>> const& L,
+        Vector3<SimdVector<double, 2>> const& distance, SimdVector<double, 2> scaleRatio,
+        Expansion<SimdVector<double, 2>>& targetL);
+#endif
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+#ifndef __CUDACC__
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void L2L(Expansion<SimdVector<float, 4>> const& L,
+        Vector3<SimdVector<float, 4>> const& distance, SimdVector<float, 4> scaleRatio,
+        Expansion<SimdVector<float, 4>>& targetL);
+#endif
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+#ifndef __CUDACC__
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void L2L(Expansion<SimdVector<double, 4>> const& L,
+        Vector3<SimdVector<double, 4>> const& distance, SimdVector<double, 4> scaleRatio,
+        Expansion<SimdVector<double, 4>>& targetL);
+#endif
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+#ifndef __CUDACC__
+
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    void L2L(Expansion<SimdVector<double, 8>> const& L,
+        Vector3<SimdVector<double, 8>> const& distance, SimdVector<double, 8> scaleRatio,
+        Expansion<SimdVector<double, 8>>& targetL);
 #endif
 #endif
 
