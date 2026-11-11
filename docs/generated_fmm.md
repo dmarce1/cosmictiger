@@ -83,7 +83,7 @@ precision. CUDA supports float/double. Production headers declare concrete overl
 only by the counting-test instrumentation macros. Spherical container adapters forward coefficient
 addresses without copying or changing layouts.
 
-`src/gravity/kernels/instrumentation/*.cpp` contains generic definitions solely for counting-scalar
+`tests/gravity/kernels/instrumentation/*.cpp` contains generic definitions solely for counting-scalar
 tests. Those tests explicitly include the relevant source definitions; normal
 headers and production targets never include them. Concrete overloads in
 those test executables still link to the library. The standalone FLOP audit uses
@@ -113,8 +113,9 @@ Declarations and their operation report remain under `cosmictiger/gravity/kernel
 The generator defaults to these source-tree directories and emits both families for
 the selected degree (default 6), formatting C++ with the repository's clang-format
 configuration. Use `--output-dir` for a separate declaration/report directory and
-`--source-dir` for its implementations. With only a custom `--output-dir`,
-implementations go into its `sources/` subdirectory, keeping generation isolated
+`--source-dir` for its production implementations and `--instrumentation-dir`
+for its counting-test implementations. With only a custom `--output-dir`,
+these go into its `sources/` and `instrumentation/` subdirectories, keeping generation isolated
 from the source tree. Never hand-edit
 generated files; update their generators and regenerate them. `--check`
 compares the expected output with the existing files without changing them.

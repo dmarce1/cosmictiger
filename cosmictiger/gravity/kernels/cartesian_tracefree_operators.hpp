@@ -43,14 +43,6 @@ CUDA_EXPORT Vector3<Real> fmmScaleDisplacement(Vector3<Real> value) {
 }
 
 namespace cosmictiger::gravity::cartesian {
-/// Accumulate a point mass into the multipole and return the generated operation count.
-template <class Real>
-CUDA_EXPORT int P2M(Real mass, Vector3<Real> const& particleOffset, Multipole<Real>& target) {
-    using namespace math;
-    detail::P2M(mass, particleOffset, target);
-    return detail::kP2MFlops<kFmmOrder - 2>;
-}
-
 /// Accumulate a point-mass local expansion, optionally preserving the potential
 /// coefficient.
 template <class Real>
@@ -58,11 +50,11 @@ CUDA_EXPORT int P2L(
     Real mass, Vector3<Real> const& displacement, bool doPotential, Expansion<Real>& target) {
     using namespace math;
     Real const oldPotential = target[0];
-    detail::P2L(mass, displacement, target);
+    P2L(mass, displacement, target);
     if (!doPotential) {
         target[0] = oldPotential;
     }
-    return detail::kP2LFlops<kFmmOrder - 1> + 7;
+    return kP2LFlops<kFmmOrder - 1> + 7;
 }
 
 /// Accumulate translated moments at unit scale ratio; source and target must be distinct.
@@ -73,8 +65,8 @@ CUDA_EXPORT int M2M(
     constexpr auto k0 = static_cast<Scalar>(1.000000000000000000E+00);
     using namespace math;
     ASSERT(&target != &source);
-    detail::M2M(source, displacement, broadcast<Real>(k0), target);
-    return detail::kM2MFlops<kFmmOrder - 2>;
+    M2M(source, displacement, broadcast<Real>(k0), target);
+    return kM2MFlops<kFmmOrder - 2>;
 }
 
 /// Accumulate the source multipole's local field, optionally preserving the potential
@@ -84,11 +76,11 @@ CUDA_EXPORT int M2L(Multipole<Real> const& source, Vector3<Real> const& displace
     bool doPotential, Expansion<Real>& target) {
     using namespace math;
     Real const oldPotential = target[0];
-    detail::M2L(source, displacement, target);
+    M2L(source, displacement, target);
     if (!doPotential) {
         target[0] = oldPotential;
     }
-    return detail::kM2LFlops<kFmmOrder - 1> + 7;
+    return kM2LFlops<kFmmOrder - 1> + 7;
 }
 
 /// Replace the coefficients with the unit-mass Newtonian Green expansion.
@@ -99,7 +91,7 @@ CUDA_EXPORT void evaluateGreen(Vector3<Real> const& displacement, Green<Real>& t
     constexpr auto k1 = static_cast<Scalar>(1.000000000000000000E+00);
     using namespace math;
     target = broadcast<Real>(k0);
-    detail::P2L(broadcast<Real>(k1), displacement, target);
+    P2L(broadcast<Real>(k1), displacement, target);
 }
 
 /// Accumulate multipole potential and acceleration, optionally preserving potential.
@@ -108,11 +100,11 @@ CUDA_EXPORT int M2P(Multipole<Real> const& source, Vector3<Real> const& displace
     bool doPotential, gravity::Field<Real>& target) {
     using namespace math;
     Real const oldPotential = target[0];
-    detail::M2P(source, displacement, target);
+    M2P(source, displacement, target);
     if (!doPotential) {
         target[0] = oldPotential;
     }
-    return detail::kM2PFlops<kFmmOrder - 2> + 7;
+    return kM2PFlops<kFmmOrder - 2> + 7;
 }
 
 /// Accumulate a translated local expansion; source and target must be distinct.
@@ -124,56 +116,25 @@ CUDA_EXPORT int L2L(Expansion<Real> const& source, Vector3<Real> const& displace
     using namespace math;
     ASSERT(&target != &source);
     Real const oldPotential = target[0];
-    detail::L2L(source, displacement, broadcast<Real>(k0), target);
+    L2L(source, displacement, broadcast<Real>(k0), target);
     if (!doPotential) {
         target[0] = oldPotential;
     }
-    return detail::kL2LFlops<kFmmOrder - 1>;
+    return kL2LFlops<kFmmOrder - 1>;
 }
 
-/// Accumulate local potential and acceleration at unit scale ratio, optionally preserving
-/// potential.
+/// Accumulate local potential and negative gradient in the displacement coordinates,
+/// optionally preserving potential.
 template <class Real>
 CUDA_EXPORT int L2P(Expansion<Real> const& source, Vector3<Real> const& displacement,
     bool doPotential, gravity::Field<Real>& target) {
-    using Scalar = SimdScalar<Real>;
-    constexpr auto k0 = static_cast<Scalar>(1.000000000000000000E+00);
     using namespace math;
     Real const oldPotential = target[0];
-    detail::L2P(source, displacement, broadcast<Real>(k0), target);
+    L2P(source, displacement, target);
     if (!doPotential) {
         target[0] = oldPotential;
     }
-    return detail::kL2PFlops<kFmmOrder - 1>;
-}
-
-#ifdef __CUDACC__
-// Every warp lane participates. The raw target is caller-owned shared storage.
-template <class Real>
-__device__ void L2LWarpInto(Expansion<Real> const& source, Vector3<Real> const& displacement,
-    bool doPotential, Real* target) {
-    detail::L2LWarpInto(source, displacement, doPotential, target);
-}
-#endif
-
-/// Accumulate all components, including the potential.
-template <class Real>
-CUDA_EXPORT int P2L(Real mass, Vector3<Real> const& displacement, Expansion<Real>& target) {
-    return P2L(mass, displacement, true, target);
-}
-
-/// Accumulate all components, including the potential.
-template <class Real>
-CUDA_EXPORT int M2L(
-    Multipole<Real> const& source, Vector3<Real> const& displacement, Expansion<Real>& target) {
-    return M2L(source, displacement, true, target);
-}
-
-/// Accumulate all components, including the potential.
-template <class Real>
-CUDA_EXPORT int M2P(Multipole<Real> const& source, Vector3<Real> const& displacement,
-    gravity::Field<Real>& target) {
-    return M2P(source, displacement, true, target);
+    return kL2PFlops<kFmmOrder - 1>;
 }
 
 /// Accumulate all components, including the potential.
@@ -183,12 +144,6 @@ CUDA_EXPORT int L2L(
     return L2L(source, displacement, true, target);
 }
 
-/// Accumulate all components, including the potential.
-template <class Real>
-CUDA_EXPORT int L2P(Expansion<Real> const& source, Vector3<Real> const& displacement,
-    gravity::Field<Real>& target) {
-    return L2P(source, displacement, true, target);
-}
 }    // namespace cosmictiger::gravity::cartesian
 
 // Weighted walk-choice costs use conventional FLOP counts, not a representation
@@ -198,9 +153,9 @@ struct FmmHybridCost {
     static constexpr int kMultipoleDegree_ = FmmOrder<order>::kMultipoleDegree_;
     static constexpr int kLocalDegree_ = FmmOrder<order>::kLocalDegree_;
     static constexpr float kParticleCellPerParticle_ =
-        float(cosmictiger::gravity::cartesian::detail::kM2PFlops<kMultipoleDegree_>) + 15.0f + 7.0f;
+        float(cosmictiger::gravity::cartesian::kM2PFlops<kMultipoleDegree_>) + 15.0f + 7.0f;
     static constexpr float kCellParticlePerParticle_ =
-        float(cosmictiger::gravity::cartesian::detail::kP2LFlops<kLocalDegree_>) + 11.0f + 3.0f +
+        float(cosmictiger::gravity::cartesian::kP2LFlops<kLocalDegree_>) + 11.0f + 3.0f +
         float(FmmOrder<order>::kLocalCoefficients_);
     static constexpr float kHybridPerParticle_ =
         0.5f * (kParticleCellPerParticle_ + kCellParticlePerParticle_);
@@ -208,5 +163,5 @@ struct FmmHybridCost {
     // M2L arithmetic and displacement scaling, excluding SIMD padding and
     // reductions shared by a list. This is a work estimate, not a timing model.
     static constexpr float kCellCell_ =
-        float(cosmictiger::gravity::cartesian::detail::kM2LFlops<kLocalDegree_>) + 10.0f;
+        float(cosmictiger::gravity::cartesian::kM2LFlops<kLocalDegree_>) + 10.0f;
 };

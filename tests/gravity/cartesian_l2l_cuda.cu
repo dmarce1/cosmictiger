@@ -175,7 +175,7 @@ __device__ LocalExpansion<order> warpTranslate(
     LocalExpansion<order> const& source, Vector3<float> position, bool doPhi) {
     LocalExpansion<order> result{};
     auto const scaled = fmmScaleDisplacement(position);
-    cosmictiger::gravity::cartesian::detail::L2LWarp(source, scaled, doPhi, result);
+    cosmictiger::gravity::cartesian::L2LWarp(source, scaled, doPhi, result);
     return result;
 }
 

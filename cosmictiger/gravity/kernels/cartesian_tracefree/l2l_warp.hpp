@@ -19,7 +19,7 @@
 #include <cosmictiger/gravity/kernels/cartesian_tracefree_types.hpp>
 #include <cosmictiger/math/vector3.hpp>
 
-namespace cosmictiger::gravity::cartesian::detail {
+namespace cosmictiger::gravity::cartesian {
 #ifdef __CUDACC__
 template <int degree>
 inline constexpr int kL2LWarpFlops = 0;
@@ -93,4 +93,4 @@ __device__ void L2LWarpInto(
 
 #endif
 
-}    // namespace cosmictiger::gravity::cartesian::detail
+}    // namespace cosmictiger::gravity::cartesian

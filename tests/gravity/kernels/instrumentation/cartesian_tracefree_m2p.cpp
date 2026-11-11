@@ -8,7 +8,7 @@
 
 // Generated counting-scalar definitions. Tests only; not a library source.
 #include <cosmictiger/gravity/kernels/cartesian_tracefree/m2p.hpp>
-namespace cosmictiger::gravity::cartesian::detail {
+namespace cosmictiger::gravity::cartesian {
 template <class Real>
 void M2P(Multipole<Real> const& M, Vector3<Real> const& distance, gravity::Field<Real>& field) {
     using namespace math;
@@ -232,4 +232,4 @@ void M2P(Multipole<Real> const& M, Vector3<Real> const& distance, gravity::Field
     field[2] = fma(t9, t335, field[2]);
     field[3] = fma((-t9), t342, field[3]);
 }
-}    // namespace cosmictiger::gravity::cartesian::detail
+}    // namespace cosmictiger::gravity::cartesian

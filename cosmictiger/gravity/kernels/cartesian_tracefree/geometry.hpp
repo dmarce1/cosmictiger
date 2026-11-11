@@ -15,7 +15,7 @@
 #include <cosmictiger/math/simd_math.hpp>
 #include <cosmictiger/math/vector3.hpp>
 
-namespace cosmictiger::gravity::cartesian::detail {
+namespace cosmictiger::gravity::cartesian {
 // R is the separation radius; iR is its inverse, zero at coincident centers.
 #if defined(COSMICTIGER_FMM_COUNTING_ONLY) || defined(COSMICTIGER_FMM_INSTRUMENTATION)
 template <class Real>
@@ -84,4 +84,4 @@ __device__
 #endif
 #endif
 
-}    // namespace cosmictiger::gravity::cartesian::detail
+}    // namespace cosmictiger::gravity::cartesian

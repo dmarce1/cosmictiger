@@ -17,10 +17,10 @@
 #include <cosmictiger/gravity/kernels/spherical_ewald_kernels.hpp>
 #include <cosmictiger/gravity/pmmm_kernels.hpp>
 #include <cosmictiger/math/vector3.hpp>
-#include <src/gravity/kernels/instrumentation/spherical_ewald_green.cpp>
-#include <src/gravity/kernels/instrumentation/spherical_green.cpp>
-#include <src/gravity/kernels/instrumentation/spherical_p2m.cpp>
 #include <tests/flop_counting_real.hpp>
+#include <tests/gravity/kernels/instrumentation/spherical_ewald_green.cpp>
+#include <tests/gravity/kernels/instrumentation/spherical_green.cpp>
+#include <tests/gravity/kernels/instrumentation/spherical_p2m.cpp>
 
 #include "pmmm_reference.hpp"
 

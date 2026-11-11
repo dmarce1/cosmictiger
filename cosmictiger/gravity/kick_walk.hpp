@@ -257,7 +257,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
     cosmictiger::gravity::cartesian::L2L(
         expansion, fmmScaleDisplacement(ldx), params.doPhi, translated);
     expansion = translated;
-    flops += cosmictiger::gravity::cartesian::detail::kL2LFlops<kLocalDegree> + 5;
+    flops += cosmictiger::gravity::cartesian::kL2LFlops<kLocalDegree> + 5;
     // Box scaling stays double; each local displacement scales in double and
     // narrows before the float L2L coordinate scaling. Two reciprocals are float.
     doubleFlops += (params.geometry.frozenMembership ? 3 : 6) + 6 * kSimdFloatSize;
@@ -449,7 +449,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                     output.acceleration[kXi][outputIndex] = forces.gx[j];
                     output.acceleration[kYi][outputIndex] = forces.gy[j];
                     output.acceleration[kZi][outputIndex] = forces.gz[j];
-                    flops += cosmictiger::gravity::cartesian::detail::kL2PFlops<kLocalDegree> + 11;
+                    flops += cosmictiger::gravity::cartesian::kL2PFlops<kLocalDegree> + 11;
                     continue;
                 }
                 forces.gx[j] *= Gm;
@@ -623,7 +623,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                     kr.pot += 0.5f * mass * forces.phi[j];
                     kr.dkin += 0.5f * mass * sqr(vx, vy, vz) - kin0;
                 }
-                flops += cosmictiger::gravity::cartesian::detail::kL2PFlops<kLocalDegree> + 15;
+                flops += cosmictiger::gravity::cartesian::kL2PFlops<kLocalDegree> + 15;
             }
         }
         if (cudaWorkspace != nullptr && cudaWorkspace->isBatch()) {

@@ -21,7 +21,7 @@
 #include <cosmictiger/gravity/fmm_types.hpp>
 #include <cosmictiger/gravity/kernels/cartesian_tracefree/geometry.hpp>
 
-namespace cosmictiger::gravity::cartesian::detail {
+namespace cosmictiger::gravity::cartesian {
 template <int degree>
 inline constexpr int kM2LFlops = 0;
 // FMM order 7.
@@ -100,4 +100,4 @@ __device__
 
 template <>
 inline constexpr int kM2LFlops<6> = 1060;
-}    // namespace cosmictiger::gravity::cartesian::detail
+}    // namespace cosmictiger::gravity::cartesian

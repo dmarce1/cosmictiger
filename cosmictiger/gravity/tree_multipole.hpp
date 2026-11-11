@@ -95,8 +95,8 @@ FlopCounts treeComputeMultipole(MultipoleBuffer& multi, MultipoleBuffer const& l
     FlopCounts counts;
     counts.singlePrecision = 0;
     counts.doublePrecision =
-        2 * cosmictiger::gravity::cartesian::detail::kM2MFlops<FmmOrder<order>::kMultipoleDegree_> +
-        12 + 4 * kMultipoleCoefficients;
+        2 * cosmictiger::gravity::cartesian::kM2MFlops<FmmOrder<order>::kMultipoleDegree_> + 12 +
+        4 * kMultipoleCoefficients;
     counts.unclassified = 0;
     return counts;
 }
@@ -172,9 +172,8 @@ FlopCounts treeComputeMixedMultipoleImpl(Buffer& multi, Pair<ParticleInteger> pa
     // coefficient widens and accumulates in double, then narrows into storage.
     FlopCounts counts;
     counts.singlePrecision = lanes *
-            (cosmictiger::gravity::cartesian::detail::kP2MFlops<
-                 FmmOrder<order>::kMultipoleDegree_> +
-                6 + kMultipoleCoefficients) +
+            (cosmictiger::gravity::cartesian::kP2MFlops<FmmOrder<order>::kMultipoleDegree_> + 6 +
+                kMultipoleCoefficients) +
         (wideReduction ? 0 : packets * (kSimdFloatSize - 1) * kMultipoleCoefficients);
     counts.doublePrecision = centerConversions +
         ((wideReduction ? 2 * kSimdFloatSize : 2) * packets +
@@ -240,7 +239,7 @@ FlopCounts treeComputeMultipole(SourceMultipoleBuffer& multi, TreeBuildMoments c
         multi[i] = translated[i][kLeftChild] + translated[i][kRightChild];
     }
     FlopCounts counts{};
-    counts.doublePrecision = 2 * cartesian::detail::kM2MFlops<order - 2> + 18 +
+    counts.doublePrecision = 2 * cartesian::kM2MFlops<order - 2> + 18 +
         (1 + int(!left.isDouble()) + int(!right.isDouble())) * kCount;
     if constexpr (kCountFlops) {
         if (geometry.frozenMembership) {
@@ -287,7 +286,7 @@ FlopCounts treeComputeMultipole(SourceMultipoleBuffer& multi, Pair<ParticleInteg
     FlopCount const packets = (particleRange.second - particleRange.first + kLanes - 1) / kLanes;
     FlopCounts counts{};
     counts.doublePrecision = FlopCount(particleRange.second - particleRange.first) * 7 +
-        packets * (kLanes * (cartesian::detail::kP2MFlops<order - 2> + 3) + kLanes * kCount);
+        packets * (kLanes * (cartesian::kP2MFlops<order - 2> + 3) + kLanes * kCount);
     if constexpr (kCountFlops) {
         if (sources.geometry.frozenMembership) {
             counts.doublePrecision += frameFlops.doublePrecision -
@@ -333,8 +332,8 @@ FlopCount treeSourceToMesh(double* output, SourceMultipoleBuffer const& source,
             output[slot] = n ? spherical[slot] * factor : spherical[slot];
         }
     }
-    return cartesian::detail::kM2MFlops<order - 2> +
-        conversion::kMultipoleCastConventionalFlops<order> + 12 + input.size() + order - 2;
+    return cartesian::kM2MFlops<order - 2> + conversion::kMultipoleCastConventionalFlops<order> +
+        12 + input.size() + order - 2;
 }
 
 #endif

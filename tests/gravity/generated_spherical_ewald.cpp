@@ -19,7 +19,7 @@
 #include <cosmictiger/gravity/kernels/spherical_ewald_kernels.hpp>
 #include <cosmictiger/math/simd_math.hpp>
 #include <cosmictiger/math/vector3.hpp>
-#include <src/gravity/kernels/instrumentation/spherical_ewald_green.cpp>
+#include <tests/gravity/kernels/instrumentation/spherical_ewald_green.cpp>
 
 namespace counted {
 inline size_t operations = 0;

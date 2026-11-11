@@ -24,7 +24,7 @@ def finish(A,g,outputs,signature,name,order,extra=None):
         'P2M': 'Accumulate the point mass into raw trace-free moments at the supplied displacement.',
         'P2L': 'Accumulate Newtonian local coefficients from a point mass at the supplied displacement.',
         'M2P': 'Accumulate potential and acceleration from all retained multipole ranks.',
-        'L2P': 'Accumulate the local potential and negative gradient, scaling acceleration by inverseScale.',
+        'L2P': 'Accumulate the local potential and negative gradient in the displacement coordinates.',
     }
     code=['/// ' + descriptions[name], signature]
     code+=g.emitConstants(live)
@@ -123,10 +123,15 @@ def p2m(A, order):
 
 
 def l2p(A, order):
-    """Evaluate a local Taylor polynomial and its negative gradient."""
+    """Evaluate a local Taylor polynomial and its negative gradient.
+
+    With u = (x - center) / scale, the stored local coefficients are
+    scale**rank times the physical derivatives of the potential. Evaluation
+    gives the potential directly; acceleration = -grad_u(potential) / scale.
+    The caller applies the inverse scale to the new gradient contribution.
+    """
     g = A.Dag()
     displacement = [g.symbol(name) for name in ('dx', 'dy', 'dz')]
-    inverseScale = g.symbol('inverseScale')
     basis = A.dualBasis(g, displacement, order)
     source = {alpha: g.symbol(f'L[{A.index(alpha)}]')
               for degree in range(order + 1) for alpha in A.indices(degree)}
@@ -138,10 +143,10 @@ def l2p(A, order):
                  for degree in range(order - sum(alpha) + 1)
                  for beta in A.indices(degree)]
         value = g.add(*terms)
-        outputs[f'field[{component}]'] = value if component == 0 else g.scale(g.mul(inverseScale, value), -1)
+        outputs[f'field[{component}]'] = value if component == 0 else g.scale(value, -1)
     signature = f'''template <class Real> CUDA_EXPORT void L2P(
     gravity::Field<Real>& field, Expansion<Real, {order+1}> const& L,
-    Vector3<Real> const& distance, Real inverseScale) {{
+    Vector3<Real> const& distance) {{
     Real const dx = distance[0];
     Real const dy = distance[1];
     Real const dz = distance[2];

@@ -145,7 +145,7 @@ Polynomial harmonicProjection(Polynomial const& raw, int rank) {
 }
 
 template <int order, int sourceDegree = KernelLayout<order>::kMultipoleDegree_>
-Multipole<order> projectedMoments(std::vector<Particle> const& particles, double scale) {
+Multipole<order> projectedMoments(std::vector<Particle> const& particles) {
     constexpr int kMultipoleDegree = sourceDegree;
     Multipole<order> result{};
     for (auto const& particle : particles) {
@@ -156,8 +156,8 @@ Multipole<order> projectedMoments(std::vector<Particle> const& particles, double
             auto const harmonic = harmonicProjection(raw, rank);
             for (auto const& [index, value] : harmonic) {
                 if (index[2] <= 1) {
-                    result[compactIndex(index)] += particle.mass * value * factorial(index) /
-                        factorial(rank) / std::pow(scale, rank);
+                    result[compactIndex(index)] +=
+                        particle.mass * value * factorial(index) / factorial(rank);
                 }
             }
             raw = multiply(raw, linear, kMultipoleDegree);
@@ -223,26 +223,24 @@ template <int order>
 void testParticleMomentsAndTranslation() {
     constexpr int kMultipoleDegree = KernelLayout<order>::kMultipoleDegree_;
     auto const particles = particleCloud();
-    for (auto const scales : {std::array<double, 2>{.6, 1.3}, {1.4, .7}}) {
-        auto const expected = projectedMoments<order>(particles, scales[0]);
-        Multipole<order> actual{};
-        for (auto const& particle : particles) {
-            kernels::P2M(particle.mass, particle.position / scales[0], actual);
-        }
-        compareRanks<kMultipoleDegree>(actual, expected, "P2M independent harmonic projection");
-        Position const displacement{.13, -.17, .09};
-        auto shifted = particles;
-        for (auto& particle : shifted) {
-            for (int d = 0; d < 3; ++d) {
-                particle.position[d] += displacement[d];
-            }
-        }
-        auto const translatedExpected = projectedMoments<order>(shifted, scales[1]);
-        Multipole<order> translated{};
-        kernels::M2M(actual, displacement / scales[1], scales[0] / scales[1], translated);
-        compareRanks<kMultipoleDegree>(
-            translated, translatedExpected, "M2M independent particle re-expansion");
+    auto const expected = projectedMoments<order>(particles);
+    Multipole<order> actual{};
+    for (auto const& particle : particles) {
+        kernels::P2M(particle.mass, particle.position, actual);
     }
+    compareRanks<kMultipoleDegree>(actual, expected, "P2M independent harmonic projection");
+    Position const displacement{.13, -.17, .09};
+    auto shifted = particles;
+    for (auto& particle : shifted) {
+        for (int d = 0; d < 3; ++d) {
+            particle.position[d] += displacement[d];
+        }
+    }
+    auto const translatedExpected = projectedMoments<order>(shifted);
+    Multipole<order> translated{};
+    kernels::M2M(actual, displacement, 1.0, translated);
+    compareRanks<kMultipoleDegree>(
+        translated, translatedExpected, "M2M independent particle re-expansion");
 }
 
 template <int order>
@@ -255,12 +253,10 @@ void testInteractions() {
         {0, -2.1, 0}, {0, 0, 2.1}, {.001, 2., -.03}, {-1.7, -1.1, .7}}};
     for (int test = 0; test < int(kDirections.size()); ++test) {
         auto const& separation = kDirections[test];
-        double const sourceScale = .47 + .13 * test;
-        double const targetScale = .63 + .11 * test;
         double const iR = 1 /
             std::sqrt(separation[0] * separation[0] + separation[1] * separation[1] +
                 separation[2] * separation[2]);
-        auto const source = projectedMoments<order, kMultipoleDegree>(particles, sourceScale);
+        auto const source = projectedMoments<order, kMultipoleDegree>(particles);
         auto const derivatives = greenDerivatives(separation, kLocalDegree);
         Polynomial raw;
         for (int rank = 0; rank <= kMultipoleDegree; ++rank) {
@@ -285,29 +281,19 @@ void testInteractions() {
                             factorial(b);
                     }
                 }
-                expected[compactIndex(a)] = value * std::pow(targetScale, rank);
-                pointExpected[compactIndex(a)] =
-                    1.7 * derivatives.at(a) * std::pow(targetScale, rank);
+                expected[compactIndex(a)] = value;
+                pointExpected[compactIndex(a)] = 1.7 * derivatives.at(a);
             }
         }
         if constexpr (cosmictiger::gravity::cartesian::kIndependentM2lRatios) {
-            kernels::M2L(source, separation, sourceScale * iR, targetScale * iR, actual);
-            compareRanks<kLocalDegree>(actual, expected, "M2L scaled Cartesian derivative oracle");
+            kernels::M2L(source, separation, iR, iR, actual);
         } else {
-            auto const unitSource = projectedMoments<order, kMultipoleDegree>(particles, 1.0);
-            Expansion<order> unitExpected{};
-            for (int rank = 0; rank <= kLocalDegree; ++rank) {
-                for (int i = rank * rank; i < (rank + 1) * (rank + 1); ++i) {
-                    unitExpected[i] = expected[i] / std::pow(targetScale, rank);
-                }
-            }
-            kernels::M2L(unitSource, separation, actual);
-            compareRanks<kLocalDegree>(
-                actual, unitExpected, "M2L unit Cartesian derivative oracle");
+            kernels::M2L(source, separation, actual);
         }
+        compareRanks<kLocalDegree>(actual, expected, "M2L unit Cartesian derivative oracle");
         {
-            auto const unscaledSource = projectedMoments<order>(particles, 1.);
-            kernels::P2L(1.7 / targetScale, separation / targetScale, pointActual);
+            auto const unscaledSource = projectedMoments<order>(particles);
+            kernels::P2L(1.7, separation, pointActual);
             compareRanks<kLocalDegree>(
                 pointActual, pointExpected, "P2L binomial derivative oracle");
             Field field{}, fieldExpected{};
@@ -365,14 +351,13 @@ double polynomialDerivative(
 }
 
 template <int order>
-Expansion<order> localAt(Polynomial const& polynomial, Position const& position, double scale) {
+Expansion<order> localAt(Polynomial const& polynomial, Position const& position) {
     constexpr int kLocalDegree = KernelLayout<order>::kLocalDegree_;
     Expansion<order> result{};
     for (int rank = 0; rank <= kLocalDegree; ++rank) {
         for (auto const& index : indices(rank)) {
             if (index[2] <= 1) {
-                result[compactIndex(index)] =
-                    polynomialDerivative(polynomial, index, position) * std::pow(scale, rank);
+                result[compactIndex(index)] = polynomialDerivative(polynomial, index, position);
             }
         }
     }
@@ -385,22 +370,20 @@ void testLocalTranslation() {
     double const background = 0;
     auto const polynomial = potentialPolynomial(kLocalDegree, background);
     Position const displacement{.13, -.17, .09};
-    for (auto const scales : {std::array<double, 2>{.6, 1.3}, {1.4, .7}}) {
-        auto const source = localAt<order>(polynomial, {}, scales[0]);
-        auto const expected = localAt<order>(polynomial, displacement, scales[1]);
-        Expansion<order> actual{};
-        kernels::L2L(source, displacement / scales[0], scales[1] / scales[0], actual);
-        compareRanks<kLocalDegree>(actual, expected, "L2L direct Cartesian polynomial translation");
-        Field field{};
-        kernels::L2P(source, displacement / scales[0], 1 / scales[0], field);
-        near(field[0], polynomialDerivative(polynomial, {}, displacement), 1,
-            "L2P direct polynomial potential");
-        for (int d = 0; d < 3; ++d) {
-            Index derivative{};
-            derivative[d] = 1;
-            near(field[d + 1], -polynomialDerivative(polynomial, derivative, displacement), 1,
-                "L2P direct polynomial acceleration");
-        }
+    auto const source = localAt<order>(polynomial, {});
+    auto const expected = localAt<order>(polynomial, displacement);
+    Expansion<order> actual{};
+    kernels::L2L(source, displacement, 1.0, actual);
+    compareRanks<kLocalDegree>(actual, expected, "L2L direct Cartesian polynomial translation");
+    Field field{};
+    kernels::L2P(source, displacement, field);
+    near(field[0], polynomialDerivative(polynomial, {}, displacement), 1,
+        "L2P direct polynomial potential");
+    for (int d = 0; d < 3; ++d) {
+        Index derivative{};
+        derivative[d] = 1;
+        near(field[d + 1], -polynomialDerivative(polynomial, derivative, displacement), 1,
+            "L2P direct polynomial acceleration");
     }
 }
 

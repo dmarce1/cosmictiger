@@ -17,7 +17,7 @@
 
 namespace detail {
 
-namespace kernels = cosmictiger::gravity::cartesian::detail;
+namespace kernels = cosmictiger::gravity::cartesian;
 
 // Kernels and fixtures must agree on the single build degree.
 static_assert(cosmictiger::gravity::cartesian::kMinLocalDegree <= fmmLocalDegree(kFmmOrder) &&
@@ -25,7 +25,7 @@ static_assert(cosmictiger::gravity::cartesian::kMinLocalDegree <= fmmLocalDegree
     "The generated Cartesian kernels do not cover FMM orders 3 to 9");
 
 constexpr int kFieldCount = 4;
-constexpr int kGeometryCount = 9;
+constexpr int kGeometryCount = 8;
 constexpr int kOrderCount = 1;
 
 // Compact rank-major Cartesian storage: (degree + 1)^2 harmonic coefficients.
@@ -67,8 +67,7 @@ template <typename Real, int order>
 struct KernelInput {
     cosmictiger::gravity::cartesian::Multipole<Real> multipole{};
     cosmictiger::gravity::cartesian::Expansion<Real> local{};
-    // Separation, center translation, translation scale ratio, particle mass,
-    // and inverse local scale.
+    // Separation, center translation, unit translation scale ratio, particle mass.
     Coefficients<Real, kGeometryCount> geometry;
 };
 
@@ -109,7 +108,7 @@ CUDA_EXPORT void evaluateKernels(
     kernels::M2P(input.multipole, separation, m2p);
     store(m2p, Layout::kM2pOffset_, kFieldCount);
     Field l2p{};
-    kernels::L2P(input.local, translation, g[8], l2p);
+    kernels::L2P(input.local, translation, l2p);
     store(l2p, Layout::kL2pOffset_, kFieldCount);
 }
 
@@ -133,9 +132,8 @@ KernelInput<Real, order> makeKernelInput(int sample) {
     input.geometry[3] = Real(.13 * x);
     input.geometry[4] = Real(.09 * y);
     input.geometry[5] = Real(.11 * z);
-    input.geometry[6] = Real(.67 + .003 * sample);
+    input.geometry[6] = Real(1);
     input.geometry[7] = Real(.7 + .011 * sample);
-    input.geometry[8] = Real(1.1 + .002 * sample);
     return input;
 }
 

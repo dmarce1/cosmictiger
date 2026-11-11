@@ -8,7 +8,7 @@
 
 // Generated counting-scalar definitions. Tests only; not a library source.
 #include <cosmictiger/gravity/kernels/cartesian_tracefree/p2m.hpp>
-namespace cosmictiger::gravity::cartesian::detail {
+namespace cosmictiger::gravity::cartesian {
 template <class Real>
 void P2M(Real mass, Vector3<Real> const& distance, Multipole<Real>& M) {
     using namespace math;
@@ -330,4 +330,4 @@ void P2M(Real mass, Vector3<Real> const& distance, Multipole<Real>& M) {
     M.xxxyz = fma((-t4), t384, M.xxxyz);
     M.xxxxz = fma(mass, t402, M.xxxxz);
 }
-}    // namespace cosmictiger::gravity::cartesian::detail
+}    // namespace cosmictiger::gravity::cartesian

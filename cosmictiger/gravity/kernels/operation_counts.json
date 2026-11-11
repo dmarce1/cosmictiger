@@ -95,12 +95,12 @@
         "*": 78,
         "+": 15,
         "-": 29,
-        "fma": 182
+        "fma": 179
       },
-      "accumulations": 1,
-      "fused_accumulations": 3,
+      "accumulations": 4,
+      "fused_accumulations": 0,
       "weighted_flops": 305,
-      "conventional_flops": 487,
+      "conventional_flops": 484,
       "operator": "L2P",
       "order": 6
     },
@@ -404,12 +404,12 @@
             "*": 78,
             "+": 15,
             "-": 29,
-            "fma": 182
+            "fma": 179
           },
-          "accumulations": 1,
-          "fused_accumulations": 3,
+          "accumulations": 4,
+          "fused_accumulations": 0,
           "weighted_flops": 305,
-          "conventional_flops": 487,
+          "conventional_flops": 484,
           "operator": "L2P",
           "order": 6
         },

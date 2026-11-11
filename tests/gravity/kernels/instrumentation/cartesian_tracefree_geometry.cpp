@@ -8,7 +8,7 @@
 
 // Generated counting-scalar definitions. Tests only; not a library source.
 #include <cosmictiger/gravity/kernels/cartesian_tracefree/geometry.hpp>
-namespace cosmictiger::gravity::cartesian::detail {
+namespace cosmictiger::gravity::cartesian {
 template <class Real>
 Real inverseRadius(Vector3<Real> const& distance) {
     using namespace math;
@@ -24,4 +24,4 @@ Real inverseRadius(Vector3<Real> const& distance) {
     return select(R > broadcast<Real>(k0), broadcast<Real>(k2), broadcast<Real>(k0)) /
         max(R, broadcast<Real>(k1));
 }
-}    // namespace cosmictiger::gravity::cartesian::detail
+}    // namespace cosmictiger::gravity::cartesian

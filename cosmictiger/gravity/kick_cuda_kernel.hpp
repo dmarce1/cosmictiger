@@ -126,7 +126,7 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
             allGx[outputIndex] = gx;
             allGy[outputIndex] = gy;
             allGz[outputIndex] = gz;
-            flops += cosmictiger::gravity::cartesian::detail::kL2PFlops<fmmLocalDegree(order)> +
+            flops += cosmictiger::gravity::cartesian::kL2PFlops<fmmLocalDegree(order)> +
                 (geometry.frozenMembership ? 11 : 14);
             continue;
         }
@@ -317,7 +317,7 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
         dkinTot += kin1 - kin0;
         // Displacement, L2P coordinate scaling and force accumulation/scaling.
         // Energy and momentum diagnostics, including their reductions, are excluded.
-        flops += cosmictiger::gravity::cartesian::detail::kL2PFlops<fmmLocalDegree(order)> +
+        flops += cosmictiger::gravity::cartesian::kL2PFlops<fmmLocalDegree(order)> +
             (geometry.frozenMembership ? 15 : 18);
     }
     sharedReduceAdd(phiTot);
@@ -524,9 +524,8 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                     __syncwarp();
                     if (tid == 0) {
                         flops += globalParams.doPhi ?
-                            cosmictiger::gravity::cartesian::detail::kL2LWarpFlops<fmmLocalDegree(
-                                order)> :
-                            cosmictiger::gravity::cartesian::detail::kL2LWarpNoPotentialFlops<
+                            cosmictiger::gravity::cartesian::kL2LWarpFlops<fmmLocalDegree(order)> :
+                            cosmictiger::gravity::cartesian::kL2LWarpNoPotentialFlops<
                                 fmmLocalDegree(order)>;
                     }
                 }

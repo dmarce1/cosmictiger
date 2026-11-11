@@ -12,7 +12,8 @@ same length. Serialization visits the array in stored order; indexed access
 supports coefficient loops and the CUDA warp translation schedule.
 The transport buffer holds exactly the build-sized coefficient count and
 serializes `kFmmOrder * kFmmOrder` local coefficients.
-Generated Cartesian operators are ordinary scalar/SIMD overloads with the
+Generated Cartesian operators live directly in `cosmictiger::gravity::cartesian`.
+They are ordinary scalar/SIMD overloads with the
 source and displacement before the destination accumulator. `M2L` takes the target-minus-source center displacement and
 evaluates the free-space interaction directly.
 The FMM uses the generator imported from
@@ -31,6 +32,29 @@ coefficients; in general a degree-`d` tensor stores
 Moments are positive raw Cartesian moments multiplied by `S^rank`, and local
 coefficients are derivatives of the negative potential divided by `S^(rank+1)`,
 where `S=1000` preserves the existing numerical normalization.
+
+The general `L2P` kernel evaluates a local expansion in normalized coordinates
+`u = (x - center) / scale`. Its rank-n coefficients already include `scale^n`,
+so the potential needs no additional factor. Acceleration differentiates with
+respect to physical coordinates and therefore needs a factor of `1 / scale`
+by the chain rule. `L2P` has no scale argument: callers apply this factor to
+the three new gradient components after evaluation, before adding them to an
+existing physical field. The potential component is left unchanged.
+`M2L` produces local coefficients rather than a physical
+force; `M2P` obtains the force's extra inverse length directly from its radial
+powers. The application adapters use unit expansion scale in the already scaled
+FMM coordinates, then convert the resulting potential and acceleration at the
+application boundary.
+
+This global normalization protects float's exponent range. For potential degree
+`p`, the radial powers reach `x^(-(p+1))`, with `x = S*r`. Requiring every inverse
+power to remain finite and normal gives
+`FLT_MAX^(-1/(p+1)) <= S*r <= FLT_MIN^(-1/(p+1))`.
+For degree 6 and `S=1000`, the bare-power physical separation interval is
+approximately `[3.13e-9, 262]`; at degree 8 it is `[5.23e-8, 16.4]`.
+These bounds cover radial powers; coefficient factors, source masses and
+accumulations must also fit. The fixed global normalization remains active
+when the kernels use unit ratios between individual expansion scales.
 
 The imported partial-contraction M2L is used directly for near-field cell-cell
 interactions; particle-cell interactions use the generated M2P. Both retain

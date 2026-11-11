@@ -453,7 +453,7 @@ __device__ FlopCounts cudaGravityCpDirect(CudaKickData const& data, CudaKickCont
                     self.mpos->pos[kZi], sources.z[j], kZi, sourceGeometry, &mixedFlops);
                 cosmictiger::gravity::cartesian::Expansion<float> d{};
                 flops += (equalMass ? 1 : 2) * FmmOrder<order>::kLocalCoefficients_ + 3 +
-                    cosmictiger::gravity::cartesian::P2L(1.0f, fmmScaleDisplacement(dx), d);
+                    cosmictiger::gravity::cartesian::P2L(1.0f, fmmScaleDisplacement(dx), true, d);
                 if constexpr (equalMass) {
                     for (int k = 0; k < FmmOrder<order>::kLocalCoefficients_; k++) {
                         l[k] += d[k];

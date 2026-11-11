@@ -8,7 +8,7 @@
 
 // Generated counting-scalar definitions. Tests only; not a library source.
 #include <cosmictiger/gravity/kernels/cartesian_tracefree/m2m.hpp>
-namespace cosmictiger::gravity::cartesian::detail {
+namespace cosmictiger::gravity::cartesian {
 template <class Real>
 void M2M(Multipole<Real> const& M, Vector3<Real> const& distance, Real scaleRatio,
     Multipole<Real>& targetM) {
@@ -652,4 +652,4 @@ void M2M(Multipole<Real> const& M, Vector3<Real> const& distance, Real scaleRati
     targetM.xxxyz += t1146;
     targetM.xxxxz -= t1153;
 }
-}    // namespace cosmictiger::gravity::cartesian::detail
+}    // namespace cosmictiger::gravity::cartesian

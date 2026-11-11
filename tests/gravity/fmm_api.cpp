@@ -36,9 +36,7 @@ static_assert(!HasM2L<CartesianExpansion, SphericalMultipole>);
 template <class Real>
 concept HasCompiledM2P = requires(cosmictiger::gravity::cartesian::Multipole<Real> const& source,
     Vector3<Real> const& displacement, cosmictiger::gravity::Field<Real>& field) {
-    {
-        cosmictiger::gravity::cartesian::detail::M2P(source, displacement, field)
-    } -> std::same_as<void>;
+    { cosmictiger::gravity::cartesian::M2P(source, displacement, field) } -> std::same_as<void>;
 };
 static_assert(HasCompiledM2P<float>);
 static_assert(HasCompiledM2P<double>);
