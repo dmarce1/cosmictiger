@@ -12,6 +12,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <format>
+#include <ios>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -399,23 +401,24 @@ void sphParticlesLoad(FILE* fp) {
     FREAD(header, sizeof(uint32_t), 7, fp);
     FREAD(&savedCount, sizeof(ParticleInteger), 1, fp);
     if (header[0] == 0x43545350U && header[1] < detail::kSphCheckpointBaseVersion) {
-        THROW_ERROR("SPH checkpoint payload version %u predates the removal of the gradient "
-                    "viscosity models and cannot be restarted\n",
-            header[1]);
+        throw std::runtime_error(
+            std::format("SPH checkpoint payload version {} predates the removal of the gradient "
+                        "viscosity models and cannot be restarted",
+                header[1]));
     }
     if (header[0] != 0x43545350U || header[1] != detail::sphCheckpointVersion() ||
         header[2] != sizeof(ParticleInteger) || header[3] != sizeof(float) || header[4] != 0U ||
         header[5] != kSpatialDimensions || header[6] != sizeof(float) ||
         savedCount != sphParticlesSize()) {
-        THROW_ERROR("Incompatible SPH checkpoint payload (requires matching "
-                    "integrator/viscosity/chemistry layout)\n");
+        throw std::runtime_error("Incompatible SPH checkpoint payload (requires matching "
+                                 "integrator/viscosity/chemistry layout)");
     }
     uint32_t entropyInitialized;
     FREAD(&entropyInitialized, sizeof(entropyInitialized), 1, fp);
     FREAD(&sphParticlesThermalScaleFactor, sizeof(sphParticlesThermalScaleFactor), 1, fp);
     if (entropyInitialized > 1 || !(sphParticlesThermalScaleFactor > 0.0) ||
         !std::isfinite(sphParticlesThermalScaleFactor)) {
-        THROW_ERROR("Invalid SPH entropy checkpoint context\n");
+        throw std::runtime_error("Invalid SPH entropy checkpoint context");
     }
     sphParticlesEntropyInitialized = entropyInitialized != 0;
     detail::visitSphCheckpointArrays(
@@ -427,7 +430,7 @@ void sphParticlesLoad(FILE* fp) {
         false, false);
     for (ParticleInteger index = 0; index < sphParticlesSize(); ++index) {
         if (!sphParticlesFlags[index].valid()) {
-            THROW_ERROR("Invalid packed SPH flags in checkpoint\n");
+            throw std::runtime_error("Invalid packed SPH flags in checkpoint");
         }
     }
     for (ParticleInteger index = 0; index < sphParticlesSize(); ++index) {
@@ -435,7 +438,7 @@ void sphParticlesLoad(FILE* fp) {
         auto const coefficientBits = sphParticlesBulkViscosityCoefficients[index].bits;
         if ((coefficientBits & 0x7c00U) == 0x7c00U ||
             ((coefficientBits & 0x8000U) != 0U && (coefficientBits & 0x7fffU) != 0U)) {
-            THROW_ERROR("Invalid SPH viscosity coefficient in checkpoint\n");
+            throw std::runtime_error("Invalid SPH viscosity coefficient in checkpoint");
         }
     }
     if (getOptions().chemistry.enabled) {
@@ -443,7 +446,7 @@ void sphParticlesLoad(FILE* fp) {
             float electronFraction;
             FREAD(&electronFraction, sizeof(float), 1, fp);
             if (!std::isfinite(electronFraction) || electronFraction < 0.0f) {
-                THROW_ERROR("Invalid equilibrium electron fraction in checkpoint\n");
+                throw std::runtime_error("Invalid equilibrium electron fraction in checkpoint");
             }
             sphParticlesElectronFractions[index] = electronFraction;
         }
@@ -536,7 +539,7 @@ void sphCheckpointTest() {
     Vector<unsigned char> expected;
     FILE* file = std::tmpfile();
     if (file == nullptr) {
-        THROW_ERROR("Unable to create SPH checkpoint test file\n");
+        throw std::ios_base::failure("Unable to create SPH checkpoint test file");
     }
     sphParticlesSave(file);
     visitFields([&expected](unsigned char* values, size_t bytes, size_t) {
@@ -554,7 +557,7 @@ void sphCheckpointTest() {
     size_t offset = 0;
     visitFields([&expected, &offset](unsigned char* values, size_t bytes, size_t) {
         if (std::memcmp(values, expected.data() + offset, bytes) != 0) {
-            THROW_ERROR("SPH checkpoint did not restore every gas field\n");
+            throw std::logic_error("SPH checkpoint did not restore every gas field");
         }
         offset += bytes;
     });
@@ -569,7 +572,7 @@ void sphCheckpointTest() {
                 if (index < 2) {
                     for (size_t i = 0; i < bytes; ++i) {
                         if (values[i] != (index == 0 ? first : second)) {
-                            THROW_ERROR("SPH reorder did not preserve every gas field\n");
+                            throw std::logic_error("SPH reorder did not preserve every gas field");
                         }
                     }
                 }
@@ -593,7 +596,7 @@ void sphCheckpointTest() {
             sphParticlesFlags[0].bits = uint8_t(rungCode << 2);
             FILE* corruptFile = std::tmpfile();
             if (corruptFile == nullptr) {
-                THROW_ERROR("Unable to create corrupt SPH flags test file\n");
+                throw std::ios_base::failure("Unable to create corrupt SPH flags test file");
             }
             sphParticlesSave(corruptFile);
             std::rewind(corruptFile);
@@ -606,7 +609,7 @@ void sphCheckpointTest() {
             }
             std::fclose(corruptFile);
             if (!rejected) {
-                THROW_ERROR("SPH checkpoint accepted an invalid packed hydro rung\n");
+                throw std::logic_error("SPH checkpoint accepted an invalid packed hydro rung");
             }
             sphParticlesFlags[0] = validFlags;
         }

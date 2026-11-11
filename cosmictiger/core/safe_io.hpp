@@ -10,70 +10,8 @@ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
 #define SAFE_IO_HPP_
 
 #include <cstdio>
-#include <cstdlib>
-#include <stdexcept>
-#include <string>
-
-#include <cosmictiger/core/assert.hpp>
-
-#define THROW_ERROR(...) throwError(__FILE__, __LINE__, __VA_ARGS__)
-
-#ifndef __CUDA_ARCH__
-namespace detail {
-
-/// Throw a runtime error containing the message and originating source location.
-[[noreturn]] inline void throwRuntimeError(char const* file, int line, std::string message) {
-    if (!message.empty() && message.back() != '\n') {
-        message += '\n';
-    }
-    message += "Error in ";
-    message += file;
-    message += " on line ";
-    message += std::to_string(line);
-    throw std::runtime_error(message);
-}
-
-}    // namespace detail
-#endif
-
-// CUDA device code cannot throw C++ exceptions; retain its diagnostic and trap.
-/// Report the message and source location; throw on the host or trap on the device.
-template <class... Args>
-[[noreturn]]
-#ifdef __CUDA_ARCH__
-__device__
-#endif
-    inline void throwError(char const* file, int line, char const* fmt, Args... args) {
-#ifdef __CUDA_ARCH__
-    printf(fmt, args...);
-    printf("Error in %s on line %i\n", file, line);
-    __trap();
-#else
-    int const length = std::snprintf(nullptr, 0, fmt, args...);
-    if (length < 0) {
-        detail::throwRuntimeError(file, line, "Unable to format error message");
-    }
-    std::string message(static_cast<size_t>(length) + 1, '\0');
-    std::snprintf(message.data(), message.size(), fmt, args...);
-    message.resize(static_cast<size_t>(length));
-    detail::throwRuntimeError(file, line, message);
-#endif
-}
-
-/// Report the message and source location; throw on the host or trap on the device.
-[[noreturn]]
-#ifdef __CUDA_ARCH__
-__device__
-#endif
-    inline void throwError(char const* file, int line, char const* str) {
-#ifdef __CUDA_ARCH__
-    printf("%s", str);
-    printf("Error in %s on line %i\n", file, line);
-    __trap();
-#else
-    detail::throwRuntimeError(file, line, str);
-#endif
-}
+#include <format>
+#include <ios>
 
 #define FREAD(a, b, c, d) safeFread(a, b, c, d, __LINE__, __FILE__)
 #define FWRITE(a, b, c, d) safeFwrite(a, b, c, d, __LINE__, __FILE__)
@@ -82,9 +20,10 @@ __device__
 static void safeFread(void* src, size_t size, size_t count, FILE* fp, int line, char const* file) {
     auto read = fread(src, size, count, fp);
     if (read != count) {
-        throwError(file, line,
-            "Attempt to read %zu elements of size %zu failed - only %zu elements read.\n", count,
-            size, read);
+        throw std::ios_base::failure(
+            std::format("Attempt to read {} elements of size {} failed - only {} elements read.\n"
+                        "Error in {} on line {}",
+                count, size, read, file, line));
     }
 }
 
@@ -93,9 +32,10 @@ static void safeFwrite(
     void const* src, size_t size, size_t count, FILE* fp, int line, char const* file) {
     auto write = fwrite(src, size, count, fp);
     if (write != count) {
-        throwError(file, line,
-            "Attempt to write %zu elements of size %zu failed - only %zu elements written.\n",
-            count, size, write);
+        throw std::ios_base::failure(std::format(
+            "Attempt to write {} elements of size {} failed - only {} elements written.\n"
+            "Error in {} on line {}",
+            count, size, write, file, line));
     }
 }
 

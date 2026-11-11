@@ -736,12 +736,14 @@ TEST(CudaMemory, CudaCheckEvaluatesOnceAndFailsImmediately) {
         FAIL() << "CUDA_CHECK changed its enclosing branch";
     }
     EXPECT_EQ(calls, 1);
-    EXPECT_DEATH(
-        {
-            int failures = 0;
-            CUDA_CHECK(++failures == 1 ? cudaErrorMemoryAllocation : cudaSuccess);
-        },
-        "injected allocation failure");
+    int failures = 0;
+    try {
+        CUDA_CHECK(++failures == 1 ? cudaErrorMemoryAllocation : cudaSuccess);
+        FAIL() << "CUDA_CHECK returned after failure";
+    } catch (std::runtime_error const& error) {
+        EXPECT_STREQ(error.what(), "CUDA error: injected allocation failure");
+    }
+    EXPECT_EQ(failures, 1);
 }
 
 TEST(CudaMemory, DuplicateReleaseIsRejectedBeforeQueuePublication) {

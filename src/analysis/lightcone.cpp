@@ -10,11 +10,13 @@
 #include <cmath>
 #include <filesystem>
 #include <format>
+#include <ios>
 #include <iostream>
 #include <limits>
 #include <memory>
 #include <numbers>
 #include <shared_mutex>
+#include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -363,11 +365,12 @@ void lcParts2groups(double a, double linkingLength, int ti) {
         std::to_string(epoch) + "." + std::to_string(hpxRank());
     UniqueFile mapFile(fopen(mapFilename.c_str(), "wb"));
     if (!mapFile) {
-        THROW_ERROR("Unable to open %s for writing\n", mapFilename.c_str());
+        throw std::ios_base::failure(
+            std::format("Unable to open {} for writing", mapFilename.c_str()));
     }
     epochMap.writeMap(mapFile.get(), getOptions().lightcone.mapSize);
     if (fclose(mapFile.release()) != 0) {
-        THROW_ERROR("Unable to close %s\n", mapFilename.c_str());
+        throw std::ios_base::failure(std::format("Unable to close {}", mapFilename.c_str()));
     }
     epochMap.clear();
     epoch++;

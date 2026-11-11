@@ -1,12 +1,17 @@
 #pragma once
 
+#include <cstdio>
+#include <format>
+#include <stdexcept>
+
 // CUDA status checks evaluate expressions once and behave as one statement.
-#define CUDA_CHECK(expression)                                                    \
-    do {                                                                          \
-        cudaError_t const cudaCheckStatus = (expression);                         \
-        if (cudaCheckStatus != cudaSuccess) {                                     \
-            THROW_ERROR("CUDA error: %s\n", cudaGetErrorString(cudaCheckStatus)); \
-        }                                                                         \
+#define CUDA_CHECK(expression)                                                       \
+    do {                                                                             \
+        cudaError_t const cudaCheckStatus = (expression);                            \
+        if (cudaCheckStatus != cudaSuccess) {                                        \
+            throw std::runtime_error(                                                \
+                std::format("CUDA error: {}", cudaGetErrorString(cudaCheckStatus))); \
+        }                                                                            \
     } while (false)
 
 #define CUDA_WARN(expression)                                                  \

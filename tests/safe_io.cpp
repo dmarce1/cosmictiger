@@ -1,53 +1,11 @@
 #include <cstdio>
+#include <ios>
 #include <memory>
-#include <stdexcept>
 #include <string>
 
 #include <gtest/gtest.h>
 
 #include <cosmictiger/core/safe_io.hpp>
-
-TEST(SafeIo, FormattedErrorCarriesMessageAndLocation) {
-    int const line = __LINE__ + 2;
-    try {
-        THROW_ERROR("%s %i\n", "Tree arena full", 42);
-        FAIL() << "THROW_ERROR returned";
-    } catch (std::runtime_error const& error) {
-        EXPECT_EQ(std::string(error.what()),
-            "Tree arena full 42\nError in " + std::string(__FILE__) + " on line " +
-                std::to_string(line));
-    }
-}
-
-TEST(SafeIo, PlainErrorPreservesPercentCharacters) {
-    try {
-        throwError("caller.cpp", 17, "100% full (%s)");
-        FAIL() << "throwError returned";
-    } catch (std::runtime_error const& error) {
-        EXPECT_STREQ(error.what(), "100% full (%s)\nError in caller.cpp on line 17");
-    }
-}
-
-TEST(SafeIo, LongFormattedErrorIsNotTruncated) {
-    std::string const payload(16384, 'x');
-    try {
-        throwError("caller.cpp", 23, "%s: %zu", payload.c_str(), payload.size());
-        FAIL() << "throwError returned";
-    } catch (std::runtime_error const& error) {
-        EXPECT_EQ(std::string(error.what()), payload + ": 16384\nError in caller.cpp on line 23");
-    }
-}
-
-TEST(SafeIo, ErrorUnwindsStack) {
-    auto owner = std::make_shared<int>(42);
-    EXPECT_THROW(
-        {
-            auto localOwner = owner;
-            THROW_ERROR("Tree arena full");
-        },
-        std::runtime_error);
-    EXPECT_EQ(owner.use_count(), 1);
-}
 
 TEST(SafeIo, ShortReadThrowsWithCallerLocation) {
     std::unique_ptr<FILE, int (*)(FILE*)> file(std::tmpfile(), &std::fclose);
@@ -56,7 +14,7 @@ TEST(SafeIo, ShortReadThrowsWithCallerLocation) {
     try {
         safeFread(&value, sizeof(value), 1, file.get(), 31, "reader.cpp");
         FAIL() << "Short read returned";
-    } catch (std::runtime_error const& error) {
+    } catch (std::ios_base::failure const& error) {
         std::string const message = error.what();
         EXPECT_NE(message.find("only 0 elements read"), std::string::npos);
         EXPECT_NE(message.find("Error in reader.cpp on line 31"), std::string::npos);
@@ -70,9 +28,36 @@ TEST(SafeIo, FailedWriteThrowsWithCallerLocation) {
     try {
         safeFwrite(&value, sizeof(value), 1, file.get(), 37, "writer.cpp");
         FAIL() << "Failed write returned";
-    } catch (std::runtime_error const& error) {
+    } catch (std::ios_base::failure const& error) {
         std::string const message = error.what();
         EXPECT_NE(message.find("only 0 elements written"), std::string::npos);
         EXPECT_NE(message.find("Error in writer.cpp on line 37"), std::string::npos);
     }
+}
+
+TEST(SafeIo, ShortReadPreservesLongFilenameAndUnwindsStack) {
+    std::unique_ptr<FILE, int (*)(FILE*)> file(std::tmpfile(), &std::fclose);
+    ASSERT_NE(file, nullptr);
+    std::string const filename = std::string(16384, 'x') + "100%full";
+    auto owner = std::make_shared<int>(42);
+    int value = 0;
+    try {
+        auto localOwner = owner;
+        safeFread(&value, sizeof(value), 1, file.get(), 41, filename.c_str());
+        FAIL() << "Short read returned";
+    } catch (std::ios_base::failure const& error) {
+        EXPECT_NE(std::string(error.what()).find(filename + " on line 41"), std::string::npos);
+    }
+    EXPECT_EQ(owner.use_count(), 1);
+}
+
+TEST(SafeIo, BinaryRoundTrip) {
+    std::unique_ptr<FILE, int (*)(FILE*)> file(std::tmpfile(), &std::fclose);
+    ASSERT_NE(file, nullptr);
+    int const expected = 42;
+    FWRITE(&expected, sizeof(expected), 1, file.get());
+    std::rewind(file.get());
+    int actual = 0;
+    FREAD(&actual, sizeof(actual), 1, file.get());
+    EXPECT_EQ(actual, expected);
 }

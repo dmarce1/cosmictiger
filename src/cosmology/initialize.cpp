@@ -16,6 +16,7 @@
 #include <format>
 #include <fstream>
 #include <iomanip>
+#include <ios>
 #include <iostream>
 #include <limits>
 #include <numbers>
@@ -759,7 +760,7 @@ static void initX0() {
         std::ifstream glassFile("glass.bin", std::ios::binary);
         glassFile.read(reinterpret_cast<char*>(&glassSide), sizeof(glassSide));
         if (!glassFile || glassSide <= 0) {
-            THROW_ERROR("Unable to read glass.bin dimensions\n");
+            throw std::ios_base::failure("Unable to read glass.bin dimensions");
         }
         glassCount = particle_count::roundLattice(size_t(glassSide) * glassSide * glassSide).count;
         for (auto& axis : glassPositions) {
@@ -767,7 +768,7 @@ static void initX0() {
             glassFile.read(reinterpret_cast<char*>(axis.data()), glassCount * sizeof(Fixed32));
         }
         if (!glassFile) {
-            THROW_ERROR("Unable to read glass.bin positions\n");
+            throw std::ios_base::failure("Unable to read glass.bin positions");
         }
     }
     auto const appendSpecies = [&](int side, bool gas) {
@@ -797,7 +798,8 @@ static void initX0() {
         };
         if (options.scenario.cosmology.useGlass) {
             if (side % glassSide != 0) {
-                THROW_ERROR("Resolved particle lattice is not a whole number of glass tiles\n");
+                throw std::invalid_argument(
+                    "Resolved particle lattice is not a whole number of glass tiles");
             }
             int const tiles = side / glassSide;
             std::array<std::vector<int>, kDimensions> tileIndices;
@@ -884,7 +886,7 @@ static void initX0() {
         }
     }
     if (positions[0].size() > size_t(std::numeric_limits<ParticleInteger>::max())) {
-        THROW_ERROR("Local initial particle count exceeds ParticleInteger range\n");
+        throw std::overflow_error("Local initial particle count exceeds ParticleInteger range");
     }
     particlesResize(darkMatterCount);
 #if COSMICTIGER_WITH_SPH

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <stdexcept>
 #include <vector>
 
 #include <hpx/threading_base/annotated_function.hpp>
@@ -38,7 +39,8 @@ LongKick readLongKick(
         return result;
     }
     if (!particlesHasLongAcceleration(getOptions())) {
-        THROW_ERROR("A long half-kick was requested without the particle-mesh acceleration\n");
+        throw std::logic_error(
+            "A long half-kick was requested without the particle-mesh acceleration");
     }
     result.active = true;
     result.closeHalf = 0.5f * parameters.longCloseTimestep;
@@ -135,7 +137,7 @@ KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& a
         // gravity-only rung update. The long half-kicks of an outer boundary
         // are applied directly; their diagnostic corrections report through the
         // dark-matter channels so the synchronized energies stay consistent.
-        THROW_ERROR("Mesh gravity with midpoint SPH is deferred\n");
+        throw std::invalid_argument("Mesh gravity with midpoint SPH is deferred");
         if (!parameters.firstCall) {
             applyLong(parameters.sign, longKick.closeHalf);
         }
@@ -170,11 +172,11 @@ KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& a
                     std::sqrt(effectiveRadius / std::sqrt(accelerationSquared)),
                 parameters.t0));
         if (!(requiredTimestep > 0.0f) || !std::isfinite(requiredTimestep)) {
-            THROW_ERROR("Mesh kick timestep is not finite and positive\n");
+            throw std::domain_error("Mesh kick timestep is not finite and positive");
         }
         float const requestedRung = std::ceil(std::log2(parameters.t0 / requiredTimestep));
         if (!std::isfinite(requestedRung) || requestedRung >= kMaxRung) {
-            THROW_ERROR("Mesh kick timestep exceeds the available rung range\n");
+            throw std::overflow_error("Mesh kick timestep exceeds the available rung range");
         }
         proposedRung = int(requestedRung);
         // Squared acceleration, timestep bound, and division/log2/ceil rung proposal.

@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <stdexcept>
 #include <vector>
 
 #include <hpx/threading_base/annotated_function.hpp>
@@ -64,7 +65,8 @@ KickReturn particleMeshPrepareKick(double scale, double baseTimestep, double max
                                 std::sqrt(scale * effectiveRadius /
                                     std::max(std::sqrt(accelerationSquared), 1.0e-30)));
                         if (!(timestep > 0.0) || !std::isfinite(timestep)) {
-                            THROW_ERROR("Particle mesh timestep is not finite and positive\n");
+                            throw std::domain_error(
+                                "Particle mesh timestep is not finite and positive");
                         }
                         result.minimumTimestep = std::min(result.minimumTimestep, timestep);
                         int const previousRung = particlesRung(i);
@@ -72,8 +74,8 @@ KickReturn particleMeshPrepareKick(double scale, double baseTimestep, double max
                             double const requestedRung =
                                 std::ceil(std::log2(baseTimestep / timestep));
                             if (!(requestedRung < kMaxRung)) {
-                                THROW_ERROR(
-                                    "Particle mesh timestep exceeds the available rung range\n");
+                                throw std::overflow_error(
+                                    "Particle mesh timestep exceeds the available rung range");
                             }
                             result.maxRung = std::max(result.maxRung,
                                 std::max({1, int(requestedRung), previousRung - 1, minimumRung}));
@@ -97,7 +99,8 @@ KickReturn particleMeshPrepareKick(double scale, double baseTimestep, double max
                         for (int dim = 0; dim < kDimensions; ++dim) {
 #if COSMICTIGER_WITH_SPH
                             if (gas) {
-                                THROW_ERROR("Mesh gravity with midpoint SPH is deferred\n");
+                                throw std::invalid_argument(
+                                    "Mesh gravity with midpoint SPH is deferred");
                                 // Promote acceleration, multiply, then narrow the result.
                                 flops += 3;
                             } else

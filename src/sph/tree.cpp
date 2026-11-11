@@ -11,6 +11,7 @@
 #include <atomic>
 #include <cmath>
 #include <exception>
+#include <format>
 #include <memory>
 #include <mutex>
 #include <shared_mutex>
@@ -323,7 +324,7 @@ void SphTreeAllocator::reset() {
     next_ = (nextId += treeCacheLineSize);
     last_ = std::min(next_ + treeCacheLineSize, (int) nodes.size());
     if (next_ >= nodes.size()) {
-        THROW_ERROR("%s\n", "Tree arena full");
+        throw std::length_error("Tree arena full");
     }
 }
 
@@ -783,7 +784,7 @@ static SphTreeCreateReturn sphTreeBuild(SphTreeCreateParameters params, size_t k
      }
      }*/
     if (index >= nodes.size()) {
-        THROW_ERROR("%s\n", "Tree arena full\n");
+        throw std::length_error("Tree arena full");
     }
     rc.activeNodes = activeNodes;
     rc.id.index = index;
@@ -1019,7 +1020,8 @@ SphTreeNode const* sphTreeGetNode(TreeId id) {
         ASSERT(id.index >= 0);
 #ifndef NDEBUG
         if (id.index >= nodes.size()) {
-            THROW_ERROR("id.index is %li but nodes.size() is %li\n", id.index, nodes.size());
+            throw std::out_of_range(
+                std::format("id.index is {} but nodes.size() is {}", id.index, nodes.size()));
         }
 #endif
         return &nodes[id.index];
@@ -1028,8 +1030,9 @@ SphTreeNode const* sphTreeGetNode(TreeId id) {
     if (auto const* ghost = sphGhostsFindNode(id)) {
         return ghost;
     }
-    THROW_ERROR("SPH tree: rank %i reads node (%i, %i), which is not a ghost leaf here\n",
-        hpxRank(), id.proc, id.index);
+    throw std::logic_error(
+        std::format("SPH tree: rank {} reads node ({}, {}), which is not a ghost leaf here",
+            hpxRank(), id.proc, id.index));
 }
 
 /// Replace a local node's inner position and outer support bounds.

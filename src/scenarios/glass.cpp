@@ -1,4 +1,6 @@
 #include <cstdio>
+#include <ios>
+#include <stdexcept>
 
 #include <cosmictiger/core/driver.hpp>
 #include <cosmictiger/core/hpx.hpp>
@@ -13,11 +15,11 @@ namespace scenarios {
 /// Create random single-locality particles for a fixed-background glass relaxation.
 void initializeGlass(DriverParameters& state) {
     if (hpxSize() != 1) {
-        THROW_ERROR("Glass generation requires one HPX locality\n");
+        throw std::invalid_argument("Glass generation requires one HPX locality");
     }
     if (getOptions().initial.closePack) {
-        THROW_ERROR("Glass generation does not support initial.closePack; the file stores side^3 "
-                    "particles\n");
+        throw std::invalid_argument("Glass generation does not support initial.closePack; the file "
+                                    "stores side^3 particles");
     }
     auto const count = getOptions().initial.numberOfParticles;
     particlesResize(count);
@@ -38,27 +40,27 @@ void initializeGlass(DriverParameters& state) {
 void saveGlass() {
     int const side = getOptions().initial.latticeSide;
     if (uint64_t(particlesSize()) != uint64_t(side) * side * side) {
-        THROW_ERROR("Glass particle count does not match its lattice dimensions\n");
+        throw std::logic_error("Glass particle count does not match its lattice dimensions");
     }
     FILE* file = fopen(outputPath("glass.bin").c_str(), "wb");
     if (file == nullptr) {
-        THROW_ERROR("Unable to write glass.bin\n");
+        throw std::ios_base::failure("Unable to write glass.bin");
     }
     if (fwrite(&side, sizeof(side), 1, file) != 1) {
         fclose(file);
-        THROW_ERROR("Unable to write glass dimensions\n");
+        throw std::ios_base::failure("Unable to write glass dimensions");
     }
     for (int dim = 0; dim < kDimensions; dim++) {
         for (ParticleInteger i = 0; i < particlesSize(); i++) {
             Fixed32 const position(particlesPos(dim, i));
             if (fwrite(&position, sizeof(position), 1, file) != 1) {
                 fclose(file);
-                THROW_ERROR("Unable to write glass particle\n");
+                throw std::ios_base::failure("Unable to write glass particle");
             }
         }
     }
     if (fclose(file) != 0) {
-        THROW_ERROR("Unable to finish writing glass.bin\n");
+        throw std::ios_base::failure("Unable to finish writing glass.bin");
     }
 }
 

@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <cstring>
 #include <exception>
+#include <format>
 #include <map>
 #include <mutex>
 #include <stdexcept>
@@ -229,23 +230,25 @@ void clearLocalGhosts() {
 std::pair<GhostBlock const*, ParticleInteger> ghostSlot(
     ParticleGlobalRange const& range, unsigned groups) {
     if (finalizedEpoch != syncEpoch) {
-        THROW_ERROR(
-            "SPH ghosts: rank %i reads ghosts before the last sync was finalized\n", hpxRank());
+        throw std::logic_error(std::format(
+            "SPH ghosts: rank {} reads ghosts before the last sync was finalized", hpxRank()));
     }
     auto const found = nodeByRangeStart.find(ghostKey(range.proc, range.range.first));
     if (found == nodeByRangeStart.end()) {
-        THROW_ERROR("SPH ghosts: rank %i holds no ghost leaf for rank %i gas range [%lli, %lli)\n",
-            hpxRank(), range.proc, (long long) range.range.first, (long long) range.range.second);
+        throw std::logic_error(std::format(
+            "SPH ghosts: rank {} holds no ghost leaf for rank {} gas range [{}, {})", hpxRank(),
+            range.proc, (long long) range.range.first, (long long) range.range.second));
     }
     auto const& block = *found->second.block;
     int const node = found->second.node;
     if (range.range.second > block.nodes[node].particleRange.second) {
-        THROW_ERROR("SPH ghosts: remote range outruns its ghost leaf\n");
+        throw std::logic_error("SPH ghosts: remote range outruns its ghost leaf");
     }
     for (int group = 0; group < kGroupCount; ++group) {
         if (hasGroup(groups, group) && block.generations[group] != refreshGeneration) {
-            THROW_ERROR("SPH ghosts: rank %i reads rank %i %s that this pass did not refresh\n",
-                hpxRank(), range.proc, kGroupNames[group]);
+            throw std::logic_error(
+                std::format("SPH ghosts: rank {} reads rank {} {} that this pass did not refresh",
+                    hpxRank(), range.proc, kGroupNames[group]));
         }
     }
     return {&block, block.offsets[node]};
@@ -376,7 +379,8 @@ void receiveGhostLeaves(
     ALWAYS_ASSERT(records.size() == indices.size());
     auto& block = blocks[owner];
     if (block.syncEpoch == epoch) {
-        THROW_ERROR("SPH ghosts: rank %i received two syncs from rank %i\n", hpxRank(), owner);
+        throw std::logic_error(
+            std::format("SPH ghosts: rank {} received two syncs from rank {}", hpxRank(), owner));
     }
     if (keep) {
         bool same = block.indices.size() == indices.size();
@@ -385,8 +389,9 @@ void receiveGhostLeaves(
                 block.nodes[leaf].particleRange == records[leaf].particleRange;
         }
         if (!same) {
-            THROW_ERROR("SPH ghosts: rank %i keeps a rank %i block whose leaves changed\n",
-                hpxRank(), owner);
+            throw std::logic_error(
+                std::format("SPH ghosts: rank {} keeps a rank {} block whose leaves changed",
+                    hpxRank(), owner));
         }
         block.nodes.assign(records.begin(), records.end());
     } else {
@@ -414,8 +419,9 @@ void receiveGhostFields(GhostFieldsMessage message) {
         std::lock_guard<MutexType> lock(storeMutex);
         auto const found = blocks.find(message.owner);
         if (found == blocks.end()) {
-            THROW_ERROR("SPH ghosts: rank %i received fields from rank %i without a sync\n",
-                hpxRank(), message.owner);
+            throw std::logic_error(
+                std::format("SPH ghosts: rank {} received fields from rank {} without a sync",
+                    hpxRank(), message.owner));
         }
         block = &found->second;
     }
@@ -684,9 +690,10 @@ void sphGhostsRefreshLocal(std::int64_t generation, unsigned fields) {
                 if (target.ranges[leaf].second > sphParticlesSize() ||
                     id.index >= sphTreeNodesSize() ||
                     sphTreeGetNode(id)->particleRange != target.ranges[leaf]) {
-                    THROW_ERROR("SPH ghosts: rank %i refreshes an export to rank %i that predates "
-                                "the current tree; a sync must follow every rebuild\n",
-                        hpxRank(), importer);
+                    throw std::logic_error(
+                        std::format("SPH ghosts: rank {} refreshes an export to rank {} that "
+                                    "predates the current tree; a sync must follow every rebuild",
+                            hpxRank(), importer));
                 }
             }
             detail::GhostFieldsMessage message;
@@ -788,16 +795,17 @@ void sphGhostsRequireStaging(ParticleGlobalRange const& range) {
     // Ghost fields are pushed for, and current during, the staging of a pass. No other code
     // may read remote gas: there is no fetch path to serve it.
     if (detail::stagingDepth <= 0) {
-        THROW_ERROR("SPH ghosts: rank %i reads rank %i gas outside the staging of a pass\n",
-            hpxRank(), range.proc);
+        throw std::logic_error(
+            std::format("SPH ghosts: rank {} reads rank {} gas outside the staging of a pass",
+                hpxRank(), range.proc));
     }
 }
 
 /// Find a staged remote leaf by TreeId, requiring synchronization to have been finalized.
 SphTreeNode const* sphGhostsFindNode(TreeId id) {
     if (detail::finalizedEpoch != detail::syncEpoch) {
-        THROW_ERROR(
-            "SPH ghosts: rank %i looks up a ghost before the last sync was finalized\n", hpxRank());
+        throw std::logic_error(std::format(
+            "SPH ghosts: rank {} looks up a ghost before the last sync was finalized", hpxRank()));
     }
     auto const found = detail::nodeById.find(detail::ghostKey(id.proc, id.index));
     return found == detail::nodeById.end() ? nullptr :

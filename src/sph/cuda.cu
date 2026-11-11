@@ -6,7 +6,9 @@
  See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
+#include <format>
 #include <memory>
+#include <stdexcept>
 
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/sph/cuda.hpp>
@@ -107,8 +109,9 @@ SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, CudaSt
         stream.checkLaunch();
         stream.wait();
         reduction->timestepError.throwIfFailed([](SphTimestepFailure const& error) {
-            THROW_ERROR("SPH timestep exceeds rung range: particle=%lli rung=%i maximumRung=%i\n",
-                static_cast<long long>(error.particleIndex), error.requestedRung, kMaxRung - 1);
+            throw std::overflow_error(std::format(
+                "SPH timestep exceeds rung range: particle={} rung={} maximumRung={}",
+                static_cast<long long>(error.particleIndex), error.requestedRung, kMaxRung - 1));
         });
         result.maximumSignalSpeed = reduction->maximumSignalSpeed;
         result.maximumGravityRung = reduction->maximumGravityRung;

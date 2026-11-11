@@ -11,8 +11,10 @@
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <functional>
+#include <ios>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -267,7 +269,8 @@ std::pair<size_t, size_t> groupsSave(int number, double scale, double time) {
         std::string const fname = outputPath("groups." + std::to_string(number) + "/groups.dat");
         FILE* fp = fopen(fname.c_str(), "wb");
         if (fp == NULL) {
-            THROW_ERROR("Unable to open %s for writing\n", fname.c_str());
+            throw std::ios_base::failure(
+                std::format("Unable to open {} for writing", fname.c_str()));
         }
         GroupHeader header;
         header.boxLength = getOptions().units.lengthCm / constants::kMpcToCm;
@@ -290,7 +293,7 @@ std::pair<size_t, size_t> groupsSave(int number, double scale, double time) {
         std::to_string(number) + "." + std::to_string(hpxRank()) + ".dat");
     FILE* fp = fopen(fname.c_str(), "wb");
     if (fp == NULL) {
-        THROW_ERROR("Unable to open %s\n", fname.c_str());
+        throw std::ios_base::failure(std::format("Unable to open {}", fname.c_str()));
     }
     if (groups.size()) {
         hpx::sort(annotatedParallelPolicy("analysis.groups.sortCatalogue"), groups.begin(),

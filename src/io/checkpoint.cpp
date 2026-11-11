@@ -14,6 +14,7 @@
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <ios>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -212,23 +213,27 @@ fs::path checkpointRankFile(fs::path const& directory, int rank) {
 void syncDirectory(fs::path const& directory) {
     int const fd = open(directory.c_str(), O_RDONLY | O_DIRECTORY);
     if (fd < 0) {
-        THROW_ERROR("Unable to open checkpoint directory %s for sync\n", directory.c_str());
+        throw std::ios_base::failure(
+            std::format("Unable to open checkpoint directory {} for sync", directory.c_str()));
     }
     int const result = fsync(fd);
     int const closeResult = close(fd);
     if (result != 0 || closeResult != 0) {
-        THROW_ERROR("Unable to sync checkpoint directory %s\n", directory.c_str());
+        throw std::ios_base::failure(
+            std::format("Unable to sync checkpoint directory {}", directory.c_str()));
     }
 }
 
 /// Check, flush, synchronize, and close a checkpoint file before publication.
 void flushAndCloseCheckpointFile(CheckpointFile& file, fs::path const& path) {
     if (ferror(file.get()) != 0 || fflush(file.get()) != 0 || fsync(fileno(file.get())) != 0) {
-        THROW_ERROR("Unable to flush checkpoint file %s\n", path.c_str());
+        throw std::ios_base::failure(
+            std::format("Unable to flush checkpoint file {}", path.c_str()));
     }
     FILE* rawFile = file.release();
     if (fclose(rawFile) != 0) {
-        THROW_ERROR("Unable to close checkpoint file %s\n", path.c_str());
+        throw std::ios_base::failure(
+            std::format("Unable to close checkpoint file {}", path.c_str()));
     }
 }
 
@@ -236,7 +241,8 @@ void flushAndCloseCheckpointFile(CheckpointFile& file, fs::path const& path) {
 CheckpointFileInfo checkpointFileInfo(fs::path const& path) {
     std::ifstream file(path, std::ios::binary);
     if (!file) {
-        THROW_ERROR("Unable to inspect checkpoint file %s\n", path.c_str());
+        throw std::ios_base::failure(
+            std::format("Unable to inspect checkpoint file {}", path.c_str()));
     }
     std::array<char, 65536> buffer{};
     CheckpointFileInfo info{0, kFnvOffsetBasis};
@@ -250,7 +256,8 @@ CheckpointFileInfo checkpointFileInfo(fs::path const& path) {
         }
     }
     if (!file.eof()) {
-        THROW_ERROR("Unable to read checkpoint file %s\n", path.c_str());
+        throw std::ios_base::failure(
+            std::format("Unable to read checkpoint file {}", path.c_str()));
     }
     return info;
 }
@@ -281,7 +288,8 @@ void writeCheckpointScenario(fs::path const& directory) {
     if (!file ||
         fprintf(file.get(), "COSMICTIGER_SCENARIO 1\n%s\n%.17g\n%d\n", options.run.scenario.c_str(),
             options.run.endTime, int(options.gravity.enabled)) < 0) {
-        THROW_ERROR("Unable to write checkpoint scenario metadata %s\n", path.c_str());
+        throw std::ios_base::failure(
+            std::format("Unable to write checkpoint scenario metadata {}", path.c_str()));
     }
     flushAndCloseCheckpointFile(file, path);
 }
@@ -295,9 +303,10 @@ void validateCheckpointScenario(fs::path const& directory) {
     auto const path = directory / "scenario.meta";
     std::ifstream file(path);
     if (!file) {
-        THROW_ERROR("Checkpoint %s has no scenario metadata; use its original executable to "
-                    "resume a checkpoint written before first-class scenarios\n",
-            directory.c_str());
+        throw std::runtime_error(
+            std::format("Checkpoint {} has no scenario metadata; use its original executable to "
+                        "resume a checkpoint written before first-class scenarios",
+                directory.c_str()));
     }
     std::string label;
     std::string scenario;
@@ -307,13 +316,14 @@ void validateCheckpointScenario(fs::path const& directory) {
     if (!(file >> label >> version >> scenario >> endTime >> gravity) ||
         label != "COSMICTIGER_SCENARIO" || version != 1 || scenario != getOptions().run.scenario ||
         endTime != getOptions().run.endTime || gravity != int(getOptions().gravity.enabled)) {
-        THROW_ERROR("Checkpoint scenario, run.endTime or gravity.enabled differs from the "
-                    "requested run: %s\n",
-            path.c_str());
+        throw std::runtime_error(std::format("Checkpoint scenario, run.endTime or gravity.enabled "
+                                             "differs from the requested run: {}",
+            path.c_str()));
     }
     file >> std::ws;
     if (file.peek() != std::char_traits<char>::eof()) {
-        THROW_ERROR("Checkpoint scenario metadata %s has unexpected trailing data\n", path.c_str());
+        throw std::runtime_error(std::format(
+            "Checkpoint scenario metadata {} has unexpected trailing data", path.c_str()));
     }
 }
 
@@ -323,24 +333,28 @@ void writeCheckpointManifest(fs::path const& directory, int iteration) {
     fs::path const path = directory / "checkpoint.meta";
     CheckpointFile file(fopen(path.c_str(), "wb"));
     if (!file) {
-        THROW_ERROR("Unable to create checkpoint manifest %s\n", path.c_str());
+        throw std::ios_base::failure(
+            std::format("Unable to create checkpoint manifest {}", path.c_str()));
     }
     auto const manifestVersion =
         getOptions().run.test.empty() ? kScenarioManifestVersion : kCheckpointManifestVersion;
     if (fprintf(file.get(), "COSMICTIGER_CHECKPOINT %u %u %i %i\n", manifestVersion,
             kCheckpointVersion, iteration, hpxSize()) < 0) {
-        THROW_ERROR("Unable to write checkpoint manifest %s\n", path.c_str());
+        throw std::ios_base::failure(
+            std::format("Unable to write checkpoint manifest {}", path.c_str()));
     }
     for (int rank = 0; rank < hpxSize(); rank++) {
         auto const rankPath = checkpointRankFile(directory, rank);
         if (checkpointFileVersion(rankPath) != kCheckpointVersion) {
-            THROW_ERROR("Checkpoint rank %i has an unexpected format version\n", rank);
+            throw std::runtime_error(
+                std::format("Checkpoint rank {} has an unexpected format version", rank));
         }
         auto const info = checkpointFileInfo(rankPath);
         if (fprintf(file.get(), "%i %llu %016llx\n", rank,
                 static_cast<unsigned long long>(info.size),
                 static_cast<unsigned long long>(info.checksum)) < 0) {
-            THROW_ERROR("Unable to write checkpoint manifest %s\n", path.c_str());
+            throw std::ios_base::failure(
+                std::format("Unable to write checkpoint manifest {}", path.c_str()));
         }
     }
     if (manifestVersion == kScenarioManifestVersion) {
@@ -348,7 +362,8 @@ void writeCheckpointManifest(fs::path const& directory, int iteration) {
         if (fprintf(file.get(), "SCENARIO %llu %016llx\n",
                 static_cast<unsigned long long>(info.size),
                 static_cast<unsigned long long>(info.checksum)) < 0) {
-            THROW_ERROR("Unable to write scenario checksum to %s\n", path.c_str());
+            throw std::ios_base::failure(
+                std::format("Unable to write scenario checksum to {}", path.c_str()));
         }
     }
     flushAndCloseCheckpointFile(file, path);
@@ -358,7 +373,8 @@ void writeCheckpointManifest(fs::path const& directory, int iteration) {
 /// integrity checks.
 void validateCheckpointDirectory(fs::path const& directory, int iteration) {
     if (!fs::is_directory(directory)) {
-        THROW_ERROR("Checkpoint directory %s does not exist\n", directory.c_str());
+        throw std::runtime_error(
+            std::format("Checkpoint directory {} does not exist", directory.c_str()));
     }
     validateCheckpointScenario(directory);
     fs::path const manifestPath = directory / "checkpoint.meta";
@@ -367,10 +383,12 @@ void validateCheckpointDirectory(fs::path const& directory, int iteration) {
         for (int rank = 0; rank < hpxSize(); rank++) {
             auto const rankPath = checkpointRankFile(directory, rank);
             if (!fs::is_regular_file(rankPath)) {
-                THROW_ERROR("Legacy checkpoint is missing rank file %s\n", rankPath.c_str());
+                throw std::runtime_error(
+                    std::format("Legacy checkpoint is missing rank file {}", rankPath.c_str()));
             }
             if (checkpointFileVersion(rankPath) == kCheckpointVersion) {
-                THROW_ERROR("Format 3 checkpoint %s is missing its manifest\n", directory.c_str());
+                throw std::runtime_error(std::format(
+                    "Format 3 checkpoint {} is missing its manifest", directory.c_str()));
             }
         }
         std::cout << "Reading legacy checkpoint without integrity manifest\n" << std::flush;
@@ -389,9 +407,9 @@ void validateCheckpointDirectory(fs::path const& directory, int iteration) {
         (getOptions().run.test.empty() && manifestVersion != kScenarioManifestVersion) ||
         payloadVersion != kCheckpointVersion || savedIteration != iteration ||
         rankCount != hpxSize()) {
-        THROW_ERROR("Checkpoint manifest %s has an incompatible version, iteration or locality "
-                    "count\n",
-            manifestPath.c_str());
+        throw std::runtime_error(std::format(
+            "Checkpoint manifest {} has an incompatible version, iteration or locality count",
+            manifestPath.c_str()));
     }
     for (int rank = 0; rank < rankCount; rank++) {
         int savedRank = -1;
@@ -399,17 +417,18 @@ void validateCheckpointDirectory(fs::path const& directory, int iteration) {
         uint64_t savedChecksum = 0;
         if (!(manifest >> std::dec >> savedRank >> savedSize >> std::hex >> savedChecksum) ||
             savedRank != rank) {
-            THROW_ERROR("Checkpoint manifest %s has an invalid rank entry\n", manifestPath.c_str());
+            throw std::runtime_error(std::format(
+                "Checkpoint manifest {} has an invalid rank entry", manifestPath.c_str()));
         }
         auto const rankPath = checkpointRankFile(directory, rank);
         if (checkpointFileVersion(rankPath) != kCheckpointVersion) {
-            THROW_ERROR(
-                "Checkpoint rank file %s has an incompatible format version\n", rankPath.c_str());
+            throw std::runtime_error(std::format(
+                "Checkpoint rank file {} has an incompatible format version", rankPath.c_str()));
         }
         auto const actual = checkpointFileInfo(rankPath);
         if (actual.size != savedSize || actual.checksum != savedChecksum) {
-            THROW_ERROR(
-                "Checkpoint rank file %s failed size or checksum validation\n", rankPath.c_str());
+            throw std::runtime_error(std::format(
+                "Checkpoint rank file {} failed size or checksum validation", rankPath.c_str()));
         }
     }
     if (manifestVersion == kScenarioManifestVersion) {
@@ -418,17 +437,19 @@ void validateCheckpointDirectory(fs::path const& directory, int iteration) {
         uint64_t savedChecksum = 0;
         if (!(manifest >> scenarioLabel >> std::dec >> savedSize >> std::hex >> savedChecksum) ||
             scenarioLabel != "SCENARIO") {
-            THROW_ERROR(
-                "Checkpoint manifest %s has an invalid scenario entry\n", manifestPath.c_str());
+            throw std::runtime_error(std::format(
+                "Checkpoint manifest {} has an invalid scenario entry", manifestPath.c_str()));
         }
         auto const actual = checkpointFileInfo(directory / "scenario.meta");
         if (actual.size != savedSize || actual.checksum != savedChecksum) {
-            THROW_ERROR("Checkpoint scenario metadata failed size or checksum validation\n");
+            throw std::runtime_error(
+                "Checkpoint scenario metadata failed size or checksum validation");
         }
     }
     manifest >> std::ws;
     if (manifest.peek() != std::char_traits<char>::eof()) {
-        THROW_ERROR("Checkpoint manifest %s has unexpected trailing data\n", manifestPath.c_str());
+        throw std::runtime_error(std::format(
+            "Checkpoint manifest {} has unexpected trailing data", manifestPath.c_str()));
     }
 }
 
@@ -542,10 +563,11 @@ uint32_t checkpointKernelCode(std::string const& family, int degree) {
     } else if (family == "ferrers") {
         familyCode = 3;
     } else {
-        THROW_ERROR("Unknown checkpoint kernel family: %s\n", family.c_str());
+        throw std::runtime_error(
+            std::format("Unknown checkpoint kernel family: {}", family.c_str()));
     }
     if (degree < 0 || degree > 15) {
-        THROW_ERROR("Checkpoint kernel degree does not fit its selection field\n");
+        throw std::runtime_error("Checkpoint kernel degree does not fit its selection field");
     }
     return (familyCode << 4) | static_cast<uint32_t>(degree);
 }
@@ -689,7 +711,7 @@ std::array<uint64_t, 11> readPmmmCheckpointParameters(FILE* fp) {
     } else if (parameters[0] == 4 || parameters[0] == 5) {
         FREAD(&parameters[7], sizeof(uint64_t), 4, fp);
     } else if (parameters[0] != 1) {
-        THROW_ERROR("Unsupported PMMM checkpoint parameter version\n");
+        throw std::runtime_error("Unsupported PMMM checkpoint parameter version");
     }
     return parameters;
 }
@@ -723,7 +745,7 @@ std::array<uint64_t, 12> readParticleMeshCheckpointParameters(FILE* fp) {
     std::array<uint64_t, 12> parameters{};
     FREAD(parameters.data(), sizeof(uint64_t), parameters.size(), fp);
     if (parameters[0] != 1) {
-        THROW_ERROR("Unsupported particle-mesh checkpoint parameter version\n");
+        throw std::runtime_error("Unsupported particle-mesh checkpoint parameter version");
     }
     return parameters;
 }
@@ -746,7 +768,7 @@ std::array<uint64_t, 5> readCheckpointAlgorithms(FILE* fp) {
     if (algorithms[0] != 1 || algorithms[1] > 4 || algorithms[2] > 2 || algorithms[3] > 9 ||
         algorithms[4] > 2 || (nearExpected ? algorithms[2] == 0 : algorithms[2] != 0) ||
         (algorithms[1] == 0 ? algorithms[3] != 0 : algorithms[3] < 3)) {
-        THROW_ERROR("Invalid checkpoint algorithm selection extension\n");
+        throw std::runtime_error("Invalid checkpoint algorithm selection extension");
     }
     return algorithms;
 }
@@ -760,48 +782,48 @@ static_assert(kHistoricalDriverBytes == offsetof(DriverParameters, itime) + size
 void writeDriverState(FILE* fp, DriverParameters const& params) {
     auto const header = checkpointHeader(getOptions());
     if (fwrite(&header, sizeof(header), 1, fp) != 1) {
-        THROW_ERROR("Unable to write checkpoint header\n");
+        throw std::ios_base::failure("Unable to write checkpoint header");
     }
     auto const algorithms = checkpointAlgorithms(getOptions());
     if (fwrite(algorithms.data(), sizeof(uint64_t), algorithms.size(), fp) != algorithms.size()) {
-        THROW_ERROR("Unable to write checkpoint algorithm selection\n");
+        throw std::ios_base::failure("Unable to write checkpoint algorithm selection");
     }
     if ((header.flags & kParticleMultipoleMesh) != 0U) {
         auto const meshParameters = pmmmCheckpointParameters(getOptions());
         if (fwrite(meshParameters.data(), sizeof(uint64_t), meshParameters.size(), fp) !=
             meshParameters.size()) {
-            THROW_ERROR("Unable to write PMMM checkpoint parameters\n");
+            throw std::ios_base::failure("Unable to write PMMM checkpoint parameters");
         }
     }
     if ((header.flags & kIndependentParticleCounts) != 0U) {
         std::array<uint64_t, 2> const counts{
             getOptions().run.darkMatterParticleCount, getOptions().run.gasParticleCount};
         if (fwrite(counts.data(), sizeof(uint64_t), counts.size(), fp) != counts.size()) {
-            THROW_ERROR("Unable to write independent particle counts\n");
+            throw std::ios_base::failure("Unable to write independent particle counts");
         }
     }
     if (getOptions().hydro.enabled) {
         auto const sphParameters = sphCheckpointParameters(getOptions());
         if (fwrite(sphParameters.data(), sizeof(double), sphParameters.size(), fp) !=
             sphParameters.size()) {
-            THROW_ERROR("Unable to write SPH checkpoint parameters\n");
+            throw std::ios_base::failure("Unable to write SPH checkpoint parameters");
         }
         // Zero conduction preserves the existing SPH checkpoint layout.
         if ((header.flags & kArtificialConduction) != 0U &&
             fwrite(&getOptions().hydro.conductionCoefficient, sizeof(double), 1, fp) != 1) {
-            THROW_ERROR("Unable to write SPH conduction coefficient\n");
+            throw std::ios_base::failure("Unable to write SPH conduction coefficient");
         }
         // Optional extension: preserve the historical block and zero-force layout.
         if ((header.flags & kZPlaneAcceleration) != 0U &&
             fwrite(&getOptions().scenario.rayleighTaylor.zPlaneAcceleration, sizeof(double), 1,
                 fp) != 1) {
-            THROW_ERROR("Unable to write SPH z-plane acceleration\n");
+            throw std::ios_base::failure("Unable to write SPH z-plane acceleration");
         }
         if ((header.flags & kVariableViscosity) != 0U) {
             auto const viscosityParameters = viscosityCheckpointParameters(getOptions());
             if (fwrite(viscosityParameters.data(), sizeof(double), viscosityParameters.size(),
                     fp) != viscosityParameters.size()) {
-                THROW_ERROR("Unable to write SPH variable-viscosity parameters\n");
+                throw std::ios_base::failure("Unable to write SPH variable-viscosity parameters");
             }
         }
     }
@@ -810,7 +832,8 @@ void writeDriverState(FILE* fp, DriverParameters const& params) {
         auto const chemicalParameters = sphChemistryCheckpointParameters();
         if (fwrite(chemicalParameters.data(), sizeof(double), chemicalParameters.size(), fp) !=
             chemicalParameters.size()) {
-            THROW_ERROR("Unable to write equilibrium-cooling checkpoint parameters\n");
+            throw std::ios_base::failure(
+                "Unable to write equilibrium-cooling checkpoint parameters");
         }
     }
 #endif
@@ -818,18 +841,18 @@ void writeDriverState(FILE* fp, DriverParameters const& params) {
         auto const parameters = starFormationCheckpointParameters(getOptions());
         if (fwrite(parameters.data(), sizeof(uint64_t), parameters.size(), fp) !=
             parameters.size()) {
-            THROW_ERROR("Unable to write star-formation checkpoint parameters\n");
+            throw std::ios_base::failure("Unable to write star-formation checkpoint parameters");
         }
     }
     if (fwrite(&params, kHistoricalDriverBytes, 1, fp) != 1) {
-        THROW_ERROR("Unable to write checkpoint driver state\n");
+        throw std::ios_base::failure("Unable to write checkpoint driver state");
     }
     if ((header.flags & kGlobalIntegrator) != 0U) {
         uint64_t const version = 2;
         if (fwrite(&version, sizeof(version), 1, fp) != 1 ||
             fwrite(&params.globalTimestep, sizeof(params.globalTimestep), 1, fp) != 1 ||
             fwrite(&params.globalHydroTimestep, sizeof(params.globalHydroTimestep), 1, fp) != 1) {
-            THROW_ERROR("Unable to write global timestep checkpoint extension\n");
+            throw std::ios_base::failure("Unable to write global timestep checkpoint extension");
         }
     }
     if ((header.flags & (kParticleMeshInterval | kMeshGravityInterval)) != 0U) {
@@ -840,7 +863,8 @@ void writeDriverState(FILE* fp, DriverParameters const& params) {
             fwrite(&params.outerInterval, sizeof(params.outerInterval), 1, fp) != 1 ||
             fwrite(&params.outerStart, sizeof(params.outerStart), 1, fp) != 1 ||
             fwrite(&params.outerIndex, sizeof(params.outerIndex), 1, fp) != 1) {
-            THROW_ERROR("Unable to write the particle-mesh interval checkpoint extension\n");
+            throw std::ios_base::failure(
+                "Unable to write the particle-mesh interval checkpoint extension");
         }
     }
 }
@@ -853,45 +877,49 @@ DriverParameters readDriverState(FILE* fp) {
     uint64_t magic = 0;
     FREAD(&magic, sizeof(magic), 1, fp);
     if (fseek(fp, 0, SEEK_SET) != 0) {
-        THROW_ERROR("Unable to rewind checkpoint\n");
+        throw std::ios_base::failure("Unable to rewind checkpoint");
     }
     if (magic == kCheckpointMagic) {
         FREAD(&header, sizeof(header), 1, fp);
         unsigned const savedDimensions = 3 - ((header.reserved >> 28) & 3);
         if (savedDimensions != kSpatialDimensions) {
-            THROW_ERROR("Checkpoint spatial dimension %u does not match this build (%d)\n",
-                savedDimensions, kSpatialDimensions);
+            throw std::runtime_error(
+                std::format("Checkpoint spatial dimension {} does not match this build ({})",
+                    savedDimensions, kSpatialDimensions));
         }
         bool const compactDimensions = (header.reserved & (1U << 30)) != 0U;
         if (compactDimensions != (kSpatialDimensions < 3)) {
-            THROW_ERROR("Checkpoint particle storage differs: lower-dimensional builds require "
-                        "compact D-component particle records\n");
+            throw std::runtime_error("Checkpoint particle storage differs: lower-dimensional "
+                                     "builds require compact D-component particle records");
         }
         if ((header.flags & (kRetiredParticleMesh | kParticleMeshInterval)) != 0U) {
-            THROW_ERROR("Scalar particle-mesh (pm, p3m) checkpoints are no longer supported\n");
+            throw std::runtime_error(
+                "Scalar particle-mesh (pm, p3m) checkpoints are no longer supported");
         }
 #if !COSMICTIGER_WITH_SPH || !COSMICTIGER_ENABLE_CHEMISTRY
         if ((header.flags & kChemistry) != 0U) {
-            THROW_ERROR("Chemistry checkpoints require COSMICTIGER_ENABLE_SPH=ON and "
-                        "COSMICTIGER_ENABLE_CHEMISTRY=ON\n");
+            throw std::runtime_error("Chemistry checkpoints require COSMICTIGER_ENABLE_SPH=ON and "
+                                     "COSMICTIGER_ENABLE_CHEMISTRY=ON");
         }
 #endif
         if ((header.reserved & kCompactSphLayout) != 0U &&
             (header.reserved & kScalarViscosityLayout) == 0U) {
-            THROW_ERROR("Checkpoint uses the retired SPH viscosity layout and cannot be "
-                        "restarted; only none and morrisAndMonaghan viscosity remain\n");
+            throw std::runtime_error(
+                "Checkpoint uses the retired SPH viscosity layout and cannot be restarted; only "
+                "none and morrisAndMonaghan viscosity remain");
         }
         if (getOptions().hydro.enabled && (header.reserved & kCompactSphLayout) != 0U &&
             (header.reserved & kSphFormationMask) !=
                 (checkpointPhysicsCode(getOptions()) & kSphFormationMask)) {
             uint32_t const saved = header.reserved & kSphFormationMask;
-            THROW_ERROR("Checkpoint SPH pressure operator (%s) is no longer supported; "
-                        "SPH requires the variational pressure operator\n",
-                saved == kRetiredMonaghanSph ? "monaghan" : "unknown");
+            throw std::runtime_error(
+                std::format("Checkpoint SPH pressure operator ({}) is no longer supported; SPH "
+                            "requires the variational pressure operator",
+                    saved == kRetiredMonaghanSph ? "monaghan" : "unknown"));
         }
         if (!checkpointCompatible(header, getOptions())) {
-            THROW_ERROR("Checkpoint physics, particle layout or integrator differs from the "
-                        "requested run\n");
+            throw std::runtime_error(
+                "Checkpoint physics, particle layout or integrator differs from the requested run");
         }
         if ((header.flags & kRuntimeAlgorithms) != 0U) {
             auto algorithms = readCheckpointAlgorithms(fp);
@@ -901,8 +929,8 @@ DriverParameters readDriverState(FILE* fp) {
                 algorithms[1] = algorithms[2] = algorithms[3] = 0;
             }
             if (algorithms != checkpointAlgorithms(getOptions())) {
-                THROW_ERROR("Checkpoint gravity methods, expansion degree, or time integrator "
-                            "differs from the requested run\n");
+                throw std::runtime_error("Checkpoint gravity methods, expansion degree, or time "
+                                         "integrator differs from the requested run");
             }
         }
         if ((header.flags & kParticleMultipoleMesh) != 0U) {
@@ -910,10 +938,10 @@ DriverParameters readDriverState(FILE* fp) {
             bool const requireMeshMatch =
                 getOptions().gravity.enabled || !getOptions().hydro.enabled;
             if (requireMeshMatch && !pmmmCheckpointCompatible(meshParameters, getOptions())) {
-                THROW_ERROR(
-                    "PMMM checkpoint version, mesh size, near/far expansion orders, opening "
-                    "angle, neighbor width/method, gravity.pmmmCoarseMeshSize, timestep parameters "
-                    "or force convention differs from the requested run\n");
+                throw std::runtime_error(
+                    "PMMM checkpoint version, mesh size, near/far expansion orders, opening angle, "
+                    "neighbor width/method, gravity.pmmmCoarseMeshSize, timestep parameters or "
+                    "force convention differs from the requested run");
             }
         }
         if ((header.flags & kIndependentParticleCounts) != 0U) {
@@ -922,39 +950,39 @@ DriverParameters readDriverState(FILE* fp) {
             if (counts !=
                 std::array<uint64_t, 2>{
                     getOptions().run.darkMatterParticleCount, getOptions().run.gasParticleCount}) {
-                THROW_ERROR("Checkpoint dark-matter or gas particle count differs from the "
-                            "requested run\n");
+                throw std::runtime_error(
+                    "Checkpoint dark-matter or gas particle count differs from the requested run");
             }
         }
         if (getOptions().hydro.enabled) {
             auto sphParameters = sphCheckpointParameters(getOptions());
             FREAD(sphParameters.data(), sizeof(double), sphParameters.size(), fp);
             if (sphParameters != sphCheckpointParameters(getOptions())) {
-                THROW_ERROR("SPH checkpoint parameters differ from the requested run\n");
+                throw std::runtime_error("SPH checkpoint parameters differ from the requested run");
             }
             if ((header.flags & kArtificialConduction) != 0U) {
                 double conductionCoefficient;
                 FREAD(&conductionCoefficient, sizeof(conductionCoefficient), 1, fp);
                 if (conductionCoefficient != getOptions().hydro.conductionCoefficient) {
-                    THROW_ERROR("SPH checkpoint hydro.conductionCoefficient differs from the "
-                                "requested run\n");
+                    throw std::runtime_error("SPH checkpoint hydro.conductionCoefficient differs "
+                                             "from the requested run");
                 }
             }
             if ((header.flags & kZPlaneAcceleration) != 0U) {
                 double acceleration;
                 FREAD(&acceleration, sizeof(acceleration), 1, fp);
                 if (!zPlaneCheckpointCompatible(acceleration, getOptions())) {
-                    THROW_ERROR("SPH checkpoint scenario.rayleighTaylor.zPlaneAcceleration differs "
-                                "from the "
-                                "requested run\n");
+                    throw std::runtime_error(
+                        "SPH checkpoint scenario.rayleighTaylor.zPlaneAcceleration differs from "
+                        "the requested run");
                 }
             }
             if ((header.flags & kVariableViscosity) != 0U) {
                 auto viscosityParameters = viscosityCheckpointParameters(getOptions());
                 FREAD(viscosityParameters.data(), sizeof(double), viscosityParameters.size(), fp);
                 if (viscosityParameters != viscosityCheckpointParameters(getOptions())) {
-                    THROW_ERROR("SPH checkpoint variable-viscosity parameters differ from the "
-                                "requested run\n");
+                    throw std::runtime_error("SPH checkpoint variable-viscosity parameters differ "
+                                             "from the requested run");
                 }
             }
         }
@@ -963,8 +991,8 @@ DriverParameters readDriverState(FILE* fp) {
             auto chemicalParameters = sphChemistryCheckpointParameters();
             FREAD(chemicalParameters.data(), sizeof(double), chemicalParameters.size(), fp);
             if (chemicalParameters[0] != sphChemistryCheckpointParameters()[0]) {
-                THROW_ERROR(
-                    "Checkpoint particle cooling model is incompatible with GADGET-4 cooling\n");
+                throw std::runtime_error(
+                    "Checkpoint particle cooling model is incompatible with GADGET-4 cooling");
             }
             auto finiteCheckpointScalar = [](double value) {
                 uint64_t bits;
@@ -973,12 +1001,13 @@ DriverParameters readDriverState(FILE* fp) {
             };
             for (double value : chemicalParameters) {
                 if (!finiteCheckpointScalar(value)) {
-                    THROW_ERROR("Checkpoint equilibrium-cooling parameters are not finite\n");
+                    throw std::runtime_error(
+                        "Checkpoint equilibrium-cooling parameters are not finite");
                 }
             }
             if (chemicalParameters != sphChemistryCheckpointParameters()) {
-                THROW_ERROR("Checkpoint GADGET-4 cooling model or initialization "
-                            "settings differ\n");
+                throw std::runtime_error(
+                    "Checkpoint GADGET-4 cooling model or initialization settings differ");
             }
         }
 #endif
@@ -986,8 +1015,8 @@ DriverParameters readDriverState(FILE* fp) {
             auto parameters = starFormationCheckpointParameters(getOptions());
             FREAD(parameters.data(), sizeof(uint64_t), parameters.size(), fp);
             if (parameters != starFormationCheckpointParameters(getOptions())) {
-                THROW_ERROR("Checkpoint star-formation model, thresholds, or random-stream "
-                            "parameters differ from the requested run\n");
+                throw std::runtime_error("Checkpoint star-formation model, thresholds, or "
+                                         "random-stream parameters differ from the requested run");
             }
         }
         FREAD(&params, kHistoricalDriverBytes, 1, fp);
@@ -1004,16 +1033,16 @@ DriverParameters readDriverState(FILE* fp) {
                 (bits & 0x7ff0000000000000ULL) == 0x7ff0000000000000ULL ||
                 params.globalTimestep < 0.0 || params.itime != 0 ||
                 (params.iter > 0 && params.globalTimestep == 0.0)) {
-                THROW_ERROR("Invalid global timestep checkpoint extension\n");
+                throw std::runtime_error("Invalid global timestep checkpoint extension");
             }
             std::memcpy(&bits, &params.globalHydroTimestep, sizeof(bits));
             if ((bits & 0x7ff0000000000000ULL) == 0x7ff0000000000000ULL ||
                 params.globalHydroTimestep < 0.0) {
-                THROW_ERROR("Invalid global hydro timestep checkpoint extension\n");
+                throw std::runtime_error("Invalid global hydro timestep checkpoint extension");
             }
 #if COSMICTIGER_WITH_SPH
             if (sphMidpointEnabled() && params.iter > 0 && params.globalHydroTimestep == 0.0) {
-                THROW_ERROR("Invalid global hydro timestep checkpoint extension\n");
+                throw std::runtime_error("Invalid global hydro timestep checkpoint extension");
             }
 #endif
         }
@@ -1032,13 +1061,14 @@ DriverParameters readDriverState(FILE* fp) {
                 params.outerInterval < 0.0 || params.outerStart < 0.0 ||
                 (params.iter > 0 && params.outerInterval == 0.0) ||
                 (params.itime != 0 && params.outerInterval == 0.0)) {
-                THROW_ERROR("Invalid particle-mesh interval checkpoint extension\n");
+                throw std::runtime_error("Invalid particle-mesh interval checkpoint extension");
             }
         }
     } else {
         if (!legacyCheckpointCompatible(getOptions())) {
-            THROW_ERROR("Legacy checkpoints support only the original dark-matter hierarchical "
-                        "mode with the degree-eight Ferrers gravity kernel\n");
+            throw std::runtime_error(
+                "Legacy checkpoints support only the original dark-matter hierarchical mode with "
+                "the degree-eight Ferrers gravity kernel");
         }
         LegacyDriver old{};
         FREAD(&old, sizeof(old), 1, fp);
@@ -1082,7 +1112,7 @@ void checkpointStateTest() {
     constexpr int kRung = 4;
     FILE* fp = tmpfile();
     if (fp == nullptr) {
-        THROW_ERROR("Cannot create checkpoint test stream\n");
+        throw std::ios_base::failure("Cannot create checkpoint test stream");
     }
     DriverParameters input{};
     input.a = kScale;
@@ -1569,12 +1599,14 @@ void writeCheckpoint(DriverParameters params) {
     if (hpxRank() == 0) {
         terminal::detailPrint("Writing checkpoint %s\n", directory.c_str());
         if (detail::fs::exists(directory)) {
-            THROW_ERROR("Refusing to replace existing checkpoint %s\n", directory.c_str());
+            throw std::runtime_error(
+                std::format("Refusing to replace existing checkpoint {}", directory.c_str()));
         }
         if (!detail::fs::create_directory(stagingDirectory)) {
-            THROW_ERROR("Checkpoint staging directory %s already exists; inspect the incomplete "
-                        "checkpoint before retrying\n",
-                stagingDirectory.c_str());
+            throw std::runtime_error(
+                std::format("Checkpoint staging directory {} already exists; inspect the "
+                            "incomplete checkpoint before retrying",
+                    stagingDirectory.c_str()));
         }
     }
     Vector<hpx::future<void>> futs;
@@ -1586,7 +1618,8 @@ void writeCheckpoint(DriverParameters params) {
         auto const rankPath = detail::checkpointRankFile(stagingDirectory, hpxRank());
         detail::CheckpointFile file(fopen(rankPath.c_str(), "wb"));
         if (!file) {
-            THROW_ERROR("Unable to open %s for writing\n", rankPath.c_str());
+            throw std::ios_base::failure(
+                std::format("Unable to open {} for writing", rankPath.c_str()));
         }
         detail::writeDriverState(file.get(), params);
         particlesSave(file.get());
@@ -1610,7 +1643,8 @@ void writeCheckpoint(DriverParameters params) {
         detail::writeCheckpointManifest(stagingDirectory, params.iter);
         detail::syncDirectory(stagingDirectory);
         if (detail::fs::exists(directory)) {
-            THROW_ERROR("Refusing to replace existing checkpoint %s\n", directory.c_str());
+            throw std::runtime_error(
+                std::format("Refusing to replace existing checkpoint {}", directory.c_str()));
         }
         detail::fs::rename(stagingDirectory, directory);
         detail::syncDirectory(directory.has_parent_path() ? directory.parent_path() : ".");
@@ -1640,7 +1674,8 @@ DriverParameters readCheckpoint() {
             detail::checkpointRankFile(detail::checkpointDirectory(iter), hpxRank());
         detail::CheckpointFile file(fopen(rankPath.c_str(), "rb"));
         if (!file) {
-            THROW_ERROR("Unable to open %s for reading.\n", rankPath.c_str());
+            throw std::ios_base::failure(
+                std::format("Unable to open {} for reading.", rankPath.c_str()));
         }
         params = detail::readDriverState(file.get());
         particlesLoad(file.get());
@@ -1651,11 +1686,13 @@ DriverParameters readCheckpoint() {
         }
 #endif
         if (ferror(file.get()) != 0) {
-            THROW_ERROR("Unable to read checkpoint file %s\n", rankPath.c_str());
+            throw std::ios_base::failure(
+                std::format("Unable to read checkpoint file {}", rankPath.c_str()));
         }
         FILE* rawFile = file.release();
         if (fclose(rawFile) != 0) {
-            THROW_ERROR("Unable to close checkpoint file %s\n", rankPath.c_str());
+            throw std::ios_base::failure(
+                std::format("Unable to close checkpoint file {}", rankPath.c_str()));
         }
     }
     {

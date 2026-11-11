@@ -14,6 +14,7 @@
 #include <exception>
 #include <format>
 #include <fstream>
+#include <ios>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -105,7 +106,7 @@ int hpx_main(int argc, char* argv[]) {
 #if COSMICTIGER_WITH_GRAVITY
             FILE* fp = fopen(outputPath("soft.txt").c_str(), "wt");
             if (fp == nullptr) {
-                THROW_ERROR("Unable to write soft.txt\n");
+                throw std::ios_base::failure("Unable to write soft.txt");
             }
             for (double r = 0.0; r < 1.0; r += 0.01) {
                 double f, phi;

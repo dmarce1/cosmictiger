@@ -6,6 +6,7 @@
  See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
+#include <stdexcept>
 #include <unordered_set>
 
 #include <hpx/threading_base/annotated_function.hpp>
@@ -142,7 +143,7 @@ GroupTreeReturn groupTreeCreate(size_t key, Pair<int, int> processRange,
     Pair<ParticleInteger> particleRange, GroupRange box, int depth, bool localRoot) {
     int const treeCacheLineSize = getOptions().compute.treeCacheLineSize;
     if (depth >= kMaxDepth) {
-        THROW_ERROR("%s\n", "Maximum depth exceeded\n");
+        throw std::length_error("Maximum depth exceeded");
     }
     if (nodes.size() == 0) {
         nextId = -treeCacheLineSize;
@@ -258,7 +259,7 @@ void GroupTreeAllocator::reset() {
     next_ = (nextId += treeCacheLineSize);
     last_ = std::min(next_ + treeCacheLineSize, (int) nodes.size());
     if (next_ >= nodes.size()) {
-        THROW_ERROR("%s\n", "Tree arena full");
+        throw std::length_error("Tree arena full");
     }
 }
 

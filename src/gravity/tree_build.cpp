@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <stdexcept>
 
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/safe_io.hpp>
@@ -67,7 +68,7 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
     int bucketSize = getOptions().compute.bucketSize;
     TreeCreateReturn rc;
     if (depth >= kMaxDepth) {
-        THROW_ERROR("%s\n", "Maximum depth exceeded\n");
+        throw std::length_error("Maximum depth exceeded");
     }
     if (localRoot) {
         size_t cnt = particleRange.second - particleRange.first;

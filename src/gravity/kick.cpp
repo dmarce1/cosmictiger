@@ -10,6 +10,7 @@
 #include <exception>
 #include <memory>
 #include <stack>
+#include <stdexcept>
 #include <utility>
 
 #include <cosmictiger/core/flops.hpp>
@@ -119,7 +120,7 @@ void gravityBeginDeferredGasOpening() {
         detail::gasOpeningCount = count;
         detail::gasOpeningState = detail::GasOpeningState::Collecting;
 #else
-        THROW_ERROR("Deferred gas opening requires SPH support\n");
+        throw std::invalid_argument("Deferred gas opening requires SPH support");
 #endif
     } catch (...) {
         auto const failure = std::current_exception();

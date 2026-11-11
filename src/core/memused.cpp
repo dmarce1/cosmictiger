@@ -1,6 +1,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <ios>
+#include <stdexcept>
 
 #include <hpx/threading_base/annotated_function.hpp>
 
@@ -75,7 +77,7 @@ static void memuseDaemon(std::string filename) {
                 terminal::detailPrint("MAX MEMUSED = %f GB\n", thismemused / 1024. / 1024. / 1024.);
                 FILE* fp = fopen(filename.c_str(), "wt");
                 if (fp == NULL) {
-                    THROW_ERROR("Unable to open maxmem.txt\n");
+                    throw std::ios_base::failure("Unable to open maxmem.txt");
                 }
                 fprintf(fp, "%f GB\n", thismemused / 1024. / 1024. / 1024.);
                 fclose(fp);
