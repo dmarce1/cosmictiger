@@ -2,6 +2,7 @@
 #include <cmath>
 #include <cstdio>
 #include <format>
+#include <ios>
 #include <iostream>
 #include <numeric>
 #include <span>
@@ -73,7 +74,7 @@ void writeScenarioDiagnostics(DriverParameters const& state) {
     double const total = energy.kin + energy.therm + energy.pot;
     FILE* file = fopen(outputPath("energy.dat").c_str(), "at");
     if (file == nullptr) {
-        THROW_ERROR("Unable to write scenario energy diagnostics\n");
+        throw std::ios_base::failure("Unable to write scenario energy diagnostics");
     }
     double const normalization =
         std::max(std::abs(energy.kin) + std::abs(energy.therm) + std::abs(energy.pot), 1.0e-30);
@@ -86,7 +87,7 @@ void writeScenarioDiagnostics(DriverParameters const& state) {
     }();
     file = fopen(outputPath("rho.dat").c_str(), "at");
     if (file == nullptr) {
-        THROW_ERROR("Unable to write scenario density diagnostics\n");
+        throw std::ios_base::failure("Unable to write scenario density diagnostics");
     }
     fprintf(file, "%e %e\n", state.tau, maximumDensity);
     fclose(file);
@@ -125,8 +126,8 @@ void runFixedScenario() {
         }
     } else {
         if (baseOptions.run.outputIntervalCount() < int(plan.stages.size())) {
-            THROW_ERROR(
-                "run.numberOfOutputs must allow at least one interval per scenario stage\n");
+            throw std::invalid_argument(
+                "run.numberOfOutputs must allow at least one interval per scenario stage");
         }
         int assignedSteps = 0;
         int cumulativeDefaultSteps = 0;
@@ -155,7 +156,7 @@ void runFixedScenario() {
         state = readCheckpoint();
         profile::profileEnd();
         if (state.tauMax != duration) {
-            THROW_ERROR("Checkpoint duration differs from the selected scenario\n");
+            throw std::runtime_error("Checkpoint duration differs from the selected scenario");
         }
     } else {
         particlesSetMinrung(usesGlobalIntegration(baseOptions.run) ? 0 : baseOptions.run.minRung);
@@ -190,8 +191,9 @@ void runFixedScenario() {
         if ((state.iter > 0 && !(state.outerInterval > 0.0)) ||
             state.outerInterval > coarse * (1.0 + 1.0e-9) ||
             (state.iter > 0 && std::abs(expected - state.tau) > tolerance)) {
-            THROW_ERROR("Checkpoint outer PM interval, phase and conformal time are "
-                        "inconsistent; retain the original mesh and timestep settings\n");
+            throw std::runtime_error(
+                "Checkpoint outer PM interval, phase and conformal time are inconsistent; retain "
+                "the original mesh and timestep settings");
         }
     }
     // A restart keeps the decomposition read from the checkpoint: each rank's file holds
@@ -378,7 +380,8 @@ void runFixedScenario() {
 #endif
             if (meshInterval && state.itime == 0) {
                 if (!(pmmmBoundary.nextInterval > 0.0)) {
-                    THROW_ERROR("The PMMM outer interval must be positive before the end time\n");
+                    throw std::logic_error(
+                        "The PMMM outer interval must be positive before the end time");
                 }
                 state.outerInterval = pmmmBoundary.nextInterval;
                 state.outerStart = state.tau;
@@ -400,7 +403,7 @@ void runFixedScenario() {
                 std::ldexp(t0, -state.maxRung);
             if (!std::isfinite(timestep) || !(timestep > 0.0) ||
                 state.tau + timestep == state.tau) {
-                THROW_ERROR("Scenario timestep cannot advance time\n");
+                throw std::underflow_error("Scenario timestep cannot advance time");
             }
 #if COSMICTIGER_WITH_SPH
             if (midpointHydro) {
@@ -461,7 +464,7 @@ void runFixedScenario() {
             runtime.start();
             FILE* progress = fopen(outputPath("progress.txt").c_str(), "at");
             if (progress == nullptr) {
-                THROW_ERROR("Unable to write scenario progress\n");
+                throw std::ios_base::failure("Unable to write scenario progress");
             }
             fprintf(progress, "%i %e %e %i %i\n", state.iter, state.tau, timestep,
                 displayedMinimumRung, state.maxRung);

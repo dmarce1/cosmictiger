@@ -174,7 +174,7 @@ void cudaSetDevice() {
     int count;
     CUDA_CHECK(cudaGetDeviceCount(&count));
     if (count == 0) {
-        THROW_ERROR("CUDA backend requested without a visible GPU\n");
+        throw std::runtime_error("CUDA backend requested without a visible GPU");
     }
     int const deviceNum = hpxLocalRank() % count;
     CUDA_CHECK(cudaSetDevice(deviceNum));
@@ -185,7 +185,7 @@ int cudaGetDevice() {
     int count;
     CUDA_CHECK(cudaGetDeviceCount(&count));
     if (count == 0) {
-        THROW_ERROR("CUDA backend requested without a visible GPU\n");
+        throw std::runtime_error("CUDA backend requested without a visible GPU");
     }
     int const deviceNum = hpxLocalRank() % count;
     return deviceNum;
@@ -246,7 +246,7 @@ void cudaInit() {
         CUDA_CHECK(cudaDeviceSetLimit(cudaLimitMaxL2FetchGranularity , value));
         CUDA_CHECK(cudaDeviceGetLimit(&value, cudaLimitMaxL2FetchGranularity ));
         if (value != oval) {
-            THROW_ERROR("Unable to set stack size to %li\n", oval);
+            throw std::runtime_error(std::format("Unable to set stack size to {}", oval));
         }*/
     detail::initializeCudaStreamRuntime();
 }

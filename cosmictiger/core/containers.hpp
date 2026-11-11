@@ -10,6 +10,9 @@
 #define CONTAINERS_HPP_
 
 #include <array>
+#include <cstdio>
+#include <format>
+#include <stdexcept>
 #include <vector>
 
 #include <cosmictiger/core/defs.hpp>
@@ -17,17 +20,17 @@
 #include <cosmictiger/cuda/cuda.hpp>
 
 #ifdef __CUDA_ARCH__
-#define DO_BOUNDS_CHECK(i)                                                                        \
-    if (i >= this->size()) {                                                                      \
-        THROW_ERROR("Bounds error - %lld is not between 0 and %lld\n", static_cast<long long>(i), \
-            static_cast<long long>(this->size()));                                                \
-        __trap();                                                                                 \
+#define DO_BOUNDS_CHECK(i)                                                                   \
+    if (i >= this->size()) {                                                                 \
+        printf("Bounds error - %lld is not between 0 and %lld\n", static_cast<long long>(i), \
+            static_cast<long long>(this->size()));                                           \
+        __trap();                                                                            \
     }
 #else
-#define DO_BOUNDS_CHECK(i)                                                                        \
-    if (i >= this->size()) {                                                                      \
-        THROW_ERROR("Bounds error - %lld is not between 0 and %lld\n", static_cast<long long>(i), \
-            static_cast<long long>(this->size()));                                                \
+#define DO_BOUNDS_CHECK(i)                                                               \
+    if (i >= this->size()) {                                                             \
+        throw std::out_of_range(std::format("Bounds error - {} is not between 0 and {}", \
+            static_cast<long long>(i), static_cast<long long>(this->size())));           \
     }
 #endif
 

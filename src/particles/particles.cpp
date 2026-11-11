@@ -14,6 +14,7 @@ constexpr bool kVerbose = true;
 #include <cstring>
 #include <exception>
 #include <format>
+#include <ios>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -1729,7 +1730,7 @@ void loadStarFormationParticles(FILE* fp) {
     FREAD(&magic, sizeof(magic), 1, fp);
     FREAD(&version, sizeof(version), 1, fp);
     if (magic != kStarFormationParticleMagic || version != kStarFormationParticleVersion) {
-        THROW_ERROR("Unsupported star-formation particle checkpoint layout\n");
+        throw std::runtime_error("Unsupported star-formation particle checkpoint layout");
     }
     std::unordered_set<uint64_t> ids;
     for (ParticleInteger index = 0; index < particlesSize(); ++index) {
@@ -1748,7 +1749,7 @@ void loadStarFormationParticles(FILE* fp) {
             (type != kDarkMatterType && type != kSphType && type != kStarType) ||
             ((type == kStarType) != (state.formationTime >= 0.0)) ||
             (type != kSphType && state.specificStarFormationRate != 0.0)) {
-            THROW_ERROR("Invalid star-formation particle checkpoint metadata\n");
+            throw std::runtime_error("Invalid star-formation particle checkpoint metadata");
         }
     }
 }
@@ -1757,7 +1758,7 @@ void loadStarFormationParticles(FILE* fp) {
 void saveStarFormationParticles(FILE* fp) {
     if (fwrite(&kStarFormationParticleMagic, sizeof(uint64_t), 1, fp) != 1 ||
         fwrite(&kStarFormationParticleVersion, sizeof(uint64_t), 1, fp) != 1) {
-        THROW_ERROR("Unable to write star-formation particle checkpoint header\n");
+        throw std::ios_base::failure("Unable to write star-formation particle checkpoint header");
     }
     for (ParticleInteger index = 0; index < particlesSize(); ++index) {
         auto const& state = particlesStarFormationStates[index];
@@ -1767,7 +1768,8 @@ void saveStarFormationParticles(FILE* fp) {
             fwrite(&state.specificStarFormationRate, sizeof(state.specificStarFormationRate), 1,
                 fp) != 1 ||
             fwrite(&state.elapsedPhysicalTime, sizeof(state.elapsedPhysicalTime), 1, fp) != 1) {
-            THROW_ERROR("Unable to write star-formation particle checkpoint metadata\n");
+            throw std::ios_base::failure(
+                "Unable to write star-formation particle checkpoint metadata");
         }
     }
 }
@@ -1786,7 +1788,7 @@ void particlesLoad(FILE* fp) {
         std::cout << std::format("Reading {:d} total particles {:d} sph\n", size, sphSize)
                   << std::flush;
         if (sphSize < 0 || sphSize > size) {
-            THROW_ERROR("Invalid gas count in checkpoint\n");
+            throw std::runtime_error("Invalid gas count in checkpoint");
         }
         particlesResize(size);
         sphParticlesResize(sphSize, false);
@@ -2119,8 +2121,8 @@ GadgetIoHeader readGadgetHeader(FILE* fp, std::string const& filename) {
     int marker = 0;
     FREAD(&marker, sizeof(marker), 1, fp);
     if (marker != sizeof(GadgetIoHeader)) {
-        THROW_ERROR(
-            "Unsupported Gadget header layout in %s (expected NTYPES=2)\n", filename.c_str());
+        throw std::runtime_error(std::format(
+            "Unsupported Gadget header layout in {} (expected NTYPES=2)", filename.c_str()));
     }
     GadgetIoHeader header{};
     FREAD(&header, sizeof(header), 1, fp);
@@ -2132,9 +2134,9 @@ GadgetIoHeader readGadgetHeader(FILE* fp, std::string const& filename) {
         (header.numFiles == 1 && header.npart[1] != header.npartTotal[1]) ||
         !std::isfinite(header.mass[1]) || header.mass[1] <= 0.0 || !std::isfinite(header.boxSize) ||
         header.boxSize <= 0.0 || !std::isfinite(header.redshift) || header.redshift <= -1.0) {
-        THROW_ERROR("Unsupported Gadget snapshot in %s: require finite DM-only constant-mass "
-                    "data and one file per locality\n",
-            filename.c_str());
+        throw std::runtime_error(std::format("Unsupported Gadget snapshot in {}: require finite "
+                                             "DM-only constant-mass data and one file per locality",
+            filename.c_str()));
     }
     return header;
 }
@@ -2145,7 +2147,8 @@ GadgetIoHeader particlesReadGadget4Header(std::string const& filenameBase) {
     std::string const filename = filenameBase + (hpxSize() > 1 ? ".0" : "");
     UniqueFile file(fopen(filename.c_str(), "rb"));
     if (!file) {
-        THROW_ERROR("Unable to open %s for reading.\n", filename.c_str());
+        throw std::ios_base::failure(
+            std::format("Unable to open {} for reading.", filename.c_str()));
     }
     return detail::readGadgetHeader(file.get(), filename);
 }
@@ -2166,7 +2169,7 @@ GadgetIoHeader particlesReadGadget4(std::string fnameBase) {
     }
     FILE* fp = fopen(fname.c_str(), "rb");
     if (!fp) {
-        THROW_ERROR("Unable to open %s for reading.\n", fname.c_str());
+        throw std::ios_base::failure(std::format("Unable to open {} for reading.", fname.c_str()));
     }
     int size;
     auto const header = detail::readGadgetHeader(fp, fname);
@@ -2174,7 +2177,8 @@ GadgetIoHeader particlesReadGadget4(std::string fnameBase) {
         FREAD(&size, sizeof(size), 1, fp);
         uint64_t const bytes = uint64_t(header.npart[1]) * 3 * sizeof(float);
         if (size < 0 || uint64_t(size) != bytes) {
-            THROW_ERROR("Invalid Gadget position/velocity block in %s\n", fname.c_str());
+            throw std::runtime_error(
+                std::format("Invalid Gadget position/velocity block in {}", fname.c_str()));
         }
     };
     auto const numberOfParticles = header.npart[1];

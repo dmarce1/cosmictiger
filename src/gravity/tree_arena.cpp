@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cstddef>
+#include <format>
 #include <iostream>
 #include <limits>
 #include <mutex>
@@ -166,7 +167,7 @@ void TreeAllocator::reset() {
     next_ = (nextId += treeAllocLineSize);
     last_ = std::min(next_ + treeAllocLineSize, (int) nodesSize);
     if (next_ >= nodesSize) {
-        THROW_ERROR("%s\n", "Tree arena full");
+        throw std::length_error("Tree arena full");
     }
 }
 
@@ -254,7 +255,7 @@ void tree2Cpu() {
 void tree2Gpu() {
 #ifdef USE_CUDA
     if (!getOptions().gravity.cuda) {
-        THROW_ERROR("GPU tree access requires gravity.cuda=true\n");
+        throw std::invalid_argument("GPU tree access requires gravity.cuda=true");
     }
     if (!setGpu) {
         cudaSetDevice();
@@ -264,7 +265,7 @@ void tree2Gpu() {
         setCpu = false;
     }
 #else
-    THROW_ERROR("GPU tree access requested in a build without CUDA\n");
+    throw std::invalid_argument("GPU tree access requested in a build without CUDA");
 #endif
 }
 
@@ -365,7 +366,7 @@ int treeAllocateNode() {
 /// Store a node and its multipole coefficients and mark the arena slot populated.
 void treeStoreNode(int index, TreeNode node, MultipoleBuffer const& multipole) {
     if (size_t(index) >= nodesSize) {
-        THROW_ERROR("%s\n", "Tree arena full");
+        throw std::length_error("Tree arena full");
     }
     node.mpos = treeMultipoleRecord(index);
     node.mpos->pos = node.pos;
@@ -442,7 +443,8 @@ TreeNode const* treeGetNode(TreeId id) {
         ASSERT(id.index >= 0);
 #ifndef NDEBUG
         if (id.index >= nodesSize) {
-            THROW_ERROR("id.index is %li but nodes.size() is %li\n", id.index, nodesSize);
+            throw std::out_of_range(
+                std::format("id.index is {} but nodes.size() is {}", id.index, nodesSize));
         }
 #endif
         return &nodes[id.index];

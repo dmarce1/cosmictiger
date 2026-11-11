@@ -1068,7 +1068,7 @@ static void domainsCheck() {
     }
     hpx::wait_all(futs.begin(), futs.end());
     if (int(fail)) {
-        THROW_ERROR("particle out of range!\n");
+        throw std::out_of_range("particle out of range!");
     }
 }
 

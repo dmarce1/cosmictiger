@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <stdexcept>
 
 #include <cosmictiger/core/safe_io.hpp>
 #include <cosmictiger/cosmology/evolution.hpp>
@@ -13,7 +14,7 @@
 double pmSelectOuterInterval(double accelerationTimestep, double expansionTimestep, double time,
     double outputInterval, double endTime) {
     if (!(outputInterval > 0.0) || !std::isfinite(outputInterval)) {
-        THROW_ERROR("The output interval must be finite and positive\n");
+        throw std::invalid_argument("The output interval must be finite and positive");
     }
     double const remaining = endTime - time;
     if (cosmology::endTimeReached(time, endTime) || !(remaining > 0.0)) {
@@ -27,7 +28,7 @@ double pmSelectOuterInterval(double accelerationTimestep, double expansionTimest
     double const toBoundary = nextBoundary - time;
     double const candidate = std::min({accelerationTimestep, expansionTimestep, toBoundary});
     if (!(candidate > 0.0) || !std::isfinite(candidate) || !(toBoundary > 0.0)) {
-        THROW_ERROR("The selected outer PM interval must be finite and positive\n");
+        throw std::invalid_argument("The selected outer PM interval must be finite and positive");
     }
     // H = R / max(1, floor(R / h)): the smallest equal subdivision >= h.
     // R is time remaining to the next output, h is the raw long-step proposal.
@@ -40,7 +41,8 @@ double pmSelectOuterInterval(double accelerationTimestep, double expansionTimest
         1.0, std::floor(std::abs(quotient - integral) <= quotientTolerance ? integral : quotient));
     double const interval = toBoundary / steps;
     if (!(interval > 0.0) || !std::isfinite(interval) || time + interval == time) {
-        THROW_ERROR("The selected outer PM interval cannot advance the evolution clock\n");
+        throw std::underflow_error(
+            "The selected outer PM interval cannot advance the evolution clock");
     }
     return interval;
 }

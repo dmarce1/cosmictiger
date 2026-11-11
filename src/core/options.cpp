@@ -60,7 +60,7 @@ static std::vector<std::string> commandLineArguments;
 static bool displayOptions = false;
 
 // Invalid options are user errors: hpx_main reports the exception and finalizes.
-// Keep these diagnostics concise, without THROW_ERROR's source location.
+// Keep these diagnostics concise, without a source location.
 [[noreturn]] __attribute__((format(printf, 1, 2))) void throwOptionError(char const* format, ...) {
     va_list arguments;
     va_start(arguments, format);

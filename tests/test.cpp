@@ -52,7 +52,8 @@ static void nativeChemistryInitializationTest() {
     auto const& options = getOptions();
     if (!options.hydro.enabled || !options.chemistry.enabled ||
         options.run.scenario != "cosmology" || options.checkpoint.readIndex >= 0) {
-        THROW_ERROR("Native chemistry initialization fixture requires fresh cosmological gas\n");
+        throw std::runtime_error(
+            "Native chemistry initialization fixture requires fresh cosmological gas");
     }
     DriverParameters state{};
     scenarios::initializeCosmology(state);
@@ -337,5 +338,5 @@ void test(std::string name) {
         runApplicationTest(entry.name, entry.run);
         return;
     }
-    THROW_ERROR("test %s is not known\n", name.c_str());
+    throw std::invalid_argument(std::format("test {} is not known", name.c_str()));
 }

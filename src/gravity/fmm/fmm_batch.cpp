@@ -11,6 +11,7 @@
 #include <memory>
 #include <mutex>
 #include <stack>
+#include <stdexcept>
 #include <utility>
 
 #include <hpx/threading_base/annotated_function.hpp>
@@ -107,7 +108,7 @@ KickReturn localBatchGpu(KickParameters params, Vector<KickWorkitem> workitems,
     return cudaExecuteKicks(params, &particlesPos(kXi, 0), &particlesPos(kYi, 0),
         &particlesPos(kZi, 0), treeData(), std::move(workitems), output);
 #else
-    THROW_ERROR("GPU gravity requested in a build without CUDA\n");
+    throw std::invalid_argument("GPU gravity requested in a build without CUDA");
     return {};
 #endif
 }

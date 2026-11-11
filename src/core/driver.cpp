@@ -11,10 +11,12 @@
 #include <cstdio>
 #include <format>
 #include <functional>
+#include <ios>
 #include <iostream>
 #include <limits>
 #include <numbers>
 #include <span>
+#include <stdexcept>
 #include <string>
 
 #if COSMICTIGER_ENABLE_ROCKSTAR
@@ -394,7 +396,8 @@ static SphRunReturn sphMidpointEvaluate(int minrung, int maximumHydroRung, doubl
         }
         do {
             if (++densityIterations > 256) {
-                THROW_ERROR("SPH smoothing lengths did not converge after 256 tree rebuilds\n");
+                throw std::runtime_error(
+                    "SPH smoothing lengths did not converge after 256 tree rebuilds");
             }
 
             runParameters.runType = kSphRunSmoothingLengths;
@@ -448,7 +451,8 @@ static SphRunReturn sphMidpointEvaluate(int minrung, int maximumHydroRung, doubl
         SphRunReturn gradHDiagnostics;
         do {
             if (++densityIterations > 256) {
-                THROW_ERROR("SPH neighbor densities did not converge after 256 tree rebuilds\n");
+                throw std::runtime_error(
+                    "SPH neighbor densities did not converge after 256 tree rebuilds");
             }
 
             runParameters.runType = kSphRunDensityAndGradients;
@@ -714,7 +718,8 @@ ForceStepResult pmmmIntervalStep(int minRung, double scale, double scaleDerivati
     double baseTimestep, bool firstCall, bool closingOnly, bool global,
     MeshKickSchedule const& schedule) {
     if (global) {
-        THROW_ERROR("The global inner integrator is not available for the PMMM outer interval\n");
+        throw std::invalid_argument(
+            "The global inner integrator is not available for the PMMM outer interval");
     }
     auto* const boundary = schedule.pmmmBoundary;
     if (boundary == nullptr) {
@@ -742,7 +747,7 @@ ForceStepResult pmmmIntervalStep(int minRung, double scale, double scaleDerivati
     boundary->nextInterval = far.nextInterval;
     boundary->potentialEnergy = far.potentialEnergy;
     if (!closingOnly && !(far.nextInterval > 0.0)) {
-        THROW_ERROR("The PMMM outer interval must be positive before the end time\n");
+        throw std::logic_error("The PMMM outer interval must be positive before the end time");
     }
     double const nextInterval = closingOnly ? schedule.closingBaseTimestep : far.nextInterval;
     auto parameters = pmmmIntervalParameters(0, scale, scaleDerivative, nextInterval, firstCall);
@@ -1115,7 +1120,8 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
             schedule.pmmmBoundary->potentialEnergy = far.potentialEnergy;
             if (!closingOnly) {
                 if (!(far.nextInterval > 0.0)) {
-                    THROW_ERROR("The PMMM outer interval must be positive before the end time\n");
+                    throw std::logic_error(
+                        "The PMMM outer interval must be positive before the end time");
                 }
                 t0 = far.nextInterval;
             }
@@ -1352,7 +1358,8 @@ double doPowerSpectrum(int num, double a, double adot) {
     std::string filename = "power." + std::to_string(num) + ".txt";
     FILE* fp = fopen(outputPath(filename).c_str(), "wt");
     if (fp == NULL) {
-        THROW_ERROR("Unable to open %s for writing\n", filename.c_str());
+        throw std::ios_base::failure(
+            std::format("Unable to open {} for writing", filename.c_str()));
     }
     fprintf(fp, "# a=%.17g physical_adot=%.17g growth_rescaling=%s growth_ratio=%.17g\n", a, adot,
         rescaleGrowth ? "flat_lambda_approximation" : "none", growthRatio);
@@ -1397,7 +1404,7 @@ void outputTimeFile(DriverParameters const& parameters) {
     int const m = getOptions().run.outputIntervalCount();
     FILE* fp = fopen(outputPath("time.txt").c_str(), "wt");
     if (fp == NULL) {
-        THROW_ERROR("Unable to open time.txt for writing\n");
+        throw std::ios_base::failure("Unable to open time.txt for writing");
     }
     fprintf(
         fp, "%4s %13s %13s %13s %13s\n", "step", "real yrs", "conformal yrs", "scale", "redshift");
@@ -1421,7 +1428,7 @@ static void outputEnergy(double coarseTime, double scale, EnergiesT const& energ
         energies.therm, energies.heating, energies.cosmic, referenceEnergy);
     FILE* fp = fopen(outputPath("energy.txt").c_str(), "at");
     if (fp == nullptr) {
-        THROW_ERROR("unable to open energy.txt for writing\n");
+        throw std::ios_base::failure("unable to open energy.txt for writing");
     }
     // Label the columns once, when the file is new; restarts append.
     fseek(fp, 0, SEEK_END);
@@ -1477,7 +1484,7 @@ void driver() {
         if (!std::isfinite(coarseInterval) || !(coarseInterval > 0.0) ||
             !std::isfinite(params.tau) || params.tau < 0.0 ||
             params.tau > params.tauMax + endpointTolerance || params.step < 0) {
-            THROW_ERROR("Checkpoint contains an invalid evolution clock\n");
+            throw std::runtime_error("Checkpoint contains an invalid evolution clock");
         }
         if (outerInterval) {
             long double const phase = std::ldexp(static_cast<long double>(params.itime), -64);
@@ -1491,8 +1498,9 @@ void driver() {
                 (params.itime == 0 && params.iter > 0 &&
                     std::abs(static_cast<long double>(params.outerStart) + params.outerInterval -
                         params.tau) > clockTolerance)) {
-                THROW_ERROR("Checkpoint outer PM interval, phase and conformal time are "
-                            "inconsistent; retain the original mesh and timestep settings\n");
+                throw std::runtime_error(
+                    "Checkpoint outer PM interval, phase and conformal time are inconsistent; "
+                    "retain the original mesh and timestep settings");
             }
             params.step = driverOutputStep(params.tau, coarseInterval);
         } else if (!global) {
@@ -1505,15 +1513,14 @@ void driver() {
                     std::max(1.0L, std::abs(coarsePosition)));
             if (std::abs(coarsePosition - coarseIndex) > clockTolerance || coarseIndex < 0.0L ||
                 coarseIndex >= std::numeric_limits<int>::max()) {
-                THROW_ERROR(
-                    "Checkpoint conformal time and integer timestep phase are inconsistent; "
-                    "retain the original timestep settings\n");
+                throw std::runtime_error("Checkpoint conformal time and integer timestep phase are "
+                                         "inconsistent; retain the original timestep settings");
             }
             int const resumedStep = static_cast<int>(coarseIndex);
             if (params.step != resumedStep &&
                 !(params.itime == 0 && params.step == resumedStep - 1)) {
-                THROW_ERROR("Checkpoint coarse step and conformal time are inconsistent; "
-                            "retain the original timestep settings\n");
+                throw std::runtime_error("Checkpoint coarse step and conformal time are "
+                                         "inconsistent; retain the original timestep settings");
             }
             // Stopping at a coarse boundary bypasses the outer for-loop increment.
             // Periodic checkpoints taken on the next loop already contain this index.
@@ -1528,7 +1535,8 @@ void driver() {
                 double const requestedDuration = cosmology::configuredDuration(a0);
                 double const tolerance = 1.0e-10 * std::max(requestedDuration, params.tauMax);
                 if (std::abs(requestedDuration - params.tauMax) > tolerance) {
-                    THROW_ERROR("Checkpoint duration differs from cosmology.endRedshift\n");
+                    throw std::runtime_error(
+                        "Checkpoint duration differs from cosmology.endRedshift");
                 }
             }
             auto const expected =
@@ -1544,8 +1552,8 @@ void driver() {
             if (!std::isfinite(params.a) || !std::isfinite(savedRate) ||
                 std::abs(params.a - expected.scaleFactor) > scaleTolerance ||
                 std::abs(savedRate - expectedRate) > rateTolerance) {
-                THROW_ERROR("Checkpoint cosmology/background does not match the requested "
-                            "initial redshift and cosmological parameters\n");
+                throw std::runtime_error("Checkpoint cosmology/background does not match the "
+                                         "requested initial redshift and cosmological parameters");
             }
         }
     } else {
@@ -1978,7 +1986,8 @@ void driver() {
 #endif
             if (meshInterval && itime == 0) {
                 if (!(pmmmBoundary.nextInterval > 0.0)) {
-                    THROW_ERROR("The PMMM outer interval must be positive before the end time\n");
+                    throw std::logic_error(
+                        "The PMMM outer interval must be positive before the end time");
                 }
                 params.outerInterval = pmmmBoundary.nextInterval;
                 params.outerStart = tau;
@@ -2013,7 +2022,7 @@ void driver() {
             }
             dt = global ? std::min(kr.minimumTimestep, tauMax - tau) : std::ldexp(t0, -maxRung);
             if (!(dt > 0.0) || !std::isfinite(dt) || tau + dt == tau) {
-                THROW_ERROR("Selected timestep cannot advance the evolution clock\n");
+                throw std::underflow_error("Selected timestep cannot advance the evolution clock");
             }
             TimeType const nextIntegerTime = global ? 0 : inc(itime, maxRung);
             double const integerPhase =
@@ -2115,7 +2124,7 @@ void driver() {
             double const flops = flopRates.total();
             FILE* textfp = fopen(outputPath("progress.txt").c_str(), "at");
             if (textfp == nullptr) {
-                THROW_ERROR("unable to open progress.txt for writing\n");
+                throw std::ios_base::failure("unable to open progress.txt for writing");
             }
             iter++;
             Timer remainingTime;
@@ -2332,7 +2341,7 @@ void driver() {
                   << std::flush;
     }
 #else
-    THROW_ERROR(
-        "run.scenario=%s requires a gravity-enabled build\n", getOptions().run.scenario.c_str());
+    throw std::invalid_argument(std::format(
+        "run.scenario={} requires a gravity-enabled build", getOptions().run.scenario.c_str()));
 #endif
 }

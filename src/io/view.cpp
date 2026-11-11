@@ -18,6 +18,7 @@
 #include <exception>
 #include <filesystem>
 #include <format>
+#include <ios>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -171,7 +172,8 @@ namespace detail {
 /// Report a failed Silo operation with the affected output object name.
 void checkViewWrite(int result, char const* name) {
     if (result < 0) {
-        THROW_ERROR("Cannot write converted particle Silo object %s\n", name);
+        throw std::ios_base::failure(
+            std::format("Cannot write converted particle Silo object {}", name));
     }
 }
 
@@ -1333,8 +1335,8 @@ void viewConfigure() {
     std::error_code directoryError;
     std::filesystem::create_directories(opts.output.directory, directoryError);
     if (directoryError) {
-        THROW_ERROR("Cannot create output.directory %s: %s\n", opts.output.directory.c_str(),
-            directoryError.message().c_str());
+        throw std::filesystem::filesystem_error(
+            "Cannot create output.directory", opts.output.directory, directoryError);
     }
     Range<double> viewBox;
     viewBox.begin[kXi] = opts.output.xMin;
@@ -1415,7 +1417,8 @@ Vector<float> outputView(int number, double time) {
         std::string const filename = outputPath("view." + std::to_string(number) + ".dat");
         FILE* fp = fopen(filename.c_str(), "wb");
         if (fp == NULL) {
-            THROW_ERROR("unable to open %s for writing\n", filename.c_str());
+            throw std::ios_base::failure(
+                std::format("unable to open {} for writing", filename.c_str()));
         }
         bool const writeSucceeded = fwrite(&nside, sizeof(int), 1, fp) == 1 &&
             fwrite(&npix, sizeof(int), 1, fp) == 1 &&
@@ -1423,7 +1426,8 @@ Vector<float> outputView(int number, double time) {
             fwrite(&number, sizeof(int), 1, fp) == 1 && fwrite(&time, sizeof(double), 1, fp) == 1;
         int const closeStatus = fclose(fp);
         if (!writeSucceeded || closeStatus != 0) {
-            THROW_ERROR("Unable to complete HEALPix view output %s\n", filename.c_str());
+            throw std::ios_base::failure(
+                std::format("Unable to complete HEALPix view output {}", filename.c_str()));
         }
     }
     return results;
