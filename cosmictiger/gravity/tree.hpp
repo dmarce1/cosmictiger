@@ -28,7 +28,7 @@
 // (fmmPositionedMultipoleBytes(kFmmOrder) bytes each, stored
 // fmmPositionedMultipoleStride(kFmmOrder) bytes apart). Nodes point at the
 // order-agnostic position header; per-order code views the moments through
-// fmmMultiPos<order>(node.mpos).
+// fmmMultiPos(node.mpos).
 MultipolePosition* treeAddMultipole(Vector3<Position> const& pos, MultipoleBuffer const& multipole);
 void treeReadMultipole(MultipolePosition const* record, MultipoleBuffer& multipole);
 

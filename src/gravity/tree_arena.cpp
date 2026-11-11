@@ -79,8 +79,7 @@ long long treeNodesSize() {
     return nodesSize;
 }
 // The coefficients follow the position header without padding for every order.
-static_assert(offsetof(FmmMultiPos<kFmmOrder>, multi) == sizeof(MultipolePosition) &&
-        offsetof(FmmMultiPos<kFmmOrder>, multi) == sizeof(MultipolePosition),
+static_assert(offsetof(FmmMultiPos, multi) == sizeof(MultipolePosition),
     "Positioned multipole coefficients must directly follow the position");
 
 /// Locate a node's variable-stride multipole record in the coefficient arena.

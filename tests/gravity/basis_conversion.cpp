@@ -146,10 +146,10 @@ std::array<Complex, 4> regular(int n, int m, Point const& p) {
 
 template <class Real>
 void basisChecks() {
-    using Cl = cartesian::Expansion<Real, kOrder>;
-    using Sl = spherical::Expansion<Real, kOrder>;
-    using Cm = cartesian::Multipole<Real, kOrder>;
-    using Sm = spherical::Multipole<Real, kOrder>;
+    using Cl = cartesian::Expansion<Real>;
+    using Sl = spherical::Expansion<Real>;
+    using Cm = cartesian::Multipole<Real>;
+    using Sm = spherical::Multipole<Real>;
     static_assert(std::is_constructible_v<Cl, Sl const&>);
     static_assert(std::is_constructible_v<Sm, Cm const&>);
     static_assert(!std::is_convertible_v<Sl, Cl>);
@@ -172,7 +172,7 @@ void basisChecks() {
             for (auto const& p : samples) {
                 Field cf;
                 clear(cf);
-                cartesian::L2P(cf, c, point<Real>(p));
+                cartesian::L2P(c, point<Real>(p), cf);
                 auto const oracle = regular(n, std::abs(m), p);
                 for (int component = 0; component < 4; ++component) {
                     double const value =
@@ -190,15 +190,15 @@ void basisChecks() {
 
 template <class Real>
 void cloudCheck(std::array<Point, 4> const& positions) {
-    cartesian::Multipole<Real, kOrder> c;
+    cartesian::Multipole<Real> c;
     clear(c);
-    spherical::Multipole<Real, kOrder> s;
+    spherical::Multipole<Real> s;
     clear(s, 19);
     std::array<double, 4> const masses{.7, 1.3, .2, 2.1};
     for (size_t i = 0; i < positions.size(); ++i) {
-        cartesian::P2M(c, math::broadcast<Real>(masses[i]), point<Real>(positions[i]));
+        cartesian::P2M(math::broadcast<Real>(masses[i]), point<Real>(positions[i]), c);
     }
-    s = static_cast<spherical::Multipole<Real, kOrder>>(c);
+    s = static_cast<spherical::Multipole<Real>>(c);
     for (int n = 0; n <= kOrder - 2; ++n) {
         double rankScale = 1e-100;
         std::array<Complex, kOrder> expected{};
@@ -240,17 +240,17 @@ void sourceScalingCheck() {
     double const κ = kScaleFactor;
     for (double const h : {.125, .03125, .0078125}) {
         context = "mesh/tree source rank scaling";
-        cartesian::Multipole<double, kOrder> cm;
-        spherical::Multipole<double, kOrder> sm, direct;
+        cartesian::Multipole<double> cm;
+        spherical::Multipole<double> sm, direct;
         clear(cm);
         clear(sm);
         clear(direct);
         for (int i = 0; i < 4; ++i) {
             Point const u{.12 + .03 * i, -.21 + .04 * i, .18 - .05 * i};
-            cartesian::P2M(cm, .7 + .3 * i, Point{κ * h * u[0], κ * h * u[1], κ * h * u[2]});
-            spherical::detail::P2M<kOrder - 2, double>(direct, .7 + .3 * i, u[0], u[1], u[2]);
+            cartesian::P2M(.7 + .3 * i, Point{κ * h * u[0], κ * h * u[1], κ * h * u[2]}, cm);
+            spherical::detail::P2M(.7 + .3 * i, u[0], u[1], u[2], direct);
         }
-        sm = static_cast<spherical::Multipole<double, kOrder>>(cm);
+        sm = static_cast<spherical::Multipole<double>>(cm);
         for (int n = 0; n <= kOrder - 2; ++n) {
             double scale = 1e-100;
             for (int m = -n; m <= n; ++m) {
@@ -268,7 +268,7 @@ template <class Real, class PositionType>
 void productionTreeLocal() {
     namespace local = cosmictiger::gravity::tree_local;
     context = "production mesh/tree local, native centers and potential sentinels";
-    using Local = cartesian::Expansion<Real, kOrder>;
+    using Local = cartesian::Expansion<Real>;
     using Field = cosmictiger::gravity::Field<Real>;
     constexpr double kTolerance = std::is_same_v<Real, float> ? 2e-6 : 3e-11;
     for (int meshSize : {4, 8, 16, 64}) {
@@ -301,11 +301,11 @@ void productionTreeLocal() {
             }
             for (int n = 0; n < kOrder; ++n) {
                 for (int m = -n; m <= n; ++m) {
-                    spherical::Expansion<double, kOrder> source{};
+                    spherical::Expansion<double> source{};
                     source(n, m) = 1;
                     auto const oracle = regular(n, std::abs(m), u);
                     for (bool doPotential : {true, false}) {
-                        cartesian::Expansion<double, kOrder> initial{}, rootDouble{};
+                        cartesian::Expansion<double> initial{}, rootDouble{};
                         rootDouble[0] = doPotential ? 0 : 73;
                         local::fromMesh(initial, source.data(), βₘ, meshSize);
                         local::translate(

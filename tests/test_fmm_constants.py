@@ -35,9 +35,9 @@ class GravityConstants(unittest.TestCase):
 
     def test_concrete_precision(self):
         source = 'CUDA_EXPORT void kernel(Real x) { x *= math::broadcast<Real>(4.0 / 3.0); }'
-        self.assertIn('constexpr double k0 = static_cast<Scalar>(1.33333333333333333e+00);',
+        self.assertIn('constexpr double k0 = 1.33333333333333333e+00;',
                       hoistConstants(source, 'double'))
-        self.assertIn('constexpr float k0 = static_cast<Scalar>(1.33333333e+00);',
+        self.assertIn('constexpr float k0 = 1.33333333e+00f;',
                       hoistConstants(source, 'float'))
         for digits in (8, 17):
             midpoint = Fraction(1) + Fraction(5, 10**(digits + 1))
@@ -48,26 +48,33 @@ class GravityConstants(unittest.TestCase):
                              '1.' + '0' * (digits - 1) + '1E+00')
 
     def test_compiled_source_constants(self):
-        root = Path(__file__).resolve().parents[1] / 'cosmictiger/gravity/kernels/sources'
+        root = Path(__file__).resolve().parents[1] / 'src/gravity/kernels'
         paths = list(root.glob('*.cpp')) + list(root.glob('*.cu'))
         self.assertGreater(len(paths), 0)
         counts = {'float': 0, 'double': 0}
         for path in paths:
             code = path.read_text()
             self.assertNotRegex(code, r'constexpr auto k\d+')
-            for table in code.split('using Scalar = SimdScalar<Real>;')[1:]:
+            self.assertNotRegex(code, r'\b(?:Real|Scalar)\b')
+            self.assertNotRegex(code, r'broadcast<(?:float|double)>')
+            for table in re.split(r'\bCUDA_EXPORT\b|\b__device__\b', code)[1:]:
                 declarations = re.findall(
-                    r'constexpr (float|double) (k\d+) = static_cast<Scalar>\(([^)]+)\);', table)
-                self.assertTrue(declarations, path.name)
+                    r'constexpr (float|double) (k\d+) = ([^;]+);', table)
+                if not declarations:
+                    continue
                 values = []
                 width = len(str(len(declarations) - 1))
                 for index, (scalar, name, literal) in enumerate(declarations):
                     counts[scalar] += 1
                     digits = 8 if scalar == 'float' else 17
-                    self.assertRegex(literal, rf'^\d\.\d{{{digits}}}e[+-]\d{{2,}}$')
+                    suffix = 'f' if scalar == 'float' else ''
+                    self.assertRegex(literal, rf'^\d\.\d{{{digits}}}e[+-]\d{{2,}}{suffix}$')
                     self.assertEqual(name, f'k{index:0{width}d}')
-                    self.assertRegex(table, rf'broadcast<Real>\({name}\)')
-                    values.append(Decimal(literal))
+                    if '_simd.' in path.name:
+                        self.assertRegex(table, rf'broadcast<SimdVector<{scalar}, [248]>>\({name}\)')
+                    else:
+                        self.assertGreater(len(re.findall(rf'\b{name}\b', table)), 1)
+                    values.append(Decimal(literal.removesuffix('f')))
                 self.assertEqual(values, sorted(set(values)))
         self.assertTrue(all(counts.values()))
 

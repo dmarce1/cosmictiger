@@ -39,58 +39,56 @@ inline constexpr int kL2LWarpFlops<6> = 8902;
 template <>
 inline constexpr int kL2LWarpNoPotentialFlops<6> = 6724;
 /// Translate a local expansion collectively across a full warp; synchronize all L reads.
+#if defined(COSMICTIGER_FMM_COUNTING_ONLY) || defined(COSMICTIGER_FMM_INSTRUMENTATION)
 template <bool kReplicate, class Real, class Target>
-__device__ void executeL2LWarp(Target& targetL, Expansion<Real, 7> const& L, Real const dx,
+__device__ void executeL2LWarp(Target& targetL, Expansion<Real> const& L, Real const dx,
     Real const dy, Real const dz, bool doPhi);
-#ifndef COSMICTIGER_FMM_COUNTING_ONLY
-template <>
-__device__ void executeL2LWarp<true, float, Expansion<float, 7>>(Expansion<float, 7>& targetL,
-    Expansion<float, 7> const& L, float const dx, float const dy, float const dz, bool doPhi);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
-template <>
-__device__ void executeL2LWarp<false, float, float*>(float*& targetL, Expansion<float, 7> const& L,
-    float const dx, float const dy, float const dz, bool doPhi);
+__device__ void executeL2LWarp(Expansion<float>& targetL, Expansion<float> const& L, float const dx,
+    float const dy, float const dz, bool doPhi);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
-template <>
-__device__ void executeL2LWarp<true, double, Expansion<double, 7>>(Expansion<double, 7>& targetL,
-    Expansion<double, 7> const& L, double const dx, double const dy, double const dz, bool doPhi);
+__device__ void executeL2LWarp(float*& targetL, Expansion<float> const& L, float const dx,
+    float const dy, float const dz, bool doPhi);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
-template <>
-__device__ void executeL2LWarp<false, double, double*>(double*& targetL,
-    Expansion<double, 7> const& L, double const dx, double const dy, double const dz, bool doPhi);
+__device__ void executeL2LWarp(Expansion<double>& targetL, Expansion<double> const& L,
+    double const dx, double const dy, double const dz, bool doPhi);
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+__device__ void executeL2LWarp(double*& targetL, Expansion<double> const& L, double const dx,
+    double const dy, double const dz, bool doPhi);
 #endif
 
 /// Translate collectively and replicate the resulting expansion in every warp lane.
+#if defined(COSMICTIGER_FMM_COUNTING_ONLY) || defined(COSMICTIGER_FMM_INSTRUMENTATION)
 template <class Real>
-__device__ void L2LWarp(Expansion<Real, 7>& targetL, Expansion<Real, 7> const& L,
-    Vector3<Real> const& distance, bool doPhi);
-#ifndef COSMICTIGER_FMM_COUNTING_ONLY
-template <>
-__device__ void L2LWarp<float>(Expansion<float, 7>& targetL, Expansion<float, 7> const& L,
-    Vector3<float> const& distance, bool doPhi);
+__device__ void L2LWarp(
+    Expansion<Real> const& L, Vector3<Real> const& distance, bool doPhi, Expansion<Real>& targetL);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
-template <>
-__device__ void L2LWarp<double>(Expansion<double, 7>& targetL, Expansion<double, 7> const& L,
-    Vector3<double> const& distance, bool doPhi);
+__device__ void L2LWarp(Expansion<float> const& L, Vector3<float> const& distance, bool doPhi,
+    Expansion<float>& targetL);
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+__device__ void L2LWarp(Expansion<double> const& L, Vector3<double> const& distance, bool doPhi,
+    Expansion<double>& targetL);
 #endif
 
 /// Translate collectively into shared targetL coefficients, with each output written once.
+#if defined(COSMICTIGER_FMM_COUNTING_ONLY) || defined(COSMICTIGER_FMM_INSTRUMENTATION)
 template <class Real>
 __device__ void L2LWarpInto(
-    Real* targetL, Expansion<Real, 7> const& L, Vector3<Real> const& distance, bool doPhi);
-#ifndef COSMICTIGER_FMM_COUNTING_ONLY
-template <>
-__device__ void L2LWarpInto<float>(
-    float* targetL, Expansion<float, 7> const& L, Vector3<float> const& distance, bool doPhi);
+    Expansion<Real> const& L, Vector3<Real> const& distance, bool doPhi, Real* targetL);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
-template <>
-__device__ void L2LWarpInto<double>(
-    double* targetL, Expansion<double, 7> const& L, Vector3<double> const& distance, bool doPhi);
+__device__ void L2LWarpInto(
+    Expansion<float> const& L, Vector3<float> const& distance, bool doPhi, float* targetL);
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+__device__ void L2LWarpInto(
+    Expansion<double> const& L, Vector3<double> const& distance, bool doPhi, double* targetL);
 #endif
 
 #endif

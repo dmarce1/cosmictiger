@@ -22,8 +22,8 @@ inline FlopCount addMoments(
     FlopCount count = 0;
     {
         constexpr int kDegree = kFmmOrder - 2;
-        cosmictiger::gravity::spherical::detail::P2M<kDegree, double>(
-            moments, mass, offset[0], offset[1], offset[2]);
+        cosmictiger::gravity::spherical::detail::P2M(
+            mass, offset[0], offset[1], offset[2], moments);
         count = cosmictiger::gravity::spherical::detail::kP2MConventionalFlops<kDegree>;
     };
     return count;

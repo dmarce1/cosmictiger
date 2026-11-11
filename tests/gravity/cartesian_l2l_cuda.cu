@@ -34,7 +34,7 @@ void cosmictigerAssert(char const* condition, bool value, char const* file, int 
 namespace detail {
 
 template <int order>
-using LocalExpansion = cosmictiger::gravity::cartesian::Expansion<float, order>;
+using LocalExpansion = cosmictiger::gravity::cartesian::Expansion<float>;
 constexpr int kLanes = 32;
 constexpr int kMaxWarpsPerBlock = 4;
 constexpr int kValidationSamples = 16;
@@ -175,7 +175,7 @@ __device__ LocalExpansion<order> warpTranslate(
     LocalExpansion<order> const& source, Vector3<float> position, bool doPhi) {
     LocalExpansion<order> result{};
     auto const scaled = fmmScaleDisplacement(position);
-    cosmictiger::gravity::cartesian::detail::L2LWarp(result, source, scaled, doPhi);
+    cosmictiger::gravity::cartesian::detail::L2LWarp(source, scaled, doPhi, result);
     return result;
 }
 
@@ -225,7 +225,7 @@ template <int order>
 __device__ void warpTranslateInto(LocalExpansion<order>& target,
     LocalExpansion<order> const& source, Vector3<float> const& position, bool doPhi) {
     cosmictiger::gravity::cartesian::L2LWarpInto(
-        &target[0], source, fmmScaleDisplacement(position), doPhi);
+        source, fmmScaleDisplacement(position), doPhi, &target[0]);
 }
 
 template <int order>
@@ -361,7 +361,7 @@ void validate(Fixture<order> const* deviceInput, std::vector<Fixture<order>> con
                         translated[0] = scalar[0];
                     }
                     cosmictiger::gravity::cartesian::L2L(
-                        translated, scalar, fmmScaleDisplacement(shift), doPhi);
+                        scalar, fmmScaleDisplacement(shift), doPhi, translated);
                     scalar = translated;
                 }
                 auto const scalarCanonical = canonical<order>(scalar);

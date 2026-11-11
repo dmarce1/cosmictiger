@@ -29,11 +29,11 @@ using Position = Vector3<double>;
 using Polynomial = std::map<Index, double>;
 using Field = cosmictiger::gravity::Field<double>;
 template <int order>
-using Multipole = cosmictiger::gravity::cartesian::Multipole<double, order>;
+using Multipole = cosmictiger::gravity::cartesian::Multipole<double>;
 template <int order>
-using Expansion = cosmictiger::gravity::cartesian::Expansion<double, order>;
+using Expansion = cosmictiger::gravity::cartesian::Expansion<double>;
 template <int order>
-using Green = cosmictiger::gravity::cartesian::Green<double, order>;
+using Green = cosmictiger::gravity::cartesian::Green<double>;
 
 // The Cartesian oracles below carry full (non-compact) coefficients, so their
 // rounding grows with the rank through the harmonic projection's alternating
@@ -227,7 +227,7 @@ void testParticleMomentsAndTranslation() {
         auto const expected = projectedMoments<order>(particles, scales[0]);
         Multipole<order> actual{};
         for (auto const& particle : particles) {
-            kernels::P2M(actual, particle.mass, particle.position / scales[0]);
+            kernels::P2M(particle.mass, particle.position / scales[0], actual);
         }
         compareRanks<kMultipoleDegree>(actual, expected, "P2M independent harmonic projection");
         Position const displacement{.13, -.17, .09};
@@ -239,7 +239,7 @@ void testParticleMomentsAndTranslation() {
         }
         auto const translatedExpected = projectedMoments<order>(shifted, scales[1]);
         Multipole<order> translated{};
-        kernels::M2M(translated, actual, displacement / scales[1], scales[0] / scales[1]);
+        kernels::M2M(actual, displacement / scales[1], scales[0] / scales[1], translated);
         compareRanks<kMultipoleDegree>(
             translated, translatedExpected, "M2M independent particle re-expansion");
     }
@@ -291,7 +291,7 @@ void testInteractions() {
             }
         }
         if constexpr (cosmictiger::gravity::cartesian::kIndependentM2lRatios) {
-            kernels::M2L(actual, source, separation, sourceScale * iR, targetScale * iR);
+            kernels::M2L(source, separation, sourceScale * iR, targetScale * iR, actual);
             compareRanks<kLocalDegree>(actual, expected, "M2L scaled Cartesian derivative oracle");
         } else {
             auto const unitSource = projectedMoments<order, kMultipoleDegree>(particles, 1.0);
@@ -301,13 +301,13 @@ void testInteractions() {
                     unitExpected[i] = expected[i] / std::pow(targetScale, rank);
                 }
             }
-            kernels::M2L(actual, unitSource, separation);
+            kernels::M2L(unitSource, separation, actual);
             compareRanks<kLocalDegree>(
                 actual, unitExpected, "M2L unit Cartesian derivative oracle");
         }
         {
             auto const unscaledSource = projectedMoments<order>(particles, 1.);
-            kernels::P2L(pointActual, 1.7 / targetScale, separation / targetScale);
+            kernels::P2L(1.7 / targetScale, separation / targetScale, pointActual);
             compareRanks<kLocalDegree>(
                 pointActual, pointExpected, "P2L binomial derivative oracle");
             Field field{}, fieldExpected{};
@@ -320,7 +320,7 @@ void testInteractions() {
                     fieldExpected[d + 1] -= coefficient * derivatives.at(a);
                 }
             }
-            kernels::M2P(field, unscaledSource, separation);
+            kernels::M2P(unscaledSource, separation, field);
             for (int i = 0; i < kFieldCount; ++i) {
                 near(field[i], fieldExpected[i], std::abs(fieldExpected[0]),
                     "M2P source-truncated Cartesian potential/force oracle");
@@ -389,10 +389,10 @@ void testLocalTranslation() {
         auto const source = localAt<order>(polynomial, {}, scales[0]);
         auto const expected = localAt<order>(polynomial, displacement, scales[1]);
         Expansion<order> actual{};
-        kernels::L2L(actual, source, displacement / scales[0], scales[1] / scales[0]);
+        kernels::L2L(source, displacement / scales[0], scales[1] / scales[0], actual);
         compareRanks<kLocalDegree>(actual, expected, "L2L direct Cartesian polynomial translation");
         Field field{};
-        kernels::L2P(field, source, displacement / scales[0], 1 / scales[0]);
+        kernels::L2P(source, displacement / scales[0], 1 / scales[0], field);
         near(field[0], polynomialDerivative(polynomial, {}, displacement), 1,
             "L2P direct polynomial potential");
         for (int d = 0; d < 3; ++d) {
@@ -444,9 +444,9 @@ void testDirectParticleRemainder() {
         near(closedForm.acceleration, series.acceleration, std::abs(series.acceleration),
             "Direct particle acceleration remainder closed form", 1e-12);
         Multipole<order> source{};
-        kernels::P2M(source, 1., Position{2 * q, 0., 0.});
+        kernels::P2M(1., Position{2 * q, 0., 0.}, source);
         Field field{};
-        kernels::M2P(field, source, Position{2., 0., 0.});
+        kernels::M2P(source, Position{2., 0., 0.}, field);
         double const potential = -1 / (2 * (1 - q));
         double const acceleration = -1 / (4 * (1 - q) * (1 - q));
         near(potential - field[0], series.potential, 1, "Direct particle exact potential remainder",
@@ -489,12 +489,12 @@ void testSimd() {
     using Pack = SimdVector<Real, lanes>;
     using Layout = KernelLayout<order>;
     namespace cartesian = cosmictiger::gravity::cartesian;
-    static_assert(std::is_trivially_copyable_v<cartesian::Multipole<Real, order>>);
-    static_assert(std::is_trivially_copyable_v<cartesian::Expansion<Real, order>>);
-    static_assert(std::is_trivially_copyable_v<cartesian::Green<Real, order>>);
-    testSimdCoefficientCopies<cartesian::Multipole<Pack, order>, Real, lanes>();
-    testSimdCoefficientCopies<cartesian::Expansion<Pack, order>, Real, lanes>();
-    testSimdCoefficientCopies<cartesian::Green<Pack, order>, Real, lanes>();
+    static_assert(std::is_trivially_copyable_v<cartesian::Multipole<Real>>);
+    static_assert(std::is_trivially_copyable_v<cartesian::Expansion<Real>>);
+    static_assert(std::is_trivially_copyable_v<cartesian::Green<Real>>);
+    testSimdCoefficientCopies<cartesian::Multipole<Pack>, Real, lanes>();
+    testSimdCoefficientCopies<cartesian::Expansion<Pack>, Real, lanes>();
+    testSimdCoefficientCopies<cartesian::Green<Pack>, Real, lanes>();
     constexpr double kTolerance = sizeof(Real) == sizeof(float) ? 2e-5 : 3e-12;
     for (int batch = 0; batch < 3; ++batch) {
         std::array<KernelInput<Real, order>, lanes> input{};

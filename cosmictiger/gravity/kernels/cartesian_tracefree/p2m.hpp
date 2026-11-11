@@ -23,49 +23,44 @@ template <int degree>
 inline constexpr int kP2MFlops = 0;
 // FMM order 7.
 /// Accumulate the point mass into raw trace-free moments at the supplied displacement.
+#if defined(COSMICTIGER_FMM_COUNTING_ONLY) || defined(COSMICTIGER_FMM_INSTRUMENTATION)
 template <class Real>
-CUDA_EXPORT void P2M(Multipole<Real, 7>& M, Real mass, Vector3<Real> const& distance);
-#ifndef COSMICTIGER_FMM_COUNTING_ONLY
-template <>
-CUDA_EXPORT void P2M<float>(Multipole<float, 7>& M, float mass, Vector3<float> const& distance);
+CUDA_EXPORT void P2M(Real mass, Vector3<Real> const& distance, Multipole<Real>& M);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
-template <>
-CUDA_EXPORT void P2M<double>(Multipole<double, 7>& M, double mass, Vector3<double> const& distance);
+CUDA_EXPORT void P2M(float mass, Vector3<float> const& distance, Multipole<float>& M);
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+CUDA_EXPORT void P2M(double mass, Vector3<double> const& distance, Multipole<double>& M);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-template <>
-CUDA_EXPORT void P2M<SimdVector<float, 8>>(Multipole<SimdVector<float, 8>, 7>& M,
-    SimdVector<float, 8> mass, Vector3<SimdVector<float, 8>> const& distance);
+CUDA_EXPORT void P2M(SimdVector<float, 8> mass, Vector3<SimdVector<float, 8>> const& distance,
+    Multipole<SimdVector<float, 8>>& M);
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-template <>
-CUDA_EXPORT void P2M<SimdVector<double, 2>>(Multipole<SimdVector<double, 2>, 7>& M,
-    SimdVector<double, 2> mass, Vector3<SimdVector<double, 2>> const& distance);
+CUDA_EXPORT void P2M(SimdVector<double, 2> mass, Vector3<SimdVector<double, 2>> const& distance,
+    Multipole<SimdVector<double, 2>>& M);
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-template <>
-CUDA_EXPORT void P2M<SimdVector<float, 4>>(Multipole<SimdVector<float, 4>, 7>& M,
-    SimdVector<float, 4> mass, Vector3<SimdVector<float, 4>> const& distance);
+CUDA_EXPORT void P2M(SimdVector<float, 4> mass, Vector3<SimdVector<float, 4>> const& distance,
+    Multipole<SimdVector<float, 4>>& M);
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-template <>
-CUDA_EXPORT void P2M<SimdVector<double, 4>>(Multipole<SimdVector<double, 4>, 7>& M,
-    SimdVector<double, 4> mass, Vector3<SimdVector<double, 4>> const& distance);
+CUDA_EXPORT void P2M(SimdVector<double, 4> mass, Vector3<SimdVector<double, 4>> const& distance,
+    Multipole<SimdVector<double, 4>>& M);
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-template <>
-CUDA_EXPORT void P2M<SimdVector<double, 8>>(Multipole<SimdVector<double, 8>, 7>& M,
-    SimdVector<double, 8> mass, Vector3<SimdVector<double, 8>> const& distance);
+CUDA_EXPORT void P2M(SimdVector<double, 8> mass, Vector3<SimdVector<double, 8>> const& distance,
+    Multipole<SimdVector<double, 8>>& M);
 #endif
 #endif
 

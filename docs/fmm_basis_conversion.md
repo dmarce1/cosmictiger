@@ -7,8 +7,8 @@ arithmetic lives directly in the cast definitions in
 type header also makes its cast available:
 
 ```cpp
-auto sphericalSource = static_cast<spherical::Multipole<Real, order>>(cartesianSource);
-auto cartesianLocal = static_cast<cartesian::Expansion<Real, order>>(sphericalLocal);
+auto sphericalSource = static_cast<spherical::Multipole<Real>>(cartesianSource);
+auto cartesianLocal = static_cast<cartesian::Expansion<Real>>(sphericalLocal);
 ```
 
 Both return new coefficient objects, preserve every dipole component, and

@@ -82,16 +82,16 @@ void evaluateFar() {
             // Match the mesh-center construction and native fixed-position
             // displacement accounting used by the ordinary far descent.
             flops += kDimensions * (kPositionBits == 64 ? 13 : 8) + 12 + 6;
-            cartesian::Expansion<double, kOrder> meshLocal{}, rootLocal{};
+            cartesian::Expansion<double> meshLocal{}, rootLocal{};
             flops += local::fromMesh(meshLocal, coefficients.data(), localTrace, cache.meshSize);
             double const curvature = local::backgroundCurvature(localTrace, cache.meshSize);
             flops += local::translate(rootLocal, meshLocal, displacement, curvature, true);
             auto descend = [&](auto const& self, TreeId id,
-                               cartesian::Expansion<double, kOrder> const& expansion) -> void {
+                               cartesian::Expansion<double> const& expansion) -> void {
                 auto const* node = treeGetNode(id);
                 if (!node->leaf) {
                     for (auto const child : node->children) {
-                        cartesian::Expansion<double, kOrder> translated{};
+                        cartesian::Expansion<double> translated{};
                         flops +=
                             local::translate(translated, expansion,
                                 local::displacement<double>(treeGetNode(child)->pos, node->pos),

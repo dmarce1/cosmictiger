@@ -11,13 +11,15 @@
 
 #include <gtest/gtest.h>
 
+#define COSMICTIGER_FMM_INSTRUMENTATION
+
 #include <cosmictiger/gravity/fmm_order.hpp>
-#include <cosmictiger/gravity/kernels/instrumentation/spherical_ewald_green.cpp>
-#include <cosmictiger/gravity/kernels/instrumentation/spherical_green.cpp>
-#include <cosmictiger/gravity/kernels/instrumentation/spherical_p2m.cpp>
 #include <cosmictiger/gravity/kernels/spherical_ewald_kernels.hpp>
 #include <cosmictiger/gravity/pmmm_kernels.hpp>
 #include <cosmictiger/math/vector3.hpp>
+#include <src/gravity/kernels/instrumentation/spherical_ewald_green.cpp>
+#include <src/gravity/kernels/instrumentation/spherical_green.cpp>
+#include <src/gravity/kernels/instrumentation/spherical_p2m.cpp>
 #include <tests/flop_counting_real.hpp>
 
 #include "pmmm_reference.hpp"
@@ -67,8 +69,8 @@ namespace detail {
         std::array<Real, moments.size()> countedMoments{};
         FlopCount const momentCount = pmmm::addMoments(order, moments.data(), 0.7, point);
         Real::reset();
-        spherical::detail::P2M<order - 2, Real>(
-            countedMoments, Real(0.7), Real(point[0]), Real(point[1]), Real(point[2]));
+        spherical::detail::P2M(
+            Real(0.7), Real(point[0]), Real(point[1]), Real(point[2]), countedMoments);
         EXPECT_EQ(momentCount, Real::count());
 
         // The regular central-image series has the same source operation count
@@ -85,13 +87,13 @@ namespace detail {
                 std::array<Real, order * order> countedCoefficients{};
                 Real trace{};
                 Real::reset();
-                spherical::evaluateEwaldGreen<kDegree, Real>(
-                    countedCoefficients, trace, Real(sample[0]), Real(sample[1]), Real(sample[2]));
+                spherical::evaluateEwaldGreen(
+                    trace, Real(sample[0]), Real(sample[1]), Real(sample[2]), countedCoefficients);
                 EXPECT_EQ(spherical::kEwaldGreenConventionalFlops<kDegree>, Real::count());
                 if (!near) {
                     std::array<Real, order * order> primary{};
-                    spherical::detail::evaluateGreen<kDegree, Real>(
-                        primary, Real(sample[0]), Real(sample[1]), Real(sample[2]));
+                    spherical::detail::evaluateGreen(
+                        Real(sample[0]), Real(sample[1]), Real(sample[2]), primary);
                     for (size_t slot = 0; slot < primary.size(); ++slot) {
                         countedCoefficients[slot] += primary[slot];
                     }

@@ -75,7 +75,7 @@ void frozenCloud() {
     SourceMultipoleBuffer root;
     treeComputeMultipole<order>(
         root, left, right, leftCenter, rightCenter, center, sources.geometry);
-    cartesian::Multipole<double, order> expected{};
+    cartesian::Multipole<double> expected{};
     for (size_t i = 0; i < masses.size(); ++i) {
         Vector3<double> offset;
         for (int axis = 0; axis < kDimensions; ++axis) {
@@ -83,7 +83,7 @@ void frozenCloud() {
             double const point = positions[axis][i].toDouble();
             offset[axis] = (point > .5 ? point - 1 : point) - (center[axis].toDouble() - 1);
         }
-        cartesian::P2M(expected, double(masses[i]), fmmScaleDisplacement(offset));
+        cartesian::P2M(double(masses[i]), fmmScaleDisplacement(offset), expected);
     }
     for (int i = 0; i < expected.size(); ++i) {
         check(root[i], expected[i], std::max(1., std::abs(expected[i])));
@@ -144,8 +144,8 @@ void cloud(int meshSize, bool subDoubleCenters) {
                 positions[axis][i].toDouble() * meshSize - (meshSize - .5);
             maximumOffset = std::max(maximumOffset, std::abs(offset[axis]));
         }
-        cosmictiger::gravity::spherical::detail::P2M<order - 2, double>(
-            expected, masses[i], offset[0], offset[1], offset[2]);
+        cosmictiger::gravity::spherical::detail::P2M(
+            double(masses[i]), offset[0], offset[1], offset[2], expected);
     }
     double rankScale = expected[0];
     for (int n = 0; n <= order - 2; ++n) {

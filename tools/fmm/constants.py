@@ -92,11 +92,12 @@ def hoistConstants(cpp, scalar=None):
         def literal(value):
             if scalar is None:
                 return scientific(value)
-            return scientific(value, 8 if scalar == 'float' else 17).lower()
+            return scientific(value, 8 if scalar == 'float' else 17).lower() + ('f' if scalar == 'float' else '')
         declarations = ''.join(
-            f'\n    constexpr {scalar or "auto"} {name} = static_cast<Scalar>({literal(value)});'
+            f'\n    constexpr {scalar or "auto"} {name} = ' +
+            (literal(value) if scalar else f'static_cast<Scalar>({literal(value)})') + ';'
             for value, name in names.items())
-        alias = '\n    using Scalar = SimdScalar<Real>;' if names else ''
+        alias = '\n    using Scalar = SimdScalar<Real>;' if names and scalar is None else ''
         output.append(cpp[position:opening + 1] + alias + declarations + body + '}')
         position = closing
     output.append(cpp[position:])

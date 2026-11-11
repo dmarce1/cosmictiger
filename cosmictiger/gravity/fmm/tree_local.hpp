@@ -18,25 +18,25 @@ namespace cartesian = gravity::cartesian;
 // B is the local basis map; L is a spherical local; κ is kScaleFactor;
 // h is mesh width; K is the tree residual curvature; z is tree displacement.
 // Code names: meshBackground = βₘ; curvature = K; source = L; target = C.
-template <int order>
-CUDA_EXPORT int fromMesh(cartesian::Expansion<double, order>& target, double const* source,
+CUDA_EXPORT inline int fromMesh(cartesian::Expansion<double>& target, double const* source,
     double meshBackground, int meshSize) {
-    spherical::Expansion<double, order> harmonic;
+    spherical::Expansion<double> harmonic;
     for (int i = 0; i < harmonic.kCount_; ++i) {
         harmonic[i] = source[i];
     }
     harmonic.real(2, 0) += 2 * meshBackground;
-    target = static_cast<cartesian::Expansion<double, order>>(harmonic);
+    target = static_cast<cartesian::Expansion<double>>(harmonic);
     double const κ = kScaleFactor;
     double const ratio = meshSize / κ;
     double factor = 1 / κ;
-    for (int n = 0; n < order; ++n) {
+    for (int n = 0; n < kFmmOrder; ++n) {
         for (int i = n * n; i < (n + 1) * (n + 1); ++i) {
             target[i] *= factor;
         }
         factor *= ratio;
     }
-    return basis_conversion::kExpansionCastConventionalFlops<order> + order * order + order + 4;
+    return basis_conversion::kExpansionCastConventionalFlops<kFmmOrder> + kFmmOrder * kFmmOrder +
+        kFmmOrder + 4;
 }
 
 /// Convert the mesh isotropic-background coefficient to tree-coordinate curvature using
@@ -69,11 +69,11 @@ CUDA_EXPORT Vector3<Real> displacement(
 // Symbol directory: H′ is the harmonic proxy; d is the tree center shift;
 // K is the known residual curvature, carried once per solve, not in each local.
 // Code names: curvature = K.
-template <class Real, int order>
-CUDA_EXPORT int translate(cartesian::Expansion<Real, order>& target,
-    cartesian::Expansion<Real, order> const& source, Vector3<Real> const& d, Real curvature,
+template <class Real>
+CUDA_EXPORT int translate(cartesian::Expansion<Real>& target,
+    cartesian::Expansion<Real> const& source, Vector3<Real> const& d, Real curvature,
     bool doPotential) {
-    int const flops = cartesian::L2L(target, source, d, doPotential);
+    int const flops = cartesian::L2L(source, d, doPotential, target);
     target(0, 0, 1) += curvature * d[2];
     if (doPotential) {
         target[0] += Real(.5) * curvature * d[2] * d[2];
@@ -86,11 +86,11 @@ CUDA_EXPORT int translate(cartesian::Expansion<Real, order>& target,
 // Symbol directory: Φ is potential; a is acceleration; K is residual curvature;
 // κ is kScaleFactor; y is tree displacement with z=y_z; H′ is the harmonic proxy.
 // Code names: curvature = K.
-template <class Real, int order>
-CUDA_EXPORT int evaluate(Field<Real>& target, cartesian::Expansion<Real, order> const& source,
+template <class Real>
+CUDA_EXPORT int evaluate(Field<Real>& target, cartesian::Expansion<Real> const& source,
     Vector3<Real> const& y, Real curvature, bool doPotential) {
     Field<Real> field{};
-    int const flops = cartesian::L2P(field, source, y, doPotential);
+    int const flops = cartesian::L2P(source, y, doPotential, field);
     if (doPotential) {
         target[0] += Real(kScaleFactor) * (field[0] + Real(.5) * curvature * y[2] * y[2]);
     }

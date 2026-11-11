@@ -49,7 +49,7 @@ __device__ inline void cudaCopyExpansion(float* destination, float const* source
 /// reduce energy/momentum diagnostics.
 template <int order>
 __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKickData const& data,
-    cosmictiger::gravity::cartesian::Expansion<float, order> const& lValue2, TreeNode const& self,
+    cosmictiger::gravity::cartesian::Expansion<float> const& lValue2, TreeNode const& self,
     CudaKickForceTile const& force, int sinkBegin, int sinkCount, ParticleInteger outputOffset,
     FmmGeometry const& geometry) {
     int const& tid = threadIdx.x;
@@ -111,7 +111,7 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
                 sinkZ[i], self.pos[kZi], geometry.sinkCell[kZi], geometry.meshSize, &frameFlops) :
             unwrappedDistance(sinkZ[i], self.pos[kZi]);
         doubleFlops += geometry.frozenMembership ? 3 : 0;
-        cosmictiger::gravity::cartesian::L2P(l2, lValue2, fmmScaleDisplacement(dx), params.doPhi);
+        cosmictiger::gravity::cartesian::L2P(lValue2, fmmScaleDisplacement(dx), params.doPhi, l2);
         float gx = force.gx[i];
         float gy = force.gy[i];
         float gz = force.gz[i];
@@ -389,7 +389,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
     int const& tid = threadIdx.x;
     extern __shared__ __align__(16) char shmemPtr[];
     using Control = CudaKickControl<order>;
-    using Expansion = cosmictiger::gravity::cartesian::Expansion<float, order>;
+    using Expansion = cosmictiger::gravity::cartesian::Expansion<float>;
     constexpr int kLocalExpansionBytes = FmmOrder<order>::kLocalExpansionBytes_;
     Control& control = *reinterpret_cast<Control*>(shmemPtr + layout.controlOffset);
     if (layout.listSlabBytes > 0) {
@@ -516,7 +516,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                     // Cooperative translation into the scratch expansion, then
                     // publish it as the active expansion at this node's center.
                     cosmictiger::gravity::cartesian::L2LWarpInto(
-                        scratch, expansion, fmmScaleDisplacement(dx), globalParams.doPhi);
+                        expansion, fmmScaleDisplacement(dx), globalParams.doPhi, scratch);
                     detail::cudaCopyExpansion<order>(&expansion[0], scratch);
                     if (tid < kDimensions) {
                         expansionPos[tid] = self.pos[tid];

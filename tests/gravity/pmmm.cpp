@@ -856,16 +856,16 @@ std::array<double, 4> directPmmmExpansionReferenceOrder(
         }
         bool const near = cellDistance <= options.gravity.pmmmNearWidth;
         std::array<double, (kSourceDegree + 1) * (kSourceDegree + 1)> moments{};
-        spherical::detail::P2M<kSourceDegree, double>(
-            moments, samples[source].mass, sourceOffset[0], sourceOffset[1], sourceOffset[2]);
+        spherical::detail::P2M(
+            double(samples[source].mass), sourceOffset[0], sourceOffset[1], sourceOffset[2], moments);
         std::array<double, (kLocalDegree + 1) * (kLocalDegree + 1)> green{};
         double greenTrace = 0.0;
-        spherical::evaluateEwaldGreen<kLocalDegree, double>(
-            green, greenTrace, displacement[0], displacement[1], displacement[2]);
+        spherical::evaluateEwaldGreen(
+            greenTrace, displacement[0], displacement[1], displacement[2], green);
         if (!near) {
             std::array<double, (kLocalDegree + 1) * (kLocalDegree + 1)> primary{};
-            spherical::detail::evaluateGreen<kLocalDegree, double>(
-                primary, displacement[0], displacement[1], displacement[2]);
+            spherical::detail::evaluateGreen(
+                displacement[0], displacement[1], displacement[2], primary);
             for (size_t slot = 0; slot < green.size(); ++slot) {
                 green[slot] += primary[slot];
             }

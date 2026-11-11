@@ -25,57 +25,52 @@ template <int degree>
 inline constexpr int kL2PFlops = 0;
 // FMM order 7.
 /// Accumulate the local potential and negative gradient, scaling acceleration by inverseScale.
+#if defined(COSMICTIGER_FMM_COUNTING_ONLY) || defined(COSMICTIGER_FMM_INSTRUMENTATION)
 template <class Real>
-CUDA_EXPORT void L2P(gravity::Field<Real>& field, Expansion<Real, 7> const& L,
-    Vector3<Real> const& distance, Real inverseScale);
-#ifndef COSMICTIGER_FMM_COUNTING_ONLY
-template <>
-CUDA_EXPORT void L2P<float>(gravity::Field<float>& field, Expansion<float, 7> const& L,
-    Vector3<float> const& distance, float inverseScale);
+CUDA_EXPORT void L2P(Expansion<Real> const& L, Vector3<Real> const& distance, Real inverseScale,
+    gravity::Field<Real>& field);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
-template <>
-CUDA_EXPORT void L2P<double>(gravity::Field<double>& field, Expansion<double, 7> const& L,
-    Vector3<double> const& distance, double inverseScale);
+CUDA_EXPORT void L2P(Expansion<float> const& L, Vector3<float> const& distance, float inverseScale,
+    gravity::Field<float>& field);
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+CUDA_EXPORT void L2P(Expansion<double> const& L, Vector3<double> const& distance,
+    double inverseScale, gravity::Field<double>& field);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-template <>
-CUDA_EXPORT void L2P<SimdVector<float, 8>>(gravity::Field<SimdVector<float, 8>>& field,
-    Expansion<SimdVector<float, 8>, 7> const& L, Vector3<SimdVector<float, 8>> const& distance,
-    SimdVector<float, 8> inverseScale);
+CUDA_EXPORT void L2P(Expansion<SimdVector<float, 8>> const& L,
+    Vector3<SimdVector<float, 8>> const& distance, SimdVector<float, 8> inverseScale,
+    gravity::Field<SimdVector<float, 8>>& field);
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-template <>
-CUDA_EXPORT void L2P<SimdVector<double, 2>>(gravity::Field<SimdVector<double, 2>>& field,
-    Expansion<SimdVector<double, 2>, 7> const& L, Vector3<SimdVector<double, 2>> const& distance,
-    SimdVector<double, 2> inverseScale);
+CUDA_EXPORT void L2P(Expansion<SimdVector<double, 2>> const& L,
+    Vector3<SimdVector<double, 2>> const& distance, SimdVector<double, 2> inverseScale,
+    gravity::Field<SimdVector<double, 2>>& field);
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-template <>
-CUDA_EXPORT void L2P<SimdVector<float, 4>>(gravity::Field<SimdVector<float, 4>>& field,
-    Expansion<SimdVector<float, 4>, 7> const& L, Vector3<SimdVector<float, 4>> const& distance,
-    SimdVector<float, 4> inverseScale);
+CUDA_EXPORT void L2P(Expansion<SimdVector<float, 4>> const& L,
+    Vector3<SimdVector<float, 4>> const& distance, SimdVector<float, 4> inverseScale,
+    gravity::Field<SimdVector<float, 4>>& field);
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-template <>
-CUDA_EXPORT void L2P<SimdVector<double, 4>>(gravity::Field<SimdVector<double, 4>>& field,
-    Expansion<SimdVector<double, 4>, 7> const& L, Vector3<SimdVector<double, 4>> const& distance,
-    SimdVector<double, 4> inverseScale);
+CUDA_EXPORT void L2P(Expansion<SimdVector<double, 4>> const& L,
+    Vector3<SimdVector<double, 4>> const& distance, SimdVector<double, 4> inverseScale,
+    gravity::Field<SimdVector<double, 4>>& field);
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-template <>
-CUDA_EXPORT void L2P<SimdVector<double, 8>>(gravity::Field<SimdVector<double, 8>>& field,
-    Expansion<SimdVector<double, 8>, 7> const& L, Vector3<SimdVector<double, 8>> const& distance,
-    SimdVector<double, 8> inverseScale);
+CUDA_EXPORT void L2P(Expansion<SimdVector<double, 8>> const& L,
+    Vector3<SimdVector<double, 8>> const& distance, SimdVector<double, 8> inverseScale,
+    gravity::Field<SimdVector<double, 8>>& field);
 #endif
 #endif
 

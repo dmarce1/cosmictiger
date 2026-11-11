@@ -18,7 +18,7 @@
 #include <cosmictiger/core/containers.hpp>
 
 namespace cosmictiger::gravity::spherical {
-template <class Real, int order>
+template <class Real>
 class Multipole;
 }
 
@@ -27,120 +27,6 @@ namespace detail {
     struct CoefficientArrayInit {};
     template <class Real, int degree>
     struct CoefficientFields;
-    template <class Real>
-    struct CoefficientFields<Real, 1> {
-        union {
-            struct {
-                Real m;
-                Real y;
-                Real x;
-                Real z;
-            };
-            Real coefficients[4];
-        };
-        /// Leave scalar coefficient initialization to the caller.
-        CUDA_EXPORT CoefficientFields() = default;
-        /// Value-initialize the coefficient array as the active union member.
-        CUDA_EXPORT explicit CoefficientFields(CoefficientArrayInit)
-          : coefficients() {}
-    };
-
-    static_assert(sizeof(CoefficientFields<float, 1>) == 4 * sizeof(float));
-    template <class Real>
-    struct CoefficientFields<Real, 2> {
-        union {
-            struct {
-                Real m;
-                Real y;
-                Real x;
-                Real z;
-                Real yy;
-                Real xy;
-                Real xx;
-                Real yz;
-                Real xz;
-            };
-            Real coefficients[9];
-        };
-        /// Leave scalar coefficient initialization to the caller.
-        CUDA_EXPORT CoefficientFields() = default;
-        /// Value-initialize the coefficient array as the active union member.
-        CUDA_EXPORT explicit CoefficientFields(CoefficientArrayInit)
-          : coefficients() {}
-    };
-
-    static_assert(sizeof(CoefficientFields<float, 2>) == 9 * sizeof(float));
-    template <class Real>
-    struct CoefficientFields<Real, 3> {
-        union {
-            struct {
-                Real m;
-                Real y;
-                Real x;
-                Real z;
-                Real yy;
-                Real xy;
-                Real xx;
-                Real yz;
-                Real xz;
-                Real yyy;
-                Real xyy;
-                Real xxy;
-                Real xxx;
-                Real yyz;
-                Real xyz;
-                Real xxz;
-            };
-            Real coefficients[16];
-        };
-        /// Leave scalar coefficient initialization to the caller.
-        CUDA_EXPORT CoefficientFields() = default;
-        /// Value-initialize the coefficient array as the active union member.
-        CUDA_EXPORT explicit CoefficientFields(CoefficientArrayInit)
-          : coefficients() {}
-    };
-
-    static_assert(sizeof(CoefficientFields<float, 3>) == 16 * sizeof(float));
-    template <class Real>
-    struct CoefficientFields<Real, 4> {
-        union {
-            struct {
-                Real m;
-                Real y;
-                Real x;
-                Real z;
-                Real yy;
-                Real xy;
-                Real xx;
-                Real yz;
-                Real xz;
-                Real yyy;
-                Real xyy;
-                Real xxy;
-                Real xxx;
-                Real yyz;
-                Real xyz;
-                Real xxz;
-                Real yyyy;
-                Real xyyy;
-                Real xxyy;
-                Real xxxy;
-                Real xxxx;
-                Real yyyz;
-                Real xyyz;
-                Real xxyz;
-                Real xxxz;
-            };
-            Real coefficients[25];
-        };
-        /// Leave scalar coefficient initialization to the caller.
-        CUDA_EXPORT CoefficientFields() = default;
-        /// Value-initialize the coefficient array as the active union member.
-        CUDA_EXPORT explicit CoefficientFields(CoefficientArrayInit)
-          : coefficients() {}
-    };
-
-    static_assert(sizeof(CoefficientFields<float, 4>) == 25 * sizeof(float));
     template <class Real>
     struct CoefficientFields<Real, 5> {
         union {
@@ -326,7 +212,7 @@ namespace detail {
             }
             return -(*this)(nx + 2, ny, nz - 2) - (*this)(nx, ny + 2, nz - 2);
         }
-        /// Archive the independent coefficients in compact storage order.
+        /// Archive the independent coefficients in compact storage 7.
         template <class Archive>
         void serialize(Archive& arc, unsigned) {
             for (auto& coefficient : this->coefficients) {
@@ -335,26 +221,22 @@ namespace detail {
         }
     };
 }    // namespace detail
-template <class Real, int order>
-struct Multipole : detail::Coefficients<Real, order - 2> {
-    static_assert(order >= 3 && order <= 9);
-    using detail::Coefficients<Real, order - 2>::operator=;
+template <class Real>
+struct Multipole : detail::Coefficients<Real, 5> {
+    using detail::Coefficients<Real, 5>::operator=;
     /// Convert basis at the same center and coordinate scale.
-    CUDA_EXPORT explicit operator spherical::Multipole<Real, order>() const
-        requires(order == 7);
+    CUDA_EXPORT explicit operator spherical::Multipole<Real>() const;
 };
-template <class Real, int order>
-struct Expansion : detail::Coefficients<Real, order - 1> {
-    static_assert(order >= 3 && order <= 9);
-    using detail::Coefficients<Real, order - 1>::operator=;
+template <class Real>
+struct Expansion : detail::Coefficients<Real, 6> {
+    using detail::Coefficients<Real, 6>::operator=;
 };
-template <class Real, int order>
-struct Green : detail::Coefficients<Real, order - 1> {
-    static_assert(order >= 3 && order <= 9);
-    using detail::Coefficients<Real, order - 1>::operator=;
+template <class Real>
+struct Green : detail::Coefficients<Real, 6> {
+    using detail::Coefficients<Real, 6>::operator=;
 };
-template <class Real, int order>
-using Derivatives = Green<Real, order>;
+template <class Real>
+using Derivatives = Green<Real>;
 }    // namespace cosmictiger::gravity::cartesian
 
 // Both coefficient types must be complete before defining their basis casts.

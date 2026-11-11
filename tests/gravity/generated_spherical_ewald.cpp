@@ -13,11 +13,13 @@
 #include <stdexcept>
 #include <vector>
 
+#define COSMICTIGER_FMM_INSTRUMENTATION
+
 #include <cosmictiger/gravity/fmm/tree_local.hpp>
-#include <cosmictiger/gravity/kernels/instrumentation/spherical_ewald_green.cpp>
 #include <cosmictiger/gravity/kernels/spherical_ewald_kernels.hpp>
 #include <cosmictiger/math/simd_math.hpp>
 #include <cosmictiger/math/vector3.hpp>
+#include <src/gravity/kernels/instrumentation/spherical_ewald_green.cpp>
 
 namespace counted {
 inline size_t operations = 0;
@@ -261,7 +263,7 @@ void scalarCases() {
     for (auto const& p : points) {
         std::array<Real, kCount> greens{};
         Real trace{};
-        evaluateEwaldGreen<degree, Real>(greens, trace, Real(p[0]), Real(p[1]), Real(p[2]));
+        evaluateEwaldGreen(trace, Real(p[0]), Real(p[1]), Real(p[2]), greens);
         auto const exact =
             reference(degree, {double(Real(p[0])), double(Real(p[1])), double(Real(p[2]))});
         near(trace, 4 * kPi / 3, epsilon, "Green trace");
@@ -286,9 +288,9 @@ void scalarCases() {
     namespace cartesian = cosmictiger::gravity::cartesian;
     namespace local = cosmictiger::gravity::tree_local;
     std::array<double, kCount> zero{};
-    cartesian::Expansion<double, degree + 1> wide{};
+    cartesian::Expansion<double> wide{};
     local::fromMesh(wide, zero.data(), 2, 1);
-    cartesian::Expansion<Real, degree + 1> expansion{};
+    cartesian::Expansion<Real> expansion{};
     for (int i = 0; i < kCount; ++i) {
         expansion[i] = Real(wide[i]);
     }
@@ -308,8 +310,7 @@ void countCase() {
     std::array<counted::Real, (degree + 1) * (degree + 1)> greens{};
     counted::Real trace{};
     counted::operations = 0;
-    evaluateEwaldGreen<degree, counted::Real>(
-        greens, trace, counted::Real(.2), counted::Real(-.1), counted::Real(.3));
+    evaluateEwaldGreen(trace, counted::Real(.2), counted::Real(-.1), counted::Real(.3), greens);
     near(
         double(counted::operations), kEwaldGreenFlops<degree>, 0, "Ewald emitted arithmetic count");
 }
@@ -325,12 +326,12 @@ void simdCase() {
     Pack const z([&](auto lane) { return Scalar(positions[lane][2]); });
     std::array<Pack, (degree + 1) * (degree + 1)> output{};
     Pack trace;
-    evaluateEwaldGreen<degree, Pack>(output, trace, x, y, z);
+    evaluateEwaldGreen(trace, x, y, z, output);
     for (int lane = 0; lane < 4; ++lane) {
         std::array<Scalar, (degree + 1) * (degree + 1)> expected{};
         Scalar scalarTrace{};
-        evaluateEwaldGreen<degree, Scalar>(
-            expected, scalarTrace, Scalar(x[lane]), Scalar(y[lane]), Scalar(z[lane]));
+        evaluateEwaldGreen(
+            scalarTrace, Scalar(x[lane]), Scalar(y[lane]), Scalar(z[lane]), expected);
         for (int slot = 0; slot < (degree + 1) * (degree + 1); ++slot) {
             near(output[slot][lane], expected[slot],
                 3e-12 * std::max(1., std::abs(double(expected[slot]))), "SIMD mixed-lane Ewald");

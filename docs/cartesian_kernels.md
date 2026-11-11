@@ -1,19 +1,19 @@
 # Trace-free Cartesian gravity kernels
 
-`cosmictiger::gravity::cartesian::Multipole<Real, order>` stores symmetric
-trace-free moments, and `cartesian::Expansion<Real, order>` stores local
-coefficients. Their second template argument is the application
-internal FMM order: the multipole degree is `order - 2`, and the local degree is
-`order - 1`. The public potential expansion degree is `order - 1`.
+`cosmictiger::gravity::cartesian::Multipole<Real>` stores symmetric
+trace-free moments, and `cartesian::Expansion<Real>` stores local
+coefficients. Both take only the scalar type; the build fixes the internal
+FMM order. The multipole degree is `kFmmOrder - 2`, and the local/potential
+degree is `kFmmOrder - 1`.
 The named fields `m`, `x`, `xy`, `xyz`, etc. retain the compact rank-major
 layout; components containing two or more `z` indices are derived from the
 trace-free relation. A union overlays the named fields with an array of the
 same length. Serialization visits the array in stored order; indexed access
 supports coefficient loops and the CUDA warp translation schedule.
-The transport buffer holds the maximum supported coefficient count and
-serializes exactly `order * order` coefficients for the active order.
-The generated Cartesian operators are order-specific free functions templated
-only on `Real`. `M2L` takes the target-minus-source center displacement and
+The transport buffer holds exactly the build-sized coefficient count and
+serializes `kFmmOrder * kFmmOrder` local coefficients.
+Generated Cartesian operators are ordinary scalar/SIMD overloads with the
+source and displacement before the destination accumulator. `M2L` takes the target-minus-source center displacement and
 evaluates the free-space interaction directly.
 The FMM uses the generator imported from
 [`dmarce1/experimental`](https://github.com/dmarce1/experimental/tree/7ba8f1829fdede7348a1418b7cb36c0e7a955302)

@@ -23,16 +23,16 @@ namespace detail {
 template <class Real, int order>
 __device__ void convert(Real const* input, Real* output) {
     namespace gravity = cosmictiger::gravity;
-    gravity::cartesian::Multipole<Real, order> source;
-    gravity::spherical::Expansion<Real, order> local;
+    gravity::cartesian::Multipole<Real> source;
+    gravity::spherical::Expansion<Real> local;
     for (int i = 0; i < source.size(); ++i) {
         source[i] = input[i];
     }
     for (int i = 0; i < local.kCount_; ++i) {
         local[i] = input[i];
     }
-    auto const sphericalSource = static_cast<gravity::spherical::Multipole<Real, order>>(source);
-    auto const cartesianLocal = static_cast<gravity::cartesian::Expansion<Real, order>>(local);
+    auto const sphericalSource = static_cast<gravity::spherical::Multipole<Real>>(source);
+    auto const cartesianLocal = static_cast<gravity::cartesian::Expansion<Real>>(local);
     for (int i = 0; i < sphericalSource.kCount_; ++i) {
         output[i] = sphericalSource[i];
     }
@@ -47,8 +47,8 @@ template <int order, class PositionType, class Real = double>
 CUDA_EXPORT void treeLocal(double const* input, double* output, bool doPotential, bool tiny) {
     namespace gravity = cosmictiger::gravity;
     namespace local = gravity::tree_local;
-    gravity::cartesian::Expansion<double, order> initial{}, rootDouble{};
-    gravity::cartesian::Expansion<Real, order> atRoot{}, shifted{};
+    gravity::cartesian::Expansion<double> initial{}, rootDouble{};
+    gravity::cartesian::Expansion<Real> atRoot{}, shifted{};
     Vector3<PositionType> first, second;
     for (int axis = 0; axis < kDimensions; ++axis) {
         first[axis] = input[axis];

@@ -24,57 +24,52 @@ template <int degree>
 inline constexpr int kM2MFlops = 0;
 // FMM order 7.
 /// Accumulate translated source moments, applying the source-to-target scale ratio.
+#if defined(COSMICTIGER_FMM_COUNTING_ONLY) || defined(COSMICTIGER_FMM_INSTRUMENTATION)
 template <class Real>
-CUDA_EXPORT void M2M(Multipole<Real, 7>& targetM, Multipole<Real, 7> const& M,
-    Vector3<Real> const& distance, Real scaleRatio);
-#ifndef COSMICTIGER_FMM_COUNTING_ONLY
-template <>
-CUDA_EXPORT void M2M<float>(Multipole<float, 7>& targetM, Multipole<float, 7> const& M,
-    Vector3<float> const& distance, float scaleRatio);
+CUDA_EXPORT void M2M(Multipole<Real> const& M, Vector3<Real> const& distance, Real scaleRatio,
+    Multipole<Real>& targetM);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
-template <>
-CUDA_EXPORT void M2M<double>(Multipole<double, 7>& targetM, Multipole<double, 7> const& M,
-    Vector3<double> const& distance, double scaleRatio);
+CUDA_EXPORT void M2M(Multipole<float> const& M, Vector3<float> const& distance, float scaleRatio,
+    Multipole<float>& targetM);
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+CUDA_EXPORT void M2M(Multipole<double> const& M, Vector3<double> const& distance, double scaleRatio,
+    Multipole<double>& targetM);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-template <>
-CUDA_EXPORT void M2M<SimdVector<float, 8>>(Multipole<SimdVector<float, 8>, 7>& targetM,
-    Multipole<SimdVector<float, 8>, 7> const& M, Vector3<SimdVector<float, 8>> const& distance,
-    SimdVector<float, 8> scaleRatio);
+CUDA_EXPORT void M2M(Multipole<SimdVector<float, 8>> const& M,
+    Vector3<SimdVector<float, 8>> const& distance, SimdVector<float, 8> scaleRatio,
+    Multipole<SimdVector<float, 8>>& targetM);
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-template <>
-CUDA_EXPORT void M2M<SimdVector<double, 2>>(Multipole<SimdVector<double, 2>, 7>& targetM,
-    Multipole<SimdVector<double, 2>, 7> const& M, Vector3<SimdVector<double, 2>> const& distance,
-    SimdVector<double, 2> scaleRatio);
+CUDA_EXPORT void M2M(Multipole<SimdVector<double, 2>> const& M,
+    Vector3<SimdVector<double, 2>> const& distance, SimdVector<double, 2> scaleRatio,
+    Multipole<SimdVector<double, 2>>& targetM);
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-template <>
-CUDA_EXPORT void M2M<SimdVector<float, 4>>(Multipole<SimdVector<float, 4>, 7>& targetM,
-    Multipole<SimdVector<float, 4>, 7> const& M, Vector3<SimdVector<float, 4>> const& distance,
-    SimdVector<float, 4> scaleRatio);
+CUDA_EXPORT void M2M(Multipole<SimdVector<float, 4>> const& M,
+    Vector3<SimdVector<float, 4>> const& distance, SimdVector<float, 4> scaleRatio,
+    Multipole<SimdVector<float, 4>>& targetM);
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-template <>
-CUDA_EXPORT void M2M<SimdVector<double, 4>>(Multipole<SimdVector<double, 4>, 7>& targetM,
-    Multipole<SimdVector<double, 4>, 7> const& M, Vector3<SimdVector<double, 4>> const& distance,
-    SimdVector<double, 4> scaleRatio);
+CUDA_EXPORT void M2M(Multipole<SimdVector<double, 4>> const& M,
+    Vector3<SimdVector<double, 4>> const& distance, SimdVector<double, 4> scaleRatio,
+    Multipole<SimdVector<double, 4>>& targetM);
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-template <>
-CUDA_EXPORT void M2M<SimdVector<double, 8>>(Multipole<SimdVector<double, 8>, 7>& targetM,
-    Multipole<SimdVector<double, 8>, 7> const& M, Vector3<SimdVector<double, 8>> const& distance,
-    SimdVector<double, 8> scaleRatio);
+CUDA_EXPORT void M2M(Multipole<SimdVector<double, 8>> const& M,
+    Vector3<SimdVector<double, 8>> const& distance, SimdVector<double, 8> scaleRatio,
+    Multipole<SimdVector<double, 8>>& targetM);
 #endif
 #endif
 

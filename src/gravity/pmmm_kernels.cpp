@@ -121,13 +121,13 @@ FlopCount green(int order, double* coefficients, Vector3<double> const& boxOffse
     {
         constexpr int kDegree = kFmmOrder - 1;
         double trace = 0.0;
-        cosmictiger::gravity::spherical::evaluateEwaldGreen<kDegree, double>(
-            coefficients, trace, boxOffset[0], boxOffset[1], boxOffset[2]);
+        cosmictiger::gravity::spherical::evaluateEwaldGreen(
+            trace, boxOffset[0], boxOffset[1], boxOffset[2], coefficients);
         count = cosmictiger::gravity::spherical::kEwaldGreenConventionalFlops<kDegree>;
         if (!near) {
             std::array<double, (kDegree + 1) * (kDegree + 1)> primary;
-            cosmictiger::gravity::spherical::detail::evaluateGreen<kDegree, double>(
-                primary, boxOffset[0], boxOffset[1], boxOffset[2]);
+            cosmictiger::gravity::spherical::detail::evaluateGreen(
+                boxOffset[0], boxOffset[1], boxOffset[2], primary);
             for (size_t slot = 0; slot < primary.size(); ++slot) {
                 coefficients[slot] += primary[slot];
             }

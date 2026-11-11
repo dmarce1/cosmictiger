@@ -134,7 +134,7 @@ template <int order>
 KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> pos, TreeId self,
     Vector<TreeId> dchecklist, std::shared_ptr<KickWorkspace> cudaWorkspace,
     KickContext const& context) {
-    using Expansion = cosmictiger::gravity::cartesian::Expansion<float, order>;
+    using Expansion = cosmictiger::gravity::cartesian::Expansion<float>;
     ALWAYS_ASSERT(!params.deferHydroOpening || (!params.forceOnly && gravityGasOpeningDeferred()));
     auto* deferredGasOpening = params.deferHydroOpening ? gravityDeferredGasOpeningData() : nullptr;
     constexpr int kLocalCoefficients = FmmOrder<order>::kLocalCoefficients_;
@@ -149,7 +149,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
 #endif
     profile::ScopedWork work(profile::WorkPhase::KickCpuPrepare, profileWork);
     // The buffer travels with the work item; the view aliases its leading coefficients.
-    Expansion& expansion = l.template expansion<order>();
+    Expansion& expansion = l.expansion();
     FlopCounter<FlopCount> flops = 0;    // Float force and timestep arithmetic.
     FlopCounter<FlopCount> doubleFlops = 0;
     FlopCounter<FlopCounts> policyFlops;
@@ -250,12 +250,12 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                 params.geometry.meshSize, &geometryFlops) :
             unwrappedDoubleDistance(selfPtr->pos[dim], pos[dim]);
     }
-    cosmictiger::gravity::cartesian::Expansion<float, order> translated{};
+    cosmictiger::gravity::cartesian::Expansion<float> translated{};
     if (!params.doPhi) {
         translated[0] = expansion[0];
     }
     cosmictiger::gravity::cartesian::L2L(
-        translated, expansion, fmmScaleDisplacement(ldx), params.doPhi);
+        expansion, fmmScaleDisplacement(ldx), params.doPhi, translated);
     expansion = translated;
     flops += cosmictiger::gravity::cartesian::detail::kL2LFlops<kLocalDegree> + 5;
     // Box scaling stays double; each local displacement scales in double and
@@ -431,7 +431,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                 }
                 cosmictiger::gravity::Field<float> l2{};
                 cosmictiger::gravity::cartesian::L2P(
-                    l2, expansion, fmmScaleDisplacement(dx), params.doPhi);
+                    expansion, fmmScaleDisplacement(dx), params.doPhi, l2);
                 float const gravityEffectiveRadius =
                     gravitySofteningEffectiveRadius(params.gravitySmoothingLength);
                 forces.phi[j] += kScaleFactor1 * l2.potential();

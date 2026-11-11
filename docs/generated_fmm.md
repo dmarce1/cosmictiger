@@ -13,8 +13,9 @@ Degree d uses source degree d-1 and internal FMM order d+1. Runtime order
 selection is removed. Checkpoints retain the internal order for compatibility
 validation. A different degree requires another build.
 
-Generated build declarations and sources live under `generated_fmm/cosmictiger/gravity/kernels`
+Generated build declarations live under `generated_fmm/cosmictiger/gravity/kernels`
 and take precedence over the checked-in default-degree reference headers.
+Build implementations live under `generated_fmm/src/gravity/kernels`.
 The generator's `--degree` argument selects one potential degree; without it,
 it regenerates the degree-6 reference declarations and sources. Build generation never modifies
 the source tree, so independent builds may use different degrees concurrently.
@@ -25,7 +26,7 @@ tracefree; the far-field mesh uses the spherical kernels.
 
 The C++ namespaces are `cosmictiger::gravity::cartesian` and
 `cosmictiger::gravity::spherical`. Each has distinct `Multipole`, `Expansion`,
-and `Green` types. Cartesian provides the destination-first tree operators;
+and `Green` types. Cartesian provides the source-first tree operators;
 the spherical family provides `P2M`, `evaluateGreen`, `L2P` and
 `evaluateEwaldGreen`. Production PMMM uses the Green evaluators and basis casts;
 the direct spherical particle operators remain test references. Field acceleration is minus the potential
@@ -34,28 +35,33 @@ expansions to Cartesian expansions at the same order and scalar type. Cartesian
 callers include `cartesian_tracefree_operators.hpp` and qualify
 `cartesian` (or use ADL with its types).
 
-`Multipole<Real, order>` has source degree `order - 2`; `Expansion` and `Green`
-have degree `order - 1`. The generated implementation functions take degrees.
+`Multipole<Real>` has source degree `kFmmOrder - 2`; `Expansion<Real>` and
+`Green<Real>` have degree `kFmmOrder - 1`. The build fixes these shapes; neither
+the coefficient types nor kernel calls take an order template argument.
+Generated operators are ordinary scalar/SIMD overloads. Accumulators come last,
+for example `M2P(M, distance, field)` and `P2M(mass, distance, M)`. Operations
+continue to accumulate in place, with unchanged arithmetic and FLOP counts.
 Types use PascalCase, functions and variables camelCase, and namespaces and
 filenames snake_case, with the standard FMM operator abbreviations retained.
 
 Numerical coefficients are declared at each kernel function's entry in ascending
-order of nonnegative magnitude, using `Scalar = SimdScalar<Real>` so they remain
-scalar `constexpr` values for both scalar and SIMD instantiations. Names use
+order of nonnegative magnitude as scalar `constexpr` values. Concrete float
+implementations use direct `f`-suffixed literals; double implementations use
+unsuffixed literals. No scalar alias or cast is needed in those implementations. Names use
 equal-width indices within each function: `k0` through `k8` for nine constants,
 or `k00` through `k14` for fifteen. Concrete implementations declare
 `constexpr float` constants with `%14.8e` literals or `constexpr double`
 constants with `%23.17e` literals (8 or 17 fractional digits, lowercase `e`).
 SIMD implementations use the precision of their lanes. Exact rational coefficients
 are rounded to nearest, with ties to even, using integer arithmetic before
-conversion to `Scalar`. Opposite signs share one magnitude, with negation at
+conversion to the declared scalar type. Opposite signs share one magnitude, with negation at
 the use site.
 Integer indices, template arguments, and loop bounds are not coefficients.
 
 ## Compiled library
 
 `cosmictiger_fmm` is a static library containing the generated arithmetic in
-`sources/`. CPU builds compile scalar and SIMD `.cpp` files. CUDA builds compile
+`src/gravity/kernels/`. CPU builds compile scalar and SIMD `.cpp` files. CUDA builds compile
 the SIMD `.cpp` files and scalar `.cu` units; NVCC supplies both host and device
 scalar symbols, so host scalar definitions are not compiled a second time.
 The warp L2L functions and both schedule tables live in one CUDA unit. CUDA
@@ -69,13 +75,13 @@ no longer supplies their arithmetic implementations.
 Concrete implementations cover `float`, `double`, `SimdVector<float, 8>` and
 `SimdVector<double, 2>` used by the solver, plus four-lane float/double packs
 used by numerical reference tests and eight-lane double for Ewald working
-precision. CUDA supports float/double. The public template declarations retain
-the existing call syntax. Spherical container adapters forward coefficient
+precision. CUDA supports float/double. Production headers declare concrete overloads; generic declarations are enabled
+only by the counting-test instrumentation macros. Spherical container adapters forward coefficient
 addresses without copying or changing layouts.
 
-`instrumentation/*.cpp` contains generic definitions solely for counting-scalar
+`src/gravity/kernels/instrumentation/*.cpp` contains generic definitions solely for counting-scalar
 tests. Those tests explicitly include the relevant source definitions; normal
-headers and production targets never include them. Concrete specializations in
+headers and production targets never include them. Concrete overloads in
 those test executables still link to the library. The standalone FLOP audit uses
 `COSMICTIGER_FMM_COUNTING_ONLY` with its replacement arithmetic backend.
 
@@ -87,8 +93,8 @@ python3 tools/generate_fmm.py --check
 python3 tests/gravity/check_generated_fmm_flops.py --generated-dir cosmictiger/gravity/kernels --compiler c++
 ```
 
-Generated declarations, sources and their operation report are checked in under
-`cosmictiger/gravity/kernels/`:
+Generated implementations are checked in under `src/gravity/kernels/`.
+Declarations and their operation report remain under `cosmictiger/gravity/kernels/`:
 
 - `cartesian_tracefree_types.hpp` contains named STF coefficient structs;
   `cartesian_tracefree_config.hpp` records the generated degree.
@@ -100,9 +106,12 @@ Generated declarations, sources and their operation report are checked in under
   include these declarations. `spherical_types.hpp` is generated with its cast declarations.
 - `operation_counts.json` records the generated arithmetic counts and selections.
 
-The generator defaults to this source directory and emits both families for
+The generator defaults to these source-tree directories and emits both families for
 the selected degree (default 6), formatting C++ with the repository's clang-format
-configuration. Use `--output-dir` to write a separate copy. Never hand-edit
+configuration. Use `--output-dir` for a separate declaration/report directory and
+`--source-dir` for its implementations. With only a custom `--output-dir`,
+implementations go into its `sources/` subdirectory, keeping generation isolated
+from the source tree. Never hand-edit
 generated files; update their generators and regenerate them. `--check`
 compares the expected output with the existing files without changing them.
 
@@ -140,7 +149,7 @@ derivative emitter retain their existing explicit FMAs and count conventions.
 
 For each order, L2P generates three candidates: no rotation, azimuthal
 rotation, and axial alignment. Generation selects the candidate with the
-smallest emitted weighted count. A comment on each specialization records its
+smallest emitted weighted count. A comment on each generated operator records its
 rotation variant; there is no C++ `Variant` type or variant template parameter.
 Equal counts choose the first candidate. P2M and Green use direct harmonic
 recurrences. The operation report retains the costs of every L2P candidate.

@@ -47,6 +47,7 @@ if dimensionDefinition is None:
     raise RuntimeError('defs.hpp must define kDimensions as an inline constexpr int integer literal')
 NDIM = int(dimensionDefinition.group(1))
 outputDirectory = projectRoot / 'cosmictiger/gravity/kernels'
+sourceDirectory = projectRoot / 'src/gravity/kernels'
 reportPath = outputDirectory / 'operation_counts.json'
 
 
@@ -781,24 +782,30 @@ def useUnqualifiedMathInGeneratedFunctions(cpp):
 
 def main():
     ap=argparse.ArgumentParser(description=__doc__)
-    ap.add_argument('--check',action='store_true',help='fail if the files in --output-dir differ')
+    ap.add_argument('--check',action='store_true',help='fail if generated declarations or sources differ')
     ap.add_argument('--degree', type=int, default=6, choices=range(2, 9),
                     help='single potential expansion degree to emit (default: 6)')
     ap.add_argument('--output-dir',dest='outputDir',type=Path,default=outputDirectory,
-                    help='directory receiving generated declarations, sources and operation counts '
+                    help='directory receiving generated declarations and operation counts '
                          '(default: cosmictiger/gravity/kernels in the source tree)')
+    ap.add_argument('--source-dir',dest='sourceDir',type=Path,
+                    help='directory receiving generated implementations (default: src/gravity/kernels '
+                         'in the source tree, or OUTPUT_DIR/sources for a custom --output-dir)')
     ap.add_argument('--independent-m2l-ratios',dest='independentM2lRatios',
                     action='store_true',help='emit independent Cartesian M2L source/target scale ratios')
     ap.add_argument('--no-format',dest='noFormat',action='store_true',
                     help='skip clang-format for temporary output; checked-in C++ uses formatting')
     args=ap.parse_args()
+    if args.sourceDir is None:
+        args.sourceDir = (sourceDirectory if args.outputDir.resolve() == outputDirectory
+                          else args.outputDir / 'sources')
     from fmm.constants import hoistConstants
-    from fmm.sources import splitSources
+    from fmm.sources import singleOrderApi, splitSources
 
     outputs=generate(args.degree,args.degree,args.independentM2lRatios)
     outputs = {name: unnameUnusedGeneratedParameters(code) if name.endswith('.hpp') else code
                for name, code in outputs.items()}
-    outputs = splitSources(outputs, args.degree)
+    outputs = splitSources(singleOrderApi(outputs, args.degree), args.degree)
     notice = (projectRoot / 'tools/cartesian/generated_notice.txt').read_text()
     for name, cpp in list(outputs.items()):
         if not name.endswith(('.hpp', '.cpp', '.cu')):
@@ -821,7 +828,12 @@ def main():
 
     failed=[]
     for name,text in outputs.items():
-        path=args.outputDir/name
+        if name.startswith('sources/'):
+            path = args.sourceDir / name.removeprefix('sources/')
+        elif name.startswith('instrumentation/'):
+            path = args.sourceDir / name
+        else:
+            path = args.outputDir / name
         if args.check:
             if not path.exists() or path.read_text()!=text: failed.append(str(path))
         else:

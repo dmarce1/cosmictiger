@@ -12,7 +12,7 @@
 #include <cosmictiger/cuda/cuda_export.hpp>
 
 namespace cosmictiger::gravity::cartesian {
-template <class Real, int order>
+template <class Real>
 struct Expansion;
 }
 
@@ -85,31 +85,27 @@ namespace detail {
 
 }    // namespace detail
 
-template <class Real, int order>
-class Multipole : public detail::Coefficients<Real, (order - 2)> {
-    static_assert(order >= 3 && order <= 9);
-    using Base = detail::Coefficients<Real, (order - 2)>;
+template <class Real>
+class Multipole : public detail::Coefficients<Real, (5)> {
+    using Base = detail::Coefficients<Real, (5)>;
 
 public:
     using Base::operator=;
 };
 
-template <class Real, int order>
-class Expansion : public detail::Coefficients<Real, (order - 1)> {
-    static_assert(order >= 3 && order <= 9);
-    using Base = detail::Coefficients<Real, (order - 1)>;
+template <class Real>
+class Expansion : public detail::Coefficients<Real, (6)> {
+    using Base = detail::Coefficients<Real, (6)>;
 
 public:
     using Base::operator=;
     /// Convert basis at the same center and coordinate scale.
-    CUDA_EXPORT explicit operator cartesian::Expansion<Real, order>() const
-        requires(order == 7);
+    CUDA_EXPORT explicit operator cartesian::Expansion<Real>() const;
 };
 
-template <class Real, int order>
-class Green : public detail::Coefficients<Real, (order - 1)> {
-    static_assert(order >= 3 && order <= 9);
-    using Base = detail::Coefficients<Real, (order - 1)>;
+template <class Real>
+class Green : public detail::Coefficients<Real, (6)> {
+    using Base = detail::Coefficients<Real, (6)>;
 
 public:
     using Base::operator=;

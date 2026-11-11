@@ -33,7 +33,7 @@ def generate_types(max_degree, min_degree=2):
         'struct CoefficientArrayInit {};',
         'template <class Real, int degree> struct CoefficientFields;',
     ]
-    for degree in range(1, max_degree + 1):
+    for degree in sorted({max_degree - 1, max_degree}):
         fields = names(degree)
         lines += [f'template <class Real> struct CoefficientFields<Real, {degree}> {{',
                   '    union {', '        struct {']

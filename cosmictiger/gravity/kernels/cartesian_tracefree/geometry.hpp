@@ -17,49 +17,39 @@
 
 namespace cosmictiger::gravity::cartesian::detail {
 // R is the separation radius; iR is its inverse, zero at coincident centers.
+#if defined(COSMICTIGER_FMM_COUNTING_ONLY) || defined(COSMICTIGER_FMM_INSTRUMENTATION)
 template <class Real>
 CUDA_EXPORT Real inverseRadius(Vector3<Real> const& distance);
-#ifndef COSMICTIGER_FMM_COUNTING_ONLY
-template <>
-CUDA_EXPORT float inverseRadius<float>(Vector3<float> const& distance);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
-template <>
-CUDA_EXPORT double inverseRadius<double>(Vector3<double> const& distance);
+CUDA_EXPORT float inverseRadius(Vector3<float> const& distance);
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+CUDA_EXPORT double inverseRadius(Vector3<double> const& distance);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-template <>
-CUDA_EXPORT SimdVector<float, 8> inverseRadius<SimdVector<float, 8>>(
-    Vector3<SimdVector<float, 8>> const& distance);
+CUDA_EXPORT SimdVector<float, 8> inverseRadius(Vector3<SimdVector<float, 8>> const& distance);
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-template <>
-CUDA_EXPORT SimdVector<double, 2> inverseRadius<SimdVector<double, 2>>(
-    Vector3<SimdVector<double, 2>> const& distance);
+CUDA_EXPORT SimdVector<double, 2> inverseRadius(Vector3<SimdVector<double, 2>> const& distance);
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-template <>
-CUDA_EXPORT SimdVector<float, 4> inverseRadius<SimdVector<float, 4>>(
-    Vector3<SimdVector<float, 4>> const& distance);
+CUDA_EXPORT SimdVector<float, 4> inverseRadius(Vector3<SimdVector<float, 4>> const& distance);
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-template <>
-CUDA_EXPORT SimdVector<double, 4> inverseRadius<SimdVector<double, 4>>(
-    Vector3<SimdVector<double, 4>> const& distance);
+CUDA_EXPORT SimdVector<double, 4> inverseRadius(Vector3<SimdVector<double, 4>> const& distance);
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-template <>
-CUDA_EXPORT SimdVector<double, 8> inverseRadius<SimdVector<double, 8>>(
-    Vector3<SimdVector<double, 8>> const& distance);
+CUDA_EXPORT SimdVector<double, 8> inverseRadius(Vector3<SimdVector<double, 8>> const& distance);
 #endif
 #endif
 

@@ -29,62 +29,50 @@ inline constexpr int kP2MFlops<5> = 132;
 template <>
 inline constexpr int kP2MConventionalFlops<5> = 184;
 /// Accumulate mass-weighted regular solid harmonics into the source multipole.
-template <int degree, typename Real>
-    requires(degree == 5)
-CUDA_EXPORT void P2M(Real* output, Real mass, Real x, Real y, Real z);
-#ifndef COSMICTIGER_FMM_COUNTING_ONLY
-template <>
-CUDA_EXPORT void P2M<5, float>(float* output, float mass, float x, float y, float z);
+#if defined(COSMICTIGER_FMM_COUNTING_ONLY) || defined(COSMICTIGER_FMM_INSTRUMENTATION)
+template <typename Real>
+CUDA_EXPORT void P2M(Real mass, Real x, Real y, Real z, Real* output);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
-template <>
-CUDA_EXPORT void P2M<5, double>(double* output, double mass, double x, double y, double z);
+CUDA_EXPORT void P2M(float mass, float x, float y, float z, float* output);
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+CUDA_EXPORT void P2M(double mass, double x, double y, double z, double* output);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-template <>
-CUDA_EXPORT void P2M<5, SimdVector<float, 8>>(SimdVector<float, 8>* output,
-    SimdVector<float, 8> mass, SimdVector<float, 8> x, SimdVector<float, 8> y,
-    SimdVector<float, 8> z);
+CUDA_EXPORT void P2M(SimdVector<float, 8> mass, SimdVector<float, 8> x, SimdVector<float, 8> y,
+    SimdVector<float, 8> z, SimdVector<float, 8>* output);
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-template <>
-CUDA_EXPORT void P2M<5, SimdVector<double, 2>>(SimdVector<double, 2>* output,
-    SimdVector<double, 2> mass, SimdVector<double, 2> x, SimdVector<double, 2> y,
-    SimdVector<double, 2> z);
+CUDA_EXPORT void P2M(SimdVector<double, 2> mass, SimdVector<double, 2> x, SimdVector<double, 2> y,
+    SimdVector<double, 2> z, SimdVector<double, 2>* output);
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-template <>
-CUDA_EXPORT void P2M<5, SimdVector<float, 4>>(SimdVector<float, 4>* output,
-    SimdVector<float, 4> mass, SimdVector<float, 4> x, SimdVector<float, 4> y,
-    SimdVector<float, 4> z);
+CUDA_EXPORT void P2M(SimdVector<float, 4> mass, SimdVector<float, 4> x, SimdVector<float, 4> y,
+    SimdVector<float, 4> z, SimdVector<float, 4>* output);
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-template <>
-CUDA_EXPORT void P2M<5, SimdVector<double, 4>>(SimdVector<double, 4>* output,
-    SimdVector<double, 4> mass, SimdVector<double, 4> x, SimdVector<double, 4> y,
-    SimdVector<double, 4> z);
+CUDA_EXPORT void P2M(SimdVector<double, 4> mass, SimdVector<double, 4> x, SimdVector<double, 4> y,
+    SimdVector<double, 4> z, SimdVector<double, 4>* output);
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-template <>
-CUDA_EXPORT void P2M<5, SimdVector<double, 8>>(SimdVector<double, 8>* output,
-    SimdVector<double, 8> mass, SimdVector<double, 8> x, SimdVector<double, 8> y,
-    SimdVector<double, 8> z);
+CUDA_EXPORT void P2M(SimdVector<double, 8> mass, SimdVector<double, 8> x, SimdVector<double, 8> y,
+    SimdVector<double, 8> z, SimdVector<double, 8>* output);
 #endif
 #endif
-template <int degree, typename Real, typename Output>
-    requires(degree == 5)
-CUDA_EXPORT void P2M(Output& output, Real mass, Real x, Real y, Real z) {
+template <typename Real, typename Output>
+CUDA_EXPORT void P2M(Real mass, Real x, Real y, Real z, Output& output) {
     using namespace math;
-    P2M<degree, Real>(&output[0], mass, x, y, z);
+    P2M(mass, x, y, z, &output[0]);
 }
 
 }    // namespace cosmictiger::gravity::spherical::detail

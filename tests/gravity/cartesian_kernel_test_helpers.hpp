@@ -65,8 +65,8 @@ struct Coefficients {
 
 template <typename Real, int order>
 struct KernelInput {
-    cosmictiger::gravity::cartesian::Multipole<Real, order> multipole{};
-    cosmictiger::gravity::cartesian::Expansion<Real, order> local{};
+    cosmictiger::gravity::cartesian::Multipole<Real> multipole{};
+    cosmictiger::gravity::cartesian::Expansion<Real> local{};
     // Separation, center translation, translation scale ratio, particle mass,
     // and inverse local scale.
     Coefficients<Real, kGeometryCount> geometry;
@@ -79,8 +79,8 @@ template <typename Real, int order>
 CUDA_EXPORT void evaluateKernels(
     KernelInput<Real, order> const& input, KernelResult<Real, order>& result) {
     using Layout = KernelLayout<order>;
-    using Multipole = cosmictiger::gravity::cartesian::Multipole<Real, order>;
-    using Expansion = cosmictiger::gravity::cartesian::Expansion<Real, order>;
+    using Multipole = cosmictiger::gravity::cartesian::Multipole<Real>;
+    using Expansion = cosmictiger::gravity::cartesian::Expansion<Real>;
     using Field = cosmictiger::gravity::Field<Real>;
     auto const& g = input.geometry;
     Vector3<Real> const separation{g[0], g[1], g[2]};
@@ -91,25 +91,25 @@ CUDA_EXPORT void evaluateKernels(
         }
     };
     Multipole p2m{};
-    kernels::P2M(p2m, g[7], translation);
+    kernels::P2M(g[7], translation, p2m);
     store(p2m, Layout::kP2mOffset_, Layout::kMultipoleCount_);
     Multipole m2m{};
-    kernels::M2M(m2m, input.multipole, translation, g[6]);
+    kernels::M2M(input.multipole, translation, g[6], m2m);
     store(m2m, Layout::kM2mOffset_, Layout::kMultipoleCount_);
     Expansion p2l{};
-    kernels::P2L(p2l, g[7], separation);
+    kernels::P2L(g[7], separation, p2l);
     store(p2l, Layout::kP2lOffset_, Layout::kLocalHarmonicCount_);
     Expansion m2l{};
-    kernels::M2L(m2l, input.multipole, separation);
+    kernels::M2L(input.multipole, separation, m2l);
     store(m2l, Layout::kM2lOffset_, Layout::kLocalHarmonicCount_);
     Expansion l2l{};
-    kernels::L2L(l2l, input.local, translation, g[6]);
+    kernels::L2L(input.local, translation, g[6], l2l);
     store(l2l, Layout::kL2lOffset_, Layout::kLocalCount_);
     Field m2p{};
-    kernels::M2P(m2p, input.multipole, separation);
+    kernels::M2P(input.multipole, separation, m2p);
     store(m2p, Layout::kM2pOffset_, kFieldCount);
     Field l2p{};
-    kernels::L2P(l2p, input.local, translation, g[8]);
+    kernels::L2P(input.local, translation, g[8], l2p);
     store(l2p, Layout::kL2pOffset_, kFieldCount);
 }
 

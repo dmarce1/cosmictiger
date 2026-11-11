@@ -548,7 +548,7 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
         params.geometry = workitems[i].geometry;
         params.outputOffset = workitems[i].outputOffset;
         params.lpos = workitems[i].pos;
-        params.lValue = workitems[i].l.template expansion<order>();
+        params.lValue = workitems[i].l.expansion();
         params.self = workitems[i].self.index;
         params.dchecks = devDchecks + dindices[i];
         params.dcount = dindices[i + 1] - dindices[i];

@@ -118,29 +118,29 @@ def selectReportOrders(report, minFmmOrder, maxFmmOrder):
 def appendAvailabilityChecks(lines, report, minFmmOrder, maxFmmOrder):
     lines.extend([
         'template <typename Type> concept CompleteKernel = requires { sizeof(Type); };',
-        'template <int order> concept HasCartesianM2L = requires(',
-        '    cosmictiger::gravity::cartesian::Expansion<CountingReal, order>& L,',
-        '    cosmictiger::gravity::cartesian::Multipole<CountingReal, order> const& M,',
-        '    Vector3<CountingReal> const& distance) {',
-        '    cosmictiger::gravity::cartesian::detail::M2L(L, M, distance);',
+        'template <class Real> concept HasCartesianM2L = requires(',
+        '    cosmictiger::gravity::cartesian::Expansion<Real>& L,',
+        '    cosmictiger::gravity::cartesian::Multipole<Real> const& M,',
+        '    Vector3<Real> const& distance) {',
+        '    cosmictiger::gravity::cartesian::detail::M2L(M, distance, L);',
         '};',
-        'template <int order> concept HasSourceConversion = requires(',
-        '    cosmictiger::gravity::spherical::Multipole<CountingReal, order>& S,',
-        '    cosmictiger::gravity::cartesian::Multipole<CountingReal, order> const& C) {',
-        '    static_cast<cosmictiger::gravity::spherical::Multipole<CountingReal, order>>(C);',
+        'template <class Real> concept HasSourceConversion = requires(',
+        '    cosmictiger::gravity::spherical::Multipole<Real>& S,',
+        '    cosmictiger::gravity::cartesian::Multipole<Real> const& C) {',
+        '    static_cast<cosmictiger::gravity::spherical::Multipole<Real>>(C);',
         '};',
-        'template <int order> concept HasLocalConversion = requires(',
-        '    cosmictiger::gravity::cartesian::Expansion<CountingReal, order>& C,',
-        '    cosmictiger::gravity::spherical::Expansion<CountingReal, order> const& L) {',
-        '    static_cast<cosmictiger::gravity::cartesian::Expansion<CountingReal, order>>(L);',
+        'template <class Real> concept HasLocalConversion = requires(',
+        '    cosmictiger::gravity::cartesian::Expansion<Real>& C,',
+        '    cosmictiger::gravity::spherical::Expansion<Real> const& L) {',
+        '    static_cast<cosmictiger::gravity::cartesian::Expansion<Real>>(L);',
         '};',
     ])
     for order in range(report['min_local_degree'] + 1, report['max_local_degree'] + 2):
         selected = str(minFmmOrder <= order <= maxFmmOrder).lower()
         degree = order - 1
-        lines.append(f'static_assert(HasCartesianM2L<{order}> == {selected});')
-        lines.append(f'static_assert(HasSourceConversion<{order}> == {selected});')
-        lines.append(f'static_assert(HasLocalConversion<{order}> == {selected});')
+        lines.append(f'static_assert(HasCartesianM2L<CountingReal> == {selected});')
+        lines.append(f'static_assert(HasSourceConversion<CountingReal> == {selected});')
+        lines.append(f'static_assert(HasLocalConversion<CountingReal> == {selected});')
         for count in (f'spherical::detail::kP2MFlops<{order - 2}>',
                       f'spherical::detail::kGreenFlops<{degree}>',
                       f'spherical::detail::kL2PFlops<{degree}>',
@@ -151,13 +151,13 @@ def appendAvailabilityChecks(lines, report, minFmmOrder, maxFmmOrder):
 def appendCartesianChecks(lines, report, checks):
     cartesian = report['representations']['cartesianTracefree']
     operations = {
-        'M2L': ('kM2LFlops', 'M2L(L, M, distance)', 11),
-        'M2M': ('kM2MFlops', 'M2M(targetM, M, distance, ratio)', 0),
-        'L2L': ('kL2LFlops', 'L2L(targetL, L, distance, ratio)', 0),
-        'P2M': ('kP2MFlops', 'P2M(targetM, mass, distance)', 0),
-        'P2L': ('kP2LFlops', 'P2L(L, mass, distance)', 11),
-        'M2P': ('kM2PFlops', 'M2P(field, M, distance)', 11),
-        'L2P': ('kL2PFlops', 'L2P(field, L, distance, ratio)', 0),
+        'M2L': ('kM2LFlops', 'M2L(M, distance, L)', 11),
+        'M2M': ('kM2MFlops', 'M2M(M, distance, ratio, targetM)', 0),
+        'L2L': ('kL2LFlops', 'L2L(L, distance, ratio, targetL)', 0),
+        'P2M': ('kP2MFlops', 'P2M(mass, distance, targetM)', 0),
+        'P2L': ('kP2LFlops', 'P2L(mass, distance, L)', 11),
+        'M2P': ('kM2PFlops', 'M2P(M, distance, field)', 11),
+        'L2P': ('kL2PFlops', 'L2P(L, distance, ratio, field)', 0),
     }
     for kernel in cartesian['kernels'] + cartesian['operators']:
         name = kernel.get('operator') or 'M2L'
@@ -175,8 +175,8 @@ def appendCartesianChecks(lines, report, checks):
             '    {',
             '        using namespace cosmictiger::gravity::cartesian;',
             f'        static_assert(cosmictiger::gravity::cartesian::detail::{constant}<{degree}> == {kernel["conventional_flops"]});',
-            f'        Multipole<Real, {order}> M{{}}, targetM{{}};',
-            f'        Expansion<Real, {order}> L{{}}, targetL{{}};',
+            f'        Multipole<Real> M{{}}, targetM{{}};',
+            f'        Expansion<Real> L{{}}, targetL{{}};',
             '        cosmictiger::gravity::Field<Real> field{};',
             '        Vector3<Real> const distance{Real(0.3), Real(-0.2), Real(0.4)};',
             '        Real const mass(0.7), ratio(0.6);',
@@ -213,7 +213,7 @@ def buildChecks(report, minFmmOrder, maxFmmOrder):
                  'cartesian_tracefree_m2p', 'cartesian_tracefree_l2l',
                  'cartesian_tracefree_l2p', 'spherical_p2m', 'spherical_l2p',
                  'spherical_green', 'spherical_ewald_green'):
-        lines.append(f'#include <cosmictiger/gravity/kernels/instrumentation/{stem}.cpp>')
+        lines.append(f'#include <src/gravity/kernels/instrumentation/{stem}.cpp>')
     appendAvailabilityChecks(lines, report, minFmmOrder, maxFmmOrder)
     lines.extend(['struct CountingRadial {',
                   '    template <int radial, int traces>',
@@ -246,12 +246,12 @@ def buildChecks(report, minFmmOrder, maxFmmOrder):
         if kernel['conventional_flops'] != expected + fused:
             raise ValueError(f'Incorrect conventional basis-conversion count: {kernel}')
         lines.extend(['    {', '        using namespace cosmictiger::gravity;',
-            f'        {sourceType}<Real, {order}> source{{}};',
-            f'        {targetType}<Real, {order}> target{{}};',
+            f'        {sourceType}<Real> source{{}};',
+            f'        {targetType}<Real> target{{}};',
             f'        static_assert(basis_conversion::k{constant}Flops<{order}> == {expected});',
             f'        static_assert(basis_conversion::k{constant}ConventionalFlops<{order}> == {kernel["conventional_flops"]});',
             '        Real::operations = Real::fusedOperations = 0;',
-            f'        target = static_cast<{targetType}<Real, {order}>>(source);',
+            f'        target = static_cast<{targetType}<Real>>(source);',
             f'        if (Real::operations != {expected} || Real::fusedOperations != {fused}) {{',
             f'            std::fprintf(stderr, "{name}<{order}> operation count mismatch\\n");',
             '            return 7;', '        }', '    }'])
@@ -286,18 +286,18 @@ def buildChecks(report, minFmmOrder, maxFmmOrder):
         parameters = str(degree)
         function = 'evaluateGreen' if operation == 'Greens' else name
         if operation == 'P2m':
-            arguments = 'output, Real(0.7), Real(0.3), Real(-0.2), Real(0.4)'
+            arguments = 'Real(0.7), Real(0.3), Real(-0.2), Real(0.4), output'
         elif operation == 'Greens':
-            arguments = 'output, Real(0.3), Real(-0.2), Real(0.4)'
+            arguments = 'Real(0.3), Real(-0.2), Real(0.4), output'
         else:
-            arguments = 'output, source, Real(0.3), Real(-0.2), Real(0.4)'
+            arguments = 'source, Real(0.3), Real(-0.2), Real(0.4), output'
         prefix = f'cosmictiger::gravity::{namespace}::detail::'
         label = f'{namespace}::{name}<{parameters}>'
         expected = kernel['weighted_flops']
         lines.extend(['    {',
                       f'        static_assert({prefix}k{name}Flops<{degree}> == {expected});',
                       '        Real::operations = 0;',
-                      f'        {prefix}{function}<{degree}, Real>({arguments});',
+                      f'        {prefix}{function}({arguments});',
                       f'        if (Real::operations != {expected}) {{',
                       f'            std::fprintf(stderr, "{label}: got %d, expected {expected}\\n", Real::operations);',
                       '            return 1;', '        }', '    }'])
@@ -306,7 +306,7 @@ def buildChecks(report, minFmmOrder, maxFmmOrder):
         degree = counts['local_degree']
         for name, method, arguments, expected in (
                 ('EwaldGreen', 'evaluate',
-                 'output, trace, Real(0.13), Real(-0.21), Real(0.31)',
+                 'trace, Real(0.13), Real(-0.21), Real(0.31), output',
                  counts['green_weighted_flops']),
 ):
             prefix = 'cosmictiger::gravity::spherical::'
@@ -316,7 +316,7 @@ def buildChecks(report, minFmmOrder, maxFmmOrder):
             lines.extend(['    {',
                           '        Real::operations = 0;', '        Real::squareRoots = 0;',
                           '        for (int i = 0; i < 4; ++i) { specialCalls[i] = 0; }',
-                          f'        {prefix}{function}<{degree}, Real>({arguments});',
+                          f'        {prefix}{function}({arguments});',
                           f'        if (Real::operations != {count}) {{',
                           f'            std::fprintf(stderr, "{name}<{degree}>: got %d, expected %d\\n", Real::operations, {count});',
                           '            return 1;', '        }'])
@@ -338,6 +338,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--generated-dir', type=Path, required=True,
                         help='Directory containing operation_counts.json and generated headers')
+    parser.add_argument('--generated-source-dir', type=Path,
+                        help='Generated implementation directory (defaults match generate_fmm.py)')
     parser.add_argument('--compiler', default='c++')
     parser.add_argument('--min-fmm-order', type=int,
                         help='Smallest FMM order to compile and audit (default: generated minimum)')
@@ -346,6 +348,12 @@ def main():
     args = parser.parse_args()
     projectRoot = Path(__file__).resolve().parents[2]
     generated = args.generated_dir.resolve()
+    sources = args.generated_source_dir
+    if sources is None:
+        sources = (projectRoot/'src/gravity/kernels'
+                   if generated == projectRoot/'cosmictiger/gravity/kernels'
+                   else generated/'sources')
+    sources = sources.resolve()
     report = json.loads((generated/'operation_counts.json').read_text())
     generatedMinOrder = report['min_local_degree'] + 1
     generatedMaxOrder = report['max_local_degree'] + 1
@@ -383,11 +391,13 @@ template <class Real> struct Field {
 ''')
         includeDir = root/'cosmictiger/gravity/kernels'
         includeDir.mkdir(parents=True)
-        for path in list(generated.rglob('*.hpp')) + list((generated/'instrumentation').glob('*.cpp')):
-            name = path.relative_to(generated)
-            destination = includeDir/name
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.symlink_to(path)
+        for base, destinationRoot, paths in (
+                (generated, includeDir, generated.rglob('*.hpp')),
+                (sources, root/'src/gravity/kernels', (sources/'instrumentation').glob('*.cpp'))):
+            for path in paths:
+                destination = destinationRoot/path.relative_to(base)
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.symlink_to(path)
         source = root/'counts.cpp'
         source.write_text(buildChecks(report, minFmmOrder, maxFmmOrder))
         executable = root/'counts'

@@ -459,6 +459,7 @@ set_source_files_properties(src/particles/domain.cpp tests/mesh_domains.cpp PROP
 # Each build owns one generated operator set. Distinct degree builds can coexist.
 set(COSMICTIGER_GENERATED_INCLUDE_DIR ${PROJECT_BINARY_DIR}/generated_fmm)
 set(COSMICTIGER_GENERATED_FMM_DIR ${COSMICTIGER_GENERATED_INCLUDE_DIR}/cosmictiger/gravity/kernels)
+set(COSMICTIGER_GENERATED_FMM_SOURCE_DIR ${COSMICTIGER_GENERATED_INCLUDE_DIR}/src/gravity/kernels)
 include_directories(BEFORE ${COSMICTIGER_GENERATED_INCLUDE_DIR})
 set(COSMICTIGER_GENERATED_FMM_FILES
     ${COSMICTIGER_GENERATED_FMM_DIR}/spherical_types.hpp
@@ -492,25 +493,25 @@ set(cosmictiger_fmm_library_sources)
 foreach(stem IN LISTS cosmictiger_fmm_operator_stems)
     foreach(suffix IN ITEMS scalar.cpp simd.cpp scalar.cu)
         list(APPEND COSMICTIGER_GENERATED_FMM_FILES
-            ${COSMICTIGER_GENERATED_FMM_DIR}/sources/${stem}_${suffix})
+            ${COSMICTIGER_GENERATED_FMM_SOURCE_DIR}/${stem}_${suffix})
     endforeach()
     list(APPEND COSMICTIGER_GENERATED_FMM_FILES
-        ${COSMICTIGER_GENERATED_FMM_DIR}/instrumentation/${stem}.cpp)
+        ${COSMICTIGER_GENERATED_FMM_SOURCE_DIR}/instrumentation/${stem}.cpp)
     list(APPEND cosmictiger_fmm_library_sources
-        ${COSMICTIGER_GENERATED_FMM_DIR}/sources/${stem}_simd.cpp)
+        ${COSMICTIGER_GENERATED_FMM_SOURCE_DIR}/${stem}_simd.cpp)
     if(COSMICTIGER_WITH_CUDA)
         list(APPEND cosmictiger_fmm_library_sources
-            ${COSMICTIGER_GENERATED_FMM_DIR}/sources/${stem}_scalar.cu)
+            ${COSMICTIGER_GENERATED_FMM_SOURCE_DIR}/${stem}_scalar.cu)
     else()
         list(APPEND cosmictiger_fmm_library_sources
-            ${COSMICTIGER_GENERATED_FMM_DIR}/sources/${stem}_scalar.cpp)
+            ${COSMICTIGER_GENERATED_FMM_SOURCE_DIR}/${stem}_scalar.cpp)
     endif()
 endforeach()
 list(APPEND COSMICTIGER_GENERATED_FMM_FILES
-    ${COSMICTIGER_GENERATED_FMM_DIR}/sources/cartesian_tracefree_l2l_warp_scalar.cu)
+    ${COSMICTIGER_GENERATED_FMM_SOURCE_DIR}/cartesian_tracefree_l2l_warp_scalar.cu)
 if(COSMICTIGER_WITH_CUDA)
     list(APPEND cosmictiger_fmm_library_sources
-        ${COSMICTIGER_GENERATED_FMM_DIR}/sources/cartesian_tracefree_l2l_warp_scalar.cu)
+        ${COSMICTIGER_GENERATED_FMM_SOURCE_DIR}/cartesian_tracefree_l2l_warp_scalar.cu)
 endif()
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 if(COSMICTIGER_WITH_GRAVITY)
@@ -530,7 +531,8 @@ file(GLOB_RECURSE cosmictiger_fmm_generator_sources CONFIGURE_DEPENDS
     ${PROJECT_SOURCE_DIR}/tools/fmm/*.py)
 add_custom_command(OUTPUT ${COSMICTIGER_GENERATED_FMM_FILES}
     COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/generate_fmm.py
-        --output-dir ${COSMICTIGER_GENERATED_FMM_DIR} --degree ${COSMICTIGER_EXPANSION_DEGREE}
+        --output-dir ${COSMICTIGER_GENERATED_FMM_DIR}
+        --source-dir ${COSMICTIGER_GENERATED_FMM_SOURCE_DIR} --degree ${COSMICTIGER_EXPANSION_DEGREE}
     DEPENDS ${PROJECT_SOURCE_DIR}/tools/generate_fmm.py
         ${cosmictiger_fmm_generator_sources}
         ${PROJECT_SOURCE_DIR}/tools/cartesian/generated_notice.txt
@@ -1754,7 +1756,8 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
     if(COSMICTIGER_WITH_GRAVITY)
         add_test(NAME generated_fmm_current COMMAND ${Python3_EXECUTABLE}
             ${PROJECT_SOURCE_DIR}/tools/generate_fmm.py --check
-            --output-dir ${COSMICTIGER_GENERATED_FMM_DIR} --degree ${COSMICTIGER_EXPANSION_DEGREE})
+            --output-dir ${COSMICTIGER_GENERATED_FMM_DIR}
+            --source-dir ${COSMICTIGER_GENERATED_FMM_SOURCE_DIR} --degree ${COSMICTIGER_EXPANSION_DEGREE})
         set_tests_properties(generated_fmm_current PROPERTIES
             TIMEOUT 180 PROCESSORS 1 LABELS "fmm;generator")
         add_test(NAME generated_fmm_constants COMMAND ${Python3_EXECUTABLE}
@@ -1764,6 +1767,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
         add_test(NAME generated_fmm_flops COMMAND ${Python3_EXECUTABLE}
             ${PROJECT_SOURCE_DIR}/tests/gravity/check_generated_fmm_flops.py
             --generated-dir ${COSMICTIGER_GENERATED_FMM_DIR}
+            --generated-source-dir ${COSMICTIGER_GENERATED_FMM_SOURCE_DIR}
             --min-fmm-order ${cosmictiger_default_fmm_order}
             --max-fmm-order ${cosmictiger_default_fmm_order}
             --compiler ${CMAKE_CXX_COMPILER})

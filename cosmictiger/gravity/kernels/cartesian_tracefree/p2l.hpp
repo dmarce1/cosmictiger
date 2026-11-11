@@ -24,97 +24,86 @@ template <int degree>
 inline constexpr int kP2LFlops = 0;
 // FMM order 7.
 /// Accumulate Newtonian local coefficients from a point mass at the supplied displacement.
+#if defined(COSMICTIGER_FMM_COUNTING_ONLY) || defined(COSMICTIGER_FMM_INSTRUMENTATION)
 template <class Real>
-CUDA_EXPORT void P2L(Expansion<Real, 7>& L, Real mass, Vector3<Real> const& distance);
-#ifndef COSMICTIGER_FMM_COUNTING_ONLY
-template <>
-CUDA_EXPORT void P2L<float>(Expansion<float, 7>& L, float mass, Vector3<float> const& distance);
+CUDA_EXPORT void P2L(Real mass, Vector3<Real> const& distance, Expansion<Real>& L);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
-template <>
-CUDA_EXPORT void P2L<double>(Expansion<double, 7>& L, double mass, Vector3<double> const& distance);
+CUDA_EXPORT void P2L(float mass, Vector3<float> const& distance, Expansion<float>& L);
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+CUDA_EXPORT void P2L(double mass, Vector3<double> const& distance, Expansion<double>& L);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-template <>
-CUDA_EXPORT void P2L<SimdVector<float, 8>>(Expansion<SimdVector<float, 8>, 7>& L,
-    SimdVector<float, 8> mass, Vector3<SimdVector<float, 8>> const& distance);
+CUDA_EXPORT void P2L(SimdVector<float, 8> mass, Vector3<SimdVector<float, 8>> const& distance,
+    Expansion<SimdVector<float, 8>>& L);
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-template <>
-CUDA_EXPORT void P2L<SimdVector<double, 2>>(Expansion<SimdVector<double, 2>, 7>& L,
-    SimdVector<double, 2> mass, Vector3<SimdVector<double, 2>> const& distance);
+CUDA_EXPORT void P2L(SimdVector<double, 2> mass, Vector3<SimdVector<double, 2>> const& distance,
+    Expansion<SimdVector<double, 2>>& L);
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-template <>
-CUDA_EXPORT void P2L<SimdVector<float, 4>>(Expansion<SimdVector<float, 4>, 7>& L,
-    SimdVector<float, 4> mass, Vector3<SimdVector<float, 4>> const& distance);
+CUDA_EXPORT void P2L(SimdVector<float, 4> mass, Vector3<SimdVector<float, 4>> const& distance,
+    Expansion<SimdVector<float, 4>>& L);
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-template <>
-CUDA_EXPORT void P2L<SimdVector<double, 4>>(Expansion<SimdVector<double, 4>, 7>& L,
-    SimdVector<double, 4> mass, Vector3<SimdVector<double, 4>> const& distance);
+CUDA_EXPORT void P2L(SimdVector<double, 4> mass, Vector3<SimdVector<double, 4>> const& distance,
+    Expansion<SimdVector<double, 4>>& L);
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-template <>
-CUDA_EXPORT void P2L<SimdVector<double, 8>>(Expansion<SimdVector<double, 8>, 7>& L,
-    SimdVector<double, 8> mass, Vector3<SimdVector<double, 8>> const& distance);
+CUDA_EXPORT void P2L(SimdVector<double, 8> mass, Vector3<SimdVector<double, 8>> const& distance,
+    Expansion<SimdVector<double, 8>>& L);
 #endif
 #endif
 
 /// Accumulate Newtonian local coefficients from a point mass at the supplied displacement.
+#if defined(COSMICTIGER_FMM_COUNTING_ONLY) || defined(COSMICTIGER_FMM_INSTRUMENTATION)
 template <class Real>
-CUDA_EXPORT void P2L(Derivatives<Real, 7>& L, Real mass, Vector3<Real> const& distance);
-#ifndef COSMICTIGER_FMM_COUNTING_ONLY
-template <>
-CUDA_EXPORT void P2L<float>(Derivatives<float, 7>& L, float mass, Vector3<float> const& distance);
+CUDA_EXPORT void P2L(Real mass, Vector3<Real> const& distance, Derivatives<Real>& L);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
-template <>
-CUDA_EXPORT void P2L<double>(
-    Derivatives<double, 7>& L, double mass, Vector3<double> const& distance);
+CUDA_EXPORT void P2L(float mass, Vector3<float> const& distance, Derivatives<float>& L);
+#endif
+#ifndef COSMICTIGER_FMM_COUNTING_ONLY
+CUDA_EXPORT void P2L(double mass, Vector3<double> const& distance, Derivatives<double>& L);
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-template <>
-CUDA_EXPORT void P2L<SimdVector<float, 8>>(Derivatives<SimdVector<float, 8>, 7>& L,
-    SimdVector<float, 8> mass, Vector3<SimdVector<float, 8>> const& distance);
+CUDA_EXPORT void P2L(SimdVector<float, 8> mass, Vector3<SimdVector<float, 8>> const& distance,
+    Derivatives<SimdVector<float, 8>>& L);
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-template <>
-CUDA_EXPORT void P2L<SimdVector<double, 2>>(Derivatives<SimdVector<double, 2>, 7>& L,
-    SimdVector<double, 2> mass, Vector3<SimdVector<double, 2>> const& distance);
+CUDA_EXPORT void P2L(SimdVector<double, 2> mass, Vector3<SimdVector<double, 2>> const& distance,
+    Derivatives<SimdVector<double, 2>>& L);
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-template <>
-CUDA_EXPORT void P2L<SimdVector<float, 4>>(Derivatives<SimdVector<float, 4>, 7>& L,
-    SimdVector<float, 4> mass, Vector3<SimdVector<float, 4>> const& distance);
+CUDA_EXPORT void P2L(SimdVector<float, 4> mass, Vector3<SimdVector<float, 4>> const& distance,
+    Derivatives<SimdVector<float, 4>>& L);
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-template <>
-CUDA_EXPORT void P2L<SimdVector<double, 4>>(Derivatives<SimdVector<double, 4>, 7>& L,
-    SimdVector<double, 4> mass, Vector3<SimdVector<double, 4>> const& distance);
+CUDA_EXPORT void P2L(SimdVector<double, 4> mass, Vector3<SimdVector<double, 4>> const& distance,
+    Derivatives<SimdVector<double, 4>>& L);
 #endif
 #endif
 #ifndef COSMICTIGER_FMM_COUNTING_ONLY
 #ifndef __CUDACC__
-template <>
-CUDA_EXPORT void P2L<SimdVector<double, 8>>(Derivatives<SimdVector<double, 8>, 7>& L,
-    SimdVector<double, 8> mass, Vector3<SimdVector<double, 8>> const& distance);
+CUDA_EXPORT void P2L(SimdVector<double, 8> mass, Vector3<SimdVector<double, 8>> const& distance,
+    Derivatives<SimdVector<double, 8>>& L);
 #endif
 #endif
 
