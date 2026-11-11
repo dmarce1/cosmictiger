@@ -37,70 +37,72 @@ void ewaldRegular(Real x, Real y, Real z, Real radiusSquared, Real* output) {
     constexpr auto k20 = static_cast<Scalar>(7.000000000000000000E+00);
     constexpr auto k21 = static_cast<Scalar>(9.000000000000000000E+00);
     constexpr auto k22 = static_cast<Scalar>(1.100000000000000000E+01);
-    output[0] = broadcast<Real>(k17);
-    output[2] = z * output[0];
+    detail::CoefficientView<Real> const U{output};
+
+    U(0, 0) = broadcast<Real>(k17);
+    U(1, 0) = z * U(0, 0);
     Real const zFactor2_0 = broadcast<Real>(k18) * z;
-    output[6] = broadcast<Real>(k15) * fma(zFactor2_0, output[2], -radiusSquared * output[0]);
+    U(2, 0) = broadcast<Real>(k15) * fma(zFactor2_0, U(1, 0), -radiusSquared * U(0, 0));
     Real const zFactor3_0 = broadcast<Real>(k19) * z;
-    output[12] = broadcast<Real>(k12) * fma(zFactor3_0, output[6], -radiusSquared * output[2]);
+    U(3, 0) = broadcast<Real>(k12) * fma(zFactor3_0, U(2, 0), -radiusSquared * U(1, 0));
     Real const zFactor4_0 = broadcast<Real>(k20) * z;
-    output[20] = broadcast<Real>(k08) * fma(zFactor4_0, output[12], -radiusSquared * output[6]);
+    U(4, 0) = broadcast<Real>(k08) * fma(zFactor4_0, U(3, 0), -radiusSquared * U(2, 0));
     Real const zFactor5_0 = broadcast<Real>(k21) * z;
-    output[30] = broadcast<Real>(k04) * fma(zFactor5_0, output[20], -radiusSquared * output[12]);
+    U(5, 0) = broadcast<Real>(k04) * fma(zFactor5_0, U(4, 0), -radiusSquared * U(3, 0));
     Real const zFactor6_0 = broadcast<Real>(k22) * z;
-    output[42] = broadcast<Real>(k00) * fma(zFactor6_0, output[30], -radiusSquared * output[20]);
-    output[3] = x * broadcast<Real>(k16);
-    output[1] = y * broadcast<Real>(k16);
-    output[7] = z * output[3];
-    output[5] = z * output[1];
+    U(6, 0) = broadcast<Real>(k00) * fma(zFactor6_0, U(5, 0), -radiusSquared * U(4, 0));
+    U(1, 1) = x * broadcast<Real>(k16);
+    U(1, -1) = y * broadcast<Real>(k16);
+    U(2, 1) = z * U(1, 1);
+    U(2, -1) = z * U(1, -1);
     Real const zFactor3_1 = broadcast<Real>(k19) * z;
-    output[13] = broadcast<Real>(k13) * fma(zFactor3_1, output[7], -radiusSquared * output[3]);
-    output[11] = broadcast<Real>(k13) * fma(zFactor3_1, output[5], -radiusSquared * output[1]);
+    U(3, 1) = broadcast<Real>(k13) * fma(zFactor3_1, U(2, 1), -radiusSquared * U(1, 1));
+    U(3, -1) = broadcast<Real>(k13) * fma(zFactor3_1, U(2, -1), -radiusSquared * U(1, -1));
     Real const zFactor4_1 = broadcast<Real>(k20) * z;
-    output[21] = broadcast<Real>(k09) * fma(zFactor4_1, output[13], -radiusSquared * output[7]);
-    output[19] = broadcast<Real>(k09) * fma(zFactor4_1, output[11], -radiusSquared * output[5]);
+    U(4, 1) = broadcast<Real>(k09) * fma(zFactor4_1, U(3, 1), -radiusSquared * U(2, 1));
+    U(4, -1) = broadcast<Real>(k09) * fma(zFactor4_1, U(3, -1), -radiusSquared * U(2, -1));
     Real const zFactor5_1 = broadcast<Real>(k21) * z;
-    output[31] = broadcast<Real>(k05) * fma(zFactor5_1, output[21], -radiusSquared * output[13]);
-    output[29] = broadcast<Real>(k05) * fma(zFactor5_1, output[19], -radiusSquared * output[11]);
+    U(5, 1) = broadcast<Real>(k05) * fma(zFactor5_1, U(4, 1), -radiusSquared * U(3, 1));
+    U(5, -1) = broadcast<Real>(k05) * fma(zFactor5_1, U(4, -1), -radiusSquared * U(3, -1));
     Real const zFactor6_1 = broadcast<Real>(k22) * z;
-    output[43] = broadcast<Real>(k01) * fma(zFactor6_1, output[31], -radiusSquared * output[21]);
-    output[41] = broadcast<Real>(k01) * fma(zFactor6_1, output[29], -radiusSquared * output[19]);
-    output[8] = broadcast<Real>(k15) * fma(x, output[3], -y * output[1]);
-    output[4] = broadcast<Real>(k15) * fma(y, output[3], x * output[1]);
-    output[14] = z * output[8];
-    output[10] = z * output[4];
+    U(6, 1) = broadcast<Real>(k01) * fma(zFactor6_1, U(5, 1), -radiusSquared * U(4, 1));
+    U(6, -1) = broadcast<Real>(k01) * fma(zFactor6_1, U(5, -1), -radiusSquared * U(4, -1));
+    U(2, 2) = broadcast<Real>(k15) * fma(x, U(1, 1), -y * U(1, -1));
+    U(2, -2) = broadcast<Real>(k15) * fma(y, U(1, 1), x * U(1, -1));
+    U(3, 2) = z * U(2, 2);
+    U(3, -2) = z * U(2, -2);
     Real const zFactor4_2 = broadcast<Real>(k20) * z;
-    output[22] = broadcast<Real>(k10) * fma(zFactor4_2, output[14], -radiusSquared * output[8]);
-    output[18] = broadcast<Real>(k10) * fma(zFactor4_2, output[10], -radiusSquared * output[4]);
+    U(4, 2) = broadcast<Real>(k10) * fma(zFactor4_2, U(3, 2), -radiusSquared * U(2, 2));
+    U(4, -2) = broadcast<Real>(k10) * fma(zFactor4_2, U(3, -2), -radiusSquared * U(2, -2));
     Real const zFactor5_2 = broadcast<Real>(k21) * z;
-    output[32] = broadcast<Real>(k06) * fma(zFactor5_2, output[22], -radiusSquared * output[14]);
-    output[28] = broadcast<Real>(k06) * fma(zFactor5_2, output[18], -radiusSquared * output[10]);
+    U(5, 2) = broadcast<Real>(k06) * fma(zFactor5_2, U(4, 2), -radiusSquared * U(3, 2));
+    U(5, -2) = broadcast<Real>(k06) * fma(zFactor5_2, U(4, -2), -radiusSquared * U(3, -2));
     Real const zFactor6_2 = broadcast<Real>(k22) * z;
-    output[44] = broadcast<Real>(k02) * fma(zFactor6_2, output[32], -radiusSquared * output[22]);
-    output[40] = broadcast<Real>(k02) * fma(zFactor6_2, output[28], -radiusSquared * output[18]);
-    output[15] = broadcast<Real>(k14) * fma(x, output[8], -y * output[4]);
-    output[9] = broadcast<Real>(k14) * fma(y, output[8], x * output[4]);
-    output[23] = z * output[15];
-    output[17] = z * output[9];
+    U(6, 2) = broadcast<Real>(k02) * fma(zFactor6_2, U(5, 2), -radiusSquared * U(4, 2));
+    U(6, -2) = broadcast<Real>(k02) * fma(zFactor6_2, U(5, -2), -radiusSquared * U(4, -2));
+    U(3, 3) = broadcast<Real>(k14) * fma(x, U(2, 2), -y * U(2, -2));
+    U(3, -3) = broadcast<Real>(k14) * fma(y, U(2, 2), x * U(2, -2));
+    U(4, 3) = z * U(3, 3);
+    U(4, -3) = z * U(3, -3);
     Real const zFactor5_3 = broadcast<Real>(k21) * z;
-    output[33] = broadcast<Real>(k08) * fma(zFactor5_3, output[23], -radiusSquared * output[15]);
-    output[27] = broadcast<Real>(k08) * fma(zFactor5_3, output[17], -radiusSquared * output[9]);
+    U(5, 3) = broadcast<Real>(k08) * fma(zFactor5_3, U(4, 3), -radiusSquared * U(3, 3));
+    U(5, -3) = broadcast<Real>(k08) * fma(zFactor5_3, U(4, -3), -radiusSquared * U(3, -3));
     Real const zFactor6_3 = broadcast<Real>(k22) * z;
-    output[45] = broadcast<Real>(k03) * fma(zFactor6_3, output[33], -radiusSquared * output[23]);
-    output[39] = broadcast<Real>(k03) * fma(zFactor6_3, output[27], -radiusSquared * output[17]);
-    output[24] = broadcast<Real>(k13) * fma(x, output[15], -y * output[9]);
-    output[16] = broadcast<Real>(k13) * fma(y, output[15], x * output[9]);
-    output[34] = z * output[24];
-    output[26] = z * output[16];
+    U(6, 3) = broadcast<Real>(k03) * fma(zFactor6_3, U(5, 3), -radiusSquared * U(4, 3));
+    U(6, -3) = broadcast<Real>(k03) * fma(zFactor6_3, U(5, -3), -radiusSquared * U(4, -3));
+    U(4, 4) = broadcast<Real>(k13) * fma(x, U(3, 3), -y * U(3, -3));
+    U(4, -4) = broadcast<Real>(k13) * fma(y, U(3, 3), x * U(3, -3));
+    U(5, 4) = z * U(4, 4);
+    U(5, -4) = z * U(4, -4);
     Real const zFactor6_4 = broadcast<Real>(k22) * z;
-    output[46] = broadcast<Real>(k07) * fma(zFactor6_4, output[34], -radiusSquared * output[24]);
-    output[38] = broadcast<Real>(k07) * fma(zFactor6_4, output[26], -radiusSquared * output[16]);
-    output[35] = broadcast<Real>(k11) * fma(x, output[24], -y * output[16]);
-    output[25] = broadcast<Real>(k11) * fma(y, output[24], x * output[16]);
-    output[47] = z * output[35];
-    output[37] = z * output[25];
-    output[48] = broadcast<Real>(k10) * fma(x, output[35], -y * output[25]);
-    output[36] = broadcast<Real>(k10) * fma(y, output[35], x * output[25]);
+    U(6, 4) = broadcast<Real>(k07) * fma(zFactor6_4, U(5, 4), -radiusSquared * U(4, 4));
+    U(6, -4) = broadcast<Real>(k07) * fma(zFactor6_4, U(5, -4), -radiusSquared * U(4, -4));
+    U(5, 5) = broadcast<Real>(k11) * fma(x, U(4, 4), -y * U(4, -4));
+    U(5, -5) = broadcast<Real>(k11) * fma(y, U(4, 4), x * U(4, -4));
+    U(6, 5) = z * U(5, 5);
+    U(6, -5) = z * U(5, -5);
+    U(6, 6) = broadcast<Real>(k10) * fma(x, U(5, 5), -y * U(5, -5));
+    U(6, -6) = broadcast<Real>(k10) * fma(y, U(5, 5), x * U(5, -5));
 }
 }    // namespace cosmictiger::gravity::spherical
 namespace cosmictiger::gravity::spherical {
@@ -207,9 +209,17 @@ void evaluateEwaldWorking(Real& greenTrace, Real x, Real y, Real z, Real* output
     constexpr auto k95 = static_cast<Scalar>(7.257600000000000000E+06);
     constexpr auto k96 = static_cast<Scalar>(3.991680000000000000E+07);
     constexpr auto k97 = static_cast<Scalar>(4.790016000000000000E+08);
+    detail::CoefficientView<Real> const G{output};
+
     Real harmonics[49];
+    detail::CoefficientView<Real> const U{harmonics};
+
     Real compensation[49];
+    detail::CoefficientView<Real> const C{compensation};
+
     Real imagePair[49];
+    detail::CoefficientView<Real> const I{imagePair};
+
     Real const radiusSquared = fma(x, x, fma(y, y, z * z));
     ewaldRegular(x, y, z, radiusSquared, harmonics);
     Real const argument = broadcast<Real>(k61) * radiusSquared;
@@ -264,8 +274,8 @@ void evaluateEwaldWorking(Real& greenTrace, Real x, Real y, Real z, Real* output
     series0 = fma(series0, argument * broadcast<Real>(k53), broadcast<Real>(k57));
     series0 = fma(series0, argument * broadcast<Real>(k55), broadcast<Real>(k57));
     Real const radial0 = broadcast<Real>(k59) * exponential * series0;
-    output[0] = radial0 * harmonics[0];
-    compensation[0] = broadcast<Real>(k00);
+    G(0, 0) = radial0 * U(0, 0);
+    C(0, 0) = broadcast<Real>(k00);
     Real series1 = broadcast<Real>(k57);
     series1 = fma(series1, argument * broadcast<Real>(k06), broadcast<Real>(k57));
     series1 = fma(series1, argument * broadcast<Real>(k07), broadcast<Real>(k57));
@@ -316,12 +326,12 @@ void evaluateEwaldWorking(Real& greenTrace, Real x, Real y, Real z, Real* output
     series1 = fma(series1, argument * broadcast<Real>(k52), broadcast<Real>(k57));
     series1 = fma(series1, argument * broadcast<Real>(k53), broadcast<Real>(k57));
     Real const radial1 = -broadcast<Real>(k66) * exponential * series1;
-    output[1] = broadcast<Real>(k58) * radial1 * harmonics[1];
-    compensation[1] = broadcast<Real>(k00);
-    output[2] = radial1 * harmonics[2];
-    compensation[2] = broadcast<Real>(k00);
-    output[3] = broadcast<Real>(k58) * radial1 * harmonics[3];
-    compensation[3] = broadcast<Real>(k00);
+    G(1, -1) = broadcast<Real>(k58) * radial1 * U(1, -1);
+    C(1, -1) = broadcast<Real>(k00);
+    G(1, 0) = radial1 * U(1, 0);
+    C(1, 0) = broadcast<Real>(k00);
+    G(1, 1) = broadcast<Real>(k58) * radial1 * U(1, 1);
+    C(1, 1) = broadcast<Real>(k00);
     Real series2 = broadcast<Real>(k57);
     series2 = fma(series2, argument * broadcast<Real>(k05), broadcast<Real>(k57));
     series2 = fma(series2, argument * broadcast<Real>(k06), broadcast<Real>(k57));
@@ -372,16 +382,16 @@ void evaluateEwaldWorking(Real& greenTrace, Real x, Real y, Real z, Real* output
     series2 = fma(series2, argument * broadcast<Real>(k51), broadcast<Real>(k57));
     series2 = fma(series2, argument * broadcast<Real>(k52), broadcast<Real>(k57));
     Real const radial2 = broadcast<Real>(k69) * exponential * series2;
-    output[4] = broadcast<Real>(k76) * radial2 * harmonics[4];
-    compensation[4] = broadcast<Real>(k00);
-    output[5] = broadcast<Real>(k65) * radial2 * harmonics[5];
-    compensation[5] = broadcast<Real>(k00);
-    output[6] = broadcast<Real>(k61) * radial2 * harmonics[6];
-    compensation[6] = broadcast<Real>(k00);
-    output[7] = broadcast<Real>(k65) * radial2 * harmonics[7];
-    compensation[7] = broadcast<Real>(k00);
-    output[8] = broadcast<Real>(k76) * radial2 * harmonics[8];
-    compensation[8] = broadcast<Real>(k00);
+    G(2, -2) = broadcast<Real>(k76) * radial2 * U(2, -2);
+    C(2, -2) = broadcast<Real>(k00);
+    G(2, -1) = broadcast<Real>(k65) * radial2 * U(2, -1);
+    C(2, -1) = broadcast<Real>(k00);
+    G(2, 0) = broadcast<Real>(k61) * radial2 * U(2, 0);
+    C(2, 0) = broadcast<Real>(k00);
+    G(2, 1) = broadcast<Real>(k65) * radial2 * U(2, 1);
+    C(2, 1) = broadcast<Real>(k00);
+    G(2, 2) = broadcast<Real>(k76) * radial2 * U(2, 2);
+    C(2, 2) = broadcast<Real>(k00);
     Real series3 = broadcast<Real>(k57);
     series3 = fma(series3, argument * broadcast<Real>(k04), broadcast<Real>(k57));
     series3 = fma(series3, argument * broadcast<Real>(k05), broadcast<Real>(k57));
@@ -432,20 +442,20 @@ void evaluateEwaldWorking(Real& greenTrace, Real x, Real y, Real z, Real* output
     series3 = fma(series3, argument * broadcast<Real>(k50), broadcast<Real>(k57));
     series3 = fma(series3, argument * broadcast<Real>(k51), broadcast<Real>(k57));
     Real const radial3 = -broadcast<Real>(k72) * exponential * series3;
-    output[9] = broadcast<Real>(k81) * radial3 * harmonics[9];
-    compensation[9] = broadcast<Real>(k00);
-    output[10] = broadcast<Real>(k79) * radial3 * harmonics[10];
-    compensation[10] = broadcast<Real>(k00);
-    output[11] = broadcast<Real>(k78) * radial3 * harmonics[11];
-    compensation[11] = broadcast<Real>(k00);
-    output[12] = broadcast<Real>(k77) * radial3 * harmonics[12];
-    compensation[12] = broadcast<Real>(k00);
-    output[13] = broadcast<Real>(k78) * radial3 * harmonics[13];
-    compensation[13] = broadcast<Real>(k00);
-    output[14] = broadcast<Real>(k79) * radial3 * harmonics[14];
-    compensation[14] = broadcast<Real>(k00);
-    output[15] = broadcast<Real>(k81) * radial3 * harmonics[15];
-    compensation[15] = broadcast<Real>(k00);
+    G(3, -3) = broadcast<Real>(k81) * radial3 * U(3, -3);
+    C(3, -3) = broadcast<Real>(k00);
+    G(3, -2) = broadcast<Real>(k79) * radial3 * U(3, -2);
+    C(3, -2) = broadcast<Real>(k00);
+    G(3, -1) = broadcast<Real>(k78) * radial3 * U(3, -1);
+    C(3, -1) = broadcast<Real>(k00);
+    G(3, 0) = broadcast<Real>(k77) * radial3 * U(3, 0);
+    C(3, 0) = broadcast<Real>(k00);
+    G(3, 1) = broadcast<Real>(k78) * radial3 * U(3, 1);
+    C(3, 1) = broadcast<Real>(k00);
+    G(3, 2) = broadcast<Real>(k79) * radial3 * U(3, 2);
+    C(3, 2) = broadcast<Real>(k00);
+    G(3, 3) = broadcast<Real>(k81) * radial3 * U(3, 3);
+    C(3, 3) = broadcast<Real>(k00);
     Real series4 = broadcast<Real>(k57);
     series4 = fma(series4, argument * broadcast<Real>(k03), broadcast<Real>(k57));
     series4 = fma(series4, argument * broadcast<Real>(k04), broadcast<Real>(k57));
@@ -496,24 +506,24 @@ void evaluateEwaldWorking(Real& greenTrace, Real x, Real y, Real z, Real* output
     series4 = fma(series4, argument * broadcast<Real>(k49), broadcast<Real>(k57));
     series4 = fma(series4, argument * broadcast<Real>(k50), broadcast<Real>(k57));
     Real const radial4 = broadcast<Real>(k70) * exponential * series4;
-    output[16] = broadcast<Real>(k87) * radial4 * harmonics[16];
-    compensation[16] = broadcast<Real>(k00);
-    output[17] = broadcast<Real>(k83) * radial4 * harmonics[17];
-    compensation[17] = broadcast<Real>(k00);
-    output[18] = broadcast<Real>(k82) * radial4 * harmonics[18];
-    compensation[18] = broadcast<Real>(k00);
-    output[19] = broadcast<Real>(k81) * radial4 * harmonics[19];
-    compensation[19] = broadcast<Real>(k00);
-    output[20] = broadcast<Real>(k80) * radial4 * harmonics[20];
-    compensation[20] = broadcast<Real>(k00);
-    output[21] = broadcast<Real>(k81) * radial4 * harmonics[21];
-    compensation[21] = broadcast<Real>(k00);
-    output[22] = broadcast<Real>(k82) * radial4 * harmonics[22];
-    compensation[22] = broadcast<Real>(k00);
-    output[23] = broadcast<Real>(k83) * radial4 * harmonics[23];
-    compensation[23] = broadcast<Real>(k00);
-    output[24] = broadcast<Real>(k87) * radial4 * harmonics[24];
-    compensation[24] = broadcast<Real>(k00);
+    G(4, -4) = broadcast<Real>(k87) * radial4 * U(4, -4);
+    C(4, -4) = broadcast<Real>(k00);
+    G(4, -3) = broadcast<Real>(k83) * radial4 * U(4, -3);
+    C(4, -3) = broadcast<Real>(k00);
+    G(4, -2) = broadcast<Real>(k82) * radial4 * U(4, -2);
+    C(4, -2) = broadcast<Real>(k00);
+    G(4, -1) = broadcast<Real>(k81) * radial4 * U(4, -1);
+    C(4, -1) = broadcast<Real>(k00);
+    G(4, 0) = broadcast<Real>(k80) * radial4 * U(4, 0);
+    C(4, 0) = broadcast<Real>(k00);
+    G(4, 1) = broadcast<Real>(k81) * radial4 * U(4, 1);
+    C(4, 1) = broadcast<Real>(k00);
+    G(4, 2) = broadcast<Real>(k82) * radial4 * U(4, 2);
+    C(4, 2) = broadcast<Real>(k00);
+    G(4, 3) = broadcast<Real>(k83) * radial4 * U(4, 3);
+    C(4, 3) = broadcast<Real>(k00);
+    G(4, 4) = broadcast<Real>(k87) * radial4 * U(4, 4);
+    C(4, 4) = broadcast<Real>(k00);
     Real series5 = broadcast<Real>(k57);
     series5 = fma(series5, argument * broadcast<Real>(k02), broadcast<Real>(k57));
     series5 = fma(series5, argument * broadcast<Real>(k03), broadcast<Real>(k57));
@@ -564,28 +574,28 @@ void evaluateEwaldWorking(Real& greenTrace, Real x, Real y, Real z, Real* output
     series5 = fma(series5, argument * broadcast<Real>(k48), broadcast<Real>(k57));
     series5 = fma(series5, argument * broadcast<Real>(k49), broadcast<Real>(k57));
     Real const radial5 = -broadcast<Real>(k68) * exponential * series5;
-    output[25] = broadcast<Real>(k94) * radial5 * harmonics[25];
-    compensation[25] = broadcast<Real>(k00);
-    output[26] = broadcast<Real>(k89) * radial5 * harmonics[26];
-    compensation[26] = broadcast<Real>(k00);
-    output[27] = broadcast<Real>(k88) * radial5 * harmonics[27];
-    compensation[27] = broadcast<Real>(k00);
-    output[28] = broadcast<Real>(k86) * radial5 * harmonics[28];
-    compensation[28] = broadcast<Real>(k00);
-    output[29] = broadcast<Real>(k85) * radial5 * harmonics[29];
-    compensation[29] = broadcast<Real>(k00);
-    output[30] = broadcast<Real>(k84) * radial5 * harmonics[30];
-    compensation[30] = broadcast<Real>(k00);
-    output[31] = broadcast<Real>(k85) * radial5 * harmonics[31];
-    compensation[31] = broadcast<Real>(k00);
-    output[32] = broadcast<Real>(k86) * radial5 * harmonics[32];
-    compensation[32] = broadcast<Real>(k00);
-    output[33] = broadcast<Real>(k88) * radial5 * harmonics[33];
-    compensation[33] = broadcast<Real>(k00);
-    output[34] = broadcast<Real>(k89) * radial5 * harmonics[34];
-    compensation[34] = broadcast<Real>(k00);
-    output[35] = broadcast<Real>(k94) * radial5 * harmonics[35];
-    compensation[35] = broadcast<Real>(k00);
+    G(5, -5) = broadcast<Real>(k94) * radial5 * U(5, -5);
+    C(5, -5) = broadcast<Real>(k00);
+    G(5, -4) = broadcast<Real>(k89) * radial5 * U(5, -4);
+    C(5, -4) = broadcast<Real>(k00);
+    G(5, -3) = broadcast<Real>(k88) * radial5 * U(5, -3);
+    C(5, -3) = broadcast<Real>(k00);
+    G(5, -2) = broadcast<Real>(k86) * radial5 * U(5, -2);
+    C(5, -2) = broadcast<Real>(k00);
+    G(5, -1) = broadcast<Real>(k85) * radial5 * U(5, -1);
+    C(5, -1) = broadcast<Real>(k00);
+    G(5, 0) = broadcast<Real>(k84) * radial5 * U(5, 0);
+    C(5, 0) = broadcast<Real>(k00);
+    G(5, 1) = broadcast<Real>(k85) * radial5 * U(5, 1);
+    C(5, 1) = broadcast<Real>(k00);
+    G(5, 2) = broadcast<Real>(k86) * radial5 * U(5, 2);
+    C(5, 2) = broadcast<Real>(k00);
+    G(5, 3) = broadcast<Real>(k88) * radial5 * U(5, 3);
+    C(5, 3) = broadcast<Real>(k00);
+    G(5, 4) = broadcast<Real>(k89) * radial5 * U(5, 4);
+    C(5, 4) = broadcast<Real>(k00);
+    G(5, 5) = broadcast<Real>(k94) * radial5 * U(5, 5);
+    C(5, 5) = broadcast<Real>(k00);
     Real series6 = broadcast<Real>(k57);
     series6 = fma(series6, argument * broadcast<Real>(k01), broadcast<Real>(k57));
     series6 = fma(series6, argument * broadcast<Real>(k02), broadcast<Real>(k57));
@@ -636,33 +646,33 @@ void evaluateEwaldWorking(Real& greenTrace, Real x, Real y, Real z, Real* output
     series6 = fma(series6, argument * broadcast<Real>(k47), broadcast<Real>(k57));
     series6 = fma(series6, argument * broadcast<Real>(k48), broadcast<Real>(k57));
     Real const radial6 = broadcast<Real>(k63) * exponential * series6;
-    output[36] = broadcast<Real>(k97) * radial6 * harmonics[36];
-    compensation[36] = broadcast<Real>(k00);
-    output[37] = broadcast<Real>(k96) * radial6 * harmonics[37];
-    compensation[37] = broadcast<Real>(k00);
-    output[38] = broadcast<Real>(k95) * radial6 * harmonics[38];
-    compensation[38] = broadcast<Real>(k00);
-    output[39] = broadcast<Real>(k93) * radial6 * harmonics[39];
-    compensation[39] = broadcast<Real>(k00);
-    output[40] = broadcast<Real>(k92) * radial6 * harmonics[40];
-    compensation[40] = broadcast<Real>(k00);
-    output[41] = broadcast<Real>(k91) * radial6 * harmonics[41];
-    compensation[41] = broadcast<Real>(k00);
-    output[42] = broadcast<Real>(k90) * radial6 * harmonics[42];
-    compensation[42] = broadcast<Real>(k00);
-    output[43] = broadcast<Real>(k91) * radial6 * harmonics[43];
-    compensation[43] = broadcast<Real>(k00);
-    output[44] = broadcast<Real>(k92) * radial6 * harmonics[44];
-    compensation[44] = broadcast<Real>(k00);
-    output[45] = broadcast<Real>(k93) * radial6 * harmonics[45];
-    compensation[45] = broadcast<Real>(k00);
-    output[46] = broadcast<Real>(k95) * radial6 * harmonics[46];
-    compensation[46] = broadcast<Real>(k00);
-    output[47] = broadcast<Real>(k96) * radial6 * harmonics[47];
-    compensation[47] = broadcast<Real>(k00);
-    output[48] = broadcast<Real>(k97) * radial6 * harmonics[48];
-    compensation[48] = broadcast<Real>(k00);
-    output[0] += broadcast<Real>(k56);
+    G(6, -6) = broadcast<Real>(k97) * radial6 * U(6, -6);
+    C(6, -6) = broadcast<Real>(k00);
+    G(6, -5) = broadcast<Real>(k96) * radial6 * U(6, -5);
+    C(6, -5) = broadcast<Real>(k00);
+    G(6, -4) = broadcast<Real>(k95) * radial6 * U(6, -4);
+    C(6, -4) = broadcast<Real>(k00);
+    G(6, -3) = broadcast<Real>(k93) * radial6 * U(6, -3);
+    C(6, -3) = broadcast<Real>(k00);
+    G(6, -2) = broadcast<Real>(k92) * radial6 * U(6, -2);
+    C(6, -2) = broadcast<Real>(k00);
+    G(6, -1) = broadcast<Real>(k91) * radial6 * U(6, -1);
+    C(6, -1) = broadcast<Real>(k00);
+    G(6, 0) = broadcast<Real>(k90) * radial6 * U(6, 0);
+    C(6, 0) = broadcast<Real>(k00);
+    G(6, 1) = broadcast<Real>(k91) * radial6 * U(6, 1);
+    C(6, 1) = broadcast<Real>(k00);
+    G(6, 2) = broadcast<Real>(k92) * radial6 * U(6, 2);
+    C(6, 2) = broadcast<Real>(k00);
+    G(6, 3) = broadcast<Real>(k93) * radial6 * U(6, 3);
+    C(6, 3) = broadcast<Real>(k00);
+    G(6, 4) = broadcast<Real>(k95) * radial6 * U(6, 4);
+    C(6, 4) = broadcast<Real>(k00);
+    G(6, 5) = broadcast<Real>(k96) * radial6 * U(6, 5);
+    C(6, 5) = broadcast<Real>(k00);
+    G(6, 6) = broadcast<Real>(k97) * radial6 * U(6, 6);
+    C(6, 6) = broadcast<Real>(k00);
+    G(0, 0) += broadcast<Real>(k56);
     greenTrace = broadcast<Real>(k62);
     for (int ix = -6; ix <= 6; ++ix) {
         for (int iy = -6; iy <= 6; ++iy) {
@@ -688,374 +698,374 @@ void evaluateEwaldWorking(Real& greenTrace, Real x, Real y, Real z, Real* output
                     Real gammaTerm = broadcast<Real>(k59) * imageRadius * imageExp;
                     Real inversePower = iR;
                     Real const imageRadial0 = -screening * inversePower;
-                    Real const imageValue0 = imageRadial0 * harmonics[0];
+                    Real const imageValue0 = imageRadial0 * U(0, 0);
                     if (sign < 0) {
-                        imagePair[0] = imageValue0;
+                        I(0, 0) = imageValue0;
                     } else {
-                        imagePair[0] += imageValue0;
+                        I(0, 0) += imageValue0;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * broadcast<Real>(k55);
                     Real const imageRadial1 = screening * inversePower;
-                    Real const imageValue1 = broadcast<Real>(k58) * imageRadial1 * harmonics[1];
+                    Real const imageValue1 = broadcast<Real>(k58) * imageRadial1 * U(1, -1);
                     if (sign < 0) {
-                        imagePair[1] = imageValue1;
+                        I(1, -1) = imageValue1;
                     } else {
-                        imagePair[1] += imageValue1;
+                        I(1, -1) += imageValue1;
                     }
-                    Real const imageValue2 = imageRadial1 * harmonics[2];
+                    Real const imageValue2 = imageRadial1 * U(1, 0);
                     if (sign < 0) {
-                        imagePair[2] = imageValue2;
+                        I(1, 0) = imageValue2;
                     } else {
-                        imagePair[2] += imageValue2;
+                        I(1, 0) += imageValue2;
                     }
-                    Real const imageValue3 = broadcast<Real>(k58) * imageRadial1 * harmonics[3];
+                    Real const imageValue3 = broadcast<Real>(k58) * imageRadial1 * U(1, 1);
                     if (sign < 0) {
-                        imagePair[3] = imageValue3;
+                        I(1, 1) = imageValue3;
                     } else {
-                        imagePair[3] += imageValue3;
+                        I(1, 1) += imageValue3;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * broadcast<Real>(k53);
                     Real const imageRadial2 = -screening * inversePower;
-                    Real const imageValue4 = broadcast<Real>(k76) * imageRadial2 * harmonics[4];
+                    Real const imageValue4 = broadcast<Real>(k76) * imageRadial2 * U(2, -2);
                     if (sign < 0) {
-                        imagePair[4] = imageValue4;
+                        I(2, -2) = imageValue4;
                     } else {
-                        imagePair[4] += imageValue4;
+                        I(2, -2) += imageValue4;
                     }
-                    Real const imageValue5 = broadcast<Real>(k65) * imageRadial2 * harmonics[5];
+                    Real const imageValue5 = broadcast<Real>(k65) * imageRadial2 * U(2, -1);
                     if (sign < 0) {
-                        imagePair[5] = imageValue5;
+                        I(2, -1) = imageValue5;
                     } else {
-                        imagePair[5] += imageValue5;
+                        I(2, -1) += imageValue5;
                     }
-                    Real const imageValue6 = broadcast<Real>(k61) * imageRadial2 * harmonics[6];
+                    Real const imageValue6 = broadcast<Real>(k61) * imageRadial2 * U(2, 0);
                     if (sign < 0) {
-                        imagePair[6] = imageValue6;
+                        I(2, 0) = imageValue6;
                     } else {
-                        imagePair[6] += imageValue6;
+                        I(2, 0) += imageValue6;
                     }
-                    Real const imageValue7 = broadcast<Real>(k65) * imageRadial2 * harmonics[7];
+                    Real const imageValue7 = broadcast<Real>(k65) * imageRadial2 * U(2, 1);
                     if (sign < 0) {
-                        imagePair[7] = imageValue7;
+                        I(2, 1) = imageValue7;
                     } else {
-                        imagePair[7] += imageValue7;
+                        I(2, 1) += imageValue7;
                     }
-                    Real const imageValue8 = broadcast<Real>(k76) * imageRadial2 * harmonics[8];
+                    Real const imageValue8 = broadcast<Real>(k76) * imageRadial2 * U(2, 2);
                     if (sign < 0) {
-                        imagePair[8] = imageValue8;
+                        I(2, 2) = imageValue8;
                     } else {
-                        imagePair[8] += imageValue8;
+                        I(2, 2) += imageValue8;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * broadcast<Real>(k52);
                     Real const imageRadial3 = screening * inversePower;
-                    Real const imageValue9 = broadcast<Real>(k81) * imageRadial3 * harmonics[9];
+                    Real const imageValue9 = broadcast<Real>(k81) * imageRadial3 * U(3, -3);
                     if (sign < 0) {
-                        imagePair[9] = imageValue9;
+                        I(3, -3) = imageValue9;
                     } else {
-                        imagePair[9] += imageValue9;
+                        I(3, -3) += imageValue9;
                     }
-                    Real const imageValue10 = broadcast<Real>(k79) * imageRadial3 * harmonics[10];
+                    Real const imageValue10 = broadcast<Real>(k79) * imageRadial3 * U(3, -2);
                     if (sign < 0) {
-                        imagePair[10] = imageValue10;
+                        I(3, -2) = imageValue10;
                     } else {
-                        imagePair[10] += imageValue10;
+                        I(3, -2) += imageValue10;
                     }
-                    Real const imageValue11 = broadcast<Real>(k78) * imageRadial3 * harmonics[11];
+                    Real const imageValue11 = broadcast<Real>(k78) * imageRadial3 * U(3, -1);
                     if (sign < 0) {
-                        imagePair[11] = imageValue11;
+                        I(3, -1) = imageValue11;
                     } else {
-                        imagePair[11] += imageValue11;
+                        I(3, -1) += imageValue11;
                     }
-                    Real const imageValue12 = broadcast<Real>(k77) * imageRadial3 * harmonics[12];
+                    Real const imageValue12 = broadcast<Real>(k77) * imageRadial3 * U(3, 0);
                     if (sign < 0) {
-                        imagePair[12] = imageValue12;
+                        I(3, 0) = imageValue12;
                     } else {
-                        imagePair[12] += imageValue12;
+                        I(3, 0) += imageValue12;
                     }
-                    Real const imageValue13 = broadcast<Real>(k78) * imageRadial3 * harmonics[13];
+                    Real const imageValue13 = broadcast<Real>(k78) * imageRadial3 * U(3, 1);
                     if (sign < 0) {
-                        imagePair[13] = imageValue13;
+                        I(3, 1) = imageValue13;
                     } else {
-                        imagePair[13] += imageValue13;
+                        I(3, 1) += imageValue13;
                     }
-                    Real const imageValue14 = broadcast<Real>(k79) * imageRadial3 * harmonics[14];
+                    Real const imageValue14 = broadcast<Real>(k79) * imageRadial3 * U(3, 2);
                     if (sign < 0) {
-                        imagePair[14] = imageValue14;
+                        I(3, 2) = imageValue14;
                     } else {
-                        imagePair[14] += imageValue14;
+                        I(3, 2) += imageValue14;
                     }
-                    Real const imageValue15 = broadcast<Real>(k81) * imageRadial3 * harmonics[15];
+                    Real const imageValue15 = broadcast<Real>(k81) * imageRadial3 * U(3, 3);
                     if (sign < 0) {
-                        imagePair[15] = imageValue15;
+                        I(3, 3) = imageValue15;
                     } else {
-                        imagePair[15] += imageValue15;
+                        I(3, 3) += imageValue15;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * broadcast<Real>(k51);
                     Real const imageRadial4 = -screening * inversePower;
-                    Real const imageValue16 = broadcast<Real>(k87) * imageRadial4 * harmonics[16];
+                    Real const imageValue16 = broadcast<Real>(k87) * imageRadial4 * U(4, -4);
                     if (sign < 0) {
-                        imagePair[16] = imageValue16;
+                        I(4, -4) = imageValue16;
                     } else {
-                        imagePair[16] += imageValue16;
+                        I(4, -4) += imageValue16;
                     }
-                    Real const imageValue17 = broadcast<Real>(k83) * imageRadial4 * harmonics[17];
+                    Real const imageValue17 = broadcast<Real>(k83) * imageRadial4 * U(4, -3);
                     if (sign < 0) {
-                        imagePair[17] = imageValue17;
+                        I(4, -3) = imageValue17;
                     } else {
-                        imagePair[17] += imageValue17;
+                        I(4, -3) += imageValue17;
                     }
-                    Real const imageValue18 = broadcast<Real>(k82) * imageRadial4 * harmonics[18];
+                    Real const imageValue18 = broadcast<Real>(k82) * imageRadial4 * U(4, -2);
                     if (sign < 0) {
-                        imagePair[18] = imageValue18;
+                        I(4, -2) = imageValue18;
                     } else {
-                        imagePair[18] += imageValue18;
+                        I(4, -2) += imageValue18;
                     }
-                    Real const imageValue19 = broadcast<Real>(k81) * imageRadial4 * harmonics[19];
+                    Real const imageValue19 = broadcast<Real>(k81) * imageRadial4 * U(4, -1);
                     if (sign < 0) {
-                        imagePair[19] = imageValue19;
+                        I(4, -1) = imageValue19;
                     } else {
-                        imagePair[19] += imageValue19;
+                        I(4, -1) += imageValue19;
                     }
-                    Real const imageValue20 = broadcast<Real>(k80) * imageRadial4 * harmonics[20];
+                    Real const imageValue20 = broadcast<Real>(k80) * imageRadial4 * U(4, 0);
                     if (sign < 0) {
-                        imagePair[20] = imageValue20;
+                        I(4, 0) = imageValue20;
                     } else {
-                        imagePair[20] += imageValue20;
+                        I(4, 0) += imageValue20;
                     }
-                    Real const imageValue21 = broadcast<Real>(k81) * imageRadial4 * harmonics[21];
+                    Real const imageValue21 = broadcast<Real>(k81) * imageRadial4 * U(4, 1);
                     if (sign < 0) {
-                        imagePair[21] = imageValue21;
+                        I(4, 1) = imageValue21;
                     } else {
-                        imagePair[21] += imageValue21;
+                        I(4, 1) += imageValue21;
                     }
-                    Real const imageValue22 = broadcast<Real>(k82) * imageRadial4 * harmonics[22];
+                    Real const imageValue22 = broadcast<Real>(k82) * imageRadial4 * U(4, 2);
                     if (sign < 0) {
-                        imagePair[22] = imageValue22;
+                        I(4, 2) = imageValue22;
                     } else {
-                        imagePair[22] += imageValue22;
+                        I(4, 2) += imageValue22;
                     }
-                    Real const imageValue23 = broadcast<Real>(k83) * imageRadial4 * harmonics[23];
+                    Real const imageValue23 = broadcast<Real>(k83) * imageRadial4 * U(4, 3);
                     if (sign < 0) {
-                        imagePair[23] = imageValue23;
+                        I(4, 3) = imageValue23;
                     } else {
-                        imagePair[23] += imageValue23;
+                        I(4, 3) += imageValue23;
                     }
-                    Real const imageValue24 = broadcast<Real>(k87) * imageRadial4 * harmonics[24];
+                    Real const imageValue24 = broadcast<Real>(k87) * imageRadial4 * U(4, 4);
                     if (sign < 0) {
-                        imagePair[24] = imageValue24;
+                        I(4, 4) = imageValue24;
                     } else {
-                        imagePair[24] += imageValue24;
+                        I(4, 4) += imageValue24;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * broadcast<Real>(k50);
                     Real const imageRadial5 = screening * inversePower;
-                    Real const imageValue25 = broadcast<Real>(k94) * imageRadial5 * harmonics[25];
+                    Real const imageValue25 = broadcast<Real>(k94) * imageRadial5 * U(5, -5);
                     if (sign < 0) {
-                        imagePair[25] = imageValue25;
+                        I(5, -5) = imageValue25;
                     } else {
-                        imagePair[25] += imageValue25;
+                        I(5, -5) += imageValue25;
                     }
-                    Real const imageValue26 = broadcast<Real>(k89) * imageRadial5 * harmonics[26];
+                    Real const imageValue26 = broadcast<Real>(k89) * imageRadial5 * U(5, -4);
                     if (sign < 0) {
-                        imagePair[26] = imageValue26;
+                        I(5, -4) = imageValue26;
                     } else {
-                        imagePair[26] += imageValue26;
+                        I(5, -4) += imageValue26;
                     }
-                    Real const imageValue27 = broadcast<Real>(k88) * imageRadial5 * harmonics[27];
+                    Real const imageValue27 = broadcast<Real>(k88) * imageRadial5 * U(5, -3);
                     if (sign < 0) {
-                        imagePair[27] = imageValue27;
+                        I(5, -3) = imageValue27;
                     } else {
-                        imagePair[27] += imageValue27;
+                        I(5, -3) += imageValue27;
                     }
-                    Real const imageValue28 = broadcast<Real>(k86) * imageRadial5 * harmonics[28];
+                    Real const imageValue28 = broadcast<Real>(k86) * imageRadial5 * U(5, -2);
                     if (sign < 0) {
-                        imagePair[28] = imageValue28;
+                        I(5, -2) = imageValue28;
                     } else {
-                        imagePair[28] += imageValue28;
+                        I(5, -2) += imageValue28;
                     }
-                    Real const imageValue29 = broadcast<Real>(k85) * imageRadial5 * harmonics[29];
+                    Real const imageValue29 = broadcast<Real>(k85) * imageRadial5 * U(5, -1);
                     if (sign < 0) {
-                        imagePair[29] = imageValue29;
+                        I(5, -1) = imageValue29;
                     } else {
-                        imagePair[29] += imageValue29;
+                        I(5, -1) += imageValue29;
                     }
-                    Real const imageValue30 = broadcast<Real>(k84) * imageRadial5 * harmonics[30];
+                    Real const imageValue30 = broadcast<Real>(k84) * imageRadial5 * U(5, 0);
                     if (sign < 0) {
-                        imagePair[30] = imageValue30;
+                        I(5, 0) = imageValue30;
                     } else {
-                        imagePair[30] += imageValue30;
+                        I(5, 0) += imageValue30;
                     }
-                    Real const imageValue31 = broadcast<Real>(k85) * imageRadial5 * harmonics[31];
+                    Real const imageValue31 = broadcast<Real>(k85) * imageRadial5 * U(5, 1);
                     if (sign < 0) {
-                        imagePair[31] = imageValue31;
+                        I(5, 1) = imageValue31;
                     } else {
-                        imagePair[31] += imageValue31;
+                        I(5, 1) += imageValue31;
                     }
-                    Real const imageValue32 = broadcast<Real>(k86) * imageRadial5 * harmonics[32];
+                    Real const imageValue32 = broadcast<Real>(k86) * imageRadial5 * U(5, 2);
                     if (sign < 0) {
-                        imagePair[32] = imageValue32;
+                        I(5, 2) = imageValue32;
                     } else {
-                        imagePair[32] += imageValue32;
+                        I(5, 2) += imageValue32;
                     }
-                    Real const imageValue33 = broadcast<Real>(k88) * imageRadial5 * harmonics[33];
+                    Real const imageValue33 = broadcast<Real>(k88) * imageRadial5 * U(5, 3);
                     if (sign < 0) {
-                        imagePair[33] = imageValue33;
+                        I(5, 3) = imageValue33;
                     } else {
-                        imagePair[33] += imageValue33;
+                        I(5, 3) += imageValue33;
                     }
-                    Real const imageValue34 = broadcast<Real>(k89) * imageRadial5 * harmonics[34];
+                    Real const imageValue34 = broadcast<Real>(k89) * imageRadial5 * U(5, 4);
                     if (sign < 0) {
-                        imagePair[34] = imageValue34;
+                        I(5, 4) = imageValue34;
                     } else {
-                        imagePair[34] += imageValue34;
+                        I(5, 4) += imageValue34;
                     }
-                    Real const imageValue35 = broadcast<Real>(k94) * imageRadial5 * harmonics[35];
+                    Real const imageValue35 = broadcast<Real>(k94) * imageRadial5 * U(5, 5);
                     if (sign < 0) {
-                        imagePair[35] = imageValue35;
+                        I(5, 5) = imageValue35;
                     } else {
-                        imagePair[35] += imageValue35;
+                        I(5, 5) += imageValue35;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * broadcast<Real>(k49);
                     Real const imageRadial6 = -screening * inversePower;
-                    Real const imageValue36 = broadcast<Real>(k97) * imageRadial6 * harmonics[36];
+                    Real const imageValue36 = broadcast<Real>(k97) * imageRadial6 * U(6, -6);
                     if (sign < 0) {
-                        imagePair[36] = imageValue36;
+                        I(6, -6) = imageValue36;
                     } else {
-                        imagePair[36] += imageValue36;
+                        I(6, -6) += imageValue36;
                     }
-                    Real const imageValue37 = broadcast<Real>(k96) * imageRadial6 * harmonics[37];
+                    Real const imageValue37 = broadcast<Real>(k96) * imageRadial6 * U(6, -5);
                     if (sign < 0) {
-                        imagePair[37] = imageValue37;
+                        I(6, -5) = imageValue37;
                     } else {
-                        imagePair[37] += imageValue37;
+                        I(6, -5) += imageValue37;
                     }
-                    Real const imageValue38 = broadcast<Real>(k95) * imageRadial6 * harmonics[38];
+                    Real const imageValue38 = broadcast<Real>(k95) * imageRadial6 * U(6, -4);
                     if (sign < 0) {
-                        imagePair[38] = imageValue38;
+                        I(6, -4) = imageValue38;
                     } else {
-                        imagePair[38] += imageValue38;
+                        I(6, -4) += imageValue38;
                     }
-                    Real const imageValue39 = broadcast<Real>(k93) * imageRadial6 * harmonics[39];
+                    Real const imageValue39 = broadcast<Real>(k93) * imageRadial6 * U(6, -3);
                     if (sign < 0) {
-                        imagePair[39] = imageValue39;
+                        I(6, -3) = imageValue39;
                     } else {
-                        imagePair[39] += imageValue39;
+                        I(6, -3) += imageValue39;
                     }
-                    Real const imageValue40 = broadcast<Real>(k92) * imageRadial6 * harmonics[40];
+                    Real const imageValue40 = broadcast<Real>(k92) * imageRadial6 * U(6, -2);
                     if (sign < 0) {
-                        imagePair[40] = imageValue40;
+                        I(6, -2) = imageValue40;
                     } else {
-                        imagePair[40] += imageValue40;
+                        I(6, -2) += imageValue40;
                     }
-                    Real const imageValue41 = broadcast<Real>(k91) * imageRadial6 * harmonics[41];
+                    Real const imageValue41 = broadcast<Real>(k91) * imageRadial6 * U(6, -1);
                     if (sign < 0) {
-                        imagePair[41] = imageValue41;
+                        I(6, -1) = imageValue41;
                     } else {
-                        imagePair[41] += imageValue41;
+                        I(6, -1) += imageValue41;
                     }
-                    Real const imageValue42 = broadcast<Real>(k90) * imageRadial6 * harmonics[42];
+                    Real const imageValue42 = broadcast<Real>(k90) * imageRadial6 * U(6, 0);
                     if (sign < 0) {
-                        imagePair[42] = imageValue42;
+                        I(6, 0) = imageValue42;
                     } else {
-                        imagePair[42] += imageValue42;
+                        I(6, 0) += imageValue42;
                     }
-                    Real const imageValue43 = broadcast<Real>(k91) * imageRadial6 * harmonics[43];
+                    Real const imageValue43 = broadcast<Real>(k91) * imageRadial6 * U(6, 1);
                     if (sign < 0) {
-                        imagePair[43] = imageValue43;
+                        I(6, 1) = imageValue43;
                     } else {
-                        imagePair[43] += imageValue43;
+                        I(6, 1) += imageValue43;
                     }
-                    Real const imageValue44 = broadcast<Real>(k92) * imageRadial6 * harmonics[44];
+                    Real const imageValue44 = broadcast<Real>(k92) * imageRadial6 * U(6, 2);
                     if (sign < 0) {
-                        imagePair[44] = imageValue44;
+                        I(6, 2) = imageValue44;
                     } else {
-                        imagePair[44] += imageValue44;
+                        I(6, 2) += imageValue44;
                     }
-                    Real const imageValue45 = broadcast<Real>(k93) * imageRadial6 * harmonics[45];
+                    Real const imageValue45 = broadcast<Real>(k93) * imageRadial6 * U(6, 3);
                     if (sign < 0) {
-                        imagePair[45] = imageValue45;
+                        I(6, 3) = imageValue45;
                     } else {
-                        imagePair[45] += imageValue45;
+                        I(6, 3) += imageValue45;
                     }
-                    Real const imageValue46 = broadcast<Real>(k95) * imageRadial6 * harmonics[46];
+                    Real const imageValue46 = broadcast<Real>(k95) * imageRadial6 * U(6, 4);
                     if (sign < 0) {
-                        imagePair[46] = imageValue46;
+                        I(6, 4) = imageValue46;
                     } else {
-                        imagePair[46] += imageValue46;
+                        I(6, 4) += imageValue46;
                     }
-                    Real const imageValue47 = broadcast<Real>(k96) * imageRadial6 * harmonics[47];
+                    Real const imageValue47 = broadcast<Real>(k96) * imageRadial6 * U(6, 5);
                     if (sign < 0) {
-                        imagePair[47] = imageValue47;
+                        I(6, 5) = imageValue47;
                     } else {
-                        imagePair[47] += imageValue47;
+                        I(6, 5) += imageValue47;
                     }
-                    Real const imageValue48 = broadcast<Real>(k97) * imageRadial6 * harmonics[48];
+                    Real const imageValue48 = broadcast<Real>(k97) * imageRadial6 * U(6, 6);
                     if (sign < 0) {
-                        imagePair[48] = imageValue48;
+                        I(6, 6) = imageValue48;
                     } else {
-                        imagePair[48] += imageValue48;
+                        I(6, 6) += imageValue48;
                     }
                 }
-                detail::ewaldAccumulate(output[0], compensation[0], imagePair[0]);
-                detail::ewaldAccumulate(output[1], compensation[1], imagePair[1]);
-                detail::ewaldAccumulate(output[2], compensation[2], imagePair[2]);
-                detail::ewaldAccumulate(output[3], compensation[3], imagePair[3]);
-                detail::ewaldAccumulate(output[4], compensation[4], imagePair[4]);
-                detail::ewaldAccumulate(output[5], compensation[5], imagePair[5]);
-                detail::ewaldAccumulate(output[6], compensation[6], imagePair[6]);
-                detail::ewaldAccumulate(output[7], compensation[7], imagePair[7]);
-                detail::ewaldAccumulate(output[8], compensation[8], imagePair[8]);
-                detail::ewaldAccumulate(output[9], compensation[9], imagePair[9]);
-                detail::ewaldAccumulate(output[10], compensation[10], imagePair[10]);
-                detail::ewaldAccumulate(output[11], compensation[11], imagePair[11]);
-                detail::ewaldAccumulate(output[12], compensation[12], imagePair[12]);
-                detail::ewaldAccumulate(output[13], compensation[13], imagePair[13]);
-                detail::ewaldAccumulate(output[14], compensation[14], imagePair[14]);
-                detail::ewaldAccumulate(output[15], compensation[15], imagePair[15]);
-                detail::ewaldAccumulate(output[16], compensation[16], imagePair[16]);
-                detail::ewaldAccumulate(output[17], compensation[17], imagePair[17]);
-                detail::ewaldAccumulate(output[18], compensation[18], imagePair[18]);
-                detail::ewaldAccumulate(output[19], compensation[19], imagePair[19]);
-                detail::ewaldAccumulate(output[20], compensation[20], imagePair[20]);
-                detail::ewaldAccumulate(output[21], compensation[21], imagePair[21]);
-                detail::ewaldAccumulate(output[22], compensation[22], imagePair[22]);
-                detail::ewaldAccumulate(output[23], compensation[23], imagePair[23]);
-                detail::ewaldAccumulate(output[24], compensation[24], imagePair[24]);
-                detail::ewaldAccumulate(output[25], compensation[25], imagePair[25]);
-                detail::ewaldAccumulate(output[26], compensation[26], imagePair[26]);
-                detail::ewaldAccumulate(output[27], compensation[27], imagePair[27]);
-                detail::ewaldAccumulate(output[28], compensation[28], imagePair[28]);
-                detail::ewaldAccumulate(output[29], compensation[29], imagePair[29]);
-                detail::ewaldAccumulate(output[30], compensation[30], imagePair[30]);
-                detail::ewaldAccumulate(output[31], compensation[31], imagePair[31]);
-                detail::ewaldAccumulate(output[32], compensation[32], imagePair[32]);
-                detail::ewaldAccumulate(output[33], compensation[33], imagePair[33]);
-                detail::ewaldAccumulate(output[34], compensation[34], imagePair[34]);
-                detail::ewaldAccumulate(output[35], compensation[35], imagePair[35]);
-                detail::ewaldAccumulate(output[36], compensation[36], imagePair[36]);
-                detail::ewaldAccumulate(output[37], compensation[37], imagePair[37]);
-                detail::ewaldAccumulate(output[38], compensation[38], imagePair[38]);
-                detail::ewaldAccumulate(output[39], compensation[39], imagePair[39]);
-                detail::ewaldAccumulate(output[40], compensation[40], imagePair[40]);
-                detail::ewaldAccumulate(output[41], compensation[41], imagePair[41]);
-                detail::ewaldAccumulate(output[42], compensation[42], imagePair[42]);
-                detail::ewaldAccumulate(output[43], compensation[43], imagePair[43]);
-                detail::ewaldAccumulate(output[44], compensation[44], imagePair[44]);
-                detail::ewaldAccumulate(output[45], compensation[45], imagePair[45]);
-                detail::ewaldAccumulate(output[46], compensation[46], imagePair[46]);
-                detail::ewaldAccumulate(output[47], compensation[47], imagePair[47]);
-                detail::ewaldAccumulate(output[48], compensation[48], imagePair[48]);
+                detail::ewaldAccumulate(G(0, 0), C(0, 0), I(0, 0));
+                detail::ewaldAccumulate(G(1, -1), C(1, -1), I(1, -1));
+                detail::ewaldAccumulate(G(1, 0), C(1, 0), I(1, 0));
+                detail::ewaldAccumulate(G(1, 1), C(1, 1), I(1, 1));
+                detail::ewaldAccumulate(G(2, -2), C(2, -2), I(2, -2));
+                detail::ewaldAccumulate(G(2, -1), C(2, -1), I(2, -1));
+                detail::ewaldAccumulate(G(2, 0), C(2, 0), I(2, 0));
+                detail::ewaldAccumulate(G(2, 1), C(2, 1), I(2, 1));
+                detail::ewaldAccumulate(G(2, 2), C(2, 2), I(2, 2));
+                detail::ewaldAccumulate(G(3, -3), C(3, -3), I(3, -3));
+                detail::ewaldAccumulate(G(3, -2), C(3, -2), I(3, -2));
+                detail::ewaldAccumulate(G(3, -1), C(3, -1), I(3, -1));
+                detail::ewaldAccumulate(G(3, 0), C(3, 0), I(3, 0));
+                detail::ewaldAccumulate(G(3, 1), C(3, 1), I(3, 1));
+                detail::ewaldAccumulate(G(3, 2), C(3, 2), I(3, 2));
+                detail::ewaldAccumulate(G(3, 3), C(3, 3), I(3, 3));
+                detail::ewaldAccumulate(G(4, -4), C(4, -4), I(4, -4));
+                detail::ewaldAccumulate(G(4, -3), C(4, -3), I(4, -3));
+                detail::ewaldAccumulate(G(4, -2), C(4, -2), I(4, -2));
+                detail::ewaldAccumulate(G(4, -1), C(4, -1), I(4, -1));
+                detail::ewaldAccumulate(G(4, 0), C(4, 0), I(4, 0));
+                detail::ewaldAccumulate(G(4, 1), C(4, 1), I(4, 1));
+                detail::ewaldAccumulate(G(4, 2), C(4, 2), I(4, 2));
+                detail::ewaldAccumulate(G(4, 3), C(4, 3), I(4, 3));
+                detail::ewaldAccumulate(G(4, 4), C(4, 4), I(4, 4));
+                detail::ewaldAccumulate(G(5, -5), C(5, -5), I(5, -5));
+                detail::ewaldAccumulate(G(5, -4), C(5, -4), I(5, -4));
+                detail::ewaldAccumulate(G(5, -3), C(5, -3), I(5, -3));
+                detail::ewaldAccumulate(G(5, -2), C(5, -2), I(5, -2));
+                detail::ewaldAccumulate(G(5, -1), C(5, -1), I(5, -1));
+                detail::ewaldAccumulate(G(5, 0), C(5, 0), I(5, 0));
+                detail::ewaldAccumulate(G(5, 1), C(5, 1), I(5, 1));
+                detail::ewaldAccumulate(G(5, 2), C(5, 2), I(5, 2));
+                detail::ewaldAccumulate(G(5, 3), C(5, 3), I(5, 3));
+                detail::ewaldAccumulate(G(5, 4), C(5, 4), I(5, 4));
+                detail::ewaldAccumulate(G(5, 5), C(5, 5), I(5, 5));
+                detail::ewaldAccumulate(G(6, -6), C(6, -6), I(6, -6));
+                detail::ewaldAccumulate(G(6, -5), C(6, -5), I(6, -5));
+                detail::ewaldAccumulate(G(6, -4), C(6, -4), I(6, -4));
+                detail::ewaldAccumulate(G(6, -3), C(6, -3), I(6, -3));
+                detail::ewaldAccumulate(G(6, -2), C(6, -2), I(6, -2));
+                detail::ewaldAccumulate(G(6, -1), C(6, -1), I(6, -1));
+                detail::ewaldAccumulate(G(6, 0), C(6, 0), I(6, 0));
+                detail::ewaldAccumulate(G(6, 1), C(6, 1), I(6, 1));
+                detail::ewaldAccumulate(G(6, 2), C(6, 2), I(6, 2));
+                detail::ewaldAccumulate(G(6, 3), C(6, 3), I(6, 3));
+                detail::ewaldAccumulate(G(6, 4), C(6, 4), I(6, 4));
+                detail::ewaldAccumulate(G(6, 5), C(6, 5), I(6, 5));
+                detail::ewaldAccumulate(G(6, 6), C(6, 6), I(6, 6));
                 Real const waveX = broadcast<Real>(ix);
                 Real const waveY = broadcast<Real>(iy);
                 Real const waveZ = broadcast<Real>(iz);
@@ -1067,108 +1077,108 @@ void evaluateEwaldWorking(Real& greenTrace, Real x, Real y, Real z, Real* output
                 Real const wavePotential = -broadcast<Real>(k54) *
                     detail::ewaldExp(-broadcast<Real>(k60) * waveSquared) / waveSquared;
                 Real const waveRadial0 = broadcast<Real>(k57) * wavePotential * cosine;
-                detail::ewaldAccumulate(output[0], compensation[0], waveRadial0 * harmonics[0]);
+                detail::ewaldAccumulate(G(0, 0), C(0, 0), waveRadial0 * U(0, 0));
                 Real const waveRadial1 = broadcast<Real>(k67) * wavePotential * -sine;
                 detail::ewaldAccumulate(
-                    output[1], compensation[1], broadcast<Real>(k58) * waveRadial1 * harmonics[1]);
-                detail::ewaldAccumulate(output[2], compensation[2], waveRadial1 * harmonics[2]);
+                    G(1, -1), C(1, -1), broadcast<Real>(k58) * waveRadial1 * U(1, -1));
+                detail::ewaldAccumulate(G(1, 0), C(1, 0), waveRadial1 * U(1, 0));
                 detail::ewaldAccumulate(
-                    output[3], compensation[3], broadcast<Real>(k58) * waveRadial1 * harmonics[3]);
+                    G(1, 1), C(1, 1), broadcast<Real>(k58) * waveRadial1 * U(1, 1));
                 Real const waveRadial2 = broadcast<Real>(k73) * wavePotential * -cosine;
                 detail::ewaldAccumulate(
-                    output[4], compensation[4], broadcast<Real>(k76) * waveRadial2 * harmonics[4]);
+                    G(2, -2), C(2, -2), broadcast<Real>(k76) * waveRadial2 * U(2, -2));
                 detail::ewaldAccumulate(
-                    output[5], compensation[5], broadcast<Real>(k65) * waveRadial2 * harmonics[5]);
+                    G(2, -1), C(2, -1), broadcast<Real>(k65) * waveRadial2 * U(2, -1));
                 detail::ewaldAccumulate(
-                    output[6], compensation[6], broadcast<Real>(k61) * waveRadial2 * harmonics[6]);
+                    G(2, 0), C(2, 0), broadcast<Real>(k61) * waveRadial2 * U(2, 0));
                 detail::ewaldAccumulate(
-                    output[7], compensation[7], broadcast<Real>(k65) * waveRadial2 * harmonics[7]);
+                    G(2, 1), C(2, 1), broadcast<Real>(k65) * waveRadial2 * U(2, 1));
                 detail::ewaldAccumulate(
-                    output[8], compensation[8], broadcast<Real>(k76) * waveRadial2 * harmonics[8]);
+                    G(2, 2), C(2, 2), broadcast<Real>(k76) * waveRadial2 * U(2, 2));
                 Real const waveRadial3 = broadcast<Real>(k75) * wavePotential * sine;
                 detail::ewaldAccumulate(
-                    output[9], compensation[9], broadcast<Real>(k81) * waveRadial3 * harmonics[9]);
-                detail::ewaldAccumulate(output[10], compensation[10],
-                    broadcast<Real>(k79) * waveRadial3 * harmonics[10]);
-                detail::ewaldAccumulate(output[11], compensation[11],
-                    broadcast<Real>(k78) * waveRadial3 * harmonics[11]);
-                detail::ewaldAccumulate(output[12], compensation[12],
-                    broadcast<Real>(k77) * waveRadial3 * harmonics[12]);
-                detail::ewaldAccumulate(output[13], compensation[13],
-                    broadcast<Real>(k78) * waveRadial3 * harmonics[13]);
-                detail::ewaldAccumulate(output[14], compensation[14],
-                    broadcast<Real>(k79) * waveRadial3 * harmonics[14]);
-                detail::ewaldAccumulate(output[15], compensation[15],
-                    broadcast<Real>(k81) * waveRadial3 * harmonics[15]);
+                    G(3, -3), C(3, -3), broadcast<Real>(k81) * waveRadial3 * U(3, -3));
+                detail::ewaldAccumulate(
+                    G(3, -2), C(3, -2), broadcast<Real>(k79) * waveRadial3 * U(3, -2));
+                detail::ewaldAccumulate(
+                    G(3, -1), C(3, -1), broadcast<Real>(k78) * waveRadial3 * U(3, -1));
+                detail::ewaldAccumulate(
+                    G(3, 0), C(3, 0), broadcast<Real>(k77) * waveRadial3 * U(3, 0));
+                detail::ewaldAccumulate(
+                    G(3, 1), C(3, 1), broadcast<Real>(k78) * waveRadial3 * U(3, 1));
+                detail::ewaldAccumulate(
+                    G(3, 2), C(3, 2), broadcast<Real>(k79) * waveRadial3 * U(3, 2));
+                detail::ewaldAccumulate(
+                    G(3, 3), C(3, 3), broadcast<Real>(k81) * waveRadial3 * U(3, 3));
                 Real const waveRadial4 = broadcast<Real>(k74) * wavePotential * cosine;
-                detail::ewaldAccumulate(output[16], compensation[16],
-                    broadcast<Real>(k87) * waveRadial4 * harmonics[16]);
-                detail::ewaldAccumulate(output[17], compensation[17],
-                    broadcast<Real>(k83) * waveRadial4 * harmonics[17]);
-                detail::ewaldAccumulate(output[18], compensation[18],
-                    broadcast<Real>(k82) * waveRadial4 * harmonics[18]);
-                detail::ewaldAccumulate(output[19], compensation[19],
-                    broadcast<Real>(k81) * waveRadial4 * harmonics[19]);
-                detail::ewaldAccumulate(output[20], compensation[20],
-                    broadcast<Real>(k80) * waveRadial4 * harmonics[20]);
-                detail::ewaldAccumulate(output[21], compensation[21],
-                    broadcast<Real>(k81) * waveRadial4 * harmonics[21]);
-                detail::ewaldAccumulate(output[22], compensation[22],
-                    broadcast<Real>(k82) * waveRadial4 * harmonics[22]);
-                detail::ewaldAccumulate(output[23], compensation[23],
-                    broadcast<Real>(k83) * waveRadial4 * harmonics[23]);
-                detail::ewaldAccumulate(output[24], compensation[24],
-                    broadcast<Real>(k87) * waveRadial4 * harmonics[24]);
+                detail::ewaldAccumulate(
+                    G(4, -4), C(4, -4), broadcast<Real>(k87) * waveRadial4 * U(4, -4));
+                detail::ewaldAccumulate(
+                    G(4, -3), C(4, -3), broadcast<Real>(k83) * waveRadial4 * U(4, -3));
+                detail::ewaldAccumulate(
+                    G(4, -2), C(4, -2), broadcast<Real>(k82) * waveRadial4 * U(4, -2));
+                detail::ewaldAccumulate(
+                    G(4, -1), C(4, -1), broadcast<Real>(k81) * waveRadial4 * U(4, -1));
+                detail::ewaldAccumulate(
+                    G(4, 0), C(4, 0), broadcast<Real>(k80) * waveRadial4 * U(4, 0));
+                detail::ewaldAccumulate(
+                    G(4, 1), C(4, 1), broadcast<Real>(k81) * waveRadial4 * U(4, 1));
+                detail::ewaldAccumulate(
+                    G(4, 2), C(4, 2), broadcast<Real>(k82) * waveRadial4 * U(4, 2));
+                detail::ewaldAccumulate(
+                    G(4, 3), C(4, 3), broadcast<Real>(k83) * waveRadial4 * U(4, 3));
+                detail::ewaldAccumulate(
+                    G(4, 4), C(4, 4), broadcast<Real>(k87) * waveRadial4 * U(4, 4));
                 Real const waveRadial5 = broadcast<Real>(k71) * wavePotential * -sine;
-                detail::ewaldAccumulate(output[25], compensation[25],
-                    broadcast<Real>(k94) * waveRadial5 * harmonics[25]);
-                detail::ewaldAccumulate(output[26], compensation[26],
-                    broadcast<Real>(k89) * waveRadial5 * harmonics[26]);
-                detail::ewaldAccumulate(output[27], compensation[27],
-                    broadcast<Real>(k88) * waveRadial5 * harmonics[27]);
-                detail::ewaldAccumulate(output[28], compensation[28],
-                    broadcast<Real>(k86) * waveRadial5 * harmonics[28]);
-                detail::ewaldAccumulate(output[29], compensation[29],
-                    broadcast<Real>(k85) * waveRadial5 * harmonics[29]);
-                detail::ewaldAccumulate(output[30], compensation[30],
-                    broadcast<Real>(k84) * waveRadial5 * harmonics[30]);
-                detail::ewaldAccumulate(output[31], compensation[31],
-                    broadcast<Real>(k85) * waveRadial5 * harmonics[31]);
-                detail::ewaldAccumulate(output[32], compensation[32],
-                    broadcast<Real>(k86) * waveRadial5 * harmonics[32]);
-                detail::ewaldAccumulate(output[33], compensation[33],
-                    broadcast<Real>(k88) * waveRadial5 * harmonics[33]);
-                detail::ewaldAccumulate(output[34], compensation[34],
-                    broadcast<Real>(k89) * waveRadial5 * harmonics[34]);
-                detail::ewaldAccumulate(output[35], compensation[35],
-                    broadcast<Real>(k94) * waveRadial5 * harmonics[35]);
+                detail::ewaldAccumulate(
+                    G(5, -5), C(5, -5), broadcast<Real>(k94) * waveRadial5 * U(5, -5));
+                detail::ewaldAccumulate(
+                    G(5, -4), C(5, -4), broadcast<Real>(k89) * waveRadial5 * U(5, -4));
+                detail::ewaldAccumulate(
+                    G(5, -3), C(5, -3), broadcast<Real>(k88) * waveRadial5 * U(5, -3));
+                detail::ewaldAccumulate(
+                    G(5, -2), C(5, -2), broadcast<Real>(k86) * waveRadial5 * U(5, -2));
+                detail::ewaldAccumulate(
+                    G(5, -1), C(5, -1), broadcast<Real>(k85) * waveRadial5 * U(5, -1));
+                detail::ewaldAccumulate(
+                    G(5, 0), C(5, 0), broadcast<Real>(k84) * waveRadial5 * U(5, 0));
+                detail::ewaldAccumulate(
+                    G(5, 1), C(5, 1), broadcast<Real>(k85) * waveRadial5 * U(5, 1));
+                detail::ewaldAccumulate(
+                    G(5, 2), C(5, 2), broadcast<Real>(k86) * waveRadial5 * U(5, 2));
+                detail::ewaldAccumulate(
+                    G(5, 3), C(5, 3), broadcast<Real>(k88) * waveRadial5 * U(5, 3));
+                detail::ewaldAccumulate(
+                    G(5, 4), C(5, 4), broadcast<Real>(k89) * waveRadial5 * U(5, 4));
+                detail::ewaldAccumulate(
+                    G(5, 5), C(5, 5), broadcast<Real>(k94) * waveRadial5 * U(5, 5));
                 Real const waveRadial6 = broadcast<Real>(k64) * wavePotential * -cosine;
-                detail::ewaldAccumulate(output[36], compensation[36],
-                    broadcast<Real>(k97) * waveRadial6 * harmonics[36]);
-                detail::ewaldAccumulate(output[37], compensation[37],
-                    broadcast<Real>(k96) * waveRadial6 * harmonics[37]);
-                detail::ewaldAccumulate(output[38], compensation[38],
-                    broadcast<Real>(k95) * waveRadial6 * harmonics[38]);
-                detail::ewaldAccumulate(output[39], compensation[39],
-                    broadcast<Real>(k93) * waveRadial6 * harmonics[39]);
-                detail::ewaldAccumulate(output[40], compensation[40],
-                    broadcast<Real>(k92) * waveRadial6 * harmonics[40]);
-                detail::ewaldAccumulate(output[41], compensation[41],
-                    broadcast<Real>(k91) * waveRadial6 * harmonics[41]);
-                detail::ewaldAccumulate(output[42], compensation[42],
-                    broadcast<Real>(k90) * waveRadial6 * harmonics[42]);
-                detail::ewaldAccumulate(output[43], compensation[43],
-                    broadcast<Real>(k91) * waveRadial6 * harmonics[43]);
-                detail::ewaldAccumulate(output[44], compensation[44],
-                    broadcast<Real>(k92) * waveRadial6 * harmonics[44]);
-                detail::ewaldAccumulate(output[45], compensation[45],
-                    broadcast<Real>(k93) * waveRadial6 * harmonics[45]);
-                detail::ewaldAccumulate(output[46], compensation[46],
-                    broadcast<Real>(k95) * waveRadial6 * harmonics[46]);
-                detail::ewaldAccumulate(output[47], compensation[47],
-                    broadcast<Real>(k96) * waveRadial6 * harmonics[47]);
-                detail::ewaldAccumulate(output[48], compensation[48],
-                    broadcast<Real>(k97) * waveRadial6 * harmonics[48]);
+                detail::ewaldAccumulate(
+                    G(6, -6), C(6, -6), broadcast<Real>(k97) * waveRadial6 * U(6, -6));
+                detail::ewaldAccumulate(
+                    G(6, -5), C(6, -5), broadcast<Real>(k96) * waveRadial6 * U(6, -5));
+                detail::ewaldAccumulate(
+                    G(6, -4), C(6, -4), broadcast<Real>(k95) * waveRadial6 * U(6, -4));
+                detail::ewaldAccumulate(
+                    G(6, -3), C(6, -3), broadcast<Real>(k93) * waveRadial6 * U(6, -3));
+                detail::ewaldAccumulate(
+                    G(6, -2), C(6, -2), broadcast<Real>(k92) * waveRadial6 * U(6, -2));
+                detail::ewaldAccumulate(
+                    G(6, -1), C(6, -1), broadcast<Real>(k91) * waveRadial6 * U(6, -1));
+                detail::ewaldAccumulate(
+                    G(6, 0), C(6, 0), broadcast<Real>(k90) * waveRadial6 * U(6, 0));
+                detail::ewaldAccumulate(
+                    G(6, 1), C(6, 1), broadcast<Real>(k91) * waveRadial6 * U(6, 1));
+                detail::ewaldAccumulate(
+                    G(6, 2), C(6, 2), broadcast<Real>(k92) * waveRadial6 * U(6, 2));
+                detail::ewaldAccumulate(
+                    G(6, 3), C(6, 3), broadcast<Real>(k93) * waveRadial6 * U(6, 3));
+                detail::ewaldAccumulate(
+                    G(6, 4), C(6, 4), broadcast<Real>(k95) * waveRadial6 * U(6, 4));
+                detail::ewaldAccumulate(
+                    G(6, 5), C(6, 5), broadcast<Real>(k96) * waveRadial6 * U(6, 5));
+                detail::ewaldAccumulate(
+                    G(6, 6), C(6, 6), broadcast<Real>(k97) * waveRadial6 * U(6, 6));
             }
         }
     }

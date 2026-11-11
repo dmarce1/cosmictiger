@@ -19,7 +19,7 @@ struct Expansion;
 namespace cosmictiger::gravity::spherical {
 namespace detail {
 
-    // Slot n(n+1)+m: m>=0 is real; m<0 is the imaginary part of +|m|.
+    // Slot l*l+l+m: m>=0 is real; m<0 is the imaginary part of +|m|.
     template <class Real, int degree>
     class Coefficients {
         Real coefficients_[(degree + 1) * (degree + 1)]{};
@@ -29,34 +29,34 @@ namespace detail {
         static constexpr int kCount_ = (degree + 1) * (degree + 1);
         /// Map harmonic degree and signed azimuthal index to the packed real
         /// coefficient slot.
-        CUDA_EXPORT static constexpr int index(int n, int m) {
-            return n * (n + 1) + m;
+        CUDA_EXPORT static constexpr int index(int l, int m) {
+            return l * l + l + m;
         }
         /// Access the packed harmonic component; negative m selects the imaginary
         /// part of |m|.
-        CUDA_EXPORT Real& operator()(int n, int m) {
-            return coefficients_[index(n, m)];
+        CUDA_EXPORT Real& operator()(int l, int m) {
+            return coefficients_[index(l, m)];
         }
         /// Access the packed harmonic component; negative m selects the imaginary
         /// part of |m|.
-        CUDA_EXPORT Real const& operator()(int n, int m) const {
-            return coefficients_[index(n, m)];
+        CUDA_EXPORT Real const& operator()(int l, int m) const {
+            return coefficients_[index(l, m)];
         }
         /// Access the real harmonic component for a nonnegative azimuthal index.
-        CUDA_EXPORT Real& real(int n, int m) {
-            return (*this)(n, m);
+        CUDA_EXPORT Real& real(int l, int m) {
+            return (*this)(l, m);
         }
         /// Access the real harmonic component for a nonnegative azimuthal index.
-        CUDA_EXPORT Real const& real(int n, int m) const {
-            return (*this)(n, m);
+        CUDA_EXPORT Real const& real(int l, int m) const {
+            return (*this)(l, m);
         }
         /// Access the imaginary harmonic component for a positive azimuthal index.
-        CUDA_EXPORT Real& imaginary(int n, int m) {
-            return (*this)(n, -m);
+        CUDA_EXPORT Real& imaginary(int l, int m) {
+            return (*this)(l, -m);
         }
         /// Access the imaginary harmonic component for a positive azimuthal index.
-        CUDA_EXPORT Real const& imaginary(int n, int m) const {
-            return (*this)(n, -m);
+        CUDA_EXPORT Real const& imaginary(int l, int m) const {
+            return (*this)(l, -m);
         }
         /// Access a coefficient by its packed storage index.
         CUDA_EXPORT Real& operator[](int i) {
@@ -80,6 +80,20 @@ namespace detail {
                 coefficients_[i] = value;
             }
             return *this;
+        }
+    };
+
+    /// View existing packed storage using signed harmonic indices without copying it.
+    template <class Real>
+    class CoefficientView {
+        Real* coefficients_;
+
+    public:
+        CUDA_EXPORT explicit CoefficientView(Real* coefficients)
+          : coefficients_(coefficients) {}
+        /// Access slot l*l+l+m; negative m selects the imaginary part of |m|.
+        CUDA_EXPORT Real& operator()(int l, int m) const {
+            return coefficients_[l * l + l + m];
         }
     };
 

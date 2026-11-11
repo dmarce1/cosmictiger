@@ -7,6 +7,7 @@ The optional arithmetic instrumentation sources contain generic definitions for
 counting-scalar tests. Production targets compile only the concrete sources.
 """
 import re
+from math import isqrt
 from .constants import hoistConstants
 
 CPU_TYPES = ('float', 'double', 'SimdVector<float, 8>', 'SimdVector<double, 2>',
@@ -97,6 +98,44 @@ def singleOrderApi(outputs, degree):
     return result
 
 
+def sphericalAccesses(path, name, body):
+    """Spell harmonic storage accesses as (l, m), preserving raw-array APIs.
+
+    The four L2P field components are not harmonic coefficients. Array-wide
+    copies retain linear indexing; only harmonic arithmetic uses the views.
+    """
+    if not path.startswith('spherical/'):
+        return body
+    arrays = {
+        'P2M': {'output': ('M', 'Real')},
+        'L2P': {'source': ('L', 'Real const')},
+        'evaluateGreen': {'output': ('G', 'Real')},
+        'ewaldRegular': {'output': ('U', 'Real')},
+        'evaluateEwaldWorking': {
+            'output': ('G', 'Real'), 'harmonics': ('U', 'Real'),
+            'compensation': ('C', 'Real'), 'imagePair': ('I', 'Real'),
+        },
+    }.get(name, {})
+    prefix = []
+    for array, (view, real) in arrays.items():
+        def access(match):
+            slot = int(match[1])
+            l = isqrt(slot)
+            m = slot - l * l - l
+            return f'{view}({l}, {m})'
+        body, count = re.subn(r'(?<!Real )\b' + array + r'\[(\d+)\]', access, body)
+        if not count:
+            continue
+        declaration = f'    detail::CoefficientView<{real}> const {view}{{{array}}};\n'
+        # Local scratch arrays must be declared before constructing their views.
+        local = re.search(r'\bReal\s+' + array + r'\[\d+\];', body)
+        if local:
+            body = body[:local.end()] + '\n' + declaration + body[local.end():]
+        else:
+            prefix.append(declaration)
+    return '\n' + ''.join(prefix) + body if prefix else body
+
+
 def splitSources(outputs, degree):
     result = dict(outputs)
     order = degree + 1
@@ -138,6 +177,7 @@ def splitSources(outputs, degree):
             namespace = list(re.finditer(r'namespace ([\w:]+)\s*\{', cpp[:match.start()]))[-1][1]
             conversion = '::operator ' in signature
             name = None if conversion else re.search(r'(\w+)\(', signature.split('CUDA_EXPORT')[-1].split('__device__')[-1])[1]
+            body = sphericalAccesses(path, name, body)
             header.append(prefix + ('' if conversion else
                 '#if defined(COSMICTIGER_FMM_COUNTING_ONLY) || defined(COSMICTIGER_FMM_INSTRUMENTATION)\n' + signature + ';\n#endif\n'))
             audit.append(f'namespace {namespace} {{\n{signature} {{{body}}}\n}}\n')

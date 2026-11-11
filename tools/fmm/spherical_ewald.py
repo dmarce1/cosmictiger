@@ -203,7 +203,7 @@ def generate(minLocalDegree=2,maxLocalDegree=8):
               "}", "template <int degree> inline constexpr int kEwaldGreenFlops = 0;",
               "template <int degree> inline constexpr int kEwaldGreenConventionalFlops = 0;", "}"]
     outputs = {'spherical/ewald_common.hpp': '\n'.join(lines) + '\n'}
-    green = ['#pragma once', '#include <cosmictiger/gravity/kernels/spherical/ewald_common.hpp>',
+    green = ['#pragma once', '#include <cosmictiger/gravity/kernels/spherical_types.hpp>', '#include <cosmictiger/gravity/kernels/spherical/ewald_common.hpp>',
              '', 'namespace cosmictiger::gravity::spherical {']
     counts = {}
     for degree in range(minLocalDegree,maxLocalDegree+1):

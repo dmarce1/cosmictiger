@@ -36,70 +36,72 @@ __device__ void ewaldRegular(float x, float y, float z, float radiusSquared, flo
     constexpr float k20 = 7.00000000e+00f;
     constexpr float k21 = 9.00000000e+00f;
     constexpr float k22 = 1.10000000e+01f;
-    output[0] = k17;
-    output[2] = z * output[0];
+    detail::CoefficientView<float> const U{output};
+
+    U(0, 0) = k17;
+    U(1, 0) = z * U(0, 0);
     float const zFactor2_0 = k18 * z;
-    output[6] = k15 * fma(zFactor2_0, output[2], -radiusSquared * output[0]);
+    U(2, 0) = k15 * fma(zFactor2_0, U(1, 0), -radiusSquared * U(0, 0));
     float const zFactor3_0 = k19 * z;
-    output[12] = k12 * fma(zFactor3_0, output[6], -radiusSquared * output[2]);
+    U(3, 0) = k12 * fma(zFactor3_0, U(2, 0), -radiusSquared * U(1, 0));
     float const zFactor4_0 = k20 * z;
-    output[20] = k08 * fma(zFactor4_0, output[12], -radiusSquared * output[6]);
+    U(4, 0) = k08 * fma(zFactor4_0, U(3, 0), -radiusSquared * U(2, 0));
     float const zFactor5_0 = k21 * z;
-    output[30] = k04 * fma(zFactor5_0, output[20], -radiusSquared * output[12]);
+    U(5, 0) = k04 * fma(zFactor5_0, U(4, 0), -radiusSquared * U(3, 0));
     float const zFactor6_0 = k22 * z;
-    output[42] = k00 * fma(zFactor6_0, output[30], -radiusSquared * output[20]);
-    output[3] = x * k16;
-    output[1] = y * k16;
-    output[7] = z * output[3];
-    output[5] = z * output[1];
+    U(6, 0) = k00 * fma(zFactor6_0, U(5, 0), -radiusSquared * U(4, 0));
+    U(1, 1) = x * k16;
+    U(1, -1) = y * k16;
+    U(2, 1) = z * U(1, 1);
+    U(2, -1) = z * U(1, -1);
     float const zFactor3_1 = k19 * z;
-    output[13] = k13 * fma(zFactor3_1, output[7], -radiusSquared * output[3]);
-    output[11] = k13 * fma(zFactor3_1, output[5], -radiusSquared * output[1]);
+    U(3, 1) = k13 * fma(zFactor3_1, U(2, 1), -radiusSquared * U(1, 1));
+    U(3, -1) = k13 * fma(zFactor3_1, U(2, -1), -radiusSquared * U(1, -1));
     float const zFactor4_1 = k20 * z;
-    output[21] = k09 * fma(zFactor4_1, output[13], -radiusSquared * output[7]);
-    output[19] = k09 * fma(zFactor4_1, output[11], -radiusSquared * output[5]);
+    U(4, 1) = k09 * fma(zFactor4_1, U(3, 1), -radiusSquared * U(2, 1));
+    U(4, -1) = k09 * fma(zFactor4_1, U(3, -1), -radiusSquared * U(2, -1));
     float const zFactor5_1 = k21 * z;
-    output[31] = k05 * fma(zFactor5_1, output[21], -radiusSquared * output[13]);
-    output[29] = k05 * fma(zFactor5_1, output[19], -radiusSquared * output[11]);
+    U(5, 1) = k05 * fma(zFactor5_1, U(4, 1), -radiusSquared * U(3, 1));
+    U(5, -1) = k05 * fma(zFactor5_1, U(4, -1), -radiusSquared * U(3, -1));
     float const zFactor6_1 = k22 * z;
-    output[43] = k01 * fma(zFactor6_1, output[31], -radiusSquared * output[21]);
-    output[41] = k01 * fma(zFactor6_1, output[29], -radiusSquared * output[19]);
-    output[8] = k15 * fma(x, output[3], -y * output[1]);
-    output[4] = k15 * fma(y, output[3], x * output[1]);
-    output[14] = z * output[8];
-    output[10] = z * output[4];
+    U(6, 1) = k01 * fma(zFactor6_1, U(5, 1), -radiusSquared * U(4, 1));
+    U(6, -1) = k01 * fma(zFactor6_1, U(5, -1), -radiusSquared * U(4, -1));
+    U(2, 2) = k15 * fma(x, U(1, 1), -y * U(1, -1));
+    U(2, -2) = k15 * fma(y, U(1, 1), x * U(1, -1));
+    U(3, 2) = z * U(2, 2);
+    U(3, -2) = z * U(2, -2);
     float const zFactor4_2 = k20 * z;
-    output[22] = k10 * fma(zFactor4_2, output[14], -radiusSquared * output[8]);
-    output[18] = k10 * fma(zFactor4_2, output[10], -radiusSquared * output[4]);
+    U(4, 2) = k10 * fma(zFactor4_2, U(3, 2), -radiusSquared * U(2, 2));
+    U(4, -2) = k10 * fma(zFactor4_2, U(3, -2), -radiusSquared * U(2, -2));
     float const zFactor5_2 = k21 * z;
-    output[32] = k06 * fma(zFactor5_2, output[22], -radiusSquared * output[14]);
-    output[28] = k06 * fma(zFactor5_2, output[18], -radiusSquared * output[10]);
+    U(5, 2) = k06 * fma(zFactor5_2, U(4, 2), -radiusSquared * U(3, 2));
+    U(5, -2) = k06 * fma(zFactor5_2, U(4, -2), -radiusSquared * U(3, -2));
     float const zFactor6_2 = k22 * z;
-    output[44] = k02 * fma(zFactor6_2, output[32], -radiusSquared * output[22]);
-    output[40] = k02 * fma(zFactor6_2, output[28], -radiusSquared * output[18]);
-    output[15] = k14 * fma(x, output[8], -y * output[4]);
-    output[9] = k14 * fma(y, output[8], x * output[4]);
-    output[23] = z * output[15];
-    output[17] = z * output[9];
+    U(6, 2) = k02 * fma(zFactor6_2, U(5, 2), -radiusSquared * U(4, 2));
+    U(6, -2) = k02 * fma(zFactor6_2, U(5, -2), -radiusSquared * U(4, -2));
+    U(3, 3) = k14 * fma(x, U(2, 2), -y * U(2, -2));
+    U(3, -3) = k14 * fma(y, U(2, 2), x * U(2, -2));
+    U(4, 3) = z * U(3, 3);
+    U(4, -3) = z * U(3, -3);
     float const zFactor5_3 = k21 * z;
-    output[33] = k08 * fma(zFactor5_3, output[23], -radiusSquared * output[15]);
-    output[27] = k08 * fma(zFactor5_3, output[17], -radiusSquared * output[9]);
+    U(5, 3) = k08 * fma(zFactor5_3, U(4, 3), -radiusSquared * U(3, 3));
+    U(5, -3) = k08 * fma(zFactor5_3, U(4, -3), -radiusSquared * U(3, -3));
     float const zFactor6_3 = k22 * z;
-    output[45] = k03 * fma(zFactor6_3, output[33], -radiusSquared * output[23]);
-    output[39] = k03 * fma(zFactor6_3, output[27], -radiusSquared * output[17]);
-    output[24] = k13 * fma(x, output[15], -y * output[9]);
-    output[16] = k13 * fma(y, output[15], x * output[9]);
-    output[34] = z * output[24];
-    output[26] = z * output[16];
+    U(6, 3) = k03 * fma(zFactor6_3, U(5, 3), -radiusSquared * U(4, 3));
+    U(6, -3) = k03 * fma(zFactor6_3, U(5, -3), -radiusSquared * U(4, -3));
+    U(4, 4) = k13 * fma(x, U(3, 3), -y * U(3, -3));
+    U(4, -4) = k13 * fma(y, U(3, 3), x * U(3, -3));
+    U(5, 4) = z * U(4, 4);
+    U(5, -4) = z * U(4, -4);
     float const zFactor6_4 = k22 * z;
-    output[46] = k07 * fma(zFactor6_4, output[34], -radiusSquared * output[24]);
-    output[38] = k07 * fma(zFactor6_4, output[26], -radiusSquared * output[16]);
-    output[35] = k11 * fma(x, output[24], -y * output[16]);
-    output[25] = k11 * fma(y, output[24], x * output[16]);
-    output[47] = z * output[35];
-    output[37] = z * output[25];
-    output[48] = k10 * fma(x, output[35], -y * output[25]);
-    output[36] = k10 * fma(y, output[35], x * output[25]);
+    U(6, 4) = k07 * fma(zFactor6_4, U(5, 4), -radiusSquared * U(4, 4));
+    U(6, -4) = k07 * fma(zFactor6_4, U(5, -4), -radiusSquared * U(4, -4));
+    U(5, 5) = k11 * fma(x, U(4, 4), -y * U(4, -4));
+    U(5, -5) = k11 * fma(y, U(4, 4), x * U(4, -4));
+    U(6, 5) = z * U(5, 5);
+    U(6, -5) = z * U(5, -5);
+    U(6, 6) = k10 * fma(x, U(5, 5), -y * U(5, -5));
+    U(6, -6) = k10 * fma(y, U(5, 5), x * U(5, -5));
 }
 }    // namespace cosmictiger::gravity::spherical
 namespace cosmictiger::gravity::spherical {
@@ -129,70 +131,72 @@ __device__ void ewaldRegular(double x, double y, double z, double radiusSquared,
     constexpr double k20 = 7.00000000000000000e+00;
     constexpr double k21 = 9.00000000000000000e+00;
     constexpr double k22 = 1.10000000000000000e+01;
-    output[0] = k17;
-    output[2] = z * output[0];
+    detail::CoefficientView<double> const U{output};
+
+    U(0, 0) = k17;
+    U(1, 0) = z * U(0, 0);
     double const zFactor2_0 = k18 * z;
-    output[6] = k15 * fma(zFactor2_0, output[2], -radiusSquared * output[0]);
+    U(2, 0) = k15 * fma(zFactor2_0, U(1, 0), -radiusSquared * U(0, 0));
     double const zFactor3_0 = k19 * z;
-    output[12] = k12 * fma(zFactor3_0, output[6], -radiusSquared * output[2]);
+    U(3, 0) = k12 * fma(zFactor3_0, U(2, 0), -radiusSquared * U(1, 0));
     double const zFactor4_0 = k20 * z;
-    output[20] = k08 * fma(zFactor4_0, output[12], -radiusSquared * output[6]);
+    U(4, 0) = k08 * fma(zFactor4_0, U(3, 0), -radiusSquared * U(2, 0));
     double const zFactor5_0 = k21 * z;
-    output[30] = k04 * fma(zFactor5_0, output[20], -radiusSquared * output[12]);
+    U(5, 0) = k04 * fma(zFactor5_0, U(4, 0), -radiusSquared * U(3, 0));
     double const zFactor6_0 = k22 * z;
-    output[42] = k00 * fma(zFactor6_0, output[30], -radiusSquared * output[20]);
-    output[3] = x * k16;
-    output[1] = y * k16;
-    output[7] = z * output[3];
-    output[5] = z * output[1];
+    U(6, 0) = k00 * fma(zFactor6_0, U(5, 0), -radiusSquared * U(4, 0));
+    U(1, 1) = x * k16;
+    U(1, -1) = y * k16;
+    U(2, 1) = z * U(1, 1);
+    U(2, -1) = z * U(1, -1);
     double const zFactor3_1 = k19 * z;
-    output[13] = k13 * fma(zFactor3_1, output[7], -radiusSquared * output[3]);
-    output[11] = k13 * fma(zFactor3_1, output[5], -radiusSquared * output[1]);
+    U(3, 1) = k13 * fma(zFactor3_1, U(2, 1), -radiusSquared * U(1, 1));
+    U(3, -1) = k13 * fma(zFactor3_1, U(2, -1), -radiusSquared * U(1, -1));
     double const zFactor4_1 = k20 * z;
-    output[21] = k09 * fma(zFactor4_1, output[13], -radiusSquared * output[7]);
-    output[19] = k09 * fma(zFactor4_1, output[11], -radiusSquared * output[5]);
+    U(4, 1) = k09 * fma(zFactor4_1, U(3, 1), -radiusSquared * U(2, 1));
+    U(4, -1) = k09 * fma(zFactor4_1, U(3, -1), -radiusSquared * U(2, -1));
     double const zFactor5_1 = k21 * z;
-    output[31] = k05 * fma(zFactor5_1, output[21], -radiusSquared * output[13]);
-    output[29] = k05 * fma(zFactor5_1, output[19], -radiusSquared * output[11]);
+    U(5, 1) = k05 * fma(zFactor5_1, U(4, 1), -radiusSquared * U(3, 1));
+    U(5, -1) = k05 * fma(zFactor5_1, U(4, -1), -radiusSquared * U(3, -1));
     double const zFactor6_1 = k22 * z;
-    output[43] = k01 * fma(zFactor6_1, output[31], -radiusSquared * output[21]);
-    output[41] = k01 * fma(zFactor6_1, output[29], -radiusSquared * output[19]);
-    output[8] = k15 * fma(x, output[3], -y * output[1]);
-    output[4] = k15 * fma(y, output[3], x * output[1]);
-    output[14] = z * output[8];
-    output[10] = z * output[4];
+    U(6, 1) = k01 * fma(zFactor6_1, U(5, 1), -radiusSquared * U(4, 1));
+    U(6, -1) = k01 * fma(zFactor6_1, U(5, -1), -radiusSquared * U(4, -1));
+    U(2, 2) = k15 * fma(x, U(1, 1), -y * U(1, -1));
+    U(2, -2) = k15 * fma(y, U(1, 1), x * U(1, -1));
+    U(3, 2) = z * U(2, 2);
+    U(3, -2) = z * U(2, -2);
     double const zFactor4_2 = k20 * z;
-    output[22] = k10 * fma(zFactor4_2, output[14], -radiusSquared * output[8]);
-    output[18] = k10 * fma(zFactor4_2, output[10], -radiusSquared * output[4]);
+    U(4, 2) = k10 * fma(zFactor4_2, U(3, 2), -radiusSquared * U(2, 2));
+    U(4, -2) = k10 * fma(zFactor4_2, U(3, -2), -radiusSquared * U(2, -2));
     double const zFactor5_2 = k21 * z;
-    output[32] = k06 * fma(zFactor5_2, output[22], -radiusSquared * output[14]);
-    output[28] = k06 * fma(zFactor5_2, output[18], -radiusSquared * output[10]);
+    U(5, 2) = k06 * fma(zFactor5_2, U(4, 2), -radiusSquared * U(3, 2));
+    U(5, -2) = k06 * fma(zFactor5_2, U(4, -2), -radiusSquared * U(3, -2));
     double const zFactor6_2 = k22 * z;
-    output[44] = k02 * fma(zFactor6_2, output[32], -radiusSquared * output[22]);
-    output[40] = k02 * fma(zFactor6_2, output[28], -radiusSquared * output[18]);
-    output[15] = k14 * fma(x, output[8], -y * output[4]);
-    output[9] = k14 * fma(y, output[8], x * output[4]);
-    output[23] = z * output[15];
-    output[17] = z * output[9];
+    U(6, 2) = k02 * fma(zFactor6_2, U(5, 2), -radiusSquared * U(4, 2));
+    U(6, -2) = k02 * fma(zFactor6_2, U(5, -2), -radiusSquared * U(4, -2));
+    U(3, 3) = k14 * fma(x, U(2, 2), -y * U(2, -2));
+    U(3, -3) = k14 * fma(y, U(2, 2), x * U(2, -2));
+    U(4, 3) = z * U(3, 3);
+    U(4, -3) = z * U(3, -3);
     double const zFactor5_3 = k21 * z;
-    output[33] = k08 * fma(zFactor5_3, output[23], -radiusSquared * output[15]);
-    output[27] = k08 * fma(zFactor5_3, output[17], -radiusSquared * output[9]);
+    U(5, 3) = k08 * fma(zFactor5_3, U(4, 3), -radiusSquared * U(3, 3));
+    U(5, -3) = k08 * fma(zFactor5_3, U(4, -3), -radiusSquared * U(3, -3));
     double const zFactor6_3 = k22 * z;
-    output[45] = k03 * fma(zFactor6_3, output[33], -radiusSquared * output[23]);
-    output[39] = k03 * fma(zFactor6_3, output[27], -radiusSquared * output[17]);
-    output[24] = k13 * fma(x, output[15], -y * output[9]);
-    output[16] = k13 * fma(y, output[15], x * output[9]);
-    output[34] = z * output[24];
-    output[26] = z * output[16];
+    U(6, 3) = k03 * fma(zFactor6_3, U(5, 3), -radiusSquared * U(4, 3));
+    U(6, -3) = k03 * fma(zFactor6_3, U(5, -3), -radiusSquared * U(4, -3));
+    U(4, 4) = k13 * fma(x, U(3, 3), -y * U(3, -3));
+    U(4, -4) = k13 * fma(y, U(3, 3), x * U(3, -3));
+    U(5, 4) = z * U(4, 4);
+    U(5, -4) = z * U(4, -4);
     double const zFactor6_4 = k22 * z;
-    output[46] = k07 * fma(zFactor6_4, output[34], -radiusSquared * output[24]);
-    output[38] = k07 * fma(zFactor6_4, output[26], -radiusSquared * output[16]);
-    output[35] = k11 * fma(x, output[24], -y * output[16]);
-    output[25] = k11 * fma(y, output[24], x * output[16]);
-    output[47] = z * output[35];
-    output[37] = z * output[25];
-    output[48] = k10 * fma(x, output[35], -y * output[25]);
-    output[36] = k10 * fma(y, output[35], x * output[25]);
+    U(6, 4) = k07 * fma(zFactor6_4, U(5, 4), -radiusSquared * U(4, 4));
+    U(6, -4) = k07 * fma(zFactor6_4, U(5, -4), -radiusSquared * U(4, -4));
+    U(5, 5) = k11 * fma(x, U(4, 4), -y * U(4, -4));
+    U(5, -5) = k11 * fma(y, U(4, 4), x * U(4, -4));
+    U(6, 5) = z * U(5, 5);
+    U(6, -5) = z * U(5, -5);
+    U(6, 6) = k10 * fma(x, U(5, 5), -y * U(5, -5));
+    U(6, -6) = k10 * fma(y, U(5, 5), x * U(5, -5));
 }
 }    // namespace cosmictiger::gravity::spherical
 namespace cosmictiger::gravity::spherical {
@@ -297,9 +301,17 @@ __device__ void evaluateEwaldWorking(float& greenTrace, float x, float y, float 
     constexpr float k95 = 7.25760000e+06f;
     constexpr float k96 = 3.99168000e+07f;
     constexpr float k97 = 4.79001600e+08f;
+    detail::CoefficientView<float> const G{output};
+
     float harmonics[49];
+    detail::CoefficientView<float> const U{harmonics};
+
     float compensation[49];
+    detail::CoefficientView<float> const C{compensation};
+
     float imagePair[49];
+    detail::CoefficientView<float> const I{imagePair};
+
     float const radiusSquared = fma(x, x, fma(y, y, z * z));
     ewaldRegular(x, y, z, radiusSquared, harmonics);
     float const argument = k61 * radiusSquared;
@@ -354,8 +366,8 @@ __device__ void evaluateEwaldWorking(float& greenTrace, float x, float y, float 
     series0 = fma(series0, argument * k53, k57);
     series0 = fma(series0, argument * k55, k57);
     float const radial0 = k59 * exponential * series0;
-    output[0] = radial0 * harmonics[0];
-    compensation[0] = k00;
+    G(0, 0) = radial0 * U(0, 0);
+    C(0, 0) = k00;
     float series1 = k57;
     series1 = fma(series1, argument * k06, k57);
     series1 = fma(series1, argument * k07, k57);
@@ -406,12 +418,12 @@ __device__ void evaluateEwaldWorking(float& greenTrace, float x, float y, float 
     series1 = fma(series1, argument * k52, k57);
     series1 = fma(series1, argument * k53, k57);
     float const radial1 = -k66 * exponential * series1;
-    output[1] = k58 * radial1 * harmonics[1];
-    compensation[1] = k00;
-    output[2] = radial1 * harmonics[2];
-    compensation[2] = k00;
-    output[3] = k58 * radial1 * harmonics[3];
-    compensation[3] = k00;
+    G(1, -1) = k58 * radial1 * U(1, -1);
+    C(1, -1) = k00;
+    G(1, 0) = radial1 * U(1, 0);
+    C(1, 0) = k00;
+    G(1, 1) = k58 * radial1 * U(1, 1);
+    C(1, 1) = k00;
     float series2 = k57;
     series2 = fma(series2, argument * k05, k57);
     series2 = fma(series2, argument * k06, k57);
@@ -462,16 +474,16 @@ __device__ void evaluateEwaldWorking(float& greenTrace, float x, float y, float 
     series2 = fma(series2, argument * k51, k57);
     series2 = fma(series2, argument * k52, k57);
     float const radial2 = k69 * exponential * series2;
-    output[4] = k76 * radial2 * harmonics[4];
-    compensation[4] = k00;
-    output[5] = k65 * radial2 * harmonics[5];
-    compensation[5] = k00;
-    output[6] = k61 * radial2 * harmonics[6];
-    compensation[6] = k00;
-    output[7] = k65 * radial2 * harmonics[7];
-    compensation[7] = k00;
-    output[8] = k76 * radial2 * harmonics[8];
-    compensation[8] = k00;
+    G(2, -2) = k76 * radial2 * U(2, -2);
+    C(2, -2) = k00;
+    G(2, -1) = k65 * radial2 * U(2, -1);
+    C(2, -1) = k00;
+    G(2, 0) = k61 * radial2 * U(2, 0);
+    C(2, 0) = k00;
+    G(2, 1) = k65 * radial2 * U(2, 1);
+    C(2, 1) = k00;
+    G(2, 2) = k76 * radial2 * U(2, 2);
+    C(2, 2) = k00;
     float series3 = k57;
     series3 = fma(series3, argument * k04, k57);
     series3 = fma(series3, argument * k05, k57);
@@ -522,20 +534,20 @@ __device__ void evaluateEwaldWorking(float& greenTrace, float x, float y, float 
     series3 = fma(series3, argument * k50, k57);
     series3 = fma(series3, argument * k51, k57);
     float const radial3 = -k72 * exponential * series3;
-    output[9] = k81 * radial3 * harmonics[9];
-    compensation[9] = k00;
-    output[10] = k79 * radial3 * harmonics[10];
-    compensation[10] = k00;
-    output[11] = k78 * radial3 * harmonics[11];
-    compensation[11] = k00;
-    output[12] = k77 * radial3 * harmonics[12];
-    compensation[12] = k00;
-    output[13] = k78 * radial3 * harmonics[13];
-    compensation[13] = k00;
-    output[14] = k79 * radial3 * harmonics[14];
-    compensation[14] = k00;
-    output[15] = k81 * radial3 * harmonics[15];
-    compensation[15] = k00;
+    G(3, -3) = k81 * radial3 * U(3, -3);
+    C(3, -3) = k00;
+    G(3, -2) = k79 * radial3 * U(3, -2);
+    C(3, -2) = k00;
+    G(3, -1) = k78 * radial3 * U(3, -1);
+    C(3, -1) = k00;
+    G(3, 0) = k77 * radial3 * U(3, 0);
+    C(3, 0) = k00;
+    G(3, 1) = k78 * radial3 * U(3, 1);
+    C(3, 1) = k00;
+    G(3, 2) = k79 * radial3 * U(3, 2);
+    C(3, 2) = k00;
+    G(3, 3) = k81 * radial3 * U(3, 3);
+    C(3, 3) = k00;
     float series4 = k57;
     series4 = fma(series4, argument * k03, k57);
     series4 = fma(series4, argument * k04, k57);
@@ -586,24 +598,24 @@ __device__ void evaluateEwaldWorking(float& greenTrace, float x, float y, float 
     series4 = fma(series4, argument * k49, k57);
     series4 = fma(series4, argument * k50, k57);
     float const radial4 = k70 * exponential * series4;
-    output[16] = k87 * radial4 * harmonics[16];
-    compensation[16] = k00;
-    output[17] = k83 * radial4 * harmonics[17];
-    compensation[17] = k00;
-    output[18] = k82 * radial4 * harmonics[18];
-    compensation[18] = k00;
-    output[19] = k81 * radial4 * harmonics[19];
-    compensation[19] = k00;
-    output[20] = k80 * radial4 * harmonics[20];
-    compensation[20] = k00;
-    output[21] = k81 * radial4 * harmonics[21];
-    compensation[21] = k00;
-    output[22] = k82 * radial4 * harmonics[22];
-    compensation[22] = k00;
-    output[23] = k83 * radial4 * harmonics[23];
-    compensation[23] = k00;
-    output[24] = k87 * radial4 * harmonics[24];
-    compensation[24] = k00;
+    G(4, -4) = k87 * radial4 * U(4, -4);
+    C(4, -4) = k00;
+    G(4, -3) = k83 * radial4 * U(4, -3);
+    C(4, -3) = k00;
+    G(4, -2) = k82 * radial4 * U(4, -2);
+    C(4, -2) = k00;
+    G(4, -1) = k81 * radial4 * U(4, -1);
+    C(4, -1) = k00;
+    G(4, 0) = k80 * radial4 * U(4, 0);
+    C(4, 0) = k00;
+    G(4, 1) = k81 * radial4 * U(4, 1);
+    C(4, 1) = k00;
+    G(4, 2) = k82 * radial4 * U(4, 2);
+    C(4, 2) = k00;
+    G(4, 3) = k83 * radial4 * U(4, 3);
+    C(4, 3) = k00;
+    G(4, 4) = k87 * radial4 * U(4, 4);
+    C(4, 4) = k00;
     float series5 = k57;
     series5 = fma(series5, argument * k02, k57);
     series5 = fma(series5, argument * k03, k57);
@@ -654,28 +666,28 @@ __device__ void evaluateEwaldWorking(float& greenTrace, float x, float y, float 
     series5 = fma(series5, argument * k48, k57);
     series5 = fma(series5, argument * k49, k57);
     float const radial5 = -k68 * exponential * series5;
-    output[25] = k94 * radial5 * harmonics[25];
-    compensation[25] = k00;
-    output[26] = k89 * radial5 * harmonics[26];
-    compensation[26] = k00;
-    output[27] = k88 * radial5 * harmonics[27];
-    compensation[27] = k00;
-    output[28] = k86 * radial5 * harmonics[28];
-    compensation[28] = k00;
-    output[29] = k85 * radial5 * harmonics[29];
-    compensation[29] = k00;
-    output[30] = k84 * radial5 * harmonics[30];
-    compensation[30] = k00;
-    output[31] = k85 * radial5 * harmonics[31];
-    compensation[31] = k00;
-    output[32] = k86 * radial5 * harmonics[32];
-    compensation[32] = k00;
-    output[33] = k88 * radial5 * harmonics[33];
-    compensation[33] = k00;
-    output[34] = k89 * radial5 * harmonics[34];
-    compensation[34] = k00;
-    output[35] = k94 * radial5 * harmonics[35];
-    compensation[35] = k00;
+    G(5, -5) = k94 * radial5 * U(5, -5);
+    C(5, -5) = k00;
+    G(5, -4) = k89 * radial5 * U(5, -4);
+    C(5, -4) = k00;
+    G(5, -3) = k88 * radial5 * U(5, -3);
+    C(5, -3) = k00;
+    G(5, -2) = k86 * radial5 * U(5, -2);
+    C(5, -2) = k00;
+    G(5, -1) = k85 * radial5 * U(5, -1);
+    C(5, -1) = k00;
+    G(5, 0) = k84 * radial5 * U(5, 0);
+    C(5, 0) = k00;
+    G(5, 1) = k85 * radial5 * U(5, 1);
+    C(5, 1) = k00;
+    G(5, 2) = k86 * radial5 * U(5, 2);
+    C(5, 2) = k00;
+    G(5, 3) = k88 * radial5 * U(5, 3);
+    C(5, 3) = k00;
+    G(5, 4) = k89 * radial5 * U(5, 4);
+    C(5, 4) = k00;
+    G(5, 5) = k94 * radial5 * U(5, 5);
+    C(5, 5) = k00;
     float series6 = k57;
     series6 = fma(series6, argument * k01, k57);
     series6 = fma(series6, argument * k02, k57);
@@ -726,33 +738,33 @@ __device__ void evaluateEwaldWorking(float& greenTrace, float x, float y, float 
     series6 = fma(series6, argument * k47, k57);
     series6 = fma(series6, argument * k48, k57);
     float const radial6 = k63 * exponential * series6;
-    output[36] = k97 * radial6 * harmonics[36];
-    compensation[36] = k00;
-    output[37] = k96 * radial6 * harmonics[37];
-    compensation[37] = k00;
-    output[38] = k95 * radial6 * harmonics[38];
-    compensation[38] = k00;
-    output[39] = k93 * radial6 * harmonics[39];
-    compensation[39] = k00;
-    output[40] = k92 * radial6 * harmonics[40];
-    compensation[40] = k00;
-    output[41] = k91 * radial6 * harmonics[41];
-    compensation[41] = k00;
-    output[42] = k90 * radial6 * harmonics[42];
-    compensation[42] = k00;
-    output[43] = k91 * radial6 * harmonics[43];
-    compensation[43] = k00;
-    output[44] = k92 * radial6 * harmonics[44];
-    compensation[44] = k00;
-    output[45] = k93 * radial6 * harmonics[45];
-    compensation[45] = k00;
-    output[46] = k95 * radial6 * harmonics[46];
-    compensation[46] = k00;
-    output[47] = k96 * radial6 * harmonics[47];
-    compensation[47] = k00;
-    output[48] = k97 * radial6 * harmonics[48];
-    compensation[48] = k00;
-    output[0] += k56;
+    G(6, -6) = k97 * radial6 * U(6, -6);
+    C(6, -6) = k00;
+    G(6, -5) = k96 * radial6 * U(6, -5);
+    C(6, -5) = k00;
+    G(6, -4) = k95 * radial6 * U(6, -4);
+    C(6, -4) = k00;
+    G(6, -3) = k93 * radial6 * U(6, -3);
+    C(6, -3) = k00;
+    G(6, -2) = k92 * radial6 * U(6, -2);
+    C(6, -2) = k00;
+    G(6, -1) = k91 * radial6 * U(6, -1);
+    C(6, -1) = k00;
+    G(6, 0) = k90 * radial6 * U(6, 0);
+    C(6, 0) = k00;
+    G(6, 1) = k91 * radial6 * U(6, 1);
+    C(6, 1) = k00;
+    G(6, 2) = k92 * radial6 * U(6, 2);
+    C(6, 2) = k00;
+    G(6, 3) = k93 * radial6 * U(6, 3);
+    C(6, 3) = k00;
+    G(6, 4) = k95 * radial6 * U(6, 4);
+    C(6, 4) = k00;
+    G(6, 5) = k96 * radial6 * U(6, 5);
+    C(6, 5) = k00;
+    G(6, 6) = k97 * radial6 * U(6, 6);
+    C(6, 6) = k00;
+    G(0, 0) += k56;
     greenTrace = k62;
     for (int ix = -6; ix <= 6; ++ix) {
         for (int iy = -6; iy <= 6; ++iy) {
@@ -778,374 +790,374 @@ __device__ void evaluateEwaldWorking(float& greenTrace, float x, float y, float 
                     float gammaTerm = k59 * imageRadius * imageExp;
                     float inversePower = iR;
                     float const imageRadial0 = -screening * inversePower;
-                    float const imageValue0 = imageRadial0 * harmonics[0];
+                    float const imageValue0 = imageRadial0 * U(0, 0);
                     if (sign < 0) {
-                        imagePair[0] = imageValue0;
+                        I(0, 0) = imageValue0;
                     } else {
-                        imagePair[0] += imageValue0;
+                        I(0, 0) += imageValue0;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * k55;
                     float const imageRadial1 = screening * inversePower;
-                    float const imageValue1 = k58 * imageRadial1 * harmonics[1];
+                    float const imageValue1 = k58 * imageRadial1 * U(1, -1);
                     if (sign < 0) {
-                        imagePair[1] = imageValue1;
+                        I(1, -1) = imageValue1;
                     } else {
-                        imagePair[1] += imageValue1;
+                        I(1, -1) += imageValue1;
                     }
-                    float const imageValue2 = imageRadial1 * harmonics[2];
+                    float const imageValue2 = imageRadial1 * U(1, 0);
                     if (sign < 0) {
-                        imagePair[2] = imageValue2;
+                        I(1, 0) = imageValue2;
                     } else {
-                        imagePair[2] += imageValue2;
+                        I(1, 0) += imageValue2;
                     }
-                    float const imageValue3 = k58 * imageRadial1 * harmonics[3];
+                    float const imageValue3 = k58 * imageRadial1 * U(1, 1);
                     if (sign < 0) {
-                        imagePair[3] = imageValue3;
+                        I(1, 1) = imageValue3;
                     } else {
-                        imagePair[3] += imageValue3;
+                        I(1, 1) += imageValue3;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * k53;
                     float const imageRadial2 = -screening * inversePower;
-                    float const imageValue4 = k76 * imageRadial2 * harmonics[4];
+                    float const imageValue4 = k76 * imageRadial2 * U(2, -2);
                     if (sign < 0) {
-                        imagePair[4] = imageValue4;
+                        I(2, -2) = imageValue4;
                     } else {
-                        imagePair[4] += imageValue4;
+                        I(2, -2) += imageValue4;
                     }
-                    float const imageValue5 = k65 * imageRadial2 * harmonics[5];
+                    float const imageValue5 = k65 * imageRadial2 * U(2, -1);
                     if (sign < 0) {
-                        imagePair[5] = imageValue5;
+                        I(2, -1) = imageValue5;
                     } else {
-                        imagePair[5] += imageValue5;
+                        I(2, -1) += imageValue5;
                     }
-                    float const imageValue6 = k61 * imageRadial2 * harmonics[6];
+                    float const imageValue6 = k61 * imageRadial2 * U(2, 0);
                     if (sign < 0) {
-                        imagePair[6] = imageValue6;
+                        I(2, 0) = imageValue6;
                     } else {
-                        imagePair[6] += imageValue6;
+                        I(2, 0) += imageValue6;
                     }
-                    float const imageValue7 = k65 * imageRadial2 * harmonics[7];
+                    float const imageValue7 = k65 * imageRadial2 * U(2, 1);
                     if (sign < 0) {
-                        imagePair[7] = imageValue7;
+                        I(2, 1) = imageValue7;
                     } else {
-                        imagePair[7] += imageValue7;
+                        I(2, 1) += imageValue7;
                     }
-                    float const imageValue8 = k76 * imageRadial2 * harmonics[8];
+                    float const imageValue8 = k76 * imageRadial2 * U(2, 2);
                     if (sign < 0) {
-                        imagePair[8] = imageValue8;
+                        I(2, 2) = imageValue8;
                     } else {
-                        imagePair[8] += imageValue8;
+                        I(2, 2) += imageValue8;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * k52;
                     float const imageRadial3 = screening * inversePower;
-                    float const imageValue9 = k81 * imageRadial3 * harmonics[9];
+                    float const imageValue9 = k81 * imageRadial3 * U(3, -3);
                     if (sign < 0) {
-                        imagePair[9] = imageValue9;
+                        I(3, -3) = imageValue9;
                     } else {
-                        imagePair[9] += imageValue9;
+                        I(3, -3) += imageValue9;
                     }
-                    float const imageValue10 = k79 * imageRadial3 * harmonics[10];
+                    float const imageValue10 = k79 * imageRadial3 * U(3, -2);
                     if (sign < 0) {
-                        imagePair[10] = imageValue10;
+                        I(3, -2) = imageValue10;
                     } else {
-                        imagePair[10] += imageValue10;
+                        I(3, -2) += imageValue10;
                     }
-                    float const imageValue11 = k78 * imageRadial3 * harmonics[11];
+                    float const imageValue11 = k78 * imageRadial3 * U(3, -1);
                     if (sign < 0) {
-                        imagePair[11] = imageValue11;
+                        I(3, -1) = imageValue11;
                     } else {
-                        imagePair[11] += imageValue11;
+                        I(3, -1) += imageValue11;
                     }
-                    float const imageValue12 = k77 * imageRadial3 * harmonics[12];
+                    float const imageValue12 = k77 * imageRadial3 * U(3, 0);
                     if (sign < 0) {
-                        imagePair[12] = imageValue12;
+                        I(3, 0) = imageValue12;
                     } else {
-                        imagePair[12] += imageValue12;
+                        I(3, 0) += imageValue12;
                     }
-                    float const imageValue13 = k78 * imageRadial3 * harmonics[13];
+                    float const imageValue13 = k78 * imageRadial3 * U(3, 1);
                     if (sign < 0) {
-                        imagePair[13] = imageValue13;
+                        I(3, 1) = imageValue13;
                     } else {
-                        imagePair[13] += imageValue13;
+                        I(3, 1) += imageValue13;
                     }
-                    float const imageValue14 = k79 * imageRadial3 * harmonics[14];
+                    float const imageValue14 = k79 * imageRadial3 * U(3, 2);
                     if (sign < 0) {
-                        imagePair[14] = imageValue14;
+                        I(3, 2) = imageValue14;
                     } else {
-                        imagePair[14] += imageValue14;
+                        I(3, 2) += imageValue14;
                     }
-                    float const imageValue15 = k81 * imageRadial3 * harmonics[15];
+                    float const imageValue15 = k81 * imageRadial3 * U(3, 3);
                     if (sign < 0) {
-                        imagePair[15] = imageValue15;
+                        I(3, 3) = imageValue15;
                     } else {
-                        imagePair[15] += imageValue15;
+                        I(3, 3) += imageValue15;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * k51;
                     float const imageRadial4 = -screening * inversePower;
-                    float const imageValue16 = k87 * imageRadial4 * harmonics[16];
+                    float const imageValue16 = k87 * imageRadial4 * U(4, -4);
                     if (sign < 0) {
-                        imagePair[16] = imageValue16;
+                        I(4, -4) = imageValue16;
                     } else {
-                        imagePair[16] += imageValue16;
+                        I(4, -4) += imageValue16;
                     }
-                    float const imageValue17 = k83 * imageRadial4 * harmonics[17];
+                    float const imageValue17 = k83 * imageRadial4 * U(4, -3);
                     if (sign < 0) {
-                        imagePair[17] = imageValue17;
+                        I(4, -3) = imageValue17;
                     } else {
-                        imagePair[17] += imageValue17;
+                        I(4, -3) += imageValue17;
                     }
-                    float const imageValue18 = k82 * imageRadial4 * harmonics[18];
+                    float const imageValue18 = k82 * imageRadial4 * U(4, -2);
                     if (sign < 0) {
-                        imagePair[18] = imageValue18;
+                        I(4, -2) = imageValue18;
                     } else {
-                        imagePair[18] += imageValue18;
+                        I(4, -2) += imageValue18;
                     }
-                    float const imageValue19 = k81 * imageRadial4 * harmonics[19];
+                    float const imageValue19 = k81 * imageRadial4 * U(4, -1);
                     if (sign < 0) {
-                        imagePair[19] = imageValue19;
+                        I(4, -1) = imageValue19;
                     } else {
-                        imagePair[19] += imageValue19;
+                        I(4, -1) += imageValue19;
                     }
-                    float const imageValue20 = k80 * imageRadial4 * harmonics[20];
+                    float const imageValue20 = k80 * imageRadial4 * U(4, 0);
                     if (sign < 0) {
-                        imagePair[20] = imageValue20;
+                        I(4, 0) = imageValue20;
                     } else {
-                        imagePair[20] += imageValue20;
+                        I(4, 0) += imageValue20;
                     }
-                    float const imageValue21 = k81 * imageRadial4 * harmonics[21];
+                    float const imageValue21 = k81 * imageRadial4 * U(4, 1);
                     if (sign < 0) {
-                        imagePair[21] = imageValue21;
+                        I(4, 1) = imageValue21;
                     } else {
-                        imagePair[21] += imageValue21;
+                        I(4, 1) += imageValue21;
                     }
-                    float const imageValue22 = k82 * imageRadial4 * harmonics[22];
+                    float const imageValue22 = k82 * imageRadial4 * U(4, 2);
                     if (sign < 0) {
-                        imagePair[22] = imageValue22;
+                        I(4, 2) = imageValue22;
                     } else {
-                        imagePair[22] += imageValue22;
+                        I(4, 2) += imageValue22;
                     }
-                    float const imageValue23 = k83 * imageRadial4 * harmonics[23];
+                    float const imageValue23 = k83 * imageRadial4 * U(4, 3);
                     if (sign < 0) {
-                        imagePair[23] = imageValue23;
+                        I(4, 3) = imageValue23;
                     } else {
-                        imagePair[23] += imageValue23;
+                        I(4, 3) += imageValue23;
                     }
-                    float const imageValue24 = k87 * imageRadial4 * harmonics[24];
+                    float const imageValue24 = k87 * imageRadial4 * U(4, 4);
                     if (sign < 0) {
-                        imagePair[24] = imageValue24;
+                        I(4, 4) = imageValue24;
                     } else {
-                        imagePair[24] += imageValue24;
+                        I(4, 4) += imageValue24;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * k50;
                     float const imageRadial5 = screening * inversePower;
-                    float const imageValue25 = k94 * imageRadial5 * harmonics[25];
+                    float const imageValue25 = k94 * imageRadial5 * U(5, -5);
                     if (sign < 0) {
-                        imagePair[25] = imageValue25;
+                        I(5, -5) = imageValue25;
                     } else {
-                        imagePair[25] += imageValue25;
+                        I(5, -5) += imageValue25;
                     }
-                    float const imageValue26 = k89 * imageRadial5 * harmonics[26];
+                    float const imageValue26 = k89 * imageRadial5 * U(5, -4);
                     if (sign < 0) {
-                        imagePair[26] = imageValue26;
+                        I(5, -4) = imageValue26;
                     } else {
-                        imagePair[26] += imageValue26;
+                        I(5, -4) += imageValue26;
                     }
-                    float const imageValue27 = k88 * imageRadial5 * harmonics[27];
+                    float const imageValue27 = k88 * imageRadial5 * U(5, -3);
                     if (sign < 0) {
-                        imagePair[27] = imageValue27;
+                        I(5, -3) = imageValue27;
                     } else {
-                        imagePair[27] += imageValue27;
+                        I(5, -3) += imageValue27;
                     }
-                    float const imageValue28 = k86 * imageRadial5 * harmonics[28];
+                    float const imageValue28 = k86 * imageRadial5 * U(5, -2);
                     if (sign < 0) {
-                        imagePair[28] = imageValue28;
+                        I(5, -2) = imageValue28;
                     } else {
-                        imagePair[28] += imageValue28;
+                        I(5, -2) += imageValue28;
                     }
-                    float const imageValue29 = k85 * imageRadial5 * harmonics[29];
+                    float const imageValue29 = k85 * imageRadial5 * U(5, -1);
                     if (sign < 0) {
-                        imagePair[29] = imageValue29;
+                        I(5, -1) = imageValue29;
                     } else {
-                        imagePair[29] += imageValue29;
+                        I(5, -1) += imageValue29;
                     }
-                    float const imageValue30 = k84 * imageRadial5 * harmonics[30];
+                    float const imageValue30 = k84 * imageRadial5 * U(5, 0);
                     if (sign < 0) {
-                        imagePair[30] = imageValue30;
+                        I(5, 0) = imageValue30;
                     } else {
-                        imagePair[30] += imageValue30;
+                        I(5, 0) += imageValue30;
                     }
-                    float const imageValue31 = k85 * imageRadial5 * harmonics[31];
+                    float const imageValue31 = k85 * imageRadial5 * U(5, 1);
                     if (sign < 0) {
-                        imagePair[31] = imageValue31;
+                        I(5, 1) = imageValue31;
                     } else {
-                        imagePair[31] += imageValue31;
+                        I(5, 1) += imageValue31;
                     }
-                    float const imageValue32 = k86 * imageRadial5 * harmonics[32];
+                    float const imageValue32 = k86 * imageRadial5 * U(5, 2);
                     if (sign < 0) {
-                        imagePair[32] = imageValue32;
+                        I(5, 2) = imageValue32;
                     } else {
-                        imagePair[32] += imageValue32;
+                        I(5, 2) += imageValue32;
                     }
-                    float const imageValue33 = k88 * imageRadial5 * harmonics[33];
+                    float const imageValue33 = k88 * imageRadial5 * U(5, 3);
                     if (sign < 0) {
-                        imagePair[33] = imageValue33;
+                        I(5, 3) = imageValue33;
                     } else {
-                        imagePair[33] += imageValue33;
+                        I(5, 3) += imageValue33;
                     }
-                    float const imageValue34 = k89 * imageRadial5 * harmonics[34];
+                    float const imageValue34 = k89 * imageRadial5 * U(5, 4);
                     if (sign < 0) {
-                        imagePair[34] = imageValue34;
+                        I(5, 4) = imageValue34;
                     } else {
-                        imagePair[34] += imageValue34;
+                        I(5, 4) += imageValue34;
                     }
-                    float const imageValue35 = k94 * imageRadial5 * harmonics[35];
+                    float const imageValue35 = k94 * imageRadial5 * U(5, 5);
                     if (sign < 0) {
-                        imagePair[35] = imageValue35;
+                        I(5, 5) = imageValue35;
                     } else {
-                        imagePair[35] += imageValue35;
+                        I(5, 5) += imageValue35;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * k49;
                     float const imageRadial6 = -screening * inversePower;
-                    float const imageValue36 = k97 * imageRadial6 * harmonics[36];
+                    float const imageValue36 = k97 * imageRadial6 * U(6, -6);
                     if (sign < 0) {
-                        imagePair[36] = imageValue36;
+                        I(6, -6) = imageValue36;
                     } else {
-                        imagePair[36] += imageValue36;
+                        I(6, -6) += imageValue36;
                     }
-                    float const imageValue37 = k96 * imageRadial6 * harmonics[37];
+                    float const imageValue37 = k96 * imageRadial6 * U(6, -5);
                     if (sign < 0) {
-                        imagePair[37] = imageValue37;
+                        I(6, -5) = imageValue37;
                     } else {
-                        imagePair[37] += imageValue37;
+                        I(6, -5) += imageValue37;
                     }
-                    float const imageValue38 = k95 * imageRadial6 * harmonics[38];
+                    float const imageValue38 = k95 * imageRadial6 * U(6, -4);
                     if (sign < 0) {
-                        imagePair[38] = imageValue38;
+                        I(6, -4) = imageValue38;
                     } else {
-                        imagePair[38] += imageValue38;
+                        I(6, -4) += imageValue38;
                     }
-                    float const imageValue39 = k93 * imageRadial6 * harmonics[39];
+                    float const imageValue39 = k93 * imageRadial6 * U(6, -3);
                     if (sign < 0) {
-                        imagePair[39] = imageValue39;
+                        I(6, -3) = imageValue39;
                     } else {
-                        imagePair[39] += imageValue39;
+                        I(6, -3) += imageValue39;
                     }
-                    float const imageValue40 = k92 * imageRadial6 * harmonics[40];
+                    float const imageValue40 = k92 * imageRadial6 * U(6, -2);
                     if (sign < 0) {
-                        imagePair[40] = imageValue40;
+                        I(6, -2) = imageValue40;
                     } else {
-                        imagePair[40] += imageValue40;
+                        I(6, -2) += imageValue40;
                     }
-                    float const imageValue41 = k91 * imageRadial6 * harmonics[41];
+                    float const imageValue41 = k91 * imageRadial6 * U(6, -1);
                     if (sign < 0) {
-                        imagePair[41] = imageValue41;
+                        I(6, -1) = imageValue41;
                     } else {
-                        imagePair[41] += imageValue41;
+                        I(6, -1) += imageValue41;
                     }
-                    float const imageValue42 = k90 * imageRadial6 * harmonics[42];
+                    float const imageValue42 = k90 * imageRadial6 * U(6, 0);
                     if (sign < 0) {
-                        imagePair[42] = imageValue42;
+                        I(6, 0) = imageValue42;
                     } else {
-                        imagePair[42] += imageValue42;
+                        I(6, 0) += imageValue42;
                     }
-                    float const imageValue43 = k91 * imageRadial6 * harmonics[43];
+                    float const imageValue43 = k91 * imageRadial6 * U(6, 1);
                     if (sign < 0) {
-                        imagePair[43] = imageValue43;
+                        I(6, 1) = imageValue43;
                     } else {
-                        imagePair[43] += imageValue43;
+                        I(6, 1) += imageValue43;
                     }
-                    float const imageValue44 = k92 * imageRadial6 * harmonics[44];
+                    float const imageValue44 = k92 * imageRadial6 * U(6, 2);
                     if (sign < 0) {
-                        imagePair[44] = imageValue44;
+                        I(6, 2) = imageValue44;
                     } else {
-                        imagePair[44] += imageValue44;
+                        I(6, 2) += imageValue44;
                     }
-                    float const imageValue45 = k93 * imageRadial6 * harmonics[45];
+                    float const imageValue45 = k93 * imageRadial6 * U(6, 3);
                     if (sign < 0) {
-                        imagePair[45] = imageValue45;
+                        I(6, 3) = imageValue45;
                     } else {
-                        imagePair[45] += imageValue45;
+                        I(6, 3) += imageValue45;
                     }
-                    float const imageValue46 = k95 * imageRadial6 * harmonics[46];
+                    float const imageValue46 = k95 * imageRadial6 * U(6, 4);
                     if (sign < 0) {
-                        imagePair[46] = imageValue46;
+                        I(6, 4) = imageValue46;
                     } else {
-                        imagePair[46] += imageValue46;
+                        I(6, 4) += imageValue46;
                     }
-                    float const imageValue47 = k96 * imageRadial6 * harmonics[47];
+                    float const imageValue47 = k96 * imageRadial6 * U(6, 5);
                     if (sign < 0) {
-                        imagePair[47] = imageValue47;
+                        I(6, 5) = imageValue47;
                     } else {
-                        imagePair[47] += imageValue47;
+                        I(6, 5) += imageValue47;
                     }
-                    float const imageValue48 = k97 * imageRadial6 * harmonics[48];
+                    float const imageValue48 = k97 * imageRadial6 * U(6, 6);
                     if (sign < 0) {
-                        imagePair[48] = imageValue48;
+                        I(6, 6) = imageValue48;
                     } else {
-                        imagePair[48] += imageValue48;
+                        I(6, 6) += imageValue48;
                     }
                 }
-                detail::ewaldAccumulate(output[0], compensation[0], imagePair[0]);
-                detail::ewaldAccumulate(output[1], compensation[1], imagePair[1]);
-                detail::ewaldAccumulate(output[2], compensation[2], imagePair[2]);
-                detail::ewaldAccumulate(output[3], compensation[3], imagePair[3]);
-                detail::ewaldAccumulate(output[4], compensation[4], imagePair[4]);
-                detail::ewaldAccumulate(output[5], compensation[5], imagePair[5]);
-                detail::ewaldAccumulate(output[6], compensation[6], imagePair[6]);
-                detail::ewaldAccumulate(output[7], compensation[7], imagePair[7]);
-                detail::ewaldAccumulate(output[8], compensation[8], imagePair[8]);
-                detail::ewaldAccumulate(output[9], compensation[9], imagePair[9]);
-                detail::ewaldAccumulate(output[10], compensation[10], imagePair[10]);
-                detail::ewaldAccumulate(output[11], compensation[11], imagePair[11]);
-                detail::ewaldAccumulate(output[12], compensation[12], imagePair[12]);
-                detail::ewaldAccumulate(output[13], compensation[13], imagePair[13]);
-                detail::ewaldAccumulate(output[14], compensation[14], imagePair[14]);
-                detail::ewaldAccumulate(output[15], compensation[15], imagePair[15]);
-                detail::ewaldAccumulate(output[16], compensation[16], imagePair[16]);
-                detail::ewaldAccumulate(output[17], compensation[17], imagePair[17]);
-                detail::ewaldAccumulate(output[18], compensation[18], imagePair[18]);
-                detail::ewaldAccumulate(output[19], compensation[19], imagePair[19]);
-                detail::ewaldAccumulate(output[20], compensation[20], imagePair[20]);
-                detail::ewaldAccumulate(output[21], compensation[21], imagePair[21]);
-                detail::ewaldAccumulate(output[22], compensation[22], imagePair[22]);
-                detail::ewaldAccumulate(output[23], compensation[23], imagePair[23]);
-                detail::ewaldAccumulate(output[24], compensation[24], imagePair[24]);
-                detail::ewaldAccumulate(output[25], compensation[25], imagePair[25]);
-                detail::ewaldAccumulate(output[26], compensation[26], imagePair[26]);
-                detail::ewaldAccumulate(output[27], compensation[27], imagePair[27]);
-                detail::ewaldAccumulate(output[28], compensation[28], imagePair[28]);
-                detail::ewaldAccumulate(output[29], compensation[29], imagePair[29]);
-                detail::ewaldAccumulate(output[30], compensation[30], imagePair[30]);
-                detail::ewaldAccumulate(output[31], compensation[31], imagePair[31]);
-                detail::ewaldAccumulate(output[32], compensation[32], imagePair[32]);
-                detail::ewaldAccumulate(output[33], compensation[33], imagePair[33]);
-                detail::ewaldAccumulate(output[34], compensation[34], imagePair[34]);
-                detail::ewaldAccumulate(output[35], compensation[35], imagePair[35]);
-                detail::ewaldAccumulate(output[36], compensation[36], imagePair[36]);
-                detail::ewaldAccumulate(output[37], compensation[37], imagePair[37]);
-                detail::ewaldAccumulate(output[38], compensation[38], imagePair[38]);
-                detail::ewaldAccumulate(output[39], compensation[39], imagePair[39]);
-                detail::ewaldAccumulate(output[40], compensation[40], imagePair[40]);
-                detail::ewaldAccumulate(output[41], compensation[41], imagePair[41]);
-                detail::ewaldAccumulate(output[42], compensation[42], imagePair[42]);
-                detail::ewaldAccumulate(output[43], compensation[43], imagePair[43]);
-                detail::ewaldAccumulate(output[44], compensation[44], imagePair[44]);
-                detail::ewaldAccumulate(output[45], compensation[45], imagePair[45]);
-                detail::ewaldAccumulate(output[46], compensation[46], imagePair[46]);
-                detail::ewaldAccumulate(output[47], compensation[47], imagePair[47]);
-                detail::ewaldAccumulate(output[48], compensation[48], imagePair[48]);
+                detail::ewaldAccumulate(G(0, 0), C(0, 0), I(0, 0));
+                detail::ewaldAccumulate(G(1, -1), C(1, -1), I(1, -1));
+                detail::ewaldAccumulate(G(1, 0), C(1, 0), I(1, 0));
+                detail::ewaldAccumulate(G(1, 1), C(1, 1), I(1, 1));
+                detail::ewaldAccumulate(G(2, -2), C(2, -2), I(2, -2));
+                detail::ewaldAccumulate(G(2, -1), C(2, -1), I(2, -1));
+                detail::ewaldAccumulate(G(2, 0), C(2, 0), I(2, 0));
+                detail::ewaldAccumulate(G(2, 1), C(2, 1), I(2, 1));
+                detail::ewaldAccumulate(G(2, 2), C(2, 2), I(2, 2));
+                detail::ewaldAccumulate(G(3, -3), C(3, -3), I(3, -3));
+                detail::ewaldAccumulate(G(3, -2), C(3, -2), I(3, -2));
+                detail::ewaldAccumulate(G(3, -1), C(3, -1), I(3, -1));
+                detail::ewaldAccumulate(G(3, 0), C(3, 0), I(3, 0));
+                detail::ewaldAccumulate(G(3, 1), C(3, 1), I(3, 1));
+                detail::ewaldAccumulate(G(3, 2), C(3, 2), I(3, 2));
+                detail::ewaldAccumulate(G(3, 3), C(3, 3), I(3, 3));
+                detail::ewaldAccumulate(G(4, -4), C(4, -4), I(4, -4));
+                detail::ewaldAccumulate(G(4, -3), C(4, -3), I(4, -3));
+                detail::ewaldAccumulate(G(4, -2), C(4, -2), I(4, -2));
+                detail::ewaldAccumulate(G(4, -1), C(4, -1), I(4, -1));
+                detail::ewaldAccumulate(G(4, 0), C(4, 0), I(4, 0));
+                detail::ewaldAccumulate(G(4, 1), C(4, 1), I(4, 1));
+                detail::ewaldAccumulate(G(4, 2), C(4, 2), I(4, 2));
+                detail::ewaldAccumulate(G(4, 3), C(4, 3), I(4, 3));
+                detail::ewaldAccumulate(G(4, 4), C(4, 4), I(4, 4));
+                detail::ewaldAccumulate(G(5, -5), C(5, -5), I(5, -5));
+                detail::ewaldAccumulate(G(5, -4), C(5, -4), I(5, -4));
+                detail::ewaldAccumulate(G(5, -3), C(5, -3), I(5, -3));
+                detail::ewaldAccumulate(G(5, -2), C(5, -2), I(5, -2));
+                detail::ewaldAccumulate(G(5, -1), C(5, -1), I(5, -1));
+                detail::ewaldAccumulate(G(5, 0), C(5, 0), I(5, 0));
+                detail::ewaldAccumulate(G(5, 1), C(5, 1), I(5, 1));
+                detail::ewaldAccumulate(G(5, 2), C(5, 2), I(5, 2));
+                detail::ewaldAccumulate(G(5, 3), C(5, 3), I(5, 3));
+                detail::ewaldAccumulate(G(5, 4), C(5, 4), I(5, 4));
+                detail::ewaldAccumulate(G(5, 5), C(5, 5), I(5, 5));
+                detail::ewaldAccumulate(G(6, -6), C(6, -6), I(6, -6));
+                detail::ewaldAccumulate(G(6, -5), C(6, -5), I(6, -5));
+                detail::ewaldAccumulate(G(6, -4), C(6, -4), I(6, -4));
+                detail::ewaldAccumulate(G(6, -3), C(6, -3), I(6, -3));
+                detail::ewaldAccumulate(G(6, -2), C(6, -2), I(6, -2));
+                detail::ewaldAccumulate(G(6, -1), C(6, -1), I(6, -1));
+                detail::ewaldAccumulate(G(6, 0), C(6, 0), I(6, 0));
+                detail::ewaldAccumulate(G(6, 1), C(6, 1), I(6, 1));
+                detail::ewaldAccumulate(G(6, 2), C(6, 2), I(6, 2));
+                detail::ewaldAccumulate(G(6, 3), C(6, 3), I(6, 3));
+                detail::ewaldAccumulate(G(6, 4), C(6, 4), I(6, 4));
+                detail::ewaldAccumulate(G(6, 5), C(6, 5), I(6, 5));
+                detail::ewaldAccumulate(G(6, 6), C(6, 6), I(6, 6));
                 float const waveX = static_cast<float>(ix);
                 float const waveY = static_cast<float>(iy);
                 float const waveZ = static_cast<float>(iz);
@@ -1157,108 +1169,61 @@ __device__ void evaluateEwaldWorking(float& greenTrace, float x, float y, float 
                 float const wavePotential =
                     -k54 * detail::ewaldExp(-k60 * waveSquared) / waveSquared;
                 float const waveRadial0 = k57 * wavePotential * cosine;
-                detail::ewaldAccumulate(output[0], compensation[0], waveRadial0 * harmonics[0]);
+                detail::ewaldAccumulate(G(0, 0), C(0, 0), waveRadial0 * U(0, 0));
                 float const waveRadial1 = k67 * wavePotential * -sine;
-                detail::ewaldAccumulate(
-                    output[1], compensation[1], k58 * waveRadial1 * harmonics[1]);
-                detail::ewaldAccumulate(output[2], compensation[2], waveRadial1 * harmonics[2]);
-                detail::ewaldAccumulate(
-                    output[3], compensation[3], k58 * waveRadial1 * harmonics[3]);
+                detail::ewaldAccumulate(G(1, -1), C(1, -1), k58 * waveRadial1 * U(1, -1));
+                detail::ewaldAccumulate(G(1, 0), C(1, 0), waveRadial1 * U(1, 0));
+                detail::ewaldAccumulate(G(1, 1), C(1, 1), k58 * waveRadial1 * U(1, 1));
                 float const waveRadial2 = k73 * wavePotential * -cosine;
-                detail::ewaldAccumulate(
-                    output[4], compensation[4], k76 * waveRadial2 * harmonics[4]);
-                detail::ewaldAccumulate(
-                    output[5], compensation[5], k65 * waveRadial2 * harmonics[5]);
-                detail::ewaldAccumulate(
-                    output[6], compensation[6], k61 * waveRadial2 * harmonics[6]);
-                detail::ewaldAccumulate(
-                    output[7], compensation[7], k65 * waveRadial2 * harmonics[7]);
-                detail::ewaldAccumulate(
-                    output[8], compensation[8], k76 * waveRadial2 * harmonics[8]);
+                detail::ewaldAccumulate(G(2, -2), C(2, -2), k76 * waveRadial2 * U(2, -2));
+                detail::ewaldAccumulate(G(2, -1), C(2, -1), k65 * waveRadial2 * U(2, -1));
+                detail::ewaldAccumulate(G(2, 0), C(2, 0), k61 * waveRadial2 * U(2, 0));
+                detail::ewaldAccumulate(G(2, 1), C(2, 1), k65 * waveRadial2 * U(2, 1));
+                detail::ewaldAccumulate(G(2, 2), C(2, 2), k76 * waveRadial2 * U(2, 2));
                 float const waveRadial3 = k75 * wavePotential * sine;
-                detail::ewaldAccumulate(
-                    output[9], compensation[9], k81 * waveRadial3 * harmonics[9]);
-                detail::ewaldAccumulate(
-                    output[10], compensation[10], k79 * waveRadial3 * harmonics[10]);
-                detail::ewaldAccumulate(
-                    output[11], compensation[11], k78 * waveRadial3 * harmonics[11]);
-                detail::ewaldAccumulate(
-                    output[12], compensation[12], k77 * waveRadial3 * harmonics[12]);
-                detail::ewaldAccumulate(
-                    output[13], compensation[13], k78 * waveRadial3 * harmonics[13]);
-                detail::ewaldAccumulate(
-                    output[14], compensation[14], k79 * waveRadial3 * harmonics[14]);
-                detail::ewaldAccumulate(
-                    output[15], compensation[15], k81 * waveRadial3 * harmonics[15]);
+                detail::ewaldAccumulate(G(3, -3), C(3, -3), k81 * waveRadial3 * U(3, -3));
+                detail::ewaldAccumulate(G(3, -2), C(3, -2), k79 * waveRadial3 * U(3, -2));
+                detail::ewaldAccumulate(G(3, -1), C(3, -1), k78 * waveRadial3 * U(3, -1));
+                detail::ewaldAccumulate(G(3, 0), C(3, 0), k77 * waveRadial3 * U(3, 0));
+                detail::ewaldAccumulate(G(3, 1), C(3, 1), k78 * waveRadial3 * U(3, 1));
+                detail::ewaldAccumulate(G(3, 2), C(3, 2), k79 * waveRadial3 * U(3, 2));
+                detail::ewaldAccumulate(G(3, 3), C(3, 3), k81 * waveRadial3 * U(3, 3));
                 float const waveRadial4 = k74 * wavePotential * cosine;
-                detail::ewaldAccumulate(
-                    output[16], compensation[16], k87 * waveRadial4 * harmonics[16]);
-                detail::ewaldAccumulate(
-                    output[17], compensation[17], k83 * waveRadial4 * harmonics[17]);
-                detail::ewaldAccumulate(
-                    output[18], compensation[18], k82 * waveRadial4 * harmonics[18]);
-                detail::ewaldAccumulate(
-                    output[19], compensation[19], k81 * waveRadial4 * harmonics[19]);
-                detail::ewaldAccumulate(
-                    output[20], compensation[20], k80 * waveRadial4 * harmonics[20]);
-                detail::ewaldAccumulate(
-                    output[21], compensation[21], k81 * waveRadial4 * harmonics[21]);
-                detail::ewaldAccumulate(
-                    output[22], compensation[22], k82 * waveRadial4 * harmonics[22]);
-                detail::ewaldAccumulate(
-                    output[23], compensation[23], k83 * waveRadial4 * harmonics[23]);
-                detail::ewaldAccumulate(
-                    output[24], compensation[24], k87 * waveRadial4 * harmonics[24]);
+                detail::ewaldAccumulate(G(4, -4), C(4, -4), k87 * waveRadial4 * U(4, -4));
+                detail::ewaldAccumulate(G(4, -3), C(4, -3), k83 * waveRadial4 * U(4, -3));
+                detail::ewaldAccumulate(G(4, -2), C(4, -2), k82 * waveRadial4 * U(4, -2));
+                detail::ewaldAccumulate(G(4, -1), C(4, -1), k81 * waveRadial4 * U(4, -1));
+                detail::ewaldAccumulate(G(4, 0), C(4, 0), k80 * waveRadial4 * U(4, 0));
+                detail::ewaldAccumulate(G(4, 1), C(4, 1), k81 * waveRadial4 * U(4, 1));
+                detail::ewaldAccumulate(G(4, 2), C(4, 2), k82 * waveRadial4 * U(4, 2));
+                detail::ewaldAccumulate(G(4, 3), C(4, 3), k83 * waveRadial4 * U(4, 3));
+                detail::ewaldAccumulate(G(4, 4), C(4, 4), k87 * waveRadial4 * U(4, 4));
                 float const waveRadial5 = k71 * wavePotential * -sine;
-                detail::ewaldAccumulate(
-                    output[25], compensation[25], k94 * waveRadial5 * harmonics[25]);
-                detail::ewaldAccumulate(
-                    output[26], compensation[26], k89 * waveRadial5 * harmonics[26]);
-                detail::ewaldAccumulate(
-                    output[27], compensation[27], k88 * waveRadial5 * harmonics[27]);
-                detail::ewaldAccumulate(
-                    output[28], compensation[28], k86 * waveRadial5 * harmonics[28]);
-                detail::ewaldAccumulate(
-                    output[29], compensation[29], k85 * waveRadial5 * harmonics[29]);
-                detail::ewaldAccumulate(
-                    output[30], compensation[30], k84 * waveRadial5 * harmonics[30]);
-                detail::ewaldAccumulate(
-                    output[31], compensation[31], k85 * waveRadial5 * harmonics[31]);
-                detail::ewaldAccumulate(
-                    output[32], compensation[32], k86 * waveRadial5 * harmonics[32]);
-                detail::ewaldAccumulate(
-                    output[33], compensation[33], k88 * waveRadial5 * harmonics[33]);
-                detail::ewaldAccumulate(
-                    output[34], compensation[34], k89 * waveRadial5 * harmonics[34]);
-                detail::ewaldAccumulate(
-                    output[35], compensation[35], k94 * waveRadial5 * harmonics[35]);
+                detail::ewaldAccumulate(G(5, -5), C(5, -5), k94 * waveRadial5 * U(5, -5));
+                detail::ewaldAccumulate(G(5, -4), C(5, -4), k89 * waveRadial5 * U(5, -4));
+                detail::ewaldAccumulate(G(5, -3), C(5, -3), k88 * waveRadial5 * U(5, -3));
+                detail::ewaldAccumulate(G(5, -2), C(5, -2), k86 * waveRadial5 * U(5, -2));
+                detail::ewaldAccumulate(G(5, -1), C(5, -1), k85 * waveRadial5 * U(5, -1));
+                detail::ewaldAccumulate(G(5, 0), C(5, 0), k84 * waveRadial5 * U(5, 0));
+                detail::ewaldAccumulate(G(5, 1), C(5, 1), k85 * waveRadial5 * U(5, 1));
+                detail::ewaldAccumulate(G(5, 2), C(5, 2), k86 * waveRadial5 * U(5, 2));
+                detail::ewaldAccumulate(G(5, 3), C(5, 3), k88 * waveRadial5 * U(5, 3));
+                detail::ewaldAccumulate(G(5, 4), C(5, 4), k89 * waveRadial5 * U(5, 4));
+                detail::ewaldAccumulate(G(5, 5), C(5, 5), k94 * waveRadial5 * U(5, 5));
                 float const waveRadial6 = k64 * wavePotential * -cosine;
-                detail::ewaldAccumulate(
-                    output[36], compensation[36], k97 * waveRadial6 * harmonics[36]);
-                detail::ewaldAccumulate(
-                    output[37], compensation[37], k96 * waveRadial6 * harmonics[37]);
-                detail::ewaldAccumulate(
-                    output[38], compensation[38], k95 * waveRadial6 * harmonics[38]);
-                detail::ewaldAccumulate(
-                    output[39], compensation[39], k93 * waveRadial6 * harmonics[39]);
-                detail::ewaldAccumulate(
-                    output[40], compensation[40], k92 * waveRadial6 * harmonics[40]);
-                detail::ewaldAccumulate(
-                    output[41], compensation[41], k91 * waveRadial6 * harmonics[41]);
-                detail::ewaldAccumulate(
-                    output[42], compensation[42], k90 * waveRadial6 * harmonics[42]);
-                detail::ewaldAccumulate(
-                    output[43], compensation[43], k91 * waveRadial6 * harmonics[43]);
-                detail::ewaldAccumulate(
-                    output[44], compensation[44], k92 * waveRadial6 * harmonics[44]);
-                detail::ewaldAccumulate(
-                    output[45], compensation[45], k93 * waveRadial6 * harmonics[45]);
-                detail::ewaldAccumulate(
-                    output[46], compensation[46], k95 * waveRadial6 * harmonics[46]);
-                detail::ewaldAccumulate(
-                    output[47], compensation[47], k96 * waveRadial6 * harmonics[47]);
-                detail::ewaldAccumulate(
-                    output[48], compensation[48], k97 * waveRadial6 * harmonics[48]);
+                detail::ewaldAccumulate(G(6, -6), C(6, -6), k97 * waveRadial6 * U(6, -6));
+                detail::ewaldAccumulate(G(6, -5), C(6, -5), k96 * waveRadial6 * U(6, -5));
+                detail::ewaldAccumulate(G(6, -4), C(6, -4), k95 * waveRadial6 * U(6, -4));
+                detail::ewaldAccumulate(G(6, -3), C(6, -3), k93 * waveRadial6 * U(6, -3));
+                detail::ewaldAccumulate(G(6, -2), C(6, -2), k92 * waveRadial6 * U(6, -2));
+                detail::ewaldAccumulate(G(6, -1), C(6, -1), k91 * waveRadial6 * U(6, -1));
+                detail::ewaldAccumulate(G(6, 0), C(6, 0), k90 * waveRadial6 * U(6, 0));
+                detail::ewaldAccumulate(G(6, 1), C(6, 1), k91 * waveRadial6 * U(6, 1));
+                detail::ewaldAccumulate(G(6, 2), C(6, 2), k92 * waveRadial6 * U(6, 2));
+                detail::ewaldAccumulate(G(6, 3), C(6, 3), k93 * waveRadial6 * U(6, 3));
+                detail::ewaldAccumulate(G(6, 4), C(6, 4), k95 * waveRadial6 * U(6, 4));
+                detail::ewaldAccumulate(G(6, 5), C(6, 5), k96 * waveRadial6 * U(6, 5));
+                detail::ewaldAccumulate(G(6, 6), C(6, 6), k97 * waveRadial6 * U(6, 6));
             }
         }
     }
@@ -1367,9 +1332,17 @@ __device__ void evaluateEwaldWorking(
     constexpr double k95 = 7.25760000000000000e+06;
     constexpr double k96 = 3.99168000000000000e+07;
     constexpr double k97 = 4.79001600000000000e+08;
+    detail::CoefficientView<double> const G{output};
+
     double harmonics[49];
+    detail::CoefficientView<double> const U{harmonics};
+
     double compensation[49];
+    detail::CoefficientView<double> const C{compensation};
+
     double imagePair[49];
+    detail::CoefficientView<double> const I{imagePair};
+
     double const radiusSquared = fma(x, x, fma(y, y, z * z));
     ewaldRegular(x, y, z, radiusSquared, harmonics);
     double const argument = k61 * radiusSquared;
@@ -1424,8 +1397,8 @@ __device__ void evaluateEwaldWorking(
     series0 = fma(series0, argument * k53, k57);
     series0 = fma(series0, argument * k55, k57);
     double const radial0 = k59 * exponential * series0;
-    output[0] = radial0 * harmonics[0];
-    compensation[0] = k00;
+    G(0, 0) = radial0 * U(0, 0);
+    C(0, 0) = k00;
     double series1 = k57;
     series1 = fma(series1, argument * k06, k57);
     series1 = fma(series1, argument * k07, k57);
@@ -1476,12 +1449,12 @@ __device__ void evaluateEwaldWorking(
     series1 = fma(series1, argument * k52, k57);
     series1 = fma(series1, argument * k53, k57);
     double const radial1 = -k66 * exponential * series1;
-    output[1] = k58 * radial1 * harmonics[1];
-    compensation[1] = k00;
-    output[2] = radial1 * harmonics[2];
-    compensation[2] = k00;
-    output[3] = k58 * radial1 * harmonics[3];
-    compensation[3] = k00;
+    G(1, -1) = k58 * radial1 * U(1, -1);
+    C(1, -1) = k00;
+    G(1, 0) = radial1 * U(1, 0);
+    C(1, 0) = k00;
+    G(1, 1) = k58 * radial1 * U(1, 1);
+    C(1, 1) = k00;
     double series2 = k57;
     series2 = fma(series2, argument * k05, k57);
     series2 = fma(series2, argument * k06, k57);
@@ -1532,16 +1505,16 @@ __device__ void evaluateEwaldWorking(
     series2 = fma(series2, argument * k51, k57);
     series2 = fma(series2, argument * k52, k57);
     double const radial2 = k69 * exponential * series2;
-    output[4] = k76 * radial2 * harmonics[4];
-    compensation[4] = k00;
-    output[5] = k65 * radial2 * harmonics[5];
-    compensation[5] = k00;
-    output[6] = k61 * radial2 * harmonics[6];
-    compensation[6] = k00;
-    output[7] = k65 * radial2 * harmonics[7];
-    compensation[7] = k00;
-    output[8] = k76 * radial2 * harmonics[8];
-    compensation[8] = k00;
+    G(2, -2) = k76 * radial2 * U(2, -2);
+    C(2, -2) = k00;
+    G(2, -1) = k65 * radial2 * U(2, -1);
+    C(2, -1) = k00;
+    G(2, 0) = k61 * radial2 * U(2, 0);
+    C(2, 0) = k00;
+    G(2, 1) = k65 * radial2 * U(2, 1);
+    C(2, 1) = k00;
+    G(2, 2) = k76 * radial2 * U(2, 2);
+    C(2, 2) = k00;
     double series3 = k57;
     series3 = fma(series3, argument * k04, k57);
     series3 = fma(series3, argument * k05, k57);
@@ -1592,20 +1565,20 @@ __device__ void evaluateEwaldWorking(
     series3 = fma(series3, argument * k50, k57);
     series3 = fma(series3, argument * k51, k57);
     double const radial3 = -k72 * exponential * series3;
-    output[9] = k81 * radial3 * harmonics[9];
-    compensation[9] = k00;
-    output[10] = k79 * radial3 * harmonics[10];
-    compensation[10] = k00;
-    output[11] = k78 * radial3 * harmonics[11];
-    compensation[11] = k00;
-    output[12] = k77 * radial3 * harmonics[12];
-    compensation[12] = k00;
-    output[13] = k78 * radial3 * harmonics[13];
-    compensation[13] = k00;
-    output[14] = k79 * radial3 * harmonics[14];
-    compensation[14] = k00;
-    output[15] = k81 * radial3 * harmonics[15];
-    compensation[15] = k00;
+    G(3, -3) = k81 * radial3 * U(3, -3);
+    C(3, -3) = k00;
+    G(3, -2) = k79 * radial3 * U(3, -2);
+    C(3, -2) = k00;
+    G(3, -1) = k78 * radial3 * U(3, -1);
+    C(3, -1) = k00;
+    G(3, 0) = k77 * radial3 * U(3, 0);
+    C(3, 0) = k00;
+    G(3, 1) = k78 * radial3 * U(3, 1);
+    C(3, 1) = k00;
+    G(3, 2) = k79 * radial3 * U(3, 2);
+    C(3, 2) = k00;
+    G(3, 3) = k81 * radial3 * U(3, 3);
+    C(3, 3) = k00;
     double series4 = k57;
     series4 = fma(series4, argument * k03, k57);
     series4 = fma(series4, argument * k04, k57);
@@ -1656,24 +1629,24 @@ __device__ void evaluateEwaldWorking(
     series4 = fma(series4, argument * k49, k57);
     series4 = fma(series4, argument * k50, k57);
     double const radial4 = k70 * exponential * series4;
-    output[16] = k87 * radial4 * harmonics[16];
-    compensation[16] = k00;
-    output[17] = k83 * radial4 * harmonics[17];
-    compensation[17] = k00;
-    output[18] = k82 * radial4 * harmonics[18];
-    compensation[18] = k00;
-    output[19] = k81 * radial4 * harmonics[19];
-    compensation[19] = k00;
-    output[20] = k80 * radial4 * harmonics[20];
-    compensation[20] = k00;
-    output[21] = k81 * radial4 * harmonics[21];
-    compensation[21] = k00;
-    output[22] = k82 * radial4 * harmonics[22];
-    compensation[22] = k00;
-    output[23] = k83 * radial4 * harmonics[23];
-    compensation[23] = k00;
-    output[24] = k87 * radial4 * harmonics[24];
-    compensation[24] = k00;
+    G(4, -4) = k87 * radial4 * U(4, -4);
+    C(4, -4) = k00;
+    G(4, -3) = k83 * radial4 * U(4, -3);
+    C(4, -3) = k00;
+    G(4, -2) = k82 * radial4 * U(4, -2);
+    C(4, -2) = k00;
+    G(4, -1) = k81 * radial4 * U(4, -1);
+    C(4, -1) = k00;
+    G(4, 0) = k80 * radial4 * U(4, 0);
+    C(4, 0) = k00;
+    G(4, 1) = k81 * radial4 * U(4, 1);
+    C(4, 1) = k00;
+    G(4, 2) = k82 * radial4 * U(4, 2);
+    C(4, 2) = k00;
+    G(4, 3) = k83 * radial4 * U(4, 3);
+    C(4, 3) = k00;
+    G(4, 4) = k87 * radial4 * U(4, 4);
+    C(4, 4) = k00;
     double series5 = k57;
     series5 = fma(series5, argument * k02, k57);
     series5 = fma(series5, argument * k03, k57);
@@ -1724,28 +1697,28 @@ __device__ void evaluateEwaldWorking(
     series5 = fma(series5, argument * k48, k57);
     series5 = fma(series5, argument * k49, k57);
     double const radial5 = -k68 * exponential * series5;
-    output[25] = k94 * radial5 * harmonics[25];
-    compensation[25] = k00;
-    output[26] = k89 * radial5 * harmonics[26];
-    compensation[26] = k00;
-    output[27] = k88 * radial5 * harmonics[27];
-    compensation[27] = k00;
-    output[28] = k86 * radial5 * harmonics[28];
-    compensation[28] = k00;
-    output[29] = k85 * radial5 * harmonics[29];
-    compensation[29] = k00;
-    output[30] = k84 * radial5 * harmonics[30];
-    compensation[30] = k00;
-    output[31] = k85 * radial5 * harmonics[31];
-    compensation[31] = k00;
-    output[32] = k86 * radial5 * harmonics[32];
-    compensation[32] = k00;
-    output[33] = k88 * radial5 * harmonics[33];
-    compensation[33] = k00;
-    output[34] = k89 * radial5 * harmonics[34];
-    compensation[34] = k00;
-    output[35] = k94 * radial5 * harmonics[35];
-    compensation[35] = k00;
+    G(5, -5) = k94 * radial5 * U(5, -5);
+    C(5, -5) = k00;
+    G(5, -4) = k89 * radial5 * U(5, -4);
+    C(5, -4) = k00;
+    G(5, -3) = k88 * radial5 * U(5, -3);
+    C(5, -3) = k00;
+    G(5, -2) = k86 * radial5 * U(5, -2);
+    C(5, -2) = k00;
+    G(5, -1) = k85 * radial5 * U(5, -1);
+    C(5, -1) = k00;
+    G(5, 0) = k84 * radial5 * U(5, 0);
+    C(5, 0) = k00;
+    G(5, 1) = k85 * radial5 * U(5, 1);
+    C(5, 1) = k00;
+    G(5, 2) = k86 * radial5 * U(5, 2);
+    C(5, 2) = k00;
+    G(5, 3) = k88 * radial5 * U(5, 3);
+    C(5, 3) = k00;
+    G(5, 4) = k89 * radial5 * U(5, 4);
+    C(5, 4) = k00;
+    G(5, 5) = k94 * radial5 * U(5, 5);
+    C(5, 5) = k00;
     double series6 = k57;
     series6 = fma(series6, argument * k01, k57);
     series6 = fma(series6, argument * k02, k57);
@@ -1796,33 +1769,33 @@ __device__ void evaluateEwaldWorking(
     series6 = fma(series6, argument * k47, k57);
     series6 = fma(series6, argument * k48, k57);
     double const radial6 = k63 * exponential * series6;
-    output[36] = k97 * radial6 * harmonics[36];
-    compensation[36] = k00;
-    output[37] = k96 * radial6 * harmonics[37];
-    compensation[37] = k00;
-    output[38] = k95 * radial6 * harmonics[38];
-    compensation[38] = k00;
-    output[39] = k93 * radial6 * harmonics[39];
-    compensation[39] = k00;
-    output[40] = k92 * radial6 * harmonics[40];
-    compensation[40] = k00;
-    output[41] = k91 * radial6 * harmonics[41];
-    compensation[41] = k00;
-    output[42] = k90 * radial6 * harmonics[42];
-    compensation[42] = k00;
-    output[43] = k91 * radial6 * harmonics[43];
-    compensation[43] = k00;
-    output[44] = k92 * radial6 * harmonics[44];
-    compensation[44] = k00;
-    output[45] = k93 * radial6 * harmonics[45];
-    compensation[45] = k00;
-    output[46] = k95 * radial6 * harmonics[46];
-    compensation[46] = k00;
-    output[47] = k96 * radial6 * harmonics[47];
-    compensation[47] = k00;
-    output[48] = k97 * radial6 * harmonics[48];
-    compensation[48] = k00;
-    output[0] += k56;
+    G(6, -6) = k97 * radial6 * U(6, -6);
+    C(6, -6) = k00;
+    G(6, -5) = k96 * radial6 * U(6, -5);
+    C(6, -5) = k00;
+    G(6, -4) = k95 * radial6 * U(6, -4);
+    C(6, -4) = k00;
+    G(6, -3) = k93 * radial6 * U(6, -3);
+    C(6, -3) = k00;
+    G(6, -2) = k92 * radial6 * U(6, -2);
+    C(6, -2) = k00;
+    G(6, -1) = k91 * radial6 * U(6, -1);
+    C(6, -1) = k00;
+    G(6, 0) = k90 * radial6 * U(6, 0);
+    C(6, 0) = k00;
+    G(6, 1) = k91 * radial6 * U(6, 1);
+    C(6, 1) = k00;
+    G(6, 2) = k92 * radial6 * U(6, 2);
+    C(6, 2) = k00;
+    G(6, 3) = k93 * radial6 * U(6, 3);
+    C(6, 3) = k00;
+    G(6, 4) = k95 * radial6 * U(6, 4);
+    C(6, 4) = k00;
+    G(6, 5) = k96 * radial6 * U(6, 5);
+    C(6, 5) = k00;
+    G(6, 6) = k97 * radial6 * U(6, 6);
+    C(6, 6) = k00;
+    G(0, 0) += k56;
     greenTrace = k62;
     for (int ix = -6; ix <= 6; ++ix) {
         for (int iy = -6; iy <= 6; ++iy) {
@@ -1848,374 +1821,374 @@ __device__ void evaluateEwaldWorking(
                     double gammaTerm = k59 * imageRadius * imageExp;
                     double inversePower = iR;
                     double const imageRadial0 = -screening * inversePower;
-                    double const imageValue0 = imageRadial0 * harmonics[0];
+                    double const imageValue0 = imageRadial0 * U(0, 0);
                     if (sign < 0) {
-                        imagePair[0] = imageValue0;
+                        I(0, 0) = imageValue0;
                     } else {
-                        imagePair[0] += imageValue0;
+                        I(0, 0) += imageValue0;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * k55;
                     double const imageRadial1 = screening * inversePower;
-                    double const imageValue1 = k58 * imageRadial1 * harmonics[1];
+                    double const imageValue1 = k58 * imageRadial1 * U(1, -1);
                     if (sign < 0) {
-                        imagePair[1] = imageValue1;
+                        I(1, -1) = imageValue1;
                     } else {
-                        imagePair[1] += imageValue1;
+                        I(1, -1) += imageValue1;
                     }
-                    double const imageValue2 = imageRadial1 * harmonics[2];
+                    double const imageValue2 = imageRadial1 * U(1, 0);
                     if (sign < 0) {
-                        imagePair[2] = imageValue2;
+                        I(1, 0) = imageValue2;
                     } else {
-                        imagePair[2] += imageValue2;
+                        I(1, 0) += imageValue2;
                     }
-                    double const imageValue3 = k58 * imageRadial1 * harmonics[3];
+                    double const imageValue3 = k58 * imageRadial1 * U(1, 1);
                     if (sign < 0) {
-                        imagePair[3] = imageValue3;
+                        I(1, 1) = imageValue3;
                     } else {
-                        imagePair[3] += imageValue3;
+                        I(1, 1) += imageValue3;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * k53;
                     double const imageRadial2 = -screening * inversePower;
-                    double const imageValue4 = k76 * imageRadial2 * harmonics[4];
+                    double const imageValue4 = k76 * imageRadial2 * U(2, -2);
                     if (sign < 0) {
-                        imagePair[4] = imageValue4;
+                        I(2, -2) = imageValue4;
                     } else {
-                        imagePair[4] += imageValue4;
+                        I(2, -2) += imageValue4;
                     }
-                    double const imageValue5 = k65 * imageRadial2 * harmonics[5];
+                    double const imageValue5 = k65 * imageRadial2 * U(2, -1);
                     if (sign < 0) {
-                        imagePair[5] = imageValue5;
+                        I(2, -1) = imageValue5;
                     } else {
-                        imagePair[5] += imageValue5;
+                        I(2, -1) += imageValue5;
                     }
-                    double const imageValue6 = k61 * imageRadial2 * harmonics[6];
+                    double const imageValue6 = k61 * imageRadial2 * U(2, 0);
                     if (sign < 0) {
-                        imagePair[6] = imageValue6;
+                        I(2, 0) = imageValue6;
                     } else {
-                        imagePair[6] += imageValue6;
+                        I(2, 0) += imageValue6;
                     }
-                    double const imageValue7 = k65 * imageRadial2 * harmonics[7];
+                    double const imageValue7 = k65 * imageRadial2 * U(2, 1);
                     if (sign < 0) {
-                        imagePair[7] = imageValue7;
+                        I(2, 1) = imageValue7;
                     } else {
-                        imagePair[7] += imageValue7;
+                        I(2, 1) += imageValue7;
                     }
-                    double const imageValue8 = k76 * imageRadial2 * harmonics[8];
+                    double const imageValue8 = k76 * imageRadial2 * U(2, 2);
                     if (sign < 0) {
-                        imagePair[8] = imageValue8;
+                        I(2, 2) = imageValue8;
                     } else {
-                        imagePair[8] += imageValue8;
+                        I(2, 2) += imageValue8;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * k52;
                     double const imageRadial3 = screening * inversePower;
-                    double const imageValue9 = k81 * imageRadial3 * harmonics[9];
+                    double const imageValue9 = k81 * imageRadial3 * U(3, -3);
                     if (sign < 0) {
-                        imagePair[9] = imageValue9;
+                        I(3, -3) = imageValue9;
                     } else {
-                        imagePair[9] += imageValue9;
+                        I(3, -3) += imageValue9;
                     }
-                    double const imageValue10 = k79 * imageRadial3 * harmonics[10];
+                    double const imageValue10 = k79 * imageRadial3 * U(3, -2);
                     if (sign < 0) {
-                        imagePair[10] = imageValue10;
+                        I(3, -2) = imageValue10;
                     } else {
-                        imagePair[10] += imageValue10;
+                        I(3, -2) += imageValue10;
                     }
-                    double const imageValue11 = k78 * imageRadial3 * harmonics[11];
+                    double const imageValue11 = k78 * imageRadial3 * U(3, -1);
                     if (sign < 0) {
-                        imagePair[11] = imageValue11;
+                        I(3, -1) = imageValue11;
                     } else {
-                        imagePair[11] += imageValue11;
+                        I(3, -1) += imageValue11;
                     }
-                    double const imageValue12 = k77 * imageRadial3 * harmonics[12];
+                    double const imageValue12 = k77 * imageRadial3 * U(3, 0);
                     if (sign < 0) {
-                        imagePair[12] = imageValue12;
+                        I(3, 0) = imageValue12;
                     } else {
-                        imagePair[12] += imageValue12;
+                        I(3, 0) += imageValue12;
                     }
-                    double const imageValue13 = k78 * imageRadial3 * harmonics[13];
+                    double const imageValue13 = k78 * imageRadial3 * U(3, 1);
                     if (sign < 0) {
-                        imagePair[13] = imageValue13;
+                        I(3, 1) = imageValue13;
                     } else {
-                        imagePair[13] += imageValue13;
+                        I(3, 1) += imageValue13;
                     }
-                    double const imageValue14 = k79 * imageRadial3 * harmonics[14];
+                    double const imageValue14 = k79 * imageRadial3 * U(3, 2);
                     if (sign < 0) {
-                        imagePair[14] = imageValue14;
+                        I(3, 2) = imageValue14;
                     } else {
-                        imagePair[14] += imageValue14;
+                        I(3, 2) += imageValue14;
                     }
-                    double const imageValue15 = k81 * imageRadial3 * harmonics[15];
+                    double const imageValue15 = k81 * imageRadial3 * U(3, 3);
                     if (sign < 0) {
-                        imagePair[15] = imageValue15;
+                        I(3, 3) = imageValue15;
                     } else {
-                        imagePair[15] += imageValue15;
+                        I(3, 3) += imageValue15;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * k51;
                     double const imageRadial4 = -screening * inversePower;
-                    double const imageValue16 = k87 * imageRadial4 * harmonics[16];
+                    double const imageValue16 = k87 * imageRadial4 * U(4, -4);
                     if (sign < 0) {
-                        imagePair[16] = imageValue16;
+                        I(4, -4) = imageValue16;
                     } else {
-                        imagePair[16] += imageValue16;
+                        I(4, -4) += imageValue16;
                     }
-                    double const imageValue17 = k83 * imageRadial4 * harmonics[17];
+                    double const imageValue17 = k83 * imageRadial4 * U(4, -3);
                     if (sign < 0) {
-                        imagePair[17] = imageValue17;
+                        I(4, -3) = imageValue17;
                     } else {
-                        imagePair[17] += imageValue17;
+                        I(4, -3) += imageValue17;
                     }
-                    double const imageValue18 = k82 * imageRadial4 * harmonics[18];
+                    double const imageValue18 = k82 * imageRadial4 * U(4, -2);
                     if (sign < 0) {
-                        imagePair[18] = imageValue18;
+                        I(4, -2) = imageValue18;
                     } else {
-                        imagePair[18] += imageValue18;
+                        I(4, -2) += imageValue18;
                     }
-                    double const imageValue19 = k81 * imageRadial4 * harmonics[19];
+                    double const imageValue19 = k81 * imageRadial4 * U(4, -1);
                     if (sign < 0) {
-                        imagePair[19] = imageValue19;
+                        I(4, -1) = imageValue19;
                     } else {
-                        imagePair[19] += imageValue19;
+                        I(4, -1) += imageValue19;
                     }
-                    double const imageValue20 = k80 * imageRadial4 * harmonics[20];
+                    double const imageValue20 = k80 * imageRadial4 * U(4, 0);
                     if (sign < 0) {
-                        imagePair[20] = imageValue20;
+                        I(4, 0) = imageValue20;
                     } else {
-                        imagePair[20] += imageValue20;
+                        I(4, 0) += imageValue20;
                     }
-                    double const imageValue21 = k81 * imageRadial4 * harmonics[21];
+                    double const imageValue21 = k81 * imageRadial4 * U(4, 1);
                     if (sign < 0) {
-                        imagePair[21] = imageValue21;
+                        I(4, 1) = imageValue21;
                     } else {
-                        imagePair[21] += imageValue21;
+                        I(4, 1) += imageValue21;
                     }
-                    double const imageValue22 = k82 * imageRadial4 * harmonics[22];
+                    double const imageValue22 = k82 * imageRadial4 * U(4, 2);
                     if (sign < 0) {
-                        imagePair[22] = imageValue22;
+                        I(4, 2) = imageValue22;
                     } else {
-                        imagePair[22] += imageValue22;
+                        I(4, 2) += imageValue22;
                     }
-                    double const imageValue23 = k83 * imageRadial4 * harmonics[23];
+                    double const imageValue23 = k83 * imageRadial4 * U(4, 3);
                     if (sign < 0) {
-                        imagePair[23] = imageValue23;
+                        I(4, 3) = imageValue23;
                     } else {
-                        imagePair[23] += imageValue23;
+                        I(4, 3) += imageValue23;
                     }
-                    double const imageValue24 = k87 * imageRadial4 * harmonics[24];
+                    double const imageValue24 = k87 * imageRadial4 * U(4, 4);
                     if (sign < 0) {
-                        imagePair[24] = imageValue24;
+                        I(4, 4) = imageValue24;
                     } else {
-                        imagePair[24] += imageValue24;
+                        I(4, 4) += imageValue24;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * k50;
                     double const imageRadial5 = screening * inversePower;
-                    double const imageValue25 = k94 * imageRadial5 * harmonics[25];
+                    double const imageValue25 = k94 * imageRadial5 * U(5, -5);
                     if (sign < 0) {
-                        imagePair[25] = imageValue25;
+                        I(5, -5) = imageValue25;
                     } else {
-                        imagePair[25] += imageValue25;
+                        I(5, -5) += imageValue25;
                     }
-                    double const imageValue26 = k89 * imageRadial5 * harmonics[26];
+                    double const imageValue26 = k89 * imageRadial5 * U(5, -4);
                     if (sign < 0) {
-                        imagePair[26] = imageValue26;
+                        I(5, -4) = imageValue26;
                     } else {
-                        imagePair[26] += imageValue26;
+                        I(5, -4) += imageValue26;
                     }
-                    double const imageValue27 = k88 * imageRadial5 * harmonics[27];
+                    double const imageValue27 = k88 * imageRadial5 * U(5, -3);
                     if (sign < 0) {
-                        imagePair[27] = imageValue27;
+                        I(5, -3) = imageValue27;
                     } else {
-                        imagePair[27] += imageValue27;
+                        I(5, -3) += imageValue27;
                     }
-                    double const imageValue28 = k86 * imageRadial5 * harmonics[28];
+                    double const imageValue28 = k86 * imageRadial5 * U(5, -2);
                     if (sign < 0) {
-                        imagePair[28] = imageValue28;
+                        I(5, -2) = imageValue28;
                     } else {
-                        imagePair[28] += imageValue28;
+                        I(5, -2) += imageValue28;
                     }
-                    double const imageValue29 = k85 * imageRadial5 * harmonics[29];
+                    double const imageValue29 = k85 * imageRadial5 * U(5, -1);
                     if (sign < 0) {
-                        imagePair[29] = imageValue29;
+                        I(5, -1) = imageValue29;
                     } else {
-                        imagePair[29] += imageValue29;
+                        I(5, -1) += imageValue29;
                     }
-                    double const imageValue30 = k84 * imageRadial5 * harmonics[30];
+                    double const imageValue30 = k84 * imageRadial5 * U(5, 0);
                     if (sign < 0) {
-                        imagePair[30] = imageValue30;
+                        I(5, 0) = imageValue30;
                     } else {
-                        imagePair[30] += imageValue30;
+                        I(5, 0) += imageValue30;
                     }
-                    double const imageValue31 = k85 * imageRadial5 * harmonics[31];
+                    double const imageValue31 = k85 * imageRadial5 * U(5, 1);
                     if (sign < 0) {
-                        imagePair[31] = imageValue31;
+                        I(5, 1) = imageValue31;
                     } else {
-                        imagePair[31] += imageValue31;
+                        I(5, 1) += imageValue31;
                     }
-                    double const imageValue32 = k86 * imageRadial5 * harmonics[32];
+                    double const imageValue32 = k86 * imageRadial5 * U(5, 2);
                     if (sign < 0) {
-                        imagePair[32] = imageValue32;
+                        I(5, 2) = imageValue32;
                     } else {
-                        imagePair[32] += imageValue32;
+                        I(5, 2) += imageValue32;
                     }
-                    double const imageValue33 = k88 * imageRadial5 * harmonics[33];
+                    double const imageValue33 = k88 * imageRadial5 * U(5, 3);
                     if (sign < 0) {
-                        imagePair[33] = imageValue33;
+                        I(5, 3) = imageValue33;
                     } else {
-                        imagePair[33] += imageValue33;
+                        I(5, 3) += imageValue33;
                     }
-                    double const imageValue34 = k89 * imageRadial5 * harmonics[34];
+                    double const imageValue34 = k89 * imageRadial5 * U(5, 4);
                     if (sign < 0) {
-                        imagePair[34] = imageValue34;
+                        I(5, 4) = imageValue34;
                     } else {
-                        imagePair[34] += imageValue34;
+                        I(5, 4) += imageValue34;
                     }
-                    double const imageValue35 = k94 * imageRadial5 * harmonics[35];
+                    double const imageValue35 = k94 * imageRadial5 * U(5, 5);
                     if (sign < 0) {
-                        imagePair[35] = imageValue35;
+                        I(5, 5) = imageValue35;
                     } else {
-                        imagePair[35] += imageValue35;
+                        I(5, 5) += imageValue35;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * k49;
                     double const imageRadial6 = -screening * inversePower;
-                    double const imageValue36 = k97 * imageRadial6 * harmonics[36];
+                    double const imageValue36 = k97 * imageRadial6 * U(6, -6);
                     if (sign < 0) {
-                        imagePair[36] = imageValue36;
+                        I(6, -6) = imageValue36;
                     } else {
-                        imagePair[36] += imageValue36;
+                        I(6, -6) += imageValue36;
                     }
-                    double const imageValue37 = k96 * imageRadial6 * harmonics[37];
+                    double const imageValue37 = k96 * imageRadial6 * U(6, -5);
                     if (sign < 0) {
-                        imagePair[37] = imageValue37;
+                        I(6, -5) = imageValue37;
                     } else {
-                        imagePair[37] += imageValue37;
+                        I(6, -5) += imageValue37;
                     }
-                    double const imageValue38 = k95 * imageRadial6 * harmonics[38];
+                    double const imageValue38 = k95 * imageRadial6 * U(6, -4);
                     if (sign < 0) {
-                        imagePair[38] = imageValue38;
+                        I(6, -4) = imageValue38;
                     } else {
-                        imagePair[38] += imageValue38;
+                        I(6, -4) += imageValue38;
                     }
-                    double const imageValue39 = k93 * imageRadial6 * harmonics[39];
+                    double const imageValue39 = k93 * imageRadial6 * U(6, -3);
                     if (sign < 0) {
-                        imagePair[39] = imageValue39;
+                        I(6, -3) = imageValue39;
                     } else {
-                        imagePair[39] += imageValue39;
+                        I(6, -3) += imageValue39;
                     }
-                    double const imageValue40 = k92 * imageRadial6 * harmonics[40];
+                    double const imageValue40 = k92 * imageRadial6 * U(6, -2);
                     if (sign < 0) {
-                        imagePair[40] = imageValue40;
+                        I(6, -2) = imageValue40;
                     } else {
-                        imagePair[40] += imageValue40;
+                        I(6, -2) += imageValue40;
                     }
-                    double const imageValue41 = k91 * imageRadial6 * harmonics[41];
+                    double const imageValue41 = k91 * imageRadial6 * U(6, -1);
                     if (sign < 0) {
-                        imagePair[41] = imageValue41;
+                        I(6, -1) = imageValue41;
                     } else {
-                        imagePair[41] += imageValue41;
+                        I(6, -1) += imageValue41;
                     }
-                    double const imageValue42 = k90 * imageRadial6 * harmonics[42];
+                    double const imageValue42 = k90 * imageRadial6 * U(6, 0);
                     if (sign < 0) {
-                        imagePair[42] = imageValue42;
+                        I(6, 0) = imageValue42;
                     } else {
-                        imagePair[42] += imageValue42;
+                        I(6, 0) += imageValue42;
                     }
-                    double const imageValue43 = k91 * imageRadial6 * harmonics[43];
+                    double const imageValue43 = k91 * imageRadial6 * U(6, 1);
                     if (sign < 0) {
-                        imagePair[43] = imageValue43;
+                        I(6, 1) = imageValue43;
                     } else {
-                        imagePair[43] += imageValue43;
+                        I(6, 1) += imageValue43;
                     }
-                    double const imageValue44 = k92 * imageRadial6 * harmonics[44];
+                    double const imageValue44 = k92 * imageRadial6 * U(6, 2);
                     if (sign < 0) {
-                        imagePair[44] = imageValue44;
+                        I(6, 2) = imageValue44;
                     } else {
-                        imagePair[44] += imageValue44;
+                        I(6, 2) += imageValue44;
                     }
-                    double const imageValue45 = k93 * imageRadial6 * harmonics[45];
+                    double const imageValue45 = k93 * imageRadial6 * U(6, 3);
                     if (sign < 0) {
-                        imagePair[45] = imageValue45;
+                        I(6, 3) = imageValue45;
                     } else {
-                        imagePair[45] += imageValue45;
+                        I(6, 3) += imageValue45;
                     }
-                    double const imageValue46 = k95 * imageRadial6 * harmonics[46];
+                    double const imageValue46 = k95 * imageRadial6 * U(6, 4);
                     if (sign < 0) {
-                        imagePair[46] = imageValue46;
+                        I(6, 4) = imageValue46;
                     } else {
-                        imagePair[46] += imageValue46;
+                        I(6, 4) += imageValue46;
                     }
-                    double const imageValue47 = k96 * imageRadial6 * harmonics[47];
+                    double const imageValue47 = k96 * imageRadial6 * U(6, 5);
                     if (sign < 0) {
-                        imagePair[47] = imageValue47;
+                        I(6, 5) = imageValue47;
                     } else {
-                        imagePair[47] += imageValue47;
+                        I(6, 5) += imageValue47;
                     }
-                    double const imageValue48 = k97 * imageRadial6 * harmonics[48];
+                    double const imageValue48 = k97 * imageRadial6 * U(6, 6);
                     if (sign < 0) {
-                        imagePair[48] = imageValue48;
+                        I(6, 6) = imageValue48;
                     } else {
-                        imagePair[48] += imageValue48;
+                        I(6, 6) += imageValue48;
                     }
                 }
-                detail::ewaldAccumulate(output[0], compensation[0], imagePair[0]);
-                detail::ewaldAccumulate(output[1], compensation[1], imagePair[1]);
-                detail::ewaldAccumulate(output[2], compensation[2], imagePair[2]);
-                detail::ewaldAccumulate(output[3], compensation[3], imagePair[3]);
-                detail::ewaldAccumulate(output[4], compensation[4], imagePair[4]);
-                detail::ewaldAccumulate(output[5], compensation[5], imagePair[5]);
-                detail::ewaldAccumulate(output[6], compensation[6], imagePair[6]);
-                detail::ewaldAccumulate(output[7], compensation[7], imagePair[7]);
-                detail::ewaldAccumulate(output[8], compensation[8], imagePair[8]);
-                detail::ewaldAccumulate(output[9], compensation[9], imagePair[9]);
-                detail::ewaldAccumulate(output[10], compensation[10], imagePair[10]);
-                detail::ewaldAccumulate(output[11], compensation[11], imagePair[11]);
-                detail::ewaldAccumulate(output[12], compensation[12], imagePair[12]);
-                detail::ewaldAccumulate(output[13], compensation[13], imagePair[13]);
-                detail::ewaldAccumulate(output[14], compensation[14], imagePair[14]);
-                detail::ewaldAccumulate(output[15], compensation[15], imagePair[15]);
-                detail::ewaldAccumulate(output[16], compensation[16], imagePair[16]);
-                detail::ewaldAccumulate(output[17], compensation[17], imagePair[17]);
-                detail::ewaldAccumulate(output[18], compensation[18], imagePair[18]);
-                detail::ewaldAccumulate(output[19], compensation[19], imagePair[19]);
-                detail::ewaldAccumulate(output[20], compensation[20], imagePair[20]);
-                detail::ewaldAccumulate(output[21], compensation[21], imagePair[21]);
-                detail::ewaldAccumulate(output[22], compensation[22], imagePair[22]);
-                detail::ewaldAccumulate(output[23], compensation[23], imagePair[23]);
-                detail::ewaldAccumulate(output[24], compensation[24], imagePair[24]);
-                detail::ewaldAccumulate(output[25], compensation[25], imagePair[25]);
-                detail::ewaldAccumulate(output[26], compensation[26], imagePair[26]);
-                detail::ewaldAccumulate(output[27], compensation[27], imagePair[27]);
-                detail::ewaldAccumulate(output[28], compensation[28], imagePair[28]);
-                detail::ewaldAccumulate(output[29], compensation[29], imagePair[29]);
-                detail::ewaldAccumulate(output[30], compensation[30], imagePair[30]);
-                detail::ewaldAccumulate(output[31], compensation[31], imagePair[31]);
-                detail::ewaldAccumulate(output[32], compensation[32], imagePair[32]);
-                detail::ewaldAccumulate(output[33], compensation[33], imagePair[33]);
-                detail::ewaldAccumulate(output[34], compensation[34], imagePair[34]);
-                detail::ewaldAccumulate(output[35], compensation[35], imagePair[35]);
-                detail::ewaldAccumulate(output[36], compensation[36], imagePair[36]);
-                detail::ewaldAccumulate(output[37], compensation[37], imagePair[37]);
-                detail::ewaldAccumulate(output[38], compensation[38], imagePair[38]);
-                detail::ewaldAccumulate(output[39], compensation[39], imagePair[39]);
-                detail::ewaldAccumulate(output[40], compensation[40], imagePair[40]);
-                detail::ewaldAccumulate(output[41], compensation[41], imagePair[41]);
-                detail::ewaldAccumulate(output[42], compensation[42], imagePair[42]);
-                detail::ewaldAccumulate(output[43], compensation[43], imagePair[43]);
-                detail::ewaldAccumulate(output[44], compensation[44], imagePair[44]);
-                detail::ewaldAccumulate(output[45], compensation[45], imagePair[45]);
-                detail::ewaldAccumulate(output[46], compensation[46], imagePair[46]);
-                detail::ewaldAccumulate(output[47], compensation[47], imagePair[47]);
-                detail::ewaldAccumulate(output[48], compensation[48], imagePair[48]);
+                detail::ewaldAccumulate(G(0, 0), C(0, 0), I(0, 0));
+                detail::ewaldAccumulate(G(1, -1), C(1, -1), I(1, -1));
+                detail::ewaldAccumulate(G(1, 0), C(1, 0), I(1, 0));
+                detail::ewaldAccumulate(G(1, 1), C(1, 1), I(1, 1));
+                detail::ewaldAccumulate(G(2, -2), C(2, -2), I(2, -2));
+                detail::ewaldAccumulate(G(2, -1), C(2, -1), I(2, -1));
+                detail::ewaldAccumulate(G(2, 0), C(2, 0), I(2, 0));
+                detail::ewaldAccumulate(G(2, 1), C(2, 1), I(2, 1));
+                detail::ewaldAccumulate(G(2, 2), C(2, 2), I(2, 2));
+                detail::ewaldAccumulate(G(3, -3), C(3, -3), I(3, -3));
+                detail::ewaldAccumulate(G(3, -2), C(3, -2), I(3, -2));
+                detail::ewaldAccumulate(G(3, -1), C(3, -1), I(3, -1));
+                detail::ewaldAccumulate(G(3, 0), C(3, 0), I(3, 0));
+                detail::ewaldAccumulate(G(3, 1), C(3, 1), I(3, 1));
+                detail::ewaldAccumulate(G(3, 2), C(3, 2), I(3, 2));
+                detail::ewaldAccumulate(G(3, 3), C(3, 3), I(3, 3));
+                detail::ewaldAccumulate(G(4, -4), C(4, -4), I(4, -4));
+                detail::ewaldAccumulate(G(4, -3), C(4, -3), I(4, -3));
+                detail::ewaldAccumulate(G(4, -2), C(4, -2), I(4, -2));
+                detail::ewaldAccumulate(G(4, -1), C(4, -1), I(4, -1));
+                detail::ewaldAccumulate(G(4, 0), C(4, 0), I(4, 0));
+                detail::ewaldAccumulate(G(4, 1), C(4, 1), I(4, 1));
+                detail::ewaldAccumulate(G(4, 2), C(4, 2), I(4, 2));
+                detail::ewaldAccumulate(G(4, 3), C(4, 3), I(4, 3));
+                detail::ewaldAccumulate(G(4, 4), C(4, 4), I(4, 4));
+                detail::ewaldAccumulate(G(5, -5), C(5, -5), I(5, -5));
+                detail::ewaldAccumulate(G(5, -4), C(5, -4), I(5, -4));
+                detail::ewaldAccumulate(G(5, -3), C(5, -3), I(5, -3));
+                detail::ewaldAccumulate(G(5, -2), C(5, -2), I(5, -2));
+                detail::ewaldAccumulate(G(5, -1), C(5, -1), I(5, -1));
+                detail::ewaldAccumulate(G(5, 0), C(5, 0), I(5, 0));
+                detail::ewaldAccumulate(G(5, 1), C(5, 1), I(5, 1));
+                detail::ewaldAccumulate(G(5, 2), C(5, 2), I(5, 2));
+                detail::ewaldAccumulate(G(5, 3), C(5, 3), I(5, 3));
+                detail::ewaldAccumulate(G(5, 4), C(5, 4), I(5, 4));
+                detail::ewaldAccumulate(G(5, 5), C(5, 5), I(5, 5));
+                detail::ewaldAccumulate(G(6, -6), C(6, -6), I(6, -6));
+                detail::ewaldAccumulate(G(6, -5), C(6, -5), I(6, -5));
+                detail::ewaldAccumulate(G(6, -4), C(6, -4), I(6, -4));
+                detail::ewaldAccumulate(G(6, -3), C(6, -3), I(6, -3));
+                detail::ewaldAccumulate(G(6, -2), C(6, -2), I(6, -2));
+                detail::ewaldAccumulate(G(6, -1), C(6, -1), I(6, -1));
+                detail::ewaldAccumulate(G(6, 0), C(6, 0), I(6, 0));
+                detail::ewaldAccumulate(G(6, 1), C(6, 1), I(6, 1));
+                detail::ewaldAccumulate(G(6, 2), C(6, 2), I(6, 2));
+                detail::ewaldAccumulate(G(6, 3), C(6, 3), I(6, 3));
+                detail::ewaldAccumulate(G(6, 4), C(6, 4), I(6, 4));
+                detail::ewaldAccumulate(G(6, 5), C(6, 5), I(6, 5));
+                detail::ewaldAccumulate(G(6, 6), C(6, 6), I(6, 6));
                 double const waveX = static_cast<double>(ix);
                 double const waveY = static_cast<double>(iy);
                 double const waveZ = static_cast<double>(iz);
@@ -2227,108 +2200,61 @@ __device__ void evaluateEwaldWorking(
                 double const wavePotential =
                     -k54 * detail::ewaldExp(-k60 * waveSquared) / waveSquared;
                 double const waveRadial0 = k57 * wavePotential * cosine;
-                detail::ewaldAccumulate(output[0], compensation[0], waveRadial0 * harmonics[0]);
+                detail::ewaldAccumulate(G(0, 0), C(0, 0), waveRadial0 * U(0, 0));
                 double const waveRadial1 = k67 * wavePotential * -sine;
-                detail::ewaldAccumulate(
-                    output[1], compensation[1], k58 * waveRadial1 * harmonics[1]);
-                detail::ewaldAccumulate(output[2], compensation[2], waveRadial1 * harmonics[2]);
-                detail::ewaldAccumulate(
-                    output[3], compensation[3], k58 * waveRadial1 * harmonics[3]);
+                detail::ewaldAccumulate(G(1, -1), C(1, -1), k58 * waveRadial1 * U(1, -1));
+                detail::ewaldAccumulate(G(1, 0), C(1, 0), waveRadial1 * U(1, 0));
+                detail::ewaldAccumulate(G(1, 1), C(1, 1), k58 * waveRadial1 * U(1, 1));
                 double const waveRadial2 = k73 * wavePotential * -cosine;
-                detail::ewaldAccumulate(
-                    output[4], compensation[4], k76 * waveRadial2 * harmonics[4]);
-                detail::ewaldAccumulate(
-                    output[5], compensation[5], k65 * waveRadial2 * harmonics[5]);
-                detail::ewaldAccumulate(
-                    output[6], compensation[6], k61 * waveRadial2 * harmonics[6]);
-                detail::ewaldAccumulate(
-                    output[7], compensation[7], k65 * waveRadial2 * harmonics[7]);
-                detail::ewaldAccumulate(
-                    output[8], compensation[8], k76 * waveRadial2 * harmonics[8]);
+                detail::ewaldAccumulate(G(2, -2), C(2, -2), k76 * waveRadial2 * U(2, -2));
+                detail::ewaldAccumulate(G(2, -1), C(2, -1), k65 * waveRadial2 * U(2, -1));
+                detail::ewaldAccumulate(G(2, 0), C(2, 0), k61 * waveRadial2 * U(2, 0));
+                detail::ewaldAccumulate(G(2, 1), C(2, 1), k65 * waveRadial2 * U(2, 1));
+                detail::ewaldAccumulate(G(2, 2), C(2, 2), k76 * waveRadial2 * U(2, 2));
                 double const waveRadial3 = k75 * wavePotential * sine;
-                detail::ewaldAccumulate(
-                    output[9], compensation[9], k81 * waveRadial3 * harmonics[9]);
-                detail::ewaldAccumulate(
-                    output[10], compensation[10], k79 * waveRadial3 * harmonics[10]);
-                detail::ewaldAccumulate(
-                    output[11], compensation[11], k78 * waveRadial3 * harmonics[11]);
-                detail::ewaldAccumulate(
-                    output[12], compensation[12], k77 * waveRadial3 * harmonics[12]);
-                detail::ewaldAccumulate(
-                    output[13], compensation[13], k78 * waveRadial3 * harmonics[13]);
-                detail::ewaldAccumulate(
-                    output[14], compensation[14], k79 * waveRadial3 * harmonics[14]);
-                detail::ewaldAccumulate(
-                    output[15], compensation[15], k81 * waveRadial3 * harmonics[15]);
+                detail::ewaldAccumulate(G(3, -3), C(3, -3), k81 * waveRadial3 * U(3, -3));
+                detail::ewaldAccumulate(G(3, -2), C(3, -2), k79 * waveRadial3 * U(3, -2));
+                detail::ewaldAccumulate(G(3, -1), C(3, -1), k78 * waveRadial3 * U(3, -1));
+                detail::ewaldAccumulate(G(3, 0), C(3, 0), k77 * waveRadial3 * U(3, 0));
+                detail::ewaldAccumulate(G(3, 1), C(3, 1), k78 * waveRadial3 * U(3, 1));
+                detail::ewaldAccumulate(G(3, 2), C(3, 2), k79 * waveRadial3 * U(3, 2));
+                detail::ewaldAccumulate(G(3, 3), C(3, 3), k81 * waveRadial3 * U(3, 3));
                 double const waveRadial4 = k74 * wavePotential * cosine;
-                detail::ewaldAccumulate(
-                    output[16], compensation[16], k87 * waveRadial4 * harmonics[16]);
-                detail::ewaldAccumulate(
-                    output[17], compensation[17], k83 * waveRadial4 * harmonics[17]);
-                detail::ewaldAccumulate(
-                    output[18], compensation[18], k82 * waveRadial4 * harmonics[18]);
-                detail::ewaldAccumulate(
-                    output[19], compensation[19], k81 * waveRadial4 * harmonics[19]);
-                detail::ewaldAccumulate(
-                    output[20], compensation[20], k80 * waveRadial4 * harmonics[20]);
-                detail::ewaldAccumulate(
-                    output[21], compensation[21], k81 * waveRadial4 * harmonics[21]);
-                detail::ewaldAccumulate(
-                    output[22], compensation[22], k82 * waveRadial4 * harmonics[22]);
-                detail::ewaldAccumulate(
-                    output[23], compensation[23], k83 * waveRadial4 * harmonics[23]);
-                detail::ewaldAccumulate(
-                    output[24], compensation[24], k87 * waveRadial4 * harmonics[24]);
+                detail::ewaldAccumulate(G(4, -4), C(4, -4), k87 * waveRadial4 * U(4, -4));
+                detail::ewaldAccumulate(G(4, -3), C(4, -3), k83 * waveRadial4 * U(4, -3));
+                detail::ewaldAccumulate(G(4, -2), C(4, -2), k82 * waveRadial4 * U(4, -2));
+                detail::ewaldAccumulate(G(4, -1), C(4, -1), k81 * waveRadial4 * U(4, -1));
+                detail::ewaldAccumulate(G(4, 0), C(4, 0), k80 * waveRadial4 * U(4, 0));
+                detail::ewaldAccumulate(G(4, 1), C(4, 1), k81 * waveRadial4 * U(4, 1));
+                detail::ewaldAccumulate(G(4, 2), C(4, 2), k82 * waveRadial4 * U(4, 2));
+                detail::ewaldAccumulate(G(4, 3), C(4, 3), k83 * waveRadial4 * U(4, 3));
+                detail::ewaldAccumulate(G(4, 4), C(4, 4), k87 * waveRadial4 * U(4, 4));
                 double const waveRadial5 = k71 * wavePotential * -sine;
-                detail::ewaldAccumulate(
-                    output[25], compensation[25], k94 * waveRadial5 * harmonics[25]);
-                detail::ewaldAccumulate(
-                    output[26], compensation[26], k89 * waveRadial5 * harmonics[26]);
-                detail::ewaldAccumulate(
-                    output[27], compensation[27], k88 * waveRadial5 * harmonics[27]);
-                detail::ewaldAccumulate(
-                    output[28], compensation[28], k86 * waveRadial5 * harmonics[28]);
-                detail::ewaldAccumulate(
-                    output[29], compensation[29], k85 * waveRadial5 * harmonics[29]);
-                detail::ewaldAccumulate(
-                    output[30], compensation[30], k84 * waveRadial5 * harmonics[30]);
-                detail::ewaldAccumulate(
-                    output[31], compensation[31], k85 * waveRadial5 * harmonics[31]);
-                detail::ewaldAccumulate(
-                    output[32], compensation[32], k86 * waveRadial5 * harmonics[32]);
-                detail::ewaldAccumulate(
-                    output[33], compensation[33], k88 * waveRadial5 * harmonics[33]);
-                detail::ewaldAccumulate(
-                    output[34], compensation[34], k89 * waveRadial5 * harmonics[34]);
-                detail::ewaldAccumulate(
-                    output[35], compensation[35], k94 * waveRadial5 * harmonics[35]);
+                detail::ewaldAccumulate(G(5, -5), C(5, -5), k94 * waveRadial5 * U(5, -5));
+                detail::ewaldAccumulate(G(5, -4), C(5, -4), k89 * waveRadial5 * U(5, -4));
+                detail::ewaldAccumulate(G(5, -3), C(5, -3), k88 * waveRadial5 * U(5, -3));
+                detail::ewaldAccumulate(G(5, -2), C(5, -2), k86 * waveRadial5 * U(5, -2));
+                detail::ewaldAccumulate(G(5, -1), C(5, -1), k85 * waveRadial5 * U(5, -1));
+                detail::ewaldAccumulate(G(5, 0), C(5, 0), k84 * waveRadial5 * U(5, 0));
+                detail::ewaldAccumulate(G(5, 1), C(5, 1), k85 * waveRadial5 * U(5, 1));
+                detail::ewaldAccumulate(G(5, 2), C(5, 2), k86 * waveRadial5 * U(5, 2));
+                detail::ewaldAccumulate(G(5, 3), C(5, 3), k88 * waveRadial5 * U(5, 3));
+                detail::ewaldAccumulate(G(5, 4), C(5, 4), k89 * waveRadial5 * U(5, 4));
+                detail::ewaldAccumulate(G(5, 5), C(5, 5), k94 * waveRadial5 * U(5, 5));
                 double const waveRadial6 = k64 * wavePotential * -cosine;
-                detail::ewaldAccumulate(
-                    output[36], compensation[36], k97 * waveRadial6 * harmonics[36]);
-                detail::ewaldAccumulate(
-                    output[37], compensation[37], k96 * waveRadial6 * harmonics[37]);
-                detail::ewaldAccumulate(
-                    output[38], compensation[38], k95 * waveRadial6 * harmonics[38]);
-                detail::ewaldAccumulate(
-                    output[39], compensation[39], k93 * waveRadial6 * harmonics[39]);
-                detail::ewaldAccumulate(
-                    output[40], compensation[40], k92 * waveRadial6 * harmonics[40]);
-                detail::ewaldAccumulate(
-                    output[41], compensation[41], k91 * waveRadial6 * harmonics[41]);
-                detail::ewaldAccumulate(
-                    output[42], compensation[42], k90 * waveRadial6 * harmonics[42]);
-                detail::ewaldAccumulate(
-                    output[43], compensation[43], k91 * waveRadial6 * harmonics[43]);
-                detail::ewaldAccumulate(
-                    output[44], compensation[44], k92 * waveRadial6 * harmonics[44]);
-                detail::ewaldAccumulate(
-                    output[45], compensation[45], k93 * waveRadial6 * harmonics[45]);
-                detail::ewaldAccumulate(
-                    output[46], compensation[46], k95 * waveRadial6 * harmonics[46]);
-                detail::ewaldAccumulate(
-                    output[47], compensation[47], k96 * waveRadial6 * harmonics[47]);
-                detail::ewaldAccumulate(
-                    output[48], compensation[48], k97 * waveRadial6 * harmonics[48]);
+                detail::ewaldAccumulate(G(6, -6), C(6, -6), k97 * waveRadial6 * U(6, -6));
+                detail::ewaldAccumulate(G(6, -5), C(6, -5), k96 * waveRadial6 * U(6, -5));
+                detail::ewaldAccumulate(G(6, -4), C(6, -4), k95 * waveRadial6 * U(6, -4));
+                detail::ewaldAccumulate(G(6, -3), C(6, -3), k93 * waveRadial6 * U(6, -3));
+                detail::ewaldAccumulate(G(6, -2), C(6, -2), k92 * waveRadial6 * U(6, -2));
+                detail::ewaldAccumulate(G(6, -1), C(6, -1), k91 * waveRadial6 * U(6, -1));
+                detail::ewaldAccumulate(G(6, 0), C(6, 0), k90 * waveRadial6 * U(6, 0));
+                detail::ewaldAccumulate(G(6, 1), C(6, 1), k91 * waveRadial6 * U(6, 1));
+                detail::ewaldAccumulate(G(6, 2), C(6, 2), k92 * waveRadial6 * U(6, 2));
+                detail::ewaldAccumulate(G(6, 3), C(6, 3), k93 * waveRadial6 * U(6, 3));
+                detail::ewaldAccumulate(G(6, 4), C(6, 4), k95 * waveRadial6 * U(6, 4));
+                detail::ewaldAccumulate(G(6, 5), C(6, 5), k96 * waveRadial6 * U(6, 5));
+                detail::ewaldAccumulate(G(6, 6), C(6, 6), k97 * waveRadial6 * U(6, 6));
             }
         }
     }

@@ -36,95 +36,97 @@ void ewaldRegular(SimdVector<float, 8> x, SimdVector<float, 8> y, SimdVector<flo
     constexpr float k20 = 7.00000000e+00f;
     constexpr float k21 = 9.00000000e+00f;
     constexpr float k22 = 1.10000000e+01f;
-    output[0] = broadcast<SimdVector<float, 8>>(k17);
-    output[2] = z * output[0];
+    detail::CoefficientView<SimdVector<float, 8>> const U{output};
+
+    U(0, 0) = broadcast<SimdVector<float, 8>>(k17);
+    U(1, 0) = z * U(0, 0);
     SimdVector<float, 8> const zFactor2_0 = broadcast<SimdVector<float, 8>>(k18) * z;
-    output[6] = broadcast<SimdVector<float, 8>>(k15) *
-        fma(zFactor2_0, output[2], -radiusSquared * output[0]);
+    U(2, 0) =
+        broadcast<SimdVector<float, 8>>(k15) * fma(zFactor2_0, U(1, 0), -radiusSquared * U(0, 0));
     SimdVector<float, 8> const zFactor3_0 = broadcast<SimdVector<float, 8>>(k19) * z;
-    output[12] = broadcast<SimdVector<float, 8>>(k12) *
-        fma(zFactor3_0, output[6], -radiusSquared * output[2]);
+    U(3, 0) =
+        broadcast<SimdVector<float, 8>>(k12) * fma(zFactor3_0, U(2, 0), -radiusSquared * U(1, 0));
     SimdVector<float, 8> const zFactor4_0 = broadcast<SimdVector<float, 8>>(k20) * z;
-    output[20] = broadcast<SimdVector<float, 8>>(k08) *
-        fma(zFactor4_0, output[12], -radiusSquared * output[6]);
+    U(4, 0) =
+        broadcast<SimdVector<float, 8>>(k08) * fma(zFactor4_0, U(3, 0), -radiusSquared * U(2, 0));
     SimdVector<float, 8> const zFactor5_0 = broadcast<SimdVector<float, 8>>(k21) * z;
-    output[30] = broadcast<SimdVector<float, 8>>(k04) *
-        fma(zFactor5_0, output[20], -radiusSquared * output[12]);
+    U(5, 0) =
+        broadcast<SimdVector<float, 8>>(k04) * fma(zFactor5_0, U(4, 0), -radiusSquared * U(3, 0));
     SimdVector<float, 8> const zFactor6_0 = broadcast<SimdVector<float, 8>>(k22) * z;
-    output[42] = broadcast<SimdVector<float, 8>>(k00) *
-        fma(zFactor6_0, output[30], -radiusSquared * output[20]);
-    output[3] = x * broadcast<SimdVector<float, 8>>(k16);
-    output[1] = y * broadcast<SimdVector<float, 8>>(k16);
-    output[7] = z * output[3];
-    output[5] = z * output[1];
+    U(6, 0) =
+        broadcast<SimdVector<float, 8>>(k00) * fma(zFactor6_0, U(5, 0), -radiusSquared * U(4, 0));
+    U(1, 1) = x * broadcast<SimdVector<float, 8>>(k16);
+    U(1, -1) = y * broadcast<SimdVector<float, 8>>(k16);
+    U(2, 1) = z * U(1, 1);
+    U(2, -1) = z * U(1, -1);
     SimdVector<float, 8> const zFactor3_1 = broadcast<SimdVector<float, 8>>(k19) * z;
-    output[13] = broadcast<SimdVector<float, 8>>(k13) *
-        fma(zFactor3_1, output[7], -radiusSquared * output[3]);
-    output[11] = broadcast<SimdVector<float, 8>>(k13) *
-        fma(zFactor3_1, output[5], -radiusSquared * output[1]);
+    U(3, 1) =
+        broadcast<SimdVector<float, 8>>(k13) * fma(zFactor3_1, U(2, 1), -radiusSquared * U(1, 1));
+    U(3, -1) =
+        broadcast<SimdVector<float, 8>>(k13) * fma(zFactor3_1, U(2, -1), -radiusSquared * U(1, -1));
     SimdVector<float, 8> const zFactor4_1 = broadcast<SimdVector<float, 8>>(k20) * z;
-    output[21] = broadcast<SimdVector<float, 8>>(k09) *
-        fma(zFactor4_1, output[13], -radiusSquared * output[7]);
-    output[19] = broadcast<SimdVector<float, 8>>(k09) *
-        fma(zFactor4_1, output[11], -radiusSquared * output[5]);
+    U(4, 1) =
+        broadcast<SimdVector<float, 8>>(k09) * fma(zFactor4_1, U(3, 1), -radiusSquared * U(2, 1));
+    U(4, -1) =
+        broadcast<SimdVector<float, 8>>(k09) * fma(zFactor4_1, U(3, -1), -radiusSquared * U(2, -1));
     SimdVector<float, 8> const zFactor5_1 = broadcast<SimdVector<float, 8>>(k21) * z;
-    output[31] = broadcast<SimdVector<float, 8>>(k05) *
-        fma(zFactor5_1, output[21], -radiusSquared * output[13]);
-    output[29] = broadcast<SimdVector<float, 8>>(k05) *
-        fma(zFactor5_1, output[19], -radiusSquared * output[11]);
+    U(5, 1) =
+        broadcast<SimdVector<float, 8>>(k05) * fma(zFactor5_1, U(4, 1), -radiusSquared * U(3, 1));
+    U(5, -1) =
+        broadcast<SimdVector<float, 8>>(k05) * fma(zFactor5_1, U(4, -1), -radiusSquared * U(3, -1));
     SimdVector<float, 8> const zFactor6_1 = broadcast<SimdVector<float, 8>>(k22) * z;
-    output[43] = broadcast<SimdVector<float, 8>>(k01) *
-        fma(zFactor6_1, output[31], -radiusSquared * output[21]);
-    output[41] = broadcast<SimdVector<float, 8>>(k01) *
-        fma(zFactor6_1, output[29], -radiusSquared * output[19]);
-    output[8] = broadcast<SimdVector<float, 8>>(k15) * fma(x, output[3], -y * output[1]);
-    output[4] = broadcast<SimdVector<float, 8>>(k15) * fma(y, output[3], x * output[1]);
-    output[14] = z * output[8];
-    output[10] = z * output[4];
+    U(6, 1) =
+        broadcast<SimdVector<float, 8>>(k01) * fma(zFactor6_1, U(5, 1), -radiusSquared * U(4, 1));
+    U(6, -1) =
+        broadcast<SimdVector<float, 8>>(k01) * fma(zFactor6_1, U(5, -1), -radiusSquared * U(4, -1));
+    U(2, 2) = broadcast<SimdVector<float, 8>>(k15) * fma(x, U(1, 1), -y * U(1, -1));
+    U(2, -2) = broadcast<SimdVector<float, 8>>(k15) * fma(y, U(1, 1), x * U(1, -1));
+    U(3, 2) = z * U(2, 2);
+    U(3, -2) = z * U(2, -2);
     SimdVector<float, 8> const zFactor4_2 = broadcast<SimdVector<float, 8>>(k20) * z;
-    output[22] = broadcast<SimdVector<float, 8>>(k10) *
-        fma(zFactor4_2, output[14], -radiusSquared * output[8]);
-    output[18] = broadcast<SimdVector<float, 8>>(k10) *
-        fma(zFactor4_2, output[10], -radiusSquared * output[4]);
+    U(4, 2) =
+        broadcast<SimdVector<float, 8>>(k10) * fma(zFactor4_2, U(3, 2), -radiusSquared * U(2, 2));
+    U(4, -2) =
+        broadcast<SimdVector<float, 8>>(k10) * fma(zFactor4_2, U(3, -2), -radiusSquared * U(2, -2));
     SimdVector<float, 8> const zFactor5_2 = broadcast<SimdVector<float, 8>>(k21) * z;
-    output[32] = broadcast<SimdVector<float, 8>>(k06) *
-        fma(zFactor5_2, output[22], -radiusSquared * output[14]);
-    output[28] = broadcast<SimdVector<float, 8>>(k06) *
-        fma(zFactor5_2, output[18], -radiusSquared * output[10]);
+    U(5, 2) =
+        broadcast<SimdVector<float, 8>>(k06) * fma(zFactor5_2, U(4, 2), -radiusSquared * U(3, 2));
+    U(5, -2) =
+        broadcast<SimdVector<float, 8>>(k06) * fma(zFactor5_2, U(4, -2), -radiusSquared * U(3, -2));
     SimdVector<float, 8> const zFactor6_2 = broadcast<SimdVector<float, 8>>(k22) * z;
-    output[44] = broadcast<SimdVector<float, 8>>(k02) *
-        fma(zFactor6_2, output[32], -radiusSquared * output[22]);
-    output[40] = broadcast<SimdVector<float, 8>>(k02) *
-        fma(zFactor6_2, output[28], -radiusSquared * output[18]);
-    output[15] = broadcast<SimdVector<float, 8>>(k14) * fma(x, output[8], -y * output[4]);
-    output[9] = broadcast<SimdVector<float, 8>>(k14) * fma(y, output[8], x * output[4]);
-    output[23] = z * output[15];
-    output[17] = z * output[9];
+    U(6, 2) =
+        broadcast<SimdVector<float, 8>>(k02) * fma(zFactor6_2, U(5, 2), -radiusSquared * U(4, 2));
+    U(6, -2) =
+        broadcast<SimdVector<float, 8>>(k02) * fma(zFactor6_2, U(5, -2), -radiusSquared * U(4, -2));
+    U(3, 3) = broadcast<SimdVector<float, 8>>(k14) * fma(x, U(2, 2), -y * U(2, -2));
+    U(3, -3) = broadcast<SimdVector<float, 8>>(k14) * fma(y, U(2, 2), x * U(2, -2));
+    U(4, 3) = z * U(3, 3);
+    U(4, -3) = z * U(3, -3);
     SimdVector<float, 8> const zFactor5_3 = broadcast<SimdVector<float, 8>>(k21) * z;
-    output[33] = broadcast<SimdVector<float, 8>>(k08) *
-        fma(zFactor5_3, output[23], -radiusSquared * output[15]);
-    output[27] = broadcast<SimdVector<float, 8>>(k08) *
-        fma(zFactor5_3, output[17], -radiusSquared * output[9]);
+    U(5, 3) =
+        broadcast<SimdVector<float, 8>>(k08) * fma(zFactor5_3, U(4, 3), -radiusSquared * U(3, 3));
+    U(5, -3) =
+        broadcast<SimdVector<float, 8>>(k08) * fma(zFactor5_3, U(4, -3), -radiusSquared * U(3, -3));
     SimdVector<float, 8> const zFactor6_3 = broadcast<SimdVector<float, 8>>(k22) * z;
-    output[45] = broadcast<SimdVector<float, 8>>(k03) *
-        fma(zFactor6_3, output[33], -radiusSquared * output[23]);
-    output[39] = broadcast<SimdVector<float, 8>>(k03) *
-        fma(zFactor6_3, output[27], -radiusSquared * output[17]);
-    output[24] = broadcast<SimdVector<float, 8>>(k13) * fma(x, output[15], -y * output[9]);
-    output[16] = broadcast<SimdVector<float, 8>>(k13) * fma(y, output[15], x * output[9]);
-    output[34] = z * output[24];
-    output[26] = z * output[16];
+    U(6, 3) =
+        broadcast<SimdVector<float, 8>>(k03) * fma(zFactor6_3, U(5, 3), -radiusSquared * U(4, 3));
+    U(6, -3) =
+        broadcast<SimdVector<float, 8>>(k03) * fma(zFactor6_3, U(5, -3), -radiusSquared * U(4, -3));
+    U(4, 4) = broadcast<SimdVector<float, 8>>(k13) * fma(x, U(3, 3), -y * U(3, -3));
+    U(4, -4) = broadcast<SimdVector<float, 8>>(k13) * fma(y, U(3, 3), x * U(3, -3));
+    U(5, 4) = z * U(4, 4);
+    U(5, -4) = z * U(4, -4);
     SimdVector<float, 8> const zFactor6_4 = broadcast<SimdVector<float, 8>>(k22) * z;
-    output[46] = broadcast<SimdVector<float, 8>>(k07) *
-        fma(zFactor6_4, output[34], -radiusSquared * output[24]);
-    output[38] = broadcast<SimdVector<float, 8>>(k07) *
-        fma(zFactor6_4, output[26], -radiusSquared * output[16]);
-    output[35] = broadcast<SimdVector<float, 8>>(k11) * fma(x, output[24], -y * output[16]);
-    output[25] = broadcast<SimdVector<float, 8>>(k11) * fma(y, output[24], x * output[16]);
-    output[47] = z * output[35];
-    output[37] = z * output[25];
-    output[48] = broadcast<SimdVector<float, 8>>(k10) * fma(x, output[35], -y * output[25]);
-    output[36] = broadcast<SimdVector<float, 8>>(k10) * fma(y, output[35], x * output[25]);
+    U(6, 4) =
+        broadcast<SimdVector<float, 8>>(k07) * fma(zFactor6_4, U(5, 4), -radiusSquared * U(4, 4));
+    U(6, -4) =
+        broadcast<SimdVector<float, 8>>(k07) * fma(zFactor6_4, U(5, -4), -radiusSquared * U(4, -4));
+    U(5, 5) = broadcast<SimdVector<float, 8>>(k11) * fma(x, U(4, 4), -y * U(4, -4));
+    U(5, -5) = broadcast<SimdVector<float, 8>>(k11) * fma(y, U(4, 4), x * U(4, -4));
+    U(6, 5) = z * U(5, 5);
+    U(6, -5) = z * U(5, -5);
+    U(6, 6) = broadcast<SimdVector<float, 8>>(k10) * fma(x, U(5, 5), -y * U(5, -5));
+    U(6, -6) = broadcast<SimdVector<float, 8>>(k10) * fma(y, U(5, 5), x * U(5, -5));
 }
 }    // namespace cosmictiger::gravity::spherical
 namespace cosmictiger::gravity::spherical {
@@ -155,95 +157,97 @@ void ewaldRegular(SimdVector<double, 2> x, SimdVector<double, 2> y, SimdVector<d
     constexpr double k20 = 7.00000000000000000e+00;
     constexpr double k21 = 9.00000000000000000e+00;
     constexpr double k22 = 1.10000000000000000e+01;
-    output[0] = broadcast<SimdVector<double, 2>>(k17);
-    output[2] = z * output[0];
+    detail::CoefficientView<SimdVector<double, 2>> const U{output};
+
+    U(0, 0) = broadcast<SimdVector<double, 2>>(k17);
+    U(1, 0) = z * U(0, 0);
     SimdVector<double, 2> const zFactor2_0 = broadcast<SimdVector<double, 2>>(k18) * z;
-    output[6] = broadcast<SimdVector<double, 2>>(k15) *
-        fma(zFactor2_0, output[2], -radiusSquared * output[0]);
+    U(2, 0) =
+        broadcast<SimdVector<double, 2>>(k15) * fma(zFactor2_0, U(1, 0), -radiusSquared * U(0, 0));
     SimdVector<double, 2> const zFactor3_0 = broadcast<SimdVector<double, 2>>(k19) * z;
-    output[12] = broadcast<SimdVector<double, 2>>(k12) *
-        fma(zFactor3_0, output[6], -radiusSquared * output[2]);
+    U(3, 0) =
+        broadcast<SimdVector<double, 2>>(k12) * fma(zFactor3_0, U(2, 0), -radiusSquared * U(1, 0));
     SimdVector<double, 2> const zFactor4_0 = broadcast<SimdVector<double, 2>>(k20) * z;
-    output[20] = broadcast<SimdVector<double, 2>>(k08) *
-        fma(zFactor4_0, output[12], -radiusSquared * output[6]);
+    U(4, 0) =
+        broadcast<SimdVector<double, 2>>(k08) * fma(zFactor4_0, U(3, 0), -radiusSquared * U(2, 0));
     SimdVector<double, 2> const zFactor5_0 = broadcast<SimdVector<double, 2>>(k21) * z;
-    output[30] = broadcast<SimdVector<double, 2>>(k04) *
-        fma(zFactor5_0, output[20], -radiusSquared * output[12]);
+    U(5, 0) =
+        broadcast<SimdVector<double, 2>>(k04) * fma(zFactor5_0, U(4, 0), -radiusSquared * U(3, 0));
     SimdVector<double, 2> const zFactor6_0 = broadcast<SimdVector<double, 2>>(k22) * z;
-    output[42] = broadcast<SimdVector<double, 2>>(k00) *
-        fma(zFactor6_0, output[30], -radiusSquared * output[20]);
-    output[3] = x * broadcast<SimdVector<double, 2>>(k16);
-    output[1] = y * broadcast<SimdVector<double, 2>>(k16);
-    output[7] = z * output[3];
-    output[5] = z * output[1];
+    U(6, 0) =
+        broadcast<SimdVector<double, 2>>(k00) * fma(zFactor6_0, U(5, 0), -radiusSquared * U(4, 0));
+    U(1, 1) = x * broadcast<SimdVector<double, 2>>(k16);
+    U(1, -1) = y * broadcast<SimdVector<double, 2>>(k16);
+    U(2, 1) = z * U(1, 1);
+    U(2, -1) = z * U(1, -1);
     SimdVector<double, 2> const zFactor3_1 = broadcast<SimdVector<double, 2>>(k19) * z;
-    output[13] = broadcast<SimdVector<double, 2>>(k13) *
-        fma(zFactor3_1, output[7], -radiusSquared * output[3]);
-    output[11] = broadcast<SimdVector<double, 2>>(k13) *
-        fma(zFactor3_1, output[5], -radiusSquared * output[1]);
+    U(3, 1) =
+        broadcast<SimdVector<double, 2>>(k13) * fma(zFactor3_1, U(2, 1), -radiusSquared * U(1, 1));
+    U(3, -1) = broadcast<SimdVector<double, 2>>(k13) *
+        fma(zFactor3_1, U(2, -1), -radiusSquared * U(1, -1));
     SimdVector<double, 2> const zFactor4_1 = broadcast<SimdVector<double, 2>>(k20) * z;
-    output[21] = broadcast<SimdVector<double, 2>>(k09) *
-        fma(zFactor4_1, output[13], -radiusSquared * output[7]);
-    output[19] = broadcast<SimdVector<double, 2>>(k09) *
-        fma(zFactor4_1, output[11], -radiusSquared * output[5]);
+    U(4, 1) =
+        broadcast<SimdVector<double, 2>>(k09) * fma(zFactor4_1, U(3, 1), -radiusSquared * U(2, 1));
+    U(4, -1) = broadcast<SimdVector<double, 2>>(k09) *
+        fma(zFactor4_1, U(3, -1), -radiusSquared * U(2, -1));
     SimdVector<double, 2> const zFactor5_1 = broadcast<SimdVector<double, 2>>(k21) * z;
-    output[31] = broadcast<SimdVector<double, 2>>(k05) *
-        fma(zFactor5_1, output[21], -radiusSquared * output[13]);
-    output[29] = broadcast<SimdVector<double, 2>>(k05) *
-        fma(zFactor5_1, output[19], -radiusSquared * output[11]);
+    U(5, 1) =
+        broadcast<SimdVector<double, 2>>(k05) * fma(zFactor5_1, U(4, 1), -radiusSquared * U(3, 1));
+    U(5, -1) = broadcast<SimdVector<double, 2>>(k05) *
+        fma(zFactor5_1, U(4, -1), -radiusSquared * U(3, -1));
     SimdVector<double, 2> const zFactor6_1 = broadcast<SimdVector<double, 2>>(k22) * z;
-    output[43] = broadcast<SimdVector<double, 2>>(k01) *
-        fma(zFactor6_1, output[31], -radiusSquared * output[21]);
-    output[41] = broadcast<SimdVector<double, 2>>(k01) *
-        fma(zFactor6_1, output[29], -radiusSquared * output[19]);
-    output[8] = broadcast<SimdVector<double, 2>>(k15) * fma(x, output[3], -y * output[1]);
-    output[4] = broadcast<SimdVector<double, 2>>(k15) * fma(y, output[3], x * output[1]);
-    output[14] = z * output[8];
-    output[10] = z * output[4];
+    U(6, 1) =
+        broadcast<SimdVector<double, 2>>(k01) * fma(zFactor6_1, U(5, 1), -radiusSquared * U(4, 1));
+    U(6, -1) = broadcast<SimdVector<double, 2>>(k01) *
+        fma(zFactor6_1, U(5, -1), -radiusSquared * U(4, -1));
+    U(2, 2) = broadcast<SimdVector<double, 2>>(k15) * fma(x, U(1, 1), -y * U(1, -1));
+    U(2, -2) = broadcast<SimdVector<double, 2>>(k15) * fma(y, U(1, 1), x * U(1, -1));
+    U(3, 2) = z * U(2, 2);
+    U(3, -2) = z * U(2, -2);
     SimdVector<double, 2> const zFactor4_2 = broadcast<SimdVector<double, 2>>(k20) * z;
-    output[22] = broadcast<SimdVector<double, 2>>(k10) *
-        fma(zFactor4_2, output[14], -radiusSquared * output[8]);
-    output[18] = broadcast<SimdVector<double, 2>>(k10) *
-        fma(zFactor4_2, output[10], -radiusSquared * output[4]);
+    U(4, 2) =
+        broadcast<SimdVector<double, 2>>(k10) * fma(zFactor4_2, U(3, 2), -radiusSquared * U(2, 2));
+    U(4, -2) = broadcast<SimdVector<double, 2>>(k10) *
+        fma(zFactor4_2, U(3, -2), -radiusSquared * U(2, -2));
     SimdVector<double, 2> const zFactor5_2 = broadcast<SimdVector<double, 2>>(k21) * z;
-    output[32] = broadcast<SimdVector<double, 2>>(k06) *
-        fma(zFactor5_2, output[22], -radiusSquared * output[14]);
-    output[28] = broadcast<SimdVector<double, 2>>(k06) *
-        fma(zFactor5_2, output[18], -radiusSquared * output[10]);
+    U(5, 2) =
+        broadcast<SimdVector<double, 2>>(k06) * fma(zFactor5_2, U(4, 2), -radiusSquared * U(3, 2));
+    U(5, -2) = broadcast<SimdVector<double, 2>>(k06) *
+        fma(zFactor5_2, U(4, -2), -radiusSquared * U(3, -2));
     SimdVector<double, 2> const zFactor6_2 = broadcast<SimdVector<double, 2>>(k22) * z;
-    output[44] = broadcast<SimdVector<double, 2>>(k02) *
-        fma(zFactor6_2, output[32], -radiusSquared * output[22]);
-    output[40] = broadcast<SimdVector<double, 2>>(k02) *
-        fma(zFactor6_2, output[28], -radiusSquared * output[18]);
-    output[15] = broadcast<SimdVector<double, 2>>(k14) * fma(x, output[8], -y * output[4]);
-    output[9] = broadcast<SimdVector<double, 2>>(k14) * fma(y, output[8], x * output[4]);
-    output[23] = z * output[15];
-    output[17] = z * output[9];
+    U(6, 2) =
+        broadcast<SimdVector<double, 2>>(k02) * fma(zFactor6_2, U(5, 2), -radiusSquared * U(4, 2));
+    U(6, -2) = broadcast<SimdVector<double, 2>>(k02) *
+        fma(zFactor6_2, U(5, -2), -radiusSquared * U(4, -2));
+    U(3, 3) = broadcast<SimdVector<double, 2>>(k14) * fma(x, U(2, 2), -y * U(2, -2));
+    U(3, -3) = broadcast<SimdVector<double, 2>>(k14) * fma(y, U(2, 2), x * U(2, -2));
+    U(4, 3) = z * U(3, 3);
+    U(4, -3) = z * U(3, -3);
     SimdVector<double, 2> const zFactor5_3 = broadcast<SimdVector<double, 2>>(k21) * z;
-    output[33] = broadcast<SimdVector<double, 2>>(k08) *
-        fma(zFactor5_3, output[23], -radiusSquared * output[15]);
-    output[27] = broadcast<SimdVector<double, 2>>(k08) *
-        fma(zFactor5_3, output[17], -radiusSquared * output[9]);
+    U(5, 3) =
+        broadcast<SimdVector<double, 2>>(k08) * fma(zFactor5_3, U(4, 3), -radiusSquared * U(3, 3));
+    U(5, -3) = broadcast<SimdVector<double, 2>>(k08) *
+        fma(zFactor5_3, U(4, -3), -radiusSquared * U(3, -3));
     SimdVector<double, 2> const zFactor6_3 = broadcast<SimdVector<double, 2>>(k22) * z;
-    output[45] = broadcast<SimdVector<double, 2>>(k03) *
-        fma(zFactor6_3, output[33], -radiusSquared * output[23]);
-    output[39] = broadcast<SimdVector<double, 2>>(k03) *
-        fma(zFactor6_3, output[27], -radiusSquared * output[17]);
-    output[24] = broadcast<SimdVector<double, 2>>(k13) * fma(x, output[15], -y * output[9]);
-    output[16] = broadcast<SimdVector<double, 2>>(k13) * fma(y, output[15], x * output[9]);
-    output[34] = z * output[24];
-    output[26] = z * output[16];
+    U(6, 3) =
+        broadcast<SimdVector<double, 2>>(k03) * fma(zFactor6_3, U(5, 3), -radiusSquared * U(4, 3));
+    U(6, -3) = broadcast<SimdVector<double, 2>>(k03) *
+        fma(zFactor6_3, U(5, -3), -radiusSquared * U(4, -3));
+    U(4, 4) = broadcast<SimdVector<double, 2>>(k13) * fma(x, U(3, 3), -y * U(3, -3));
+    U(4, -4) = broadcast<SimdVector<double, 2>>(k13) * fma(y, U(3, 3), x * U(3, -3));
+    U(5, 4) = z * U(4, 4);
+    U(5, -4) = z * U(4, -4);
     SimdVector<double, 2> const zFactor6_4 = broadcast<SimdVector<double, 2>>(k22) * z;
-    output[46] = broadcast<SimdVector<double, 2>>(k07) *
-        fma(zFactor6_4, output[34], -radiusSquared * output[24]);
-    output[38] = broadcast<SimdVector<double, 2>>(k07) *
-        fma(zFactor6_4, output[26], -radiusSquared * output[16]);
-    output[35] = broadcast<SimdVector<double, 2>>(k11) * fma(x, output[24], -y * output[16]);
-    output[25] = broadcast<SimdVector<double, 2>>(k11) * fma(y, output[24], x * output[16]);
-    output[47] = z * output[35];
-    output[37] = z * output[25];
-    output[48] = broadcast<SimdVector<double, 2>>(k10) * fma(x, output[35], -y * output[25]);
-    output[36] = broadcast<SimdVector<double, 2>>(k10) * fma(y, output[35], x * output[25]);
+    U(6, 4) =
+        broadcast<SimdVector<double, 2>>(k07) * fma(zFactor6_4, U(5, 4), -radiusSquared * U(4, 4));
+    U(6, -4) = broadcast<SimdVector<double, 2>>(k07) *
+        fma(zFactor6_4, U(5, -4), -radiusSquared * U(4, -4));
+    U(5, 5) = broadcast<SimdVector<double, 2>>(k11) * fma(x, U(4, 4), -y * U(4, -4));
+    U(5, -5) = broadcast<SimdVector<double, 2>>(k11) * fma(y, U(4, 4), x * U(4, -4));
+    U(6, 5) = z * U(5, 5);
+    U(6, -5) = z * U(5, -5);
+    U(6, 6) = broadcast<SimdVector<double, 2>>(k10) * fma(x, U(5, 5), -y * U(5, -5));
+    U(6, -6) = broadcast<SimdVector<double, 2>>(k10) * fma(y, U(5, 5), x * U(5, -5));
 }
 }    // namespace cosmictiger::gravity::spherical
 namespace cosmictiger::gravity::spherical {
@@ -274,95 +278,97 @@ void ewaldRegular(SimdVector<float, 4> x, SimdVector<float, 4> y, SimdVector<flo
     constexpr float k20 = 7.00000000e+00f;
     constexpr float k21 = 9.00000000e+00f;
     constexpr float k22 = 1.10000000e+01f;
-    output[0] = broadcast<SimdVector<float, 4>>(k17);
-    output[2] = z * output[0];
+    detail::CoefficientView<SimdVector<float, 4>> const U{output};
+
+    U(0, 0) = broadcast<SimdVector<float, 4>>(k17);
+    U(1, 0) = z * U(0, 0);
     SimdVector<float, 4> const zFactor2_0 = broadcast<SimdVector<float, 4>>(k18) * z;
-    output[6] = broadcast<SimdVector<float, 4>>(k15) *
-        fma(zFactor2_0, output[2], -radiusSquared * output[0]);
+    U(2, 0) =
+        broadcast<SimdVector<float, 4>>(k15) * fma(zFactor2_0, U(1, 0), -radiusSquared * U(0, 0));
     SimdVector<float, 4> const zFactor3_0 = broadcast<SimdVector<float, 4>>(k19) * z;
-    output[12] = broadcast<SimdVector<float, 4>>(k12) *
-        fma(zFactor3_0, output[6], -radiusSquared * output[2]);
+    U(3, 0) =
+        broadcast<SimdVector<float, 4>>(k12) * fma(zFactor3_0, U(2, 0), -radiusSquared * U(1, 0));
     SimdVector<float, 4> const zFactor4_0 = broadcast<SimdVector<float, 4>>(k20) * z;
-    output[20] = broadcast<SimdVector<float, 4>>(k08) *
-        fma(zFactor4_0, output[12], -radiusSquared * output[6]);
+    U(4, 0) =
+        broadcast<SimdVector<float, 4>>(k08) * fma(zFactor4_0, U(3, 0), -radiusSquared * U(2, 0));
     SimdVector<float, 4> const zFactor5_0 = broadcast<SimdVector<float, 4>>(k21) * z;
-    output[30] = broadcast<SimdVector<float, 4>>(k04) *
-        fma(zFactor5_0, output[20], -radiusSquared * output[12]);
+    U(5, 0) =
+        broadcast<SimdVector<float, 4>>(k04) * fma(zFactor5_0, U(4, 0), -radiusSquared * U(3, 0));
     SimdVector<float, 4> const zFactor6_0 = broadcast<SimdVector<float, 4>>(k22) * z;
-    output[42] = broadcast<SimdVector<float, 4>>(k00) *
-        fma(zFactor6_0, output[30], -radiusSquared * output[20]);
-    output[3] = x * broadcast<SimdVector<float, 4>>(k16);
-    output[1] = y * broadcast<SimdVector<float, 4>>(k16);
-    output[7] = z * output[3];
-    output[5] = z * output[1];
+    U(6, 0) =
+        broadcast<SimdVector<float, 4>>(k00) * fma(zFactor6_0, U(5, 0), -radiusSquared * U(4, 0));
+    U(1, 1) = x * broadcast<SimdVector<float, 4>>(k16);
+    U(1, -1) = y * broadcast<SimdVector<float, 4>>(k16);
+    U(2, 1) = z * U(1, 1);
+    U(2, -1) = z * U(1, -1);
     SimdVector<float, 4> const zFactor3_1 = broadcast<SimdVector<float, 4>>(k19) * z;
-    output[13] = broadcast<SimdVector<float, 4>>(k13) *
-        fma(zFactor3_1, output[7], -radiusSquared * output[3]);
-    output[11] = broadcast<SimdVector<float, 4>>(k13) *
-        fma(zFactor3_1, output[5], -radiusSquared * output[1]);
+    U(3, 1) =
+        broadcast<SimdVector<float, 4>>(k13) * fma(zFactor3_1, U(2, 1), -radiusSquared * U(1, 1));
+    U(3, -1) =
+        broadcast<SimdVector<float, 4>>(k13) * fma(zFactor3_1, U(2, -1), -radiusSquared * U(1, -1));
     SimdVector<float, 4> const zFactor4_1 = broadcast<SimdVector<float, 4>>(k20) * z;
-    output[21] = broadcast<SimdVector<float, 4>>(k09) *
-        fma(zFactor4_1, output[13], -radiusSquared * output[7]);
-    output[19] = broadcast<SimdVector<float, 4>>(k09) *
-        fma(zFactor4_1, output[11], -radiusSquared * output[5]);
+    U(4, 1) =
+        broadcast<SimdVector<float, 4>>(k09) * fma(zFactor4_1, U(3, 1), -radiusSquared * U(2, 1));
+    U(4, -1) =
+        broadcast<SimdVector<float, 4>>(k09) * fma(zFactor4_1, U(3, -1), -radiusSquared * U(2, -1));
     SimdVector<float, 4> const zFactor5_1 = broadcast<SimdVector<float, 4>>(k21) * z;
-    output[31] = broadcast<SimdVector<float, 4>>(k05) *
-        fma(zFactor5_1, output[21], -radiusSquared * output[13]);
-    output[29] = broadcast<SimdVector<float, 4>>(k05) *
-        fma(zFactor5_1, output[19], -radiusSquared * output[11]);
+    U(5, 1) =
+        broadcast<SimdVector<float, 4>>(k05) * fma(zFactor5_1, U(4, 1), -radiusSquared * U(3, 1));
+    U(5, -1) =
+        broadcast<SimdVector<float, 4>>(k05) * fma(zFactor5_1, U(4, -1), -radiusSquared * U(3, -1));
     SimdVector<float, 4> const zFactor6_1 = broadcast<SimdVector<float, 4>>(k22) * z;
-    output[43] = broadcast<SimdVector<float, 4>>(k01) *
-        fma(zFactor6_1, output[31], -radiusSquared * output[21]);
-    output[41] = broadcast<SimdVector<float, 4>>(k01) *
-        fma(zFactor6_1, output[29], -radiusSquared * output[19]);
-    output[8] = broadcast<SimdVector<float, 4>>(k15) * fma(x, output[3], -y * output[1]);
-    output[4] = broadcast<SimdVector<float, 4>>(k15) * fma(y, output[3], x * output[1]);
-    output[14] = z * output[8];
-    output[10] = z * output[4];
+    U(6, 1) =
+        broadcast<SimdVector<float, 4>>(k01) * fma(zFactor6_1, U(5, 1), -radiusSquared * U(4, 1));
+    U(6, -1) =
+        broadcast<SimdVector<float, 4>>(k01) * fma(zFactor6_1, U(5, -1), -radiusSquared * U(4, -1));
+    U(2, 2) = broadcast<SimdVector<float, 4>>(k15) * fma(x, U(1, 1), -y * U(1, -1));
+    U(2, -2) = broadcast<SimdVector<float, 4>>(k15) * fma(y, U(1, 1), x * U(1, -1));
+    U(3, 2) = z * U(2, 2);
+    U(3, -2) = z * U(2, -2);
     SimdVector<float, 4> const zFactor4_2 = broadcast<SimdVector<float, 4>>(k20) * z;
-    output[22] = broadcast<SimdVector<float, 4>>(k10) *
-        fma(zFactor4_2, output[14], -radiusSquared * output[8]);
-    output[18] = broadcast<SimdVector<float, 4>>(k10) *
-        fma(zFactor4_2, output[10], -radiusSquared * output[4]);
+    U(4, 2) =
+        broadcast<SimdVector<float, 4>>(k10) * fma(zFactor4_2, U(3, 2), -radiusSquared * U(2, 2));
+    U(4, -2) =
+        broadcast<SimdVector<float, 4>>(k10) * fma(zFactor4_2, U(3, -2), -radiusSquared * U(2, -2));
     SimdVector<float, 4> const zFactor5_2 = broadcast<SimdVector<float, 4>>(k21) * z;
-    output[32] = broadcast<SimdVector<float, 4>>(k06) *
-        fma(zFactor5_2, output[22], -radiusSquared * output[14]);
-    output[28] = broadcast<SimdVector<float, 4>>(k06) *
-        fma(zFactor5_2, output[18], -radiusSquared * output[10]);
+    U(5, 2) =
+        broadcast<SimdVector<float, 4>>(k06) * fma(zFactor5_2, U(4, 2), -radiusSquared * U(3, 2));
+    U(5, -2) =
+        broadcast<SimdVector<float, 4>>(k06) * fma(zFactor5_2, U(4, -2), -radiusSquared * U(3, -2));
     SimdVector<float, 4> const zFactor6_2 = broadcast<SimdVector<float, 4>>(k22) * z;
-    output[44] = broadcast<SimdVector<float, 4>>(k02) *
-        fma(zFactor6_2, output[32], -radiusSquared * output[22]);
-    output[40] = broadcast<SimdVector<float, 4>>(k02) *
-        fma(zFactor6_2, output[28], -radiusSquared * output[18]);
-    output[15] = broadcast<SimdVector<float, 4>>(k14) * fma(x, output[8], -y * output[4]);
-    output[9] = broadcast<SimdVector<float, 4>>(k14) * fma(y, output[8], x * output[4]);
-    output[23] = z * output[15];
-    output[17] = z * output[9];
+    U(6, 2) =
+        broadcast<SimdVector<float, 4>>(k02) * fma(zFactor6_2, U(5, 2), -radiusSquared * U(4, 2));
+    U(6, -2) =
+        broadcast<SimdVector<float, 4>>(k02) * fma(zFactor6_2, U(5, -2), -radiusSquared * U(4, -2));
+    U(3, 3) = broadcast<SimdVector<float, 4>>(k14) * fma(x, U(2, 2), -y * U(2, -2));
+    U(3, -3) = broadcast<SimdVector<float, 4>>(k14) * fma(y, U(2, 2), x * U(2, -2));
+    U(4, 3) = z * U(3, 3);
+    U(4, -3) = z * U(3, -3);
     SimdVector<float, 4> const zFactor5_3 = broadcast<SimdVector<float, 4>>(k21) * z;
-    output[33] = broadcast<SimdVector<float, 4>>(k08) *
-        fma(zFactor5_3, output[23], -radiusSquared * output[15]);
-    output[27] = broadcast<SimdVector<float, 4>>(k08) *
-        fma(zFactor5_3, output[17], -radiusSquared * output[9]);
+    U(5, 3) =
+        broadcast<SimdVector<float, 4>>(k08) * fma(zFactor5_3, U(4, 3), -radiusSquared * U(3, 3));
+    U(5, -3) =
+        broadcast<SimdVector<float, 4>>(k08) * fma(zFactor5_3, U(4, -3), -radiusSquared * U(3, -3));
     SimdVector<float, 4> const zFactor6_3 = broadcast<SimdVector<float, 4>>(k22) * z;
-    output[45] = broadcast<SimdVector<float, 4>>(k03) *
-        fma(zFactor6_3, output[33], -radiusSquared * output[23]);
-    output[39] = broadcast<SimdVector<float, 4>>(k03) *
-        fma(zFactor6_3, output[27], -radiusSquared * output[17]);
-    output[24] = broadcast<SimdVector<float, 4>>(k13) * fma(x, output[15], -y * output[9]);
-    output[16] = broadcast<SimdVector<float, 4>>(k13) * fma(y, output[15], x * output[9]);
-    output[34] = z * output[24];
-    output[26] = z * output[16];
+    U(6, 3) =
+        broadcast<SimdVector<float, 4>>(k03) * fma(zFactor6_3, U(5, 3), -radiusSquared * U(4, 3));
+    U(6, -3) =
+        broadcast<SimdVector<float, 4>>(k03) * fma(zFactor6_3, U(5, -3), -radiusSquared * U(4, -3));
+    U(4, 4) = broadcast<SimdVector<float, 4>>(k13) * fma(x, U(3, 3), -y * U(3, -3));
+    U(4, -4) = broadcast<SimdVector<float, 4>>(k13) * fma(y, U(3, 3), x * U(3, -3));
+    U(5, 4) = z * U(4, 4);
+    U(5, -4) = z * U(4, -4);
     SimdVector<float, 4> const zFactor6_4 = broadcast<SimdVector<float, 4>>(k22) * z;
-    output[46] = broadcast<SimdVector<float, 4>>(k07) *
-        fma(zFactor6_4, output[34], -radiusSquared * output[24]);
-    output[38] = broadcast<SimdVector<float, 4>>(k07) *
-        fma(zFactor6_4, output[26], -radiusSquared * output[16]);
-    output[35] = broadcast<SimdVector<float, 4>>(k11) * fma(x, output[24], -y * output[16]);
-    output[25] = broadcast<SimdVector<float, 4>>(k11) * fma(y, output[24], x * output[16]);
-    output[47] = z * output[35];
-    output[37] = z * output[25];
-    output[48] = broadcast<SimdVector<float, 4>>(k10) * fma(x, output[35], -y * output[25]);
-    output[36] = broadcast<SimdVector<float, 4>>(k10) * fma(y, output[35], x * output[25]);
+    U(6, 4) =
+        broadcast<SimdVector<float, 4>>(k07) * fma(zFactor6_4, U(5, 4), -radiusSquared * U(4, 4));
+    U(6, -4) =
+        broadcast<SimdVector<float, 4>>(k07) * fma(zFactor6_4, U(5, -4), -radiusSquared * U(4, -4));
+    U(5, 5) = broadcast<SimdVector<float, 4>>(k11) * fma(x, U(4, 4), -y * U(4, -4));
+    U(5, -5) = broadcast<SimdVector<float, 4>>(k11) * fma(y, U(4, 4), x * U(4, -4));
+    U(6, 5) = z * U(5, 5);
+    U(6, -5) = z * U(5, -5);
+    U(6, 6) = broadcast<SimdVector<float, 4>>(k10) * fma(x, U(5, 5), -y * U(5, -5));
+    U(6, -6) = broadcast<SimdVector<float, 4>>(k10) * fma(y, U(5, 5), x * U(5, -5));
 }
 }    // namespace cosmictiger::gravity::spherical
 namespace cosmictiger::gravity::spherical {
@@ -393,95 +399,97 @@ void ewaldRegular(SimdVector<double, 4> x, SimdVector<double, 4> y, SimdVector<d
     constexpr double k20 = 7.00000000000000000e+00;
     constexpr double k21 = 9.00000000000000000e+00;
     constexpr double k22 = 1.10000000000000000e+01;
-    output[0] = broadcast<SimdVector<double, 4>>(k17);
-    output[2] = z * output[0];
+    detail::CoefficientView<SimdVector<double, 4>> const U{output};
+
+    U(0, 0) = broadcast<SimdVector<double, 4>>(k17);
+    U(1, 0) = z * U(0, 0);
     SimdVector<double, 4> const zFactor2_0 = broadcast<SimdVector<double, 4>>(k18) * z;
-    output[6] = broadcast<SimdVector<double, 4>>(k15) *
-        fma(zFactor2_0, output[2], -radiusSquared * output[0]);
+    U(2, 0) =
+        broadcast<SimdVector<double, 4>>(k15) * fma(zFactor2_0, U(1, 0), -radiusSquared * U(0, 0));
     SimdVector<double, 4> const zFactor3_0 = broadcast<SimdVector<double, 4>>(k19) * z;
-    output[12] = broadcast<SimdVector<double, 4>>(k12) *
-        fma(zFactor3_0, output[6], -radiusSquared * output[2]);
+    U(3, 0) =
+        broadcast<SimdVector<double, 4>>(k12) * fma(zFactor3_0, U(2, 0), -radiusSquared * U(1, 0));
     SimdVector<double, 4> const zFactor4_0 = broadcast<SimdVector<double, 4>>(k20) * z;
-    output[20] = broadcast<SimdVector<double, 4>>(k08) *
-        fma(zFactor4_0, output[12], -radiusSquared * output[6]);
+    U(4, 0) =
+        broadcast<SimdVector<double, 4>>(k08) * fma(zFactor4_0, U(3, 0), -radiusSquared * U(2, 0));
     SimdVector<double, 4> const zFactor5_0 = broadcast<SimdVector<double, 4>>(k21) * z;
-    output[30] = broadcast<SimdVector<double, 4>>(k04) *
-        fma(zFactor5_0, output[20], -radiusSquared * output[12]);
+    U(5, 0) =
+        broadcast<SimdVector<double, 4>>(k04) * fma(zFactor5_0, U(4, 0), -radiusSquared * U(3, 0));
     SimdVector<double, 4> const zFactor6_0 = broadcast<SimdVector<double, 4>>(k22) * z;
-    output[42] = broadcast<SimdVector<double, 4>>(k00) *
-        fma(zFactor6_0, output[30], -radiusSquared * output[20]);
-    output[3] = x * broadcast<SimdVector<double, 4>>(k16);
-    output[1] = y * broadcast<SimdVector<double, 4>>(k16);
-    output[7] = z * output[3];
-    output[5] = z * output[1];
+    U(6, 0) =
+        broadcast<SimdVector<double, 4>>(k00) * fma(zFactor6_0, U(5, 0), -radiusSquared * U(4, 0));
+    U(1, 1) = x * broadcast<SimdVector<double, 4>>(k16);
+    U(1, -1) = y * broadcast<SimdVector<double, 4>>(k16);
+    U(2, 1) = z * U(1, 1);
+    U(2, -1) = z * U(1, -1);
     SimdVector<double, 4> const zFactor3_1 = broadcast<SimdVector<double, 4>>(k19) * z;
-    output[13] = broadcast<SimdVector<double, 4>>(k13) *
-        fma(zFactor3_1, output[7], -radiusSquared * output[3]);
-    output[11] = broadcast<SimdVector<double, 4>>(k13) *
-        fma(zFactor3_1, output[5], -radiusSquared * output[1]);
+    U(3, 1) =
+        broadcast<SimdVector<double, 4>>(k13) * fma(zFactor3_1, U(2, 1), -radiusSquared * U(1, 1));
+    U(3, -1) = broadcast<SimdVector<double, 4>>(k13) *
+        fma(zFactor3_1, U(2, -1), -radiusSquared * U(1, -1));
     SimdVector<double, 4> const zFactor4_1 = broadcast<SimdVector<double, 4>>(k20) * z;
-    output[21] = broadcast<SimdVector<double, 4>>(k09) *
-        fma(zFactor4_1, output[13], -radiusSquared * output[7]);
-    output[19] = broadcast<SimdVector<double, 4>>(k09) *
-        fma(zFactor4_1, output[11], -radiusSquared * output[5]);
+    U(4, 1) =
+        broadcast<SimdVector<double, 4>>(k09) * fma(zFactor4_1, U(3, 1), -radiusSquared * U(2, 1));
+    U(4, -1) = broadcast<SimdVector<double, 4>>(k09) *
+        fma(zFactor4_1, U(3, -1), -radiusSquared * U(2, -1));
     SimdVector<double, 4> const zFactor5_1 = broadcast<SimdVector<double, 4>>(k21) * z;
-    output[31] = broadcast<SimdVector<double, 4>>(k05) *
-        fma(zFactor5_1, output[21], -radiusSquared * output[13]);
-    output[29] = broadcast<SimdVector<double, 4>>(k05) *
-        fma(zFactor5_1, output[19], -radiusSquared * output[11]);
+    U(5, 1) =
+        broadcast<SimdVector<double, 4>>(k05) * fma(zFactor5_1, U(4, 1), -radiusSquared * U(3, 1));
+    U(5, -1) = broadcast<SimdVector<double, 4>>(k05) *
+        fma(zFactor5_1, U(4, -1), -radiusSquared * U(3, -1));
     SimdVector<double, 4> const zFactor6_1 = broadcast<SimdVector<double, 4>>(k22) * z;
-    output[43] = broadcast<SimdVector<double, 4>>(k01) *
-        fma(zFactor6_1, output[31], -radiusSquared * output[21]);
-    output[41] = broadcast<SimdVector<double, 4>>(k01) *
-        fma(zFactor6_1, output[29], -radiusSquared * output[19]);
-    output[8] = broadcast<SimdVector<double, 4>>(k15) * fma(x, output[3], -y * output[1]);
-    output[4] = broadcast<SimdVector<double, 4>>(k15) * fma(y, output[3], x * output[1]);
-    output[14] = z * output[8];
-    output[10] = z * output[4];
+    U(6, 1) =
+        broadcast<SimdVector<double, 4>>(k01) * fma(zFactor6_1, U(5, 1), -radiusSquared * U(4, 1));
+    U(6, -1) = broadcast<SimdVector<double, 4>>(k01) *
+        fma(zFactor6_1, U(5, -1), -radiusSquared * U(4, -1));
+    U(2, 2) = broadcast<SimdVector<double, 4>>(k15) * fma(x, U(1, 1), -y * U(1, -1));
+    U(2, -2) = broadcast<SimdVector<double, 4>>(k15) * fma(y, U(1, 1), x * U(1, -1));
+    U(3, 2) = z * U(2, 2);
+    U(3, -2) = z * U(2, -2);
     SimdVector<double, 4> const zFactor4_2 = broadcast<SimdVector<double, 4>>(k20) * z;
-    output[22] = broadcast<SimdVector<double, 4>>(k10) *
-        fma(zFactor4_2, output[14], -radiusSquared * output[8]);
-    output[18] = broadcast<SimdVector<double, 4>>(k10) *
-        fma(zFactor4_2, output[10], -radiusSquared * output[4]);
+    U(4, 2) =
+        broadcast<SimdVector<double, 4>>(k10) * fma(zFactor4_2, U(3, 2), -radiusSquared * U(2, 2));
+    U(4, -2) = broadcast<SimdVector<double, 4>>(k10) *
+        fma(zFactor4_2, U(3, -2), -radiusSquared * U(2, -2));
     SimdVector<double, 4> const zFactor5_2 = broadcast<SimdVector<double, 4>>(k21) * z;
-    output[32] = broadcast<SimdVector<double, 4>>(k06) *
-        fma(zFactor5_2, output[22], -radiusSquared * output[14]);
-    output[28] = broadcast<SimdVector<double, 4>>(k06) *
-        fma(zFactor5_2, output[18], -radiusSquared * output[10]);
+    U(5, 2) =
+        broadcast<SimdVector<double, 4>>(k06) * fma(zFactor5_2, U(4, 2), -radiusSquared * U(3, 2));
+    U(5, -2) = broadcast<SimdVector<double, 4>>(k06) *
+        fma(zFactor5_2, U(4, -2), -radiusSquared * U(3, -2));
     SimdVector<double, 4> const zFactor6_2 = broadcast<SimdVector<double, 4>>(k22) * z;
-    output[44] = broadcast<SimdVector<double, 4>>(k02) *
-        fma(zFactor6_2, output[32], -radiusSquared * output[22]);
-    output[40] = broadcast<SimdVector<double, 4>>(k02) *
-        fma(zFactor6_2, output[28], -radiusSquared * output[18]);
-    output[15] = broadcast<SimdVector<double, 4>>(k14) * fma(x, output[8], -y * output[4]);
-    output[9] = broadcast<SimdVector<double, 4>>(k14) * fma(y, output[8], x * output[4]);
-    output[23] = z * output[15];
-    output[17] = z * output[9];
+    U(6, 2) =
+        broadcast<SimdVector<double, 4>>(k02) * fma(zFactor6_2, U(5, 2), -radiusSquared * U(4, 2));
+    U(6, -2) = broadcast<SimdVector<double, 4>>(k02) *
+        fma(zFactor6_2, U(5, -2), -radiusSquared * U(4, -2));
+    U(3, 3) = broadcast<SimdVector<double, 4>>(k14) * fma(x, U(2, 2), -y * U(2, -2));
+    U(3, -3) = broadcast<SimdVector<double, 4>>(k14) * fma(y, U(2, 2), x * U(2, -2));
+    U(4, 3) = z * U(3, 3);
+    U(4, -3) = z * U(3, -3);
     SimdVector<double, 4> const zFactor5_3 = broadcast<SimdVector<double, 4>>(k21) * z;
-    output[33] = broadcast<SimdVector<double, 4>>(k08) *
-        fma(zFactor5_3, output[23], -radiusSquared * output[15]);
-    output[27] = broadcast<SimdVector<double, 4>>(k08) *
-        fma(zFactor5_3, output[17], -radiusSquared * output[9]);
+    U(5, 3) =
+        broadcast<SimdVector<double, 4>>(k08) * fma(zFactor5_3, U(4, 3), -radiusSquared * U(3, 3));
+    U(5, -3) = broadcast<SimdVector<double, 4>>(k08) *
+        fma(zFactor5_3, U(4, -3), -radiusSquared * U(3, -3));
     SimdVector<double, 4> const zFactor6_3 = broadcast<SimdVector<double, 4>>(k22) * z;
-    output[45] = broadcast<SimdVector<double, 4>>(k03) *
-        fma(zFactor6_3, output[33], -radiusSquared * output[23]);
-    output[39] = broadcast<SimdVector<double, 4>>(k03) *
-        fma(zFactor6_3, output[27], -radiusSquared * output[17]);
-    output[24] = broadcast<SimdVector<double, 4>>(k13) * fma(x, output[15], -y * output[9]);
-    output[16] = broadcast<SimdVector<double, 4>>(k13) * fma(y, output[15], x * output[9]);
-    output[34] = z * output[24];
-    output[26] = z * output[16];
+    U(6, 3) =
+        broadcast<SimdVector<double, 4>>(k03) * fma(zFactor6_3, U(5, 3), -radiusSquared * U(4, 3));
+    U(6, -3) = broadcast<SimdVector<double, 4>>(k03) *
+        fma(zFactor6_3, U(5, -3), -radiusSquared * U(4, -3));
+    U(4, 4) = broadcast<SimdVector<double, 4>>(k13) * fma(x, U(3, 3), -y * U(3, -3));
+    U(4, -4) = broadcast<SimdVector<double, 4>>(k13) * fma(y, U(3, 3), x * U(3, -3));
+    U(5, 4) = z * U(4, 4);
+    U(5, -4) = z * U(4, -4);
     SimdVector<double, 4> const zFactor6_4 = broadcast<SimdVector<double, 4>>(k22) * z;
-    output[46] = broadcast<SimdVector<double, 4>>(k07) *
-        fma(zFactor6_4, output[34], -radiusSquared * output[24]);
-    output[38] = broadcast<SimdVector<double, 4>>(k07) *
-        fma(zFactor6_4, output[26], -radiusSquared * output[16]);
-    output[35] = broadcast<SimdVector<double, 4>>(k11) * fma(x, output[24], -y * output[16]);
-    output[25] = broadcast<SimdVector<double, 4>>(k11) * fma(y, output[24], x * output[16]);
-    output[47] = z * output[35];
-    output[37] = z * output[25];
-    output[48] = broadcast<SimdVector<double, 4>>(k10) * fma(x, output[35], -y * output[25]);
-    output[36] = broadcast<SimdVector<double, 4>>(k10) * fma(y, output[35], x * output[25]);
+    U(6, 4) =
+        broadcast<SimdVector<double, 4>>(k07) * fma(zFactor6_4, U(5, 4), -radiusSquared * U(4, 4));
+    U(6, -4) = broadcast<SimdVector<double, 4>>(k07) *
+        fma(zFactor6_4, U(5, -4), -radiusSquared * U(4, -4));
+    U(5, 5) = broadcast<SimdVector<double, 4>>(k11) * fma(x, U(4, 4), -y * U(4, -4));
+    U(5, -5) = broadcast<SimdVector<double, 4>>(k11) * fma(y, U(4, 4), x * U(4, -4));
+    U(6, 5) = z * U(5, 5);
+    U(6, -5) = z * U(5, -5);
+    U(6, 6) = broadcast<SimdVector<double, 4>>(k10) * fma(x, U(5, 5), -y * U(5, -5));
+    U(6, -6) = broadcast<SimdVector<double, 4>>(k10) * fma(y, U(5, 5), x * U(5, -5));
 }
 }    // namespace cosmictiger::gravity::spherical
 namespace cosmictiger::gravity::spherical {
@@ -512,95 +520,97 @@ void ewaldRegular(SimdVector<double, 8> x, SimdVector<double, 8> y, SimdVector<d
     constexpr double k20 = 7.00000000000000000e+00;
     constexpr double k21 = 9.00000000000000000e+00;
     constexpr double k22 = 1.10000000000000000e+01;
-    output[0] = broadcast<SimdVector<double, 8>>(k17);
-    output[2] = z * output[0];
+    detail::CoefficientView<SimdVector<double, 8>> const U{output};
+
+    U(0, 0) = broadcast<SimdVector<double, 8>>(k17);
+    U(1, 0) = z * U(0, 0);
     SimdVector<double, 8> const zFactor2_0 = broadcast<SimdVector<double, 8>>(k18) * z;
-    output[6] = broadcast<SimdVector<double, 8>>(k15) *
-        fma(zFactor2_0, output[2], -radiusSquared * output[0]);
+    U(2, 0) =
+        broadcast<SimdVector<double, 8>>(k15) * fma(zFactor2_0, U(1, 0), -radiusSquared * U(0, 0));
     SimdVector<double, 8> const zFactor3_0 = broadcast<SimdVector<double, 8>>(k19) * z;
-    output[12] = broadcast<SimdVector<double, 8>>(k12) *
-        fma(zFactor3_0, output[6], -radiusSquared * output[2]);
+    U(3, 0) =
+        broadcast<SimdVector<double, 8>>(k12) * fma(zFactor3_0, U(2, 0), -radiusSquared * U(1, 0));
     SimdVector<double, 8> const zFactor4_0 = broadcast<SimdVector<double, 8>>(k20) * z;
-    output[20] = broadcast<SimdVector<double, 8>>(k08) *
-        fma(zFactor4_0, output[12], -radiusSquared * output[6]);
+    U(4, 0) =
+        broadcast<SimdVector<double, 8>>(k08) * fma(zFactor4_0, U(3, 0), -radiusSquared * U(2, 0));
     SimdVector<double, 8> const zFactor5_0 = broadcast<SimdVector<double, 8>>(k21) * z;
-    output[30] = broadcast<SimdVector<double, 8>>(k04) *
-        fma(zFactor5_0, output[20], -radiusSquared * output[12]);
+    U(5, 0) =
+        broadcast<SimdVector<double, 8>>(k04) * fma(zFactor5_0, U(4, 0), -radiusSquared * U(3, 0));
     SimdVector<double, 8> const zFactor6_0 = broadcast<SimdVector<double, 8>>(k22) * z;
-    output[42] = broadcast<SimdVector<double, 8>>(k00) *
-        fma(zFactor6_0, output[30], -radiusSquared * output[20]);
-    output[3] = x * broadcast<SimdVector<double, 8>>(k16);
-    output[1] = y * broadcast<SimdVector<double, 8>>(k16);
-    output[7] = z * output[3];
-    output[5] = z * output[1];
+    U(6, 0) =
+        broadcast<SimdVector<double, 8>>(k00) * fma(zFactor6_0, U(5, 0), -radiusSquared * U(4, 0));
+    U(1, 1) = x * broadcast<SimdVector<double, 8>>(k16);
+    U(1, -1) = y * broadcast<SimdVector<double, 8>>(k16);
+    U(2, 1) = z * U(1, 1);
+    U(2, -1) = z * U(1, -1);
     SimdVector<double, 8> const zFactor3_1 = broadcast<SimdVector<double, 8>>(k19) * z;
-    output[13] = broadcast<SimdVector<double, 8>>(k13) *
-        fma(zFactor3_1, output[7], -radiusSquared * output[3]);
-    output[11] = broadcast<SimdVector<double, 8>>(k13) *
-        fma(zFactor3_1, output[5], -radiusSquared * output[1]);
+    U(3, 1) =
+        broadcast<SimdVector<double, 8>>(k13) * fma(zFactor3_1, U(2, 1), -radiusSquared * U(1, 1));
+    U(3, -1) = broadcast<SimdVector<double, 8>>(k13) *
+        fma(zFactor3_1, U(2, -1), -radiusSquared * U(1, -1));
     SimdVector<double, 8> const zFactor4_1 = broadcast<SimdVector<double, 8>>(k20) * z;
-    output[21] = broadcast<SimdVector<double, 8>>(k09) *
-        fma(zFactor4_1, output[13], -radiusSquared * output[7]);
-    output[19] = broadcast<SimdVector<double, 8>>(k09) *
-        fma(zFactor4_1, output[11], -radiusSquared * output[5]);
+    U(4, 1) =
+        broadcast<SimdVector<double, 8>>(k09) * fma(zFactor4_1, U(3, 1), -radiusSquared * U(2, 1));
+    U(4, -1) = broadcast<SimdVector<double, 8>>(k09) *
+        fma(zFactor4_1, U(3, -1), -radiusSquared * U(2, -1));
     SimdVector<double, 8> const zFactor5_1 = broadcast<SimdVector<double, 8>>(k21) * z;
-    output[31] = broadcast<SimdVector<double, 8>>(k05) *
-        fma(zFactor5_1, output[21], -radiusSquared * output[13]);
-    output[29] = broadcast<SimdVector<double, 8>>(k05) *
-        fma(zFactor5_1, output[19], -radiusSquared * output[11]);
+    U(5, 1) =
+        broadcast<SimdVector<double, 8>>(k05) * fma(zFactor5_1, U(4, 1), -radiusSquared * U(3, 1));
+    U(5, -1) = broadcast<SimdVector<double, 8>>(k05) *
+        fma(zFactor5_1, U(4, -1), -radiusSquared * U(3, -1));
     SimdVector<double, 8> const zFactor6_1 = broadcast<SimdVector<double, 8>>(k22) * z;
-    output[43] = broadcast<SimdVector<double, 8>>(k01) *
-        fma(zFactor6_1, output[31], -radiusSquared * output[21]);
-    output[41] = broadcast<SimdVector<double, 8>>(k01) *
-        fma(zFactor6_1, output[29], -radiusSquared * output[19]);
-    output[8] = broadcast<SimdVector<double, 8>>(k15) * fma(x, output[3], -y * output[1]);
-    output[4] = broadcast<SimdVector<double, 8>>(k15) * fma(y, output[3], x * output[1]);
-    output[14] = z * output[8];
-    output[10] = z * output[4];
+    U(6, 1) =
+        broadcast<SimdVector<double, 8>>(k01) * fma(zFactor6_1, U(5, 1), -radiusSquared * U(4, 1));
+    U(6, -1) = broadcast<SimdVector<double, 8>>(k01) *
+        fma(zFactor6_1, U(5, -1), -radiusSquared * U(4, -1));
+    U(2, 2) = broadcast<SimdVector<double, 8>>(k15) * fma(x, U(1, 1), -y * U(1, -1));
+    U(2, -2) = broadcast<SimdVector<double, 8>>(k15) * fma(y, U(1, 1), x * U(1, -1));
+    U(3, 2) = z * U(2, 2);
+    U(3, -2) = z * U(2, -2);
     SimdVector<double, 8> const zFactor4_2 = broadcast<SimdVector<double, 8>>(k20) * z;
-    output[22] = broadcast<SimdVector<double, 8>>(k10) *
-        fma(zFactor4_2, output[14], -radiusSquared * output[8]);
-    output[18] = broadcast<SimdVector<double, 8>>(k10) *
-        fma(zFactor4_2, output[10], -radiusSquared * output[4]);
+    U(4, 2) =
+        broadcast<SimdVector<double, 8>>(k10) * fma(zFactor4_2, U(3, 2), -radiusSquared * U(2, 2));
+    U(4, -2) = broadcast<SimdVector<double, 8>>(k10) *
+        fma(zFactor4_2, U(3, -2), -radiusSquared * U(2, -2));
     SimdVector<double, 8> const zFactor5_2 = broadcast<SimdVector<double, 8>>(k21) * z;
-    output[32] = broadcast<SimdVector<double, 8>>(k06) *
-        fma(zFactor5_2, output[22], -radiusSquared * output[14]);
-    output[28] = broadcast<SimdVector<double, 8>>(k06) *
-        fma(zFactor5_2, output[18], -radiusSquared * output[10]);
+    U(5, 2) =
+        broadcast<SimdVector<double, 8>>(k06) * fma(zFactor5_2, U(4, 2), -radiusSquared * U(3, 2));
+    U(5, -2) = broadcast<SimdVector<double, 8>>(k06) *
+        fma(zFactor5_2, U(4, -2), -radiusSquared * U(3, -2));
     SimdVector<double, 8> const zFactor6_2 = broadcast<SimdVector<double, 8>>(k22) * z;
-    output[44] = broadcast<SimdVector<double, 8>>(k02) *
-        fma(zFactor6_2, output[32], -radiusSquared * output[22]);
-    output[40] = broadcast<SimdVector<double, 8>>(k02) *
-        fma(zFactor6_2, output[28], -radiusSquared * output[18]);
-    output[15] = broadcast<SimdVector<double, 8>>(k14) * fma(x, output[8], -y * output[4]);
-    output[9] = broadcast<SimdVector<double, 8>>(k14) * fma(y, output[8], x * output[4]);
-    output[23] = z * output[15];
-    output[17] = z * output[9];
+    U(6, 2) =
+        broadcast<SimdVector<double, 8>>(k02) * fma(zFactor6_2, U(5, 2), -radiusSquared * U(4, 2));
+    U(6, -2) = broadcast<SimdVector<double, 8>>(k02) *
+        fma(zFactor6_2, U(5, -2), -radiusSquared * U(4, -2));
+    U(3, 3) = broadcast<SimdVector<double, 8>>(k14) * fma(x, U(2, 2), -y * U(2, -2));
+    U(3, -3) = broadcast<SimdVector<double, 8>>(k14) * fma(y, U(2, 2), x * U(2, -2));
+    U(4, 3) = z * U(3, 3);
+    U(4, -3) = z * U(3, -3);
     SimdVector<double, 8> const zFactor5_3 = broadcast<SimdVector<double, 8>>(k21) * z;
-    output[33] = broadcast<SimdVector<double, 8>>(k08) *
-        fma(zFactor5_3, output[23], -radiusSquared * output[15]);
-    output[27] = broadcast<SimdVector<double, 8>>(k08) *
-        fma(zFactor5_3, output[17], -radiusSquared * output[9]);
+    U(5, 3) =
+        broadcast<SimdVector<double, 8>>(k08) * fma(zFactor5_3, U(4, 3), -radiusSquared * U(3, 3));
+    U(5, -3) = broadcast<SimdVector<double, 8>>(k08) *
+        fma(zFactor5_3, U(4, -3), -radiusSquared * U(3, -3));
     SimdVector<double, 8> const zFactor6_3 = broadcast<SimdVector<double, 8>>(k22) * z;
-    output[45] = broadcast<SimdVector<double, 8>>(k03) *
-        fma(zFactor6_3, output[33], -radiusSquared * output[23]);
-    output[39] = broadcast<SimdVector<double, 8>>(k03) *
-        fma(zFactor6_3, output[27], -radiusSquared * output[17]);
-    output[24] = broadcast<SimdVector<double, 8>>(k13) * fma(x, output[15], -y * output[9]);
-    output[16] = broadcast<SimdVector<double, 8>>(k13) * fma(y, output[15], x * output[9]);
-    output[34] = z * output[24];
-    output[26] = z * output[16];
+    U(6, 3) =
+        broadcast<SimdVector<double, 8>>(k03) * fma(zFactor6_3, U(5, 3), -radiusSquared * U(4, 3));
+    U(6, -3) = broadcast<SimdVector<double, 8>>(k03) *
+        fma(zFactor6_3, U(5, -3), -radiusSquared * U(4, -3));
+    U(4, 4) = broadcast<SimdVector<double, 8>>(k13) * fma(x, U(3, 3), -y * U(3, -3));
+    U(4, -4) = broadcast<SimdVector<double, 8>>(k13) * fma(y, U(3, 3), x * U(3, -3));
+    U(5, 4) = z * U(4, 4);
+    U(5, -4) = z * U(4, -4);
     SimdVector<double, 8> const zFactor6_4 = broadcast<SimdVector<double, 8>>(k22) * z;
-    output[46] = broadcast<SimdVector<double, 8>>(k07) *
-        fma(zFactor6_4, output[34], -radiusSquared * output[24]);
-    output[38] = broadcast<SimdVector<double, 8>>(k07) *
-        fma(zFactor6_4, output[26], -radiusSquared * output[16]);
-    output[35] = broadcast<SimdVector<double, 8>>(k11) * fma(x, output[24], -y * output[16]);
-    output[25] = broadcast<SimdVector<double, 8>>(k11) * fma(y, output[24], x * output[16]);
-    output[47] = z * output[35];
-    output[37] = z * output[25];
-    output[48] = broadcast<SimdVector<double, 8>>(k10) * fma(x, output[35], -y * output[25]);
-    output[36] = broadcast<SimdVector<double, 8>>(k10) * fma(y, output[35], x * output[25]);
+    U(6, 4) =
+        broadcast<SimdVector<double, 8>>(k07) * fma(zFactor6_4, U(5, 4), -radiusSquared * U(4, 4));
+    U(6, -4) = broadcast<SimdVector<double, 8>>(k07) *
+        fma(zFactor6_4, U(5, -4), -radiusSquared * U(4, -4));
+    U(5, 5) = broadcast<SimdVector<double, 8>>(k11) * fma(x, U(4, 4), -y * U(4, -4));
+    U(5, -5) = broadcast<SimdVector<double, 8>>(k11) * fma(y, U(4, 4), x * U(4, -4));
+    U(6, 5) = z * U(5, 5);
+    U(6, -5) = z * U(5, -5);
+    U(6, 6) = broadcast<SimdVector<double, 8>>(k10) * fma(x, U(5, 5), -y * U(5, -5));
+    U(6, -6) = broadcast<SimdVector<double, 8>>(k10) * fma(y, U(5, 5), x * U(5, -5));
 }
 }    // namespace cosmictiger::gravity::spherical
 namespace cosmictiger::gravity::spherical {
@@ -706,9 +716,17 @@ void evaluateEwaldWorking(SimdVector<float, 8>& greenTrace, SimdVector<float, 8>
     constexpr float k95 = 7.25760000e+06f;
     constexpr float k96 = 3.99168000e+07f;
     constexpr float k97 = 4.79001600e+08f;
+    detail::CoefficientView<SimdVector<float, 8>> const G{output};
+
     SimdVector<float, 8> harmonics[49];
+    detail::CoefficientView<SimdVector<float, 8>> const U{harmonics};
+
     SimdVector<float, 8> compensation[49];
+    detail::CoefficientView<SimdVector<float, 8>> const C{compensation};
+
     SimdVector<float, 8> imagePair[49];
+    detail::CoefficientView<SimdVector<float, 8>> const I{imagePair};
+
     SimdVector<float, 8> const radiusSquared = fma(x, x, fma(y, y, z * z));
     ewaldRegular(x, y, z, radiusSquared, harmonics);
     SimdVector<float, 8> const argument = broadcast<SimdVector<float, 8>>(k61) * radiusSquared;
@@ -812,8 +830,8 @@ void evaluateEwaldWorking(SimdVector<float, 8>& greenTrace, SimdVector<float, 8>
         broadcast<SimdVector<float, 8>>(k57));
     SimdVector<float, 8> const radial0 =
         broadcast<SimdVector<float, 8>>(k59) * exponential * series0;
-    output[0] = radial0 * harmonics[0];
-    compensation[0] = broadcast<SimdVector<float, 8>>(k00);
+    G(0, 0) = radial0 * U(0, 0);
+    C(0, 0) = broadcast<SimdVector<float, 8>>(k00);
     SimdVector<float, 8> series1 = broadcast<SimdVector<float, 8>>(k57);
     series1 = fma(series1, argument * broadcast<SimdVector<float, 8>>(k06),
         broadcast<SimdVector<float, 8>>(k57));
@@ -913,12 +931,12 @@ void evaluateEwaldWorking(SimdVector<float, 8>& greenTrace, SimdVector<float, 8>
         broadcast<SimdVector<float, 8>>(k57));
     SimdVector<float, 8> const radial1 =
         -broadcast<SimdVector<float, 8>>(k66) * exponential * series1;
-    output[1] = broadcast<SimdVector<float, 8>>(k58) * radial1 * harmonics[1];
-    compensation[1] = broadcast<SimdVector<float, 8>>(k00);
-    output[2] = radial1 * harmonics[2];
-    compensation[2] = broadcast<SimdVector<float, 8>>(k00);
-    output[3] = broadcast<SimdVector<float, 8>>(k58) * radial1 * harmonics[3];
-    compensation[3] = broadcast<SimdVector<float, 8>>(k00);
+    G(1, -1) = broadcast<SimdVector<float, 8>>(k58) * radial1 * U(1, -1);
+    C(1, -1) = broadcast<SimdVector<float, 8>>(k00);
+    G(1, 0) = radial1 * U(1, 0);
+    C(1, 0) = broadcast<SimdVector<float, 8>>(k00);
+    G(1, 1) = broadcast<SimdVector<float, 8>>(k58) * radial1 * U(1, 1);
+    C(1, 1) = broadcast<SimdVector<float, 8>>(k00);
     SimdVector<float, 8> series2 = broadcast<SimdVector<float, 8>>(k57);
     series2 = fma(series2, argument * broadcast<SimdVector<float, 8>>(k05),
         broadcast<SimdVector<float, 8>>(k57));
@@ -1018,16 +1036,16 @@ void evaluateEwaldWorking(SimdVector<float, 8>& greenTrace, SimdVector<float, 8>
         broadcast<SimdVector<float, 8>>(k57));
     SimdVector<float, 8> const radial2 =
         broadcast<SimdVector<float, 8>>(k69) * exponential * series2;
-    output[4] = broadcast<SimdVector<float, 8>>(k76) * radial2 * harmonics[4];
-    compensation[4] = broadcast<SimdVector<float, 8>>(k00);
-    output[5] = broadcast<SimdVector<float, 8>>(k65) * radial2 * harmonics[5];
-    compensation[5] = broadcast<SimdVector<float, 8>>(k00);
-    output[6] = broadcast<SimdVector<float, 8>>(k61) * radial2 * harmonics[6];
-    compensation[6] = broadcast<SimdVector<float, 8>>(k00);
-    output[7] = broadcast<SimdVector<float, 8>>(k65) * radial2 * harmonics[7];
-    compensation[7] = broadcast<SimdVector<float, 8>>(k00);
-    output[8] = broadcast<SimdVector<float, 8>>(k76) * radial2 * harmonics[8];
-    compensation[8] = broadcast<SimdVector<float, 8>>(k00);
+    G(2, -2) = broadcast<SimdVector<float, 8>>(k76) * radial2 * U(2, -2);
+    C(2, -2) = broadcast<SimdVector<float, 8>>(k00);
+    G(2, -1) = broadcast<SimdVector<float, 8>>(k65) * radial2 * U(2, -1);
+    C(2, -1) = broadcast<SimdVector<float, 8>>(k00);
+    G(2, 0) = broadcast<SimdVector<float, 8>>(k61) * radial2 * U(2, 0);
+    C(2, 0) = broadcast<SimdVector<float, 8>>(k00);
+    G(2, 1) = broadcast<SimdVector<float, 8>>(k65) * radial2 * U(2, 1);
+    C(2, 1) = broadcast<SimdVector<float, 8>>(k00);
+    G(2, 2) = broadcast<SimdVector<float, 8>>(k76) * radial2 * U(2, 2);
+    C(2, 2) = broadcast<SimdVector<float, 8>>(k00);
     SimdVector<float, 8> series3 = broadcast<SimdVector<float, 8>>(k57);
     series3 = fma(series3, argument * broadcast<SimdVector<float, 8>>(k04),
         broadcast<SimdVector<float, 8>>(k57));
@@ -1127,20 +1145,20 @@ void evaluateEwaldWorking(SimdVector<float, 8>& greenTrace, SimdVector<float, 8>
         broadcast<SimdVector<float, 8>>(k57));
     SimdVector<float, 8> const radial3 =
         -broadcast<SimdVector<float, 8>>(k72) * exponential * series3;
-    output[9] = broadcast<SimdVector<float, 8>>(k81) * radial3 * harmonics[9];
-    compensation[9] = broadcast<SimdVector<float, 8>>(k00);
-    output[10] = broadcast<SimdVector<float, 8>>(k79) * radial3 * harmonics[10];
-    compensation[10] = broadcast<SimdVector<float, 8>>(k00);
-    output[11] = broadcast<SimdVector<float, 8>>(k78) * radial3 * harmonics[11];
-    compensation[11] = broadcast<SimdVector<float, 8>>(k00);
-    output[12] = broadcast<SimdVector<float, 8>>(k77) * radial3 * harmonics[12];
-    compensation[12] = broadcast<SimdVector<float, 8>>(k00);
-    output[13] = broadcast<SimdVector<float, 8>>(k78) * radial3 * harmonics[13];
-    compensation[13] = broadcast<SimdVector<float, 8>>(k00);
-    output[14] = broadcast<SimdVector<float, 8>>(k79) * radial3 * harmonics[14];
-    compensation[14] = broadcast<SimdVector<float, 8>>(k00);
-    output[15] = broadcast<SimdVector<float, 8>>(k81) * radial3 * harmonics[15];
-    compensation[15] = broadcast<SimdVector<float, 8>>(k00);
+    G(3, -3) = broadcast<SimdVector<float, 8>>(k81) * radial3 * U(3, -3);
+    C(3, -3) = broadcast<SimdVector<float, 8>>(k00);
+    G(3, -2) = broadcast<SimdVector<float, 8>>(k79) * radial3 * U(3, -2);
+    C(3, -2) = broadcast<SimdVector<float, 8>>(k00);
+    G(3, -1) = broadcast<SimdVector<float, 8>>(k78) * radial3 * U(3, -1);
+    C(3, -1) = broadcast<SimdVector<float, 8>>(k00);
+    G(3, 0) = broadcast<SimdVector<float, 8>>(k77) * radial3 * U(3, 0);
+    C(3, 0) = broadcast<SimdVector<float, 8>>(k00);
+    G(3, 1) = broadcast<SimdVector<float, 8>>(k78) * radial3 * U(3, 1);
+    C(3, 1) = broadcast<SimdVector<float, 8>>(k00);
+    G(3, 2) = broadcast<SimdVector<float, 8>>(k79) * radial3 * U(3, 2);
+    C(3, 2) = broadcast<SimdVector<float, 8>>(k00);
+    G(3, 3) = broadcast<SimdVector<float, 8>>(k81) * radial3 * U(3, 3);
+    C(3, 3) = broadcast<SimdVector<float, 8>>(k00);
     SimdVector<float, 8> series4 = broadcast<SimdVector<float, 8>>(k57);
     series4 = fma(series4, argument * broadcast<SimdVector<float, 8>>(k03),
         broadcast<SimdVector<float, 8>>(k57));
@@ -1240,24 +1258,24 @@ void evaluateEwaldWorking(SimdVector<float, 8>& greenTrace, SimdVector<float, 8>
         broadcast<SimdVector<float, 8>>(k57));
     SimdVector<float, 8> const radial4 =
         broadcast<SimdVector<float, 8>>(k70) * exponential * series4;
-    output[16] = broadcast<SimdVector<float, 8>>(k87) * radial4 * harmonics[16];
-    compensation[16] = broadcast<SimdVector<float, 8>>(k00);
-    output[17] = broadcast<SimdVector<float, 8>>(k83) * radial4 * harmonics[17];
-    compensation[17] = broadcast<SimdVector<float, 8>>(k00);
-    output[18] = broadcast<SimdVector<float, 8>>(k82) * radial4 * harmonics[18];
-    compensation[18] = broadcast<SimdVector<float, 8>>(k00);
-    output[19] = broadcast<SimdVector<float, 8>>(k81) * radial4 * harmonics[19];
-    compensation[19] = broadcast<SimdVector<float, 8>>(k00);
-    output[20] = broadcast<SimdVector<float, 8>>(k80) * radial4 * harmonics[20];
-    compensation[20] = broadcast<SimdVector<float, 8>>(k00);
-    output[21] = broadcast<SimdVector<float, 8>>(k81) * radial4 * harmonics[21];
-    compensation[21] = broadcast<SimdVector<float, 8>>(k00);
-    output[22] = broadcast<SimdVector<float, 8>>(k82) * radial4 * harmonics[22];
-    compensation[22] = broadcast<SimdVector<float, 8>>(k00);
-    output[23] = broadcast<SimdVector<float, 8>>(k83) * radial4 * harmonics[23];
-    compensation[23] = broadcast<SimdVector<float, 8>>(k00);
-    output[24] = broadcast<SimdVector<float, 8>>(k87) * radial4 * harmonics[24];
-    compensation[24] = broadcast<SimdVector<float, 8>>(k00);
+    G(4, -4) = broadcast<SimdVector<float, 8>>(k87) * radial4 * U(4, -4);
+    C(4, -4) = broadcast<SimdVector<float, 8>>(k00);
+    G(4, -3) = broadcast<SimdVector<float, 8>>(k83) * radial4 * U(4, -3);
+    C(4, -3) = broadcast<SimdVector<float, 8>>(k00);
+    G(4, -2) = broadcast<SimdVector<float, 8>>(k82) * radial4 * U(4, -2);
+    C(4, -2) = broadcast<SimdVector<float, 8>>(k00);
+    G(4, -1) = broadcast<SimdVector<float, 8>>(k81) * radial4 * U(4, -1);
+    C(4, -1) = broadcast<SimdVector<float, 8>>(k00);
+    G(4, 0) = broadcast<SimdVector<float, 8>>(k80) * radial4 * U(4, 0);
+    C(4, 0) = broadcast<SimdVector<float, 8>>(k00);
+    G(4, 1) = broadcast<SimdVector<float, 8>>(k81) * radial4 * U(4, 1);
+    C(4, 1) = broadcast<SimdVector<float, 8>>(k00);
+    G(4, 2) = broadcast<SimdVector<float, 8>>(k82) * radial4 * U(4, 2);
+    C(4, 2) = broadcast<SimdVector<float, 8>>(k00);
+    G(4, 3) = broadcast<SimdVector<float, 8>>(k83) * radial4 * U(4, 3);
+    C(4, 3) = broadcast<SimdVector<float, 8>>(k00);
+    G(4, 4) = broadcast<SimdVector<float, 8>>(k87) * radial4 * U(4, 4);
+    C(4, 4) = broadcast<SimdVector<float, 8>>(k00);
     SimdVector<float, 8> series5 = broadcast<SimdVector<float, 8>>(k57);
     series5 = fma(series5, argument * broadcast<SimdVector<float, 8>>(k02),
         broadcast<SimdVector<float, 8>>(k57));
@@ -1357,28 +1375,28 @@ void evaluateEwaldWorking(SimdVector<float, 8>& greenTrace, SimdVector<float, 8>
         broadcast<SimdVector<float, 8>>(k57));
     SimdVector<float, 8> const radial5 =
         -broadcast<SimdVector<float, 8>>(k68) * exponential * series5;
-    output[25] = broadcast<SimdVector<float, 8>>(k94) * radial5 * harmonics[25];
-    compensation[25] = broadcast<SimdVector<float, 8>>(k00);
-    output[26] = broadcast<SimdVector<float, 8>>(k89) * radial5 * harmonics[26];
-    compensation[26] = broadcast<SimdVector<float, 8>>(k00);
-    output[27] = broadcast<SimdVector<float, 8>>(k88) * radial5 * harmonics[27];
-    compensation[27] = broadcast<SimdVector<float, 8>>(k00);
-    output[28] = broadcast<SimdVector<float, 8>>(k86) * radial5 * harmonics[28];
-    compensation[28] = broadcast<SimdVector<float, 8>>(k00);
-    output[29] = broadcast<SimdVector<float, 8>>(k85) * radial5 * harmonics[29];
-    compensation[29] = broadcast<SimdVector<float, 8>>(k00);
-    output[30] = broadcast<SimdVector<float, 8>>(k84) * radial5 * harmonics[30];
-    compensation[30] = broadcast<SimdVector<float, 8>>(k00);
-    output[31] = broadcast<SimdVector<float, 8>>(k85) * radial5 * harmonics[31];
-    compensation[31] = broadcast<SimdVector<float, 8>>(k00);
-    output[32] = broadcast<SimdVector<float, 8>>(k86) * radial5 * harmonics[32];
-    compensation[32] = broadcast<SimdVector<float, 8>>(k00);
-    output[33] = broadcast<SimdVector<float, 8>>(k88) * radial5 * harmonics[33];
-    compensation[33] = broadcast<SimdVector<float, 8>>(k00);
-    output[34] = broadcast<SimdVector<float, 8>>(k89) * radial5 * harmonics[34];
-    compensation[34] = broadcast<SimdVector<float, 8>>(k00);
-    output[35] = broadcast<SimdVector<float, 8>>(k94) * radial5 * harmonics[35];
-    compensation[35] = broadcast<SimdVector<float, 8>>(k00);
+    G(5, -5) = broadcast<SimdVector<float, 8>>(k94) * radial5 * U(5, -5);
+    C(5, -5) = broadcast<SimdVector<float, 8>>(k00);
+    G(5, -4) = broadcast<SimdVector<float, 8>>(k89) * radial5 * U(5, -4);
+    C(5, -4) = broadcast<SimdVector<float, 8>>(k00);
+    G(5, -3) = broadcast<SimdVector<float, 8>>(k88) * radial5 * U(5, -3);
+    C(5, -3) = broadcast<SimdVector<float, 8>>(k00);
+    G(5, -2) = broadcast<SimdVector<float, 8>>(k86) * radial5 * U(5, -2);
+    C(5, -2) = broadcast<SimdVector<float, 8>>(k00);
+    G(5, -1) = broadcast<SimdVector<float, 8>>(k85) * radial5 * U(5, -1);
+    C(5, -1) = broadcast<SimdVector<float, 8>>(k00);
+    G(5, 0) = broadcast<SimdVector<float, 8>>(k84) * radial5 * U(5, 0);
+    C(5, 0) = broadcast<SimdVector<float, 8>>(k00);
+    G(5, 1) = broadcast<SimdVector<float, 8>>(k85) * radial5 * U(5, 1);
+    C(5, 1) = broadcast<SimdVector<float, 8>>(k00);
+    G(5, 2) = broadcast<SimdVector<float, 8>>(k86) * radial5 * U(5, 2);
+    C(5, 2) = broadcast<SimdVector<float, 8>>(k00);
+    G(5, 3) = broadcast<SimdVector<float, 8>>(k88) * radial5 * U(5, 3);
+    C(5, 3) = broadcast<SimdVector<float, 8>>(k00);
+    G(5, 4) = broadcast<SimdVector<float, 8>>(k89) * radial5 * U(5, 4);
+    C(5, 4) = broadcast<SimdVector<float, 8>>(k00);
+    G(5, 5) = broadcast<SimdVector<float, 8>>(k94) * radial5 * U(5, 5);
+    C(5, 5) = broadcast<SimdVector<float, 8>>(k00);
     SimdVector<float, 8> series6 = broadcast<SimdVector<float, 8>>(k57);
     series6 = fma(series6, argument * broadcast<SimdVector<float, 8>>(k01),
         broadcast<SimdVector<float, 8>>(k57));
@@ -1478,33 +1496,33 @@ void evaluateEwaldWorking(SimdVector<float, 8>& greenTrace, SimdVector<float, 8>
         broadcast<SimdVector<float, 8>>(k57));
     SimdVector<float, 8> const radial6 =
         broadcast<SimdVector<float, 8>>(k63) * exponential * series6;
-    output[36] = broadcast<SimdVector<float, 8>>(k97) * radial6 * harmonics[36];
-    compensation[36] = broadcast<SimdVector<float, 8>>(k00);
-    output[37] = broadcast<SimdVector<float, 8>>(k96) * radial6 * harmonics[37];
-    compensation[37] = broadcast<SimdVector<float, 8>>(k00);
-    output[38] = broadcast<SimdVector<float, 8>>(k95) * radial6 * harmonics[38];
-    compensation[38] = broadcast<SimdVector<float, 8>>(k00);
-    output[39] = broadcast<SimdVector<float, 8>>(k93) * radial6 * harmonics[39];
-    compensation[39] = broadcast<SimdVector<float, 8>>(k00);
-    output[40] = broadcast<SimdVector<float, 8>>(k92) * radial6 * harmonics[40];
-    compensation[40] = broadcast<SimdVector<float, 8>>(k00);
-    output[41] = broadcast<SimdVector<float, 8>>(k91) * radial6 * harmonics[41];
-    compensation[41] = broadcast<SimdVector<float, 8>>(k00);
-    output[42] = broadcast<SimdVector<float, 8>>(k90) * radial6 * harmonics[42];
-    compensation[42] = broadcast<SimdVector<float, 8>>(k00);
-    output[43] = broadcast<SimdVector<float, 8>>(k91) * radial6 * harmonics[43];
-    compensation[43] = broadcast<SimdVector<float, 8>>(k00);
-    output[44] = broadcast<SimdVector<float, 8>>(k92) * radial6 * harmonics[44];
-    compensation[44] = broadcast<SimdVector<float, 8>>(k00);
-    output[45] = broadcast<SimdVector<float, 8>>(k93) * radial6 * harmonics[45];
-    compensation[45] = broadcast<SimdVector<float, 8>>(k00);
-    output[46] = broadcast<SimdVector<float, 8>>(k95) * radial6 * harmonics[46];
-    compensation[46] = broadcast<SimdVector<float, 8>>(k00);
-    output[47] = broadcast<SimdVector<float, 8>>(k96) * radial6 * harmonics[47];
-    compensation[47] = broadcast<SimdVector<float, 8>>(k00);
-    output[48] = broadcast<SimdVector<float, 8>>(k97) * radial6 * harmonics[48];
-    compensation[48] = broadcast<SimdVector<float, 8>>(k00);
-    output[0] += broadcast<SimdVector<float, 8>>(k56);
+    G(6, -6) = broadcast<SimdVector<float, 8>>(k97) * radial6 * U(6, -6);
+    C(6, -6) = broadcast<SimdVector<float, 8>>(k00);
+    G(6, -5) = broadcast<SimdVector<float, 8>>(k96) * radial6 * U(6, -5);
+    C(6, -5) = broadcast<SimdVector<float, 8>>(k00);
+    G(6, -4) = broadcast<SimdVector<float, 8>>(k95) * radial6 * U(6, -4);
+    C(6, -4) = broadcast<SimdVector<float, 8>>(k00);
+    G(6, -3) = broadcast<SimdVector<float, 8>>(k93) * radial6 * U(6, -3);
+    C(6, -3) = broadcast<SimdVector<float, 8>>(k00);
+    G(6, -2) = broadcast<SimdVector<float, 8>>(k92) * radial6 * U(6, -2);
+    C(6, -2) = broadcast<SimdVector<float, 8>>(k00);
+    G(6, -1) = broadcast<SimdVector<float, 8>>(k91) * radial6 * U(6, -1);
+    C(6, -1) = broadcast<SimdVector<float, 8>>(k00);
+    G(6, 0) = broadcast<SimdVector<float, 8>>(k90) * radial6 * U(6, 0);
+    C(6, 0) = broadcast<SimdVector<float, 8>>(k00);
+    G(6, 1) = broadcast<SimdVector<float, 8>>(k91) * radial6 * U(6, 1);
+    C(6, 1) = broadcast<SimdVector<float, 8>>(k00);
+    G(6, 2) = broadcast<SimdVector<float, 8>>(k92) * radial6 * U(6, 2);
+    C(6, 2) = broadcast<SimdVector<float, 8>>(k00);
+    G(6, 3) = broadcast<SimdVector<float, 8>>(k93) * radial6 * U(6, 3);
+    C(6, 3) = broadcast<SimdVector<float, 8>>(k00);
+    G(6, 4) = broadcast<SimdVector<float, 8>>(k95) * radial6 * U(6, 4);
+    C(6, 4) = broadcast<SimdVector<float, 8>>(k00);
+    G(6, 5) = broadcast<SimdVector<float, 8>>(k96) * radial6 * U(6, 5);
+    C(6, 5) = broadcast<SimdVector<float, 8>>(k00);
+    G(6, 6) = broadcast<SimdVector<float, 8>>(k97) * radial6 * U(6, 6);
+    C(6, 6) = broadcast<SimdVector<float, 8>>(k00);
+    G(0, 0) += broadcast<SimdVector<float, 8>>(k56);
     greenTrace = broadcast<SimdVector<float, 8>>(k62);
     for (int ix = -6; ix <= 6; ++ix) {
         for (int iy = -6; iy <= 6; ++iy) {
@@ -1537,421 +1555,421 @@ void evaluateEwaldWorking(SimdVector<float, 8>& greenTrace, SimdVector<float, 8>
                         broadcast<SimdVector<float, 8>>(k59) * imageRadius * imageExp;
                     SimdVector<float, 8> inversePower = iR;
                     SimdVector<float, 8> const imageRadial0 = -screening * inversePower;
-                    SimdVector<float, 8> const imageValue0 = imageRadial0 * harmonics[0];
+                    SimdVector<float, 8> const imageValue0 = imageRadial0 * U(0, 0);
                     if (sign < 0) {
-                        imagePair[0] = imageValue0;
+                        I(0, 0) = imageValue0;
                     } else {
-                        imagePair[0] += imageValue0;
+                        I(0, 0) += imageValue0;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * broadcast<SimdVector<float, 8>>(k55);
                     SimdVector<float, 8> const imageRadial1 = screening * inversePower;
                     SimdVector<float, 8> const imageValue1 =
-                        broadcast<SimdVector<float, 8>>(k58) * imageRadial1 * harmonics[1];
+                        broadcast<SimdVector<float, 8>>(k58) * imageRadial1 * U(1, -1);
                     if (sign < 0) {
-                        imagePair[1] = imageValue1;
+                        I(1, -1) = imageValue1;
                     } else {
-                        imagePair[1] += imageValue1;
+                        I(1, -1) += imageValue1;
                     }
-                    SimdVector<float, 8> const imageValue2 = imageRadial1 * harmonics[2];
+                    SimdVector<float, 8> const imageValue2 = imageRadial1 * U(1, 0);
                     if (sign < 0) {
-                        imagePair[2] = imageValue2;
+                        I(1, 0) = imageValue2;
                     } else {
-                        imagePair[2] += imageValue2;
+                        I(1, 0) += imageValue2;
                     }
                     SimdVector<float, 8> const imageValue3 =
-                        broadcast<SimdVector<float, 8>>(k58) * imageRadial1 * harmonics[3];
+                        broadcast<SimdVector<float, 8>>(k58) * imageRadial1 * U(1, 1);
                     if (sign < 0) {
-                        imagePair[3] = imageValue3;
+                        I(1, 1) = imageValue3;
                     } else {
-                        imagePair[3] += imageValue3;
+                        I(1, 1) += imageValue3;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * broadcast<SimdVector<float, 8>>(k53);
                     SimdVector<float, 8> const imageRadial2 = -screening * inversePower;
                     SimdVector<float, 8> const imageValue4 =
-                        broadcast<SimdVector<float, 8>>(k76) * imageRadial2 * harmonics[4];
+                        broadcast<SimdVector<float, 8>>(k76) * imageRadial2 * U(2, -2);
                     if (sign < 0) {
-                        imagePair[4] = imageValue4;
+                        I(2, -2) = imageValue4;
                     } else {
-                        imagePair[4] += imageValue4;
+                        I(2, -2) += imageValue4;
                     }
                     SimdVector<float, 8> const imageValue5 =
-                        broadcast<SimdVector<float, 8>>(k65) * imageRadial2 * harmonics[5];
+                        broadcast<SimdVector<float, 8>>(k65) * imageRadial2 * U(2, -1);
                     if (sign < 0) {
-                        imagePair[5] = imageValue5;
+                        I(2, -1) = imageValue5;
                     } else {
-                        imagePair[5] += imageValue5;
+                        I(2, -1) += imageValue5;
                     }
                     SimdVector<float, 8> const imageValue6 =
-                        broadcast<SimdVector<float, 8>>(k61) * imageRadial2 * harmonics[6];
+                        broadcast<SimdVector<float, 8>>(k61) * imageRadial2 * U(2, 0);
                     if (sign < 0) {
-                        imagePair[6] = imageValue6;
+                        I(2, 0) = imageValue6;
                     } else {
-                        imagePair[6] += imageValue6;
+                        I(2, 0) += imageValue6;
                     }
                     SimdVector<float, 8> const imageValue7 =
-                        broadcast<SimdVector<float, 8>>(k65) * imageRadial2 * harmonics[7];
+                        broadcast<SimdVector<float, 8>>(k65) * imageRadial2 * U(2, 1);
                     if (sign < 0) {
-                        imagePair[7] = imageValue7;
+                        I(2, 1) = imageValue7;
                     } else {
-                        imagePair[7] += imageValue7;
+                        I(2, 1) += imageValue7;
                     }
                     SimdVector<float, 8> const imageValue8 =
-                        broadcast<SimdVector<float, 8>>(k76) * imageRadial2 * harmonics[8];
+                        broadcast<SimdVector<float, 8>>(k76) * imageRadial2 * U(2, 2);
                     if (sign < 0) {
-                        imagePair[8] = imageValue8;
+                        I(2, 2) = imageValue8;
                     } else {
-                        imagePair[8] += imageValue8;
+                        I(2, 2) += imageValue8;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * broadcast<SimdVector<float, 8>>(k52);
                     SimdVector<float, 8> const imageRadial3 = screening * inversePower;
                     SimdVector<float, 8> const imageValue9 =
-                        broadcast<SimdVector<float, 8>>(k81) * imageRadial3 * harmonics[9];
+                        broadcast<SimdVector<float, 8>>(k81) * imageRadial3 * U(3, -3);
                     if (sign < 0) {
-                        imagePair[9] = imageValue9;
+                        I(3, -3) = imageValue9;
                     } else {
-                        imagePair[9] += imageValue9;
+                        I(3, -3) += imageValue9;
                     }
                     SimdVector<float, 8> const imageValue10 =
-                        broadcast<SimdVector<float, 8>>(k79) * imageRadial3 * harmonics[10];
+                        broadcast<SimdVector<float, 8>>(k79) * imageRadial3 * U(3, -2);
                     if (sign < 0) {
-                        imagePair[10] = imageValue10;
+                        I(3, -2) = imageValue10;
                     } else {
-                        imagePair[10] += imageValue10;
+                        I(3, -2) += imageValue10;
                     }
                     SimdVector<float, 8> const imageValue11 =
-                        broadcast<SimdVector<float, 8>>(k78) * imageRadial3 * harmonics[11];
+                        broadcast<SimdVector<float, 8>>(k78) * imageRadial3 * U(3, -1);
                     if (sign < 0) {
-                        imagePair[11] = imageValue11;
+                        I(3, -1) = imageValue11;
                     } else {
-                        imagePair[11] += imageValue11;
+                        I(3, -1) += imageValue11;
                     }
                     SimdVector<float, 8> const imageValue12 =
-                        broadcast<SimdVector<float, 8>>(k77) * imageRadial3 * harmonics[12];
+                        broadcast<SimdVector<float, 8>>(k77) * imageRadial3 * U(3, 0);
                     if (sign < 0) {
-                        imagePair[12] = imageValue12;
+                        I(3, 0) = imageValue12;
                     } else {
-                        imagePair[12] += imageValue12;
+                        I(3, 0) += imageValue12;
                     }
                     SimdVector<float, 8> const imageValue13 =
-                        broadcast<SimdVector<float, 8>>(k78) * imageRadial3 * harmonics[13];
+                        broadcast<SimdVector<float, 8>>(k78) * imageRadial3 * U(3, 1);
                     if (sign < 0) {
-                        imagePair[13] = imageValue13;
+                        I(3, 1) = imageValue13;
                     } else {
-                        imagePair[13] += imageValue13;
+                        I(3, 1) += imageValue13;
                     }
                     SimdVector<float, 8> const imageValue14 =
-                        broadcast<SimdVector<float, 8>>(k79) * imageRadial3 * harmonics[14];
+                        broadcast<SimdVector<float, 8>>(k79) * imageRadial3 * U(3, 2);
                     if (sign < 0) {
-                        imagePair[14] = imageValue14;
+                        I(3, 2) = imageValue14;
                     } else {
-                        imagePair[14] += imageValue14;
+                        I(3, 2) += imageValue14;
                     }
                     SimdVector<float, 8> const imageValue15 =
-                        broadcast<SimdVector<float, 8>>(k81) * imageRadial3 * harmonics[15];
+                        broadcast<SimdVector<float, 8>>(k81) * imageRadial3 * U(3, 3);
                     if (sign < 0) {
-                        imagePair[15] = imageValue15;
+                        I(3, 3) = imageValue15;
                     } else {
-                        imagePair[15] += imageValue15;
+                        I(3, 3) += imageValue15;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * broadcast<SimdVector<float, 8>>(k51);
                     SimdVector<float, 8> const imageRadial4 = -screening * inversePower;
                     SimdVector<float, 8> const imageValue16 =
-                        broadcast<SimdVector<float, 8>>(k87) * imageRadial4 * harmonics[16];
+                        broadcast<SimdVector<float, 8>>(k87) * imageRadial4 * U(4, -4);
                     if (sign < 0) {
-                        imagePair[16] = imageValue16;
+                        I(4, -4) = imageValue16;
                     } else {
-                        imagePair[16] += imageValue16;
+                        I(4, -4) += imageValue16;
                     }
                     SimdVector<float, 8> const imageValue17 =
-                        broadcast<SimdVector<float, 8>>(k83) * imageRadial4 * harmonics[17];
+                        broadcast<SimdVector<float, 8>>(k83) * imageRadial4 * U(4, -3);
                     if (sign < 0) {
-                        imagePair[17] = imageValue17;
+                        I(4, -3) = imageValue17;
                     } else {
-                        imagePair[17] += imageValue17;
+                        I(4, -3) += imageValue17;
                     }
                     SimdVector<float, 8> const imageValue18 =
-                        broadcast<SimdVector<float, 8>>(k82) * imageRadial4 * harmonics[18];
+                        broadcast<SimdVector<float, 8>>(k82) * imageRadial4 * U(4, -2);
                     if (sign < 0) {
-                        imagePair[18] = imageValue18;
+                        I(4, -2) = imageValue18;
                     } else {
-                        imagePair[18] += imageValue18;
+                        I(4, -2) += imageValue18;
                     }
                     SimdVector<float, 8> const imageValue19 =
-                        broadcast<SimdVector<float, 8>>(k81) * imageRadial4 * harmonics[19];
+                        broadcast<SimdVector<float, 8>>(k81) * imageRadial4 * U(4, -1);
                     if (sign < 0) {
-                        imagePair[19] = imageValue19;
+                        I(4, -1) = imageValue19;
                     } else {
-                        imagePair[19] += imageValue19;
+                        I(4, -1) += imageValue19;
                     }
                     SimdVector<float, 8> const imageValue20 =
-                        broadcast<SimdVector<float, 8>>(k80) * imageRadial4 * harmonics[20];
+                        broadcast<SimdVector<float, 8>>(k80) * imageRadial4 * U(4, 0);
                     if (sign < 0) {
-                        imagePair[20] = imageValue20;
+                        I(4, 0) = imageValue20;
                     } else {
-                        imagePair[20] += imageValue20;
+                        I(4, 0) += imageValue20;
                     }
                     SimdVector<float, 8> const imageValue21 =
-                        broadcast<SimdVector<float, 8>>(k81) * imageRadial4 * harmonics[21];
+                        broadcast<SimdVector<float, 8>>(k81) * imageRadial4 * U(4, 1);
                     if (sign < 0) {
-                        imagePair[21] = imageValue21;
+                        I(4, 1) = imageValue21;
                     } else {
-                        imagePair[21] += imageValue21;
+                        I(4, 1) += imageValue21;
                     }
                     SimdVector<float, 8> const imageValue22 =
-                        broadcast<SimdVector<float, 8>>(k82) * imageRadial4 * harmonics[22];
+                        broadcast<SimdVector<float, 8>>(k82) * imageRadial4 * U(4, 2);
                     if (sign < 0) {
-                        imagePair[22] = imageValue22;
+                        I(4, 2) = imageValue22;
                     } else {
-                        imagePair[22] += imageValue22;
+                        I(4, 2) += imageValue22;
                     }
                     SimdVector<float, 8> const imageValue23 =
-                        broadcast<SimdVector<float, 8>>(k83) * imageRadial4 * harmonics[23];
+                        broadcast<SimdVector<float, 8>>(k83) * imageRadial4 * U(4, 3);
                     if (sign < 0) {
-                        imagePair[23] = imageValue23;
+                        I(4, 3) = imageValue23;
                     } else {
-                        imagePair[23] += imageValue23;
+                        I(4, 3) += imageValue23;
                     }
                     SimdVector<float, 8> const imageValue24 =
-                        broadcast<SimdVector<float, 8>>(k87) * imageRadial4 * harmonics[24];
+                        broadcast<SimdVector<float, 8>>(k87) * imageRadial4 * U(4, 4);
                     if (sign < 0) {
-                        imagePair[24] = imageValue24;
+                        I(4, 4) = imageValue24;
                     } else {
-                        imagePair[24] += imageValue24;
+                        I(4, 4) += imageValue24;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * broadcast<SimdVector<float, 8>>(k50);
                     SimdVector<float, 8> const imageRadial5 = screening * inversePower;
                     SimdVector<float, 8> const imageValue25 =
-                        broadcast<SimdVector<float, 8>>(k94) * imageRadial5 * harmonics[25];
+                        broadcast<SimdVector<float, 8>>(k94) * imageRadial5 * U(5, -5);
                     if (sign < 0) {
-                        imagePair[25] = imageValue25;
+                        I(5, -5) = imageValue25;
                     } else {
-                        imagePair[25] += imageValue25;
+                        I(5, -5) += imageValue25;
                     }
                     SimdVector<float, 8> const imageValue26 =
-                        broadcast<SimdVector<float, 8>>(k89) * imageRadial5 * harmonics[26];
+                        broadcast<SimdVector<float, 8>>(k89) * imageRadial5 * U(5, -4);
                     if (sign < 0) {
-                        imagePair[26] = imageValue26;
+                        I(5, -4) = imageValue26;
                     } else {
-                        imagePair[26] += imageValue26;
+                        I(5, -4) += imageValue26;
                     }
                     SimdVector<float, 8> const imageValue27 =
-                        broadcast<SimdVector<float, 8>>(k88) * imageRadial5 * harmonics[27];
+                        broadcast<SimdVector<float, 8>>(k88) * imageRadial5 * U(5, -3);
                     if (sign < 0) {
-                        imagePair[27] = imageValue27;
+                        I(5, -3) = imageValue27;
                     } else {
-                        imagePair[27] += imageValue27;
+                        I(5, -3) += imageValue27;
                     }
                     SimdVector<float, 8> const imageValue28 =
-                        broadcast<SimdVector<float, 8>>(k86) * imageRadial5 * harmonics[28];
+                        broadcast<SimdVector<float, 8>>(k86) * imageRadial5 * U(5, -2);
                     if (sign < 0) {
-                        imagePair[28] = imageValue28;
+                        I(5, -2) = imageValue28;
                     } else {
-                        imagePair[28] += imageValue28;
+                        I(5, -2) += imageValue28;
                     }
                     SimdVector<float, 8> const imageValue29 =
-                        broadcast<SimdVector<float, 8>>(k85) * imageRadial5 * harmonics[29];
+                        broadcast<SimdVector<float, 8>>(k85) * imageRadial5 * U(5, -1);
                     if (sign < 0) {
-                        imagePair[29] = imageValue29;
+                        I(5, -1) = imageValue29;
                     } else {
-                        imagePair[29] += imageValue29;
+                        I(5, -1) += imageValue29;
                     }
                     SimdVector<float, 8> const imageValue30 =
-                        broadcast<SimdVector<float, 8>>(k84) * imageRadial5 * harmonics[30];
+                        broadcast<SimdVector<float, 8>>(k84) * imageRadial5 * U(5, 0);
                     if (sign < 0) {
-                        imagePair[30] = imageValue30;
+                        I(5, 0) = imageValue30;
                     } else {
-                        imagePair[30] += imageValue30;
+                        I(5, 0) += imageValue30;
                     }
                     SimdVector<float, 8> const imageValue31 =
-                        broadcast<SimdVector<float, 8>>(k85) * imageRadial5 * harmonics[31];
+                        broadcast<SimdVector<float, 8>>(k85) * imageRadial5 * U(5, 1);
                     if (sign < 0) {
-                        imagePair[31] = imageValue31;
+                        I(5, 1) = imageValue31;
                     } else {
-                        imagePair[31] += imageValue31;
+                        I(5, 1) += imageValue31;
                     }
                     SimdVector<float, 8> const imageValue32 =
-                        broadcast<SimdVector<float, 8>>(k86) * imageRadial5 * harmonics[32];
+                        broadcast<SimdVector<float, 8>>(k86) * imageRadial5 * U(5, 2);
                     if (sign < 0) {
-                        imagePair[32] = imageValue32;
+                        I(5, 2) = imageValue32;
                     } else {
-                        imagePair[32] += imageValue32;
+                        I(5, 2) += imageValue32;
                     }
                     SimdVector<float, 8> const imageValue33 =
-                        broadcast<SimdVector<float, 8>>(k88) * imageRadial5 * harmonics[33];
+                        broadcast<SimdVector<float, 8>>(k88) * imageRadial5 * U(5, 3);
                     if (sign < 0) {
-                        imagePair[33] = imageValue33;
+                        I(5, 3) = imageValue33;
                     } else {
-                        imagePair[33] += imageValue33;
+                        I(5, 3) += imageValue33;
                     }
                     SimdVector<float, 8> const imageValue34 =
-                        broadcast<SimdVector<float, 8>>(k89) * imageRadial5 * harmonics[34];
+                        broadcast<SimdVector<float, 8>>(k89) * imageRadial5 * U(5, 4);
                     if (sign < 0) {
-                        imagePair[34] = imageValue34;
+                        I(5, 4) = imageValue34;
                     } else {
-                        imagePair[34] += imageValue34;
+                        I(5, 4) += imageValue34;
                     }
                     SimdVector<float, 8> const imageValue35 =
-                        broadcast<SimdVector<float, 8>>(k94) * imageRadial5 * harmonics[35];
+                        broadcast<SimdVector<float, 8>>(k94) * imageRadial5 * U(5, 5);
                     if (sign < 0) {
-                        imagePair[35] = imageValue35;
+                        I(5, 5) = imageValue35;
                     } else {
-                        imagePair[35] += imageValue35;
+                        I(5, 5) += imageValue35;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * broadcast<SimdVector<float, 8>>(k49);
                     SimdVector<float, 8> const imageRadial6 = -screening * inversePower;
                     SimdVector<float, 8> const imageValue36 =
-                        broadcast<SimdVector<float, 8>>(k97) * imageRadial6 * harmonics[36];
+                        broadcast<SimdVector<float, 8>>(k97) * imageRadial6 * U(6, -6);
                     if (sign < 0) {
-                        imagePair[36] = imageValue36;
+                        I(6, -6) = imageValue36;
                     } else {
-                        imagePair[36] += imageValue36;
+                        I(6, -6) += imageValue36;
                     }
                     SimdVector<float, 8> const imageValue37 =
-                        broadcast<SimdVector<float, 8>>(k96) * imageRadial6 * harmonics[37];
+                        broadcast<SimdVector<float, 8>>(k96) * imageRadial6 * U(6, -5);
                     if (sign < 0) {
-                        imagePair[37] = imageValue37;
+                        I(6, -5) = imageValue37;
                     } else {
-                        imagePair[37] += imageValue37;
+                        I(6, -5) += imageValue37;
                     }
                     SimdVector<float, 8> const imageValue38 =
-                        broadcast<SimdVector<float, 8>>(k95) * imageRadial6 * harmonics[38];
+                        broadcast<SimdVector<float, 8>>(k95) * imageRadial6 * U(6, -4);
                     if (sign < 0) {
-                        imagePair[38] = imageValue38;
+                        I(6, -4) = imageValue38;
                     } else {
-                        imagePair[38] += imageValue38;
+                        I(6, -4) += imageValue38;
                     }
                     SimdVector<float, 8> const imageValue39 =
-                        broadcast<SimdVector<float, 8>>(k93) * imageRadial6 * harmonics[39];
+                        broadcast<SimdVector<float, 8>>(k93) * imageRadial6 * U(6, -3);
                     if (sign < 0) {
-                        imagePair[39] = imageValue39;
+                        I(6, -3) = imageValue39;
                     } else {
-                        imagePair[39] += imageValue39;
+                        I(6, -3) += imageValue39;
                     }
                     SimdVector<float, 8> const imageValue40 =
-                        broadcast<SimdVector<float, 8>>(k92) * imageRadial6 * harmonics[40];
+                        broadcast<SimdVector<float, 8>>(k92) * imageRadial6 * U(6, -2);
                     if (sign < 0) {
-                        imagePair[40] = imageValue40;
+                        I(6, -2) = imageValue40;
                     } else {
-                        imagePair[40] += imageValue40;
+                        I(6, -2) += imageValue40;
                     }
                     SimdVector<float, 8> const imageValue41 =
-                        broadcast<SimdVector<float, 8>>(k91) * imageRadial6 * harmonics[41];
+                        broadcast<SimdVector<float, 8>>(k91) * imageRadial6 * U(6, -1);
                     if (sign < 0) {
-                        imagePair[41] = imageValue41;
+                        I(6, -1) = imageValue41;
                     } else {
-                        imagePair[41] += imageValue41;
+                        I(6, -1) += imageValue41;
                     }
                     SimdVector<float, 8> const imageValue42 =
-                        broadcast<SimdVector<float, 8>>(k90) * imageRadial6 * harmonics[42];
+                        broadcast<SimdVector<float, 8>>(k90) * imageRadial6 * U(6, 0);
                     if (sign < 0) {
-                        imagePair[42] = imageValue42;
+                        I(6, 0) = imageValue42;
                     } else {
-                        imagePair[42] += imageValue42;
+                        I(6, 0) += imageValue42;
                     }
                     SimdVector<float, 8> const imageValue43 =
-                        broadcast<SimdVector<float, 8>>(k91) * imageRadial6 * harmonics[43];
+                        broadcast<SimdVector<float, 8>>(k91) * imageRadial6 * U(6, 1);
                     if (sign < 0) {
-                        imagePair[43] = imageValue43;
+                        I(6, 1) = imageValue43;
                     } else {
-                        imagePair[43] += imageValue43;
+                        I(6, 1) += imageValue43;
                     }
                     SimdVector<float, 8> const imageValue44 =
-                        broadcast<SimdVector<float, 8>>(k92) * imageRadial6 * harmonics[44];
+                        broadcast<SimdVector<float, 8>>(k92) * imageRadial6 * U(6, 2);
                     if (sign < 0) {
-                        imagePair[44] = imageValue44;
+                        I(6, 2) = imageValue44;
                     } else {
-                        imagePair[44] += imageValue44;
+                        I(6, 2) += imageValue44;
                     }
                     SimdVector<float, 8> const imageValue45 =
-                        broadcast<SimdVector<float, 8>>(k93) * imageRadial6 * harmonics[45];
+                        broadcast<SimdVector<float, 8>>(k93) * imageRadial6 * U(6, 3);
                     if (sign < 0) {
-                        imagePair[45] = imageValue45;
+                        I(6, 3) = imageValue45;
                     } else {
-                        imagePair[45] += imageValue45;
+                        I(6, 3) += imageValue45;
                     }
                     SimdVector<float, 8> const imageValue46 =
-                        broadcast<SimdVector<float, 8>>(k95) * imageRadial6 * harmonics[46];
+                        broadcast<SimdVector<float, 8>>(k95) * imageRadial6 * U(6, 4);
                     if (sign < 0) {
-                        imagePair[46] = imageValue46;
+                        I(6, 4) = imageValue46;
                     } else {
-                        imagePair[46] += imageValue46;
+                        I(6, 4) += imageValue46;
                     }
                     SimdVector<float, 8> const imageValue47 =
-                        broadcast<SimdVector<float, 8>>(k96) * imageRadial6 * harmonics[47];
+                        broadcast<SimdVector<float, 8>>(k96) * imageRadial6 * U(6, 5);
                     if (sign < 0) {
-                        imagePair[47] = imageValue47;
+                        I(6, 5) = imageValue47;
                     } else {
-                        imagePair[47] += imageValue47;
+                        I(6, 5) += imageValue47;
                     }
                     SimdVector<float, 8> const imageValue48 =
-                        broadcast<SimdVector<float, 8>>(k97) * imageRadial6 * harmonics[48];
+                        broadcast<SimdVector<float, 8>>(k97) * imageRadial6 * U(6, 6);
                     if (sign < 0) {
-                        imagePair[48] = imageValue48;
+                        I(6, 6) = imageValue48;
                     } else {
-                        imagePair[48] += imageValue48;
+                        I(6, 6) += imageValue48;
                     }
                 }
-                detail::ewaldAccumulate(output[0], compensation[0], imagePair[0]);
-                detail::ewaldAccumulate(output[1], compensation[1], imagePair[1]);
-                detail::ewaldAccumulate(output[2], compensation[2], imagePair[2]);
-                detail::ewaldAccumulate(output[3], compensation[3], imagePair[3]);
-                detail::ewaldAccumulate(output[4], compensation[4], imagePair[4]);
-                detail::ewaldAccumulate(output[5], compensation[5], imagePair[5]);
-                detail::ewaldAccumulate(output[6], compensation[6], imagePair[6]);
-                detail::ewaldAccumulate(output[7], compensation[7], imagePair[7]);
-                detail::ewaldAccumulate(output[8], compensation[8], imagePair[8]);
-                detail::ewaldAccumulate(output[9], compensation[9], imagePair[9]);
-                detail::ewaldAccumulate(output[10], compensation[10], imagePair[10]);
-                detail::ewaldAccumulate(output[11], compensation[11], imagePair[11]);
-                detail::ewaldAccumulate(output[12], compensation[12], imagePair[12]);
-                detail::ewaldAccumulate(output[13], compensation[13], imagePair[13]);
-                detail::ewaldAccumulate(output[14], compensation[14], imagePair[14]);
-                detail::ewaldAccumulate(output[15], compensation[15], imagePair[15]);
-                detail::ewaldAccumulate(output[16], compensation[16], imagePair[16]);
-                detail::ewaldAccumulate(output[17], compensation[17], imagePair[17]);
-                detail::ewaldAccumulate(output[18], compensation[18], imagePair[18]);
-                detail::ewaldAccumulate(output[19], compensation[19], imagePair[19]);
-                detail::ewaldAccumulate(output[20], compensation[20], imagePair[20]);
-                detail::ewaldAccumulate(output[21], compensation[21], imagePair[21]);
-                detail::ewaldAccumulate(output[22], compensation[22], imagePair[22]);
-                detail::ewaldAccumulate(output[23], compensation[23], imagePair[23]);
-                detail::ewaldAccumulate(output[24], compensation[24], imagePair[24]);
-                detail::ewaldAccumulate(output[25], compensation[25], imagePair[25]);
-                detail::ewaldAccumulate(output[26], compensation[26], imagePair[26]);
-                detail::ewaldAccumulate(output[27], compensation[27], imagePair[27]);
-                detail::ewaldAccumulate(output[28], compensation[28], imagePair[28]);
-                detail::ewaldAccumulate(output[29], compensation[29], imagePair[29]);
-                detail::ewaldAccumulate(output[30], compensation[30], imagePair[30]);
-                detail::ewaldAccumulate(output[31], compensation[31], imagePair[31]);
-                detail::ewaldAccumulate(output[32], compensation[32], imagePair[32]);
-                detail::ewaldAccumulate(output[33], compensation[33], imagePair[33]);
-                detail::ewaldAccumulate(output[34], compensation[34], imagePair[34]);
-                detail::ewaldAccumulate(output[35], compensation[35], imagePair[35]);
-                detail::ewaldAccumulate(output[36], compensation[36], imagePair[36]);
-                detail::ewaldAccumulate(output[37], compensation[37], imagePair[37]);
-                detail::ewaldAccumulate(output[38], compensation[38], imagePair[38]);
-                detail::ewaldAccumulate(output[39], compensation[39], imagePair[39]);
-                detail::ewaldAccumulate(output[40], compensation[40], imagePair[40]);
-                detail::ewaldAccumulate(output[41], compensation[41], imagePair[41]);
-                detail::ewaldAccumulate(output[42], compensation[42], imagePair[42]);
-                detail::ewaldAccumulate(output[43], compensation[43], imagePair[43]);
-                detail::ewaldAccumulate(output[44], compensation[44], imagePair[44]);
-                detail::ewaldAccumulate(output[45], compensation[45], imagePair[45]);
-                detail::ewaldAccumulate(output[46], compensation[46], imagePair[46]);
-                detail::ewaldAccumulate(output[47], compensation[47], imagePair[47]);
-                detail::ewaldAccumulate(output[48], compensation[48], imagePair[48]);
+                detail::ewaldAccumulate(G(0, 0), C(0, 0), I(0, 0));
+                detail::ewaldAccumulate(G(1, -1), C(1, -1), I(1, -1));
+                detail::ewaldAccumulate(G(1, 0), C(1, 0), I(1, 0));
+                detail::ewaldAccumulate(G(1, 1), C(1, 1), I(1, 1));
+                detail::ewaldAccumulate(G(2, -2), C(2, -2), I(2, -2));
+                detail::ewaldAccumulate(G(2, -1), C(2, -1), I(2, -1));
+                detail::ewaldAccumulate(G(2, 0), C(2, 0), I(2, 0));
+                detail::ewaldAccumulate(G(2, 1), C(2, 1), I(2, 1));
+                detail::ewaldAccumulate(G(2, 2), C(2, 2), I(2, 2));
+                detail::ewaldAccumulate(G(3, -3), C(3, -3), I(3, -3));
+                detail::ewaldAccumulate(G(3, -2), C(3, -2), I(3, -2));
+                detail::ewaldAccumulate(G(3, -1), C(3, -1), I(3, -1));
+                detail::ewaldAccumulate(G(3, 0), C(3, 0), I(3, 0));
+                detail::ewaldAccumulate(G(3, 1), C(3, 1), I(3, 1));
+                detail::ewaldAccumulate(G(3, 2), C(3, 2), I(3, 2));
+                detail::ewaldAccumulate(G(3, 3), C(3, 3), I(3, 3));
+                detail::ewaldAccumulate(G(4, -4), C(4, -4), I(4, -4));
+                detail::ewaldAccumulate(G(4, -3), C(4, -3), I(4, -3));
+                detail::ewaldAccumulate(G(4, -2), C(4, -2), I(4, -2));
+                detail::ewaldAccumulate(G(4, -1), C(4, -1), I(4, -1));
+                detail::ewaldAccumulate(G(4, 0), C(4, 0), I(4, 0));
+                detail::ewaldAccumulate(G(4, 1), C(4, 1), I(4, 1));
+                detail::ewaldAccumulate(G(4, 2), C(4, 2), I(4, 2));
+                detail::ewaldAccumulate(G(4, 3), C(4, 3), I(4, 3));
+                detail::ewaldAccumulate(G(4, 4), C(4, 4), I(4, 4));
+                detail::ewaldAccumulate(G(5, -5), C(5, -5), I(5, -5));
+                detail::ewaldAccumulate(G(5, -4), C(5, -4), I(5, -4));
+                detail::ewaldAccumulate(G(5, -3), C(5, -3), I(5, -3));
+                detail::ewaldAccumulate(G(5, -2), C(5, -2), I(5, -2));
+                detail::ewaldAccumulate(G(5, -1), C(5, -1), I(5, -1));
+                detail::ewaldAccumulate(G(5, 0), C(5, 0), I(5, 0));
+                detail::ewaldAccumulate(G(5, 1), C(5, 1), I(5, 1));
+                detail::ewaldAccumulate(G(5, 2), C(5, 2), I(5, 2));
+                detail::ewaldAccumulate(G(5, 3), C(5, 3), I(5, 3));
+                detail::ewaldAccumulate(G(5, 4), C(5, 4), I(5, 4));
+                detail::ewaldAccumulate(G(5, 5), C(5, 5), I(5, 5));
+                detail::ewaldAccumulate(G(6, -6), C(6, -6), I(6, -6));
+                detail::ewaldAccumulate(G(6, -5), C(6, -5), I(6, -5));
+                detail::ewaldAccumulate(G(6, -4), C(6, -4), I(6, -4));
+                detail::ewaldAccumulate(G(6, -3), C(6, -3), I(6, -3));
+                detail::ewaldAccumulate(G(6, -2), C(6, -2), I(6, -2));
+                detail::ewaldAccumulate(G(6, -1), C(6, -1), I(6, -1));
+                detail::ewaldAccumulate(G(6, 0), C(6, 0), I(6, 0));
+                detail::ewaldAccumulate(G(6, 1), C(6, 1), I(6, 1));
+                detail::ewaldAccumulate(G(6, 2), C(6, 2), I(6, 2));
+                detail::ewaldAccumulate(G(6, 3), C(6, 3), I(6, 3));
+                detail::ewaldAccumulate(G(6, 4), C(6, 4), I(6, 4));
+                detail::ewaldAccumulate(G(6, 5), C(6, 5), I(6, 5));
+                detail::ewaldAccumulate(G(6, 6), C(6, 6), I(6, 6));
                 SimdVector<float, 8> const waveX = broadcast<SimdVector<float, 8>>(ix);
                 SimdVector<float, 8> const waveY = broadcast<SimdVector<float, 8>>(iy);
                 SimdVector<float, 8> const waveZ = broadcast<SimdVector<float, 8>>(iz);
@@ -1967,114 +1985,114 @@ void evaluateEwaldWorking(SimdVector<float, 8>& greenTrace, SimdVector<float, 8>
                     waveSquared;
                 SimdVector<float, 8> const waveRadial0 =
                     broadcast<SimdVector<float, 8>>(k57) * wavePotential * cosine;
-                detail::ewaldAccumulate(output[0], compensation[0], waveRadial0 * harmonics[0]);
+                detail::ewaldAccumulate(G(0, 0), C(0, 0), waveRadial0 * U(0, 0));
                 SimdVector<float, 8> const waveRadial1 =
                     broadcast<SimdVector<float, 8>>(k67) * wavePotential * -sine;
-                detail::ewaldAccumulate(output[1], compensation[1],
-                    broadcast<SimdVector<float, 8>>(k58) * waveRadial1 * harmonics[1]);
-                detail::ewaldAccumulate(output[2], compensation[2], waveRadial1 * harmonics[2]);
-                detail::ewaldAccumulate(output[3], compensation[3],
-                    broadcast<SimdVector<float, 8>>(k58) * waveRadial1 * harmonics[3]);
+                detail::ewaldAccumulate(G(1, -1), C(1, -1),
+                    broadcast<SimdVector<float, 8>>(k58) * waveRadial1 * U(1, -1));
+                detail::ewaldAccumulate(G(1, 0), C(1, 0), waveRadial1 * U(1, 0));
+                detail::ewaldAccumulate(
+                    G(1, 1), C(1, 1), broadcast<SimdVector<float, 8>>(k58) * waveRadial1 * U(1, 1));
                 SimdVector<float, 8> const waveRadial2 =
                     broadcast<SimdVector<float, 8>>(k73) * wavePotential * -cosine;
-                detail::ewaldAccumulate(output[4], compensation[4],
-                    broadcast<SimdVector<float, 8>>(k76) * waveRadial2 * harmonics[4]);
-                detail::ewaldAccumulate(output[5], compensation[5],
-                    broadcast<SimdVector<float, 8>>(k65) * waveRadial2 * harmonics[5]);
-                detail::ewaldAccumulate(output[6], compensation[6],
-                    broadcast<SimdVector<float, 8>>(k61) * waveRadial2 * harmonics[6]);
-                detail::ewaldAccumulate(output[7], compensation[7],
-                    broadcast<SimdVector<float, 8>>(k65) * waveRadial2 * harmonics[7]);
-                detail::ewaldAccumulate(output[8], compensation[8],
-                    broadcast<SimdVector<float, 8>>(k76) * waveRadial2 * harmonics[8]);
+                detail::ewaldAccumulate(G(2, -2), C(2, -2),
+                    broadcast<SimdVector<float, 8>>(k76) * waveRadial2 * U(2, -2));
+                detail::ewaldAccumulate(G(2, -1), C(2, -1),
+                    broadcast<SimdVector<float, 8>>(k65) * waveRadial2 * U(2, -1));
+                detail::ewaldAccumulate(
+                    G(2, 0), C(2, 0), broadcast<SimdVector<float, 8>>(k61) * waveRadial2 * U(2, 0));
+                detail::ewaldAccumulate(
+                    G(2, 1), C(2, 1), broadcast<SimdVector<float, 8>>(k65) * waveRadial2 * U(2, 1));
+                detail::ewaldAccumulate(
+                    G(2, 2), C(2, 2), broadcast<SimdVector<float, 8>>(k76) * waveRadial2 * U(2, 2));
                 SimdVector<float, 8> const waveRadial3 =
                     broadcast<SimdVector<float, 8>>(k75) * wavePotential * sine;
-                detail::ewaldAccumulate(output[9], compensation[9],
-                    broadcast<SimdVector<float, 8>>(k81) * waveRadial3 * harmonics[9]);
-                detail::ewaldAccumulate(output[10], compensation[10],
-                    broadcast<SimdVector<float, 8>>(k79) * waveRadial3 * harmonics[10]);
-                detail::ewaldAccumulate(output[11], compensation[11],
-                    broadcast<SimdVector<float, 8>>(k78) * waveRadial3 * harmonics[11]);
-                detail::ewaldAccumulate(output[12], compensation[12],
-                    broadcast<SimdVector<float, 8>>(k77) * waveRadial3 * harmonics[12]);
-                detail::ewaldAccumulate(output[13], compensation[13],
-                    broadcast<SimdVector<float, 8>>(k78) * waveRadial3 * harmonics[13]);
-                detail::ewaldAccumulate(output[14], compensation[14],
-                    broadcast<SimdVector<float, 8>>(k79) * waveRadial3 * harmonics[14]);
-                detail::ewaldAccumulate(output[15], compensation[15],
-                    broadcast<SimdVector<float, 8>>(k81) * waveRadial3 * harmonics[15]);
+                detail::ewaldAccumulate(G(3, -3), C(3, -3),
+                    broadcast<SimdVector<float, 8>>(k81) * waveRadial3 * U(3, -3));
+                detail::ewaldAccumulate(G(3, -2), C(3, -2),
+                    broadcast<SimdVector<float, 8>>(k79) * waveRadial3 * U(3, -2));
+                detail::ewaldAccumulate(G(3, -1), C(3, -1),
+                    broadcast<SimdVector<float, 8>>(k78) * waveRadial3 * U(3, -1));
+                detail::ewaldAccumulate(
+                    G(3, 0), C(3, 0), broadcast<SimdVector<float, 8>>(k77) * waveRadial3 * U(3, 0));
+                detail::ewaldAccumulate(
+                    G(3, 1), C(3, 1), broadcast<SimdVector<float, 8>>(k78) * waveRadial3 * U(3, 1));
+                detail::ewaldAccumulate(
+                    G(3, 2), C(3, 2), broadcast<SimdVector<float, 8>>(k79) * waveRadial3 * U(3, 2));
+                detail::ewaldAccumulate(
+                    G(3, 3), C(3, 3), broadcast<SimdVector<float, 8>>(k81) * waveRadial3 * U(3, 3));
                 SimdVector<float, 8> const waveRadial4 =
                     broadcast<SimdVector<float, 8>>(k74) * wavePotential * cosine;
-                detail::ewaldAccumulate(output[16], compensation[16],
-                    broadcast<SimdVector<float, 8>>(k87) * waveRadial4 * harmonics[16]);
-                detail::ewaldAccumulate(output[17], compensation[17],
-                    broadcast<SimdVector<float, 8>>(k83) * waveRadial4 * harmonics[17]);
-                detail::ewaldAccumulate(output[18], compensation[18],
-                    broadcast<SimdVector<float, 8>>(k82) * waveRadial4 * harmonics[18]);
-                detail::ewaldAccumulate(output[19], compensation[19],
-                    broadcast<SimdVector<float, 8>>(k81) * waveRadial4 * harmonics[19]);
-                detail::ewaldAccumulate(output[20], compensation[20],
-                    broadcast<SimdVector<float, 8>>(k80) * waveRadial4 * harmonics[20]);
-                detail::ewaldAccumulate(output[21], compensation[21],
-                    broadcast<SimdVector<float, 8>>(k81) * waveRadial4 * harmonics[21]);
-                detail::ewaldAccumulate(output[22], compensation[22],
-                    broadcast<SimdVector<float, 8>>(k82) * waveRadial4 * harmonics[22]);
-                detail::ewaldAccumulate(output[23], compensation[23],
-                    broadcast<SimdVector<float, 8>>(k83) * waveRadial4 * harmonics[23]);
-                detail::ewaldAccumulate(output[24], compensation[24],
-                    broadcast<SimdVector<float, 8>>(k87) * waveRadial4 * harmonics[24]);
+                detail::ewaldAccumulate(G(4, -4), C(4, -4),
+                    broadcast<SimdVector<float, 8>>(k87) * waveRadial4 * U(4, -4));
+                detail::ewaldAccumulate(G(4, -3), C(4, -3),
+                    broadcast<SimdVector<float, 8>>(k83) * waveRadial4 * U(4, -3));
+                detail::ewaldAccumulate(G(4, -2), C(4, -2),
+                    broadcast<SimdVector<float, 8>>(k82) * waveRadial4 * U(4, -2));
+                detail::ewaldAccumulate(G(4, -1), C(4, -1),
+                    broadcast<SimdVector<float, 8>>(k81) * waveRadial4 * U(4, -1));
+                detail::ewaldAccumulate(
+                    G(4, 0), C(4, 0), broadcast<SimdVector<float, 8>>(k80) * waveRadial4 * U(4, 0));
+                detail::ewaldAccumulate(
+                    G(4, 1), C(4, 1), broadcast<SimdVector<float, 8>>(k81) * waveRadial4 * U(4, 1));
+                detail::ewaldAccumulate(
+                    G(4, 2), C(4, 2), broadcast<SimdVector<float, 8>>(k82) * waveRadial4 * U(4, 2));
+                detail::ewaldAccumulate(
+                    G(4, 3), C(4, 3), broadcast<SimdVector<float, 8>>(k83) * waveRadial4 * U(4, 3));
+                detail::ewaldAccumulate(
+                    G(4, 4), C(4, 4), broadcast<SimdVector<float, 8>>(k87) * waveRadial4 * U(4, 4));
                 SimdVector<float, 8> const waveRadial5 =
                     broadcast<SimdVector<float, 8>>(k71) * wavePotential * -sine;
-                detail::ewaldAccumulate(output[25], compensation[25],
-                    broadcast<SimdVector<float, 8>>(k94) * waveRadial5 * harmonics[25]);
-                detail::ewaldAccumulate(output[26], compensation[26],
-                    broadcast<SimdVector<float, 8>>(k89) * waveRadial5 * harmonics[26]);
-                detail::ewaldAccumulate(output[27], compensation[27],
-                    broadcast<SimdVector<float, 8>>(k88) * waveRadial5 * harmonics[27]);
-                detail::ewaldAccumulate(output[28], compensation[28],
-                    broadcast<SimdVector<float, 8>>(k86) * waveRadial5 * harmonics[28]);
-                detail::ewaldAccumulate(output[29], compensation[29],
-                    broadcast<SimdVector<float, 8>>(k85) * waveRadial5 * harmonics[29]);
-                detail::ewaldAccumulate(output[30], compensation[30],
-                    broadcast<SimdVector<float, 8>>(k84) * waveRadial5 * harmonics[30]);
-                detail::ewaldAccumulate(output[31], compensation[31],
-                    broadcast<SimdVector<float, 8>>(k85) * waveRadial5 * harmonics[31]);
-                detail::ewaldAccumulate(output[32], compensation[32],
-                    broadcast<SimdVector<float, 8>>(k86) * waveRadial5 * harmonics[32]);
-                detail::ewaldAccumulate(output[33], compensation[33],
-                    broadcast<SimdVector<float, 8>>(k88) * waveRadial5 * harmonics[33]);
-                detail::ewaldAccumulate(output[34], compensation[34],
-                    broadcast<SimdVector<float, 8>>(k89) * waveRadial5 * harmonics[34]);
-                detail::ewaldAccumulate(output[35], compensation[35],
-                    broadcast<SimdVector<float, 8>>(k94) * waveRadial5 * harmonics[35]);
+                detail::ewaldAccumulate(G(5, -5), C(5, -5),
+                    broadcast<SimdVector<float, 8>>(k94) * waveRadial5 * U(5, -5));
+                detail::ewaldAccumulate(G(5, -4), C(5, -4),
+                    broadcast<SimdVector<float, 8>>(k89) * waveRadial5 * U(5, -4));
+                detail::ewaldAccumulate(G(5, -3), C(5, -3),
+                    broadcast<SimdVector<float, 8>>(k88) * waveRadial5 * U(5, -3));
+                detail::ewaldAccumulate(G(5, -2), C(5, -2),
+                    broadcast<SimdVector<float, 8>>(k86) * waveRadial5 * U(5, -2));
+                detail::ewaldAccumulate(G(5, -1), C(5, -1),
+                    broadcast<SimdVector<float, 8>>(k85) * waveRadial5 * U(5, -1));
+                detail::ewaldAccumulate(
+                    G(5, 0), C(5, 0), broadcast<SimdVector<float, 8>>(k84) * waveRadial5 * U(5, 0));
+                detail::ewaldAccumulate(
+                    G(5, 1), C(5, 1), broadcast<SimdVector<float, 8>>(k85) * waveRadial5 * U(5, 1));
+                detail::ewaldAccumulate(
+                    G(5, 2), C(5, 2), broadcast<SimdVector<float, 8>>(k86) * waveRadial5 * U(5, 2));
+                detail::ewaldAccumulate(
+                    G(5, 3), C(5, 3), broadcast<SimdVector<float, 8>>(k88) * waveRadial5 * U(5, 3));
+                detail::ewaldAccumulate(
+                    G(5, 4), C(5, 4), broadcast<SimdVector<float, 8>>(k89) * waveRadial5 * U(5, 4));
+                detail::ewaldAccumulate(
+                    G(5, 5), C(5, 5), broadcast<SimdVector<float, 8>>(k94) * waveRadial5 * U(5, 5));
                 SimdVector<float, 8> const waveRadial6 =
                     broadcast<SimdVector<float, 8>>(k64) * wavePotential * -cosine;
-                detail::ewaldAccumulate(output[36], compensation[36],
-                    broadcast<SimdVector<float, 8>>(k97) * waveRadial6 * harmonics[36]);
-                detail::ewaldAccumulate(output[37], compensation[37],
-                    broadcast<SimdVector<float, 8>>(k96) * waveRadial6 * harmonics[37]);
-                detail::ewaldAccumulate(output[38], compensation[38],
-                    broadcast<SimdVector<float, 8>>(k95) * waveRadial6 * harmonics[38]);
-                detail::ewaldAccumulate(output[39], compensation[39],
-                    broadcast<SimdVector<float, 8>>(k93) * waveRadial6 * harmonics[39]);
-                detail::ewaldAccumulate(output[40], compensation[40],
-                    broadcast<SimdVector<float, 8>>(k92) * waveRadial6 * harmonics[40]);
-                detail::ewaldAccumulate(output[41], compensation[41],
-                    broadcast<SimdVector<float, 8>>(k91) * waveRadial6 * harmonics[41]);
-                detail::ewaldAccumulate(output[42], compensation[42],
-                    broadcast<SimdVector<float, 8>>(k90) * waveRadial6 * harmonics[42]);
-                detail::ewaldAccumulate(output[43], compensation[43],
-                    broadcast<SimdVector<float, 8>>(k91) * waveRadial6 * harmonics[43]);
-                detail::ewaldAccumulate(output[44], compensation[44],
-                    broadcast<SimdVector<float, 8>>(k92) * waveRadial6 * harmonics[44]);
-                detail::ewaldAccumulate(output[45], compensation[45],
-                    broadcast<SimdVector<float, 8>>(k93) * waveRadial6 * harmonics[45]);
-                detail::ewaldAccumulate(output[46], compensation[46],
-                    broadcast<SimdVector<float, 8>>(k95) * waveRadial6 * harmonics[46]);
-                detail::ewaldAccumulate(output[47], compensation[47],
-                    broadcast<SimdVector<float, 8>>(k96) * waveRadial6 * harmonics[47]);
-                detail::ewaldAccumulate(output[48], compensation[48],
-                    broadcast<SimdVector<float, 8>>(k97) * waveRadial6 * harmonics[48]);
+                detail::ewaldAccumulate(G(6, -6), C(6, -6),
+                    broadcast<SimdVector<float, 8>>(k97) * waveRadial6 * U(6, -6));
+                detail::ewaldAccumulate(G(6, -5), C(6, -5),
+                    broadcast<SimdVector<float, 8>>(k96) * waveRadial6 * U(6, -5));
+                detail::ewaldAccumulate(G(6, -4), C(6, -4),
+                    broadcast<SimdVector<float, 8>>(k95) * waveRadial6 * U(6, -4));
+                detail::ewaldAccumulate(G(6, -3), C(6, -3),
+                    broadcast<SimdVector<float, 8>>(k93) * waveRadial6 * U(6, -3));
+                detail::ewaldAccumulate(G(6, -2), C(6, -2),
+                    broadcast<SimdVector<float, 8>>(k92) * waveRadial6 * U(6, -2));
+                detail::ewaldAccumulate(G(6, -1), C(6, -1),
+                    broadcast<SimdVector<float, 8>>(k91) * waveRadial6 * U(6, -1));
+                detail::ewaldAccumulate(
+                    G(6, 0), C(6, 0), broadcast<SimdVector<float, 8>>(k90) * waveRadial6 * U(6, 0));
+                detail::ewaldAccumulate(
+                    G(6, 1), C(6, 1), broadcast<SimdVector<float, 8>>(k91) * waveRadial6 * U(6, 1));
+                detail::ewaldAccumulate(
+                    G(6, 2), C(6, 2), broadcast<SimdVector<float, 8>>(k92) * waveRadial6 * U(6, 2));
+                detail::ewaldAccumulate(
+                    G(6, 3), C(6, 3), broadcast<SimdVector<float, 8>>(k93) * waveRadial6 * U(6, 3));
+                detail::ewaldAccumulate(
+                    G(6, 4), C(6, 4), broadcast<SimdVector<float, 8>>(k95) * waveRadial6 * U(6, 4));
+                detail::ewaldAccumulate(
+                    G(6, 5), C(6, 5), broadcast<SimdVector<float, 8>>(k96) * waveRadial6 * U(6, 5));
+                detail::ewaldAccumulate(
+                    G(6, 6), C(6, 6), broadcast<SimdVector<float, 8>>(k97) * waveRadial6 * U(6, 6));
             }
         }
     }
@@ -2183,9 +2201,17 @@ void evaluateEwaldWorking(SimdVector<double, 2>& greenTrace, SimdVector<double, 
     constexpr double k95 = 7.25760000000000000e+06;
     constexpr double k96 = 3.99168000000000000e+07;
     constexpr double k97 = 4.79001600000000000e+08;
+    detail::CoefficientView<SimdVector<double, 2>> const G{output};
+
     SimdVector<double, 2> harmonics[49];
+    detail::CoefficientView<SimdVector<double, 2>> const U{harmonics};
+
     SimdVector<double, 2> compensation[49];
+    detail::CoefficientView<SimdVector<double, 2>> const C{compensation};
+
     SimdVector<double, 2> imagePair[49];
+    detail::CoefficientView<SimdVector<double, 2>> const I{imagePair};
+
     SimdVector<double, 2> const radiusSquared = fma(x, x, fma(y, y, z * z));
     ewaldRegular(x, y, z, radiusSquared, harmonics);
     SimdVector<double, 2> const argument = broadcast<SimdVector<double, 2>>(k61) * radiusSquared;
@@ -2289,8 +2315,8 @@ void evaluateEwaldWorking(SimdVector<double, 2>& greenTrace, SimdVector<double, 
         broadcast<SimdVector<double, 2>>(k57));
     SimdVector<double, 2> const radial0 =
         broadcast<SimdVector<double, 2>>(k59) * exponential * series0;
-    output[0] = radial0 * harmonics[0];
-    compensation[0] = broadcast<SimdVector<double, 2>>(k00);
+    G(0, 0) = radial0 * U(0, 0);
+    C(0, 0) = broadcast<SimdVector<double, 2>>(k00);
     SimdVector<double, 2> series1 = broadcast<SimdVector<double, 2>>(k57);
     series1 = fma(series1, argument * broadcast<SimdVector<double, 2>>(k06),
         broadcast<SimdVector<double, 2>>(k57));
@@ -2390,12 +2416,12 @@ void evaluateEwaldWorking(SimdVector<double, 2>& greenTrace, SimdVector<double, 
         broadcast<SimdVector<double, 2>>(k57));
     SimdVector<double, 2> const radial1 =
         -broadcast<SimdVector<double, 2>>(k66) * exponential * series1;
-    output[1] = broadcast<SimdVector<double, 2>>(k58) * radial1 * harmonics[1];
-    compensation[1] = broadcast<SimdVector<double, 2>>(k00);
-    output[2] = radial1 * harmonics[2];
-    compensation[2] = broadcast<SimdVector<double, 2>>(k00);
-    output[3] = broadcast<SimdVector<double, 2>>(k58) * radial1 * harmonics[3];
-    compensation[3] = broadcast<SimdVector<double, 2>>(k00);
+    G(1, -1) = broadcast<SimdVector<double, 2>>(k58) * radial1 * U(1, -1);
+    C(1, -1) = broadcast<SimdVector<double, 2>>(k00);
+    G(1, 0) = radial1 * U(1, 0);
+    C(1, 0) = broadcast<SimdVector<double, 2>>(k00);
+    G(1, 1) = broadcast<SimdVector<double, 2>>(k58) * radial1 * U(1, 1);
+    C(1, 1) = broadcast<SimdVector<double, 2>>(k00);
     SimdVector<double, 2> series2 = broadcast<SimdVector<double, 2>>(k57);
     series2 = fma(series2, argument * broadcast<SimdVector<double, 2>>(k05),
         broadcast<SimdVector<double, 2>>(k57));
@@ -2495,16 +2521,16 @@ void evaluateEwaldWorking(SimdVector<double, 2>& greenTrace, SimdVector<double, 
         broadcast<SimdVector<double, 2>>(k57));
     SimdVector<double, 2> const radial2 =
         broadcast<SimdVector<double, 2>>(k69) * exponential * series2;
-    output[4] = broadcast<SimdVector<double, 2>>(k76) * radial2 * harmonics[4];
-    compensation[4] = broadcast<SimdVector<double, 2>>(k00);
-    output[5] = broadcast<SimdVector<double, 2>>(k65) * radial2 * harmonics[5];
-    compensation[5] = broadcast<SimdVector<double, 2>>(k00);
-    output[6] = broadcast<SimdVector<double, 2>>(k61) * radial2 * harmonics[6];
-    compensation[6] = broadcast<SimdVector<double, 2>>(k00);
-    output[7] = broadcast<SimdVector<double, 2>>(k65) * radial2 * harmonics[7];
-    compensation[7] = broadcast<SimdVector<double, 2>>(k00);
-    output[8] = broadcast<SimdVector<double, 2>>(k76) * radial2 * harmonics[8];
-    compensation[8] = broadcast<SimdVector<double, 2>>(k00);
+    G(2, -2) = broadcast<SimdVector<double, 2>>(k76) * radial2 * U(2, -2);
+    C(2, -2) = broadcast<SimdVector<double, 2>>(k00);
+    G(2, -1) = broadcast<SimdVector<double, 2>>(k65) * radial2 * U(2, -1);
+    C(2, -1) = broadcast<SimdVector<double, 2>>(k00);
+    G(2, 0) = broadcast<SimdVector<double, 2>>(k61) * radial2 * U(2, 0);
+    C(2, 0) = broadcast<SimdVector<double, 2>>(k00);
+    G(2, 1) = broadcast<SimdVector<double, 2>>(k65) * radial2 * U(2, 1);
+    C(2, 1) = broadcast<SimdVector<double, 2>>(k00);
+    G(2, 2) = broadcast<SimdVector<double, 2>>(k76) * radial2 * U(2, 2);
+    C(2, 2) = broadcast<SimdVector<double, 2>>(k00);
     SimdVector<double, 2> series3 = broadcast<SimdVector<double, 2>>(k57);
     series3 = fma(series3, argument * broadcast<SimdVector<double, 2>>(k04),
         broadcast<SimdVector<double, 2>>(k57));
@@ -2604,20 +2630,20 @@ void evaluateEwaldWorking(SimdVector<double, 2>& greenTrace, SimdVector<double, 
         broadcast<SimdVector<double, 2>>(k57));
     SimdVector<double, 2> const radial3 =
         -broadcast<SimdVector<double, 2>>(k72) * exponential * series3;
-    output[9] = broadcast<SimdVector<double, 2>>(k81) * radial3 * harmonics[9];
-    compensation[9] = broadcast<SimdVector<double, 2>>(k00);
-    output[10] = broadcast<SimdVector<double, 2>>(k79) * radial3 * harmonics[10];
-    compensation[10] = broadcast<SimdVector<double, 2>>(k00);
-    output[11] = broadcast<SimdVector<double, 2>>(k78) * radial3 * harmonics[11];
-    compensation[11] = broadcast<SimdVector<double, 2>>(k00);
-    output[12] = broadcast<SimdVector<double, 2>>(k77) * radial3 * harmonics[12];
-    compensation[12] = broadcast<SimdVector<double, 2>>(k00);
-    output[13] = broadcast<SimdVector<double, 2>>(k78) * radial3 * harmonics[13];
-    compensation[13] = broadcast<SimdVector<double, 2>>(k00);
-    output[14] = broadcast<SimdVector<double, 2>>(k79) * radial3 * harmonics[14];
-    compensation[14] = broadcast<SimdVector<double, 2>>(k00);
-    output[15] = broadcast<SimdVector<double, 2>>(k81) * radial3 * harmonics[15];
-    compensation[15] = broadcast<SimdVector<double, 2>>(k00);
+    G(3, -3) = broadcast<SimdVector<double, 2>>(k81) * radial3 * U(3, -3);
+    C(3, -3) = broadcast<SimdVector<double, 2>>(k00);
+    G(3, -2) = broadcast<SimdVector<double, 2>>(k79) * radial3 * U(3, -2);
+    C(3, -2) = broadcast<SimdVector<double, 2>>(k00);
+    G(3, -1) = broadcast<SimdVector<double, 2>>(k78) * radial3 * U(3, -1);
+    C(3, -1) = broadcast<SimdVector<double, 2>>(k00);
+    G(3, 0) = broadcast<SimdVector<double, 2>>(k77) * radial3 * U(3, 0);
+    C(3, 0) = broadcast<SimdVector<double, 2>>(k00);
+    G(3, 1) = broadcast<SimdVector<double, 2>>(k78) * radial3 * U(3, 1);
+    C(3, 1) = broadcast<SimdVector<double, 2>>(k00);
+    G(3, 2) = broadcast<SimdVector<double, 2>>(k79) * radial3 * U(3, 2);
+    C(3, 2) = broadcast<SimdVector<double, 2>>(k00);
+    G(3, 3) = broadcast<SimdVector<double, 2>>(k81) * radial3 * U(3, 3);
+    C(3, 3) = broadcast<SimdVector<double, 2>>(k00);
     SimdVector<double, 2> series4 = broadcast<SimdVector<double, 2>>(k57);
     series4 = fma(series4, argument * broadcast<SimdVector<double, 2>>(k03),
         broadcast<SimdVector<double, 2>>(k57));
@@ -2717,24 +2743,24 @@ void evaluateEwaldWorking(SimdVector<double, 2>& greenTrace, SimdVector<double, 
         broadcast<SimdVector<double, 2>>(k57));
     SimdVector<double, 2> const radial4 =
         broadcast<SimdVector<double, 2>>(k70) * exponential * series4;
-    output[16] = broadcast<SimdVector<double, 2>>(k87) * radial4 * harmonics[16];
-    compensation[16] = broadcast<SimdVector<double, 2>>(k00);
-    output[17] = broadcast<SimdVector<double, 2>>(k83) * radial4 * harmonics[17];
-    compensation[17] = broadcast<SimdVector<double, 2>>(k00);
-    output[18] = broadcast<SimdVector<double, 2>>(k82) * radial4 * harmonics[18];
-    compensation[18] = broadcast<SimdVector<double, 2>>(k00);
-    output[19] = broadcast<SimdVector<double, 2>>(k81) * radial4 * harmonics[19];
-    compensation[19] = broadcast<SimdVector<double, 2>>(k00);
-    output[20] = broadcast<SimdVector<double, 2>>(k80) * radial4 * harmonics[20];
-    compensation[20] = broadcast<SimdVector<double, 2>>(k00);
-    output[21] = broadcast<SimdVector<double, 2>>(k81) * radial4 * harmonics[21];
-    compensation[21] = broadcast<SimdVector<double, 2>>(k00);
-    output[22] = broadcast<SimdVector<double, 2>>(k82) * radial4 * harmonics[22];
-    compensation[22] = broadcast<SimdVector<double, 2>>(k00);
-    output[23] = broadcast<SimdVector<double, 2>>(k83) * radial4 * harmonics[23];
-    compensation[23] = broadcast<SimdVector<double, 2>>(k00);
-    output[24] = broadcast<SimdVector<double, 2>>(k87) * radial4 * harmonics[24];
-    compensation[24] = broadcast<SimdVector<double, 2>>(k00);
+    G(4, -4) = broadcast<SimdVector<double, 2>>(k87) * radial4 * U(4, -4);
+    C(4, -4) = broadcast<SimdVector<double, 2>>(k00);
+    G(4, -3) = broadcast<SimdVector<double, 2>>(k83) * radial4 * U(4, -3);
+    C(4, -3) = broadcast<SimdVector<double, 2>>(k00);
+    G(4, -2) = broadcast<SimdVector<double, 2>>(k82) * radial4 * U(4, -2);
+    C(4, -2) = broadcast<SimdVector<double, 2>>(k00);
+    G(4, -1) = broadcast<SimdVector<double, 2>>(k81) * radial4 * U(4, -1);
+    C(4, -1) = broadcast<SimdVector<double, 2>>(k00);
+    G(4, 0) = broadcast<SimdVector<double, 2>>(k80) * radial4 * U(4, 0);
+    C(4, 0) = broadcast<SimdVector<double, 2>>(k00);
+    G(4, 1) = broadcast<SimdVector<double, 2>>(k81) * radial4 * U(4, 1);
+    C(4, 1) = broadcast<SimdVector<double, 2>>(k00);
+    G(4, 2) = broadcast<SimdVector<double, 2>>(k82) * radial4 * U(4, 2);
+    C(4, 2) = broadcast<SimdVector<double, 2>>(k00);
+    G(4, 3) = broadcast<SimdVector<double, 2>>(k83) * radial4 * U(4, 3);
+    C(4, 3) = broadcast<SimdVector<double, 2>>(k00);
+    G(4, 4) = broadcast<SimdVector<double, 2>>(k87) * radial4 * U(4, 4);
+    C(4, 4) = broadcast<SimdVector<double, 2>>(k00);
     SimdVector<double, 2> series5 = broadcast<SimdVector<double, 2>>(k57);
     series5 = fma(series5, argument * broadcast<SimdVector<double, 2>>(k02),
         broadcast<SimdVector<double, 2>>(k57));
@@ -2834,28 +2860,28 @@ void evaluateEwaldWorking(SimdVector<double, 2>& greenTrace, SimdVector<double, 
         broadcast<SimdVector<double, 2>>(k57));
     SimdVector<double, 2> const radial5 =
         -broadcast<SimdVector<double, 2>>(k68) * exponential * series5;
-    output[25] = broadcast<SimdVector<double, 2>>(k94) * radial5 * harmonics[25];
-    compensation[25] = broadcast<SimdVector<double, 2>>(k00);
-    output[26] = broadcast<SimdVector<double, 2>>(k89) * radial5 * harmonics[26];
-    compensation[26] = broadcast<SimdVector<double, 2>>(k00);
-    output[27] = broadcast<SimdVector<double, 2>>(k88) * radial5 * harmonics[27];
-    compensation[27] = broadcast<SimdVector<double, 2>>(k00);
-    output[28] = broadcast<SimdVector<double, 2>>(k86) * radial5 * harmonics[28];
-    compensation[28] = broadcast<SimdVector<double, 2>>(k00);
-    output[29] = broadcast<SimdVector<double, 2>>(k85) * radial5 * harmonics[29];
-    compensation[29] = broadcast<SimdVector<double, 2>>(k00);
-    output[30] = broadcast<SimdVector<double, 2>>(k84) * radial5 * harmonics[30];
-    compensation[30] = broadcast<SimdVector<double, 2>>(k00);
-    output[31] = broadcast<SimdVector<double, 2>>(k85) * radial5 * harmonics[31];
-    compensation[31] = broadcast<SimdVector<double, 2>>(k00);
-    output[32] = broadcast<SimdVector<double, 2>>(k86) * radial5 * harmonics[32];
-    compensation[32] = broadcast<SimdVector<double, 2>>(k00);
-    output[33] = broadcast<SimdVector<double, 2>>(k88) * radial5 * harmonics[33];
-    compensation[33] = broadcast<SimdVector<double, 2>>(k00);
-    output[34] = broadcast<SimdVector<double, 2>>(k89) * radial5 * harmonics[34];
-    compensation[34] = broadcast<SimdVector<double, 2>>(k00);
-    output[35] = broadcast<SimdVector<double, 2>>(k94) * radial5 * harmonics[35];
-    compensation[35] = broadcast<SimdVector<double, 2>>(k00);
+    G(5, -5) = broadcast<SimdVector<double, 2>>(k94) * radial5 * U(5, -5);
+    C(5, -5) = broadcast<SimdVector<double, 2>>(k00);
+    G(5, -4) = broadcast<SimdVector<double, 2>>(k89) * radial5 * U(5, -4);
+    C(5, -4) = broadcast<SimdVector<double, 2>>(k00);
+    G(5, -3) = broadcast<SimdVector<double, 2>>(k88) * radial5 * U(5, -3);
+    C(5, -3) = broadcast<SimdVector<double, 2>>(k00);
+    G(5, -2) = broadcast<SimdVector<double, 2>>(k86) * radial5 * U(5, -2);
+    C(5, -2) = broadcast<SimdVector<double, 2>>(k00);
+    G(5, -1) = broadcast<SimdVector<double, 2>>(k85) * radial5 * U(5, -1);
+    C(5, -1) = broadcast<SimdVector<double, 2>>(k00);
+    G(5, 0) = broadcast<SimdVector<double, 2>>(k84) * radial5 * U(5, 0);
+    C(5, 0) = broadcast<SimdVector<double, 2>>(k00);
+    G(5, 1) = broadcast<SimdVector<double, 2>>(k85) * radial5 * U(5, 1);
+    C(5, 1) = broadcast<SimdVector<double, 2>>(k00);
+    G(5, 2) = broadcast<SimdVector<double, 2>>(k86) * radial5 * U(5, 2);
+    C(5, 2) = broadcast<SimdVector<double, 2>>(k00);
+    G(5, 3) = broadcast<SimdVector<double, 2>>(k88) * radial5 * U(5, 3);
+    C(5, 3) = broadcast<SimdVector<double, 2>>(k00);
+    G(5, 4) = broadcast<SimdVector<double, 2>>(k89) * radial5 * U(5, 4);
+    C(5, 4) = broadcast<SimdVector<double, 2>>(k00);
+    G(5, 5) = broadcast<SimdVector<double, 2>>(k94) * radial5 * U(5, 5);
+    C(5, 5) = broadcast<SimdVector<double, 2>>(k00);
     SimdVector<double, 2> series6 = broadcast<SimdVector<double, 2>>(k57);
     series6 = fma(series6, argument * broadcast<SimdVector<double, 2>>(k01),
         broadcast<SimdVector<double, 2>>(k57));
@@ -2955,33 +2981,33 @@ void evaluateEwaldWorking(SimdVector<double, 2>& greenTrace, SimdVector<double, 
         broadcast<SimdVector<double, 2>>(k57));
     SimdVector<double, 2> const radial6 =
         broadcast<SimdVector<double, 2>>(k63) * exponential * series6;
-    output[36] = broadcast<SimdVector<double, 2>>(k97) * radial6 * harmonics[36];
-    compensation[36] = broadcast<SimdVector<double, 2>>(k00);
-    output[37] = broadcast<SimdVector<double, 2>>(k96) * radial6 * harmonics[37];
-    compensation[37] = broadcast<SimdVector<double, 2>>(k00);
-    output[38] = broadcast<SimdVector<double, 2>>(k95) * radial6 * harmonics[38];
-    compensation[38] = broadcast<SimdVector<double, 2>>(k00);
-    output[39] = broadcast<SimdVector<double, 2>>(k93) * radial6 * harmonics[39];
-    compensation[39] = broadcast<SimdVector<double, 2>>(k00);
-    output[40] = broadcast<SimdVector<double, 2>>(k92) * radial6 * harmonics[40];
-    compensation[40] = broadcast<SimdVector<double, 2>>(k00);
-    output[41] = broadcast<SimdVector<double, 2>>(k91) * radial6 * harmonics[41];
-    compensation[41] = broadcast<SimdVector<double, 2>>(k00);
-    output[42] = broadcast<SimdVector<double, 2>>(k90) * radial6 * harmonics[42];
-    compensation[42] = broadcast<SimdVector<double, 2>>(k00);
-    output[43] = broadcast<SimdVector<double, 2>>(k91) * radial6 * harmonics[43];
-    compensation[43] = broadcast<SimdVector<double, 2>>(k00);
-    output[44] = broadcast<SimdVector<double, 2>>(k92) * radial6 * harmonics[44];
-    compensation[44] = broadcast<SimdVector<double, 2>>(k00);
-    output[45] = broadcast<SimdVector<double, 2>>(k93) * radial6 * harmonics[45];
-    compensation[45] = broadcast<SimdVector<double, 2>>(k00);
-    output[46] = broadcast<SimdVector<double, 2>>(k95) * radial6 * harmonics[46];
-    compensation[46] = broadcast<SimdVector<double, 2>>(k00);
-    output[47] = broadcast<SimdVector<double, 2>>(k96) * radial6 * harmonics[47];
-    compensation[47] = broadcast<SimdVector<double, 2>>(k00);
-    output[48] = broadcast<SimdVector<double, 2>>(k97) * radial6 * harmonics[48];
-    compensation[48] = broadcast<SimdVector<double, 2>>(k00);
-    output[0] += broadcast<SimdVector<double, 2>>(k56);
+    G(6, -6) = broadcast<SimdVector<double, 2>>(k97) * radial6 * U(6, -6);
+    C(6, -6) = broadcast<SimdVector<double, 2>>(k00);
+    G(6, -5) = broadcast<SimdVector<double, 2>>(k96) * radial6 * U(6, -5);
+    C(6, -5) = broadcast<SimdVector<double, 2>>(k00);
+    G(6, -4) = broadcast<SimdVector<double, 2>>(k95) * radial6 * U(6, -4);
+    C(6, -4) = broadcast<SimdVector<double, 2>>(k00);
+    G(6, -3) = broadcast<SimdVector<double, 2>>(k93) * radial6 * U(6, -3);
+    C(6, -3) = broadcast<SimdVector<double, 2>>(k00);
+    G(6, -2) = broadcast<SimdVector<double, 2>>(k92) * radial6 * U(6, -2);
+    C(6, -2) = broadcast<SimdVector<double, 2>>(k00);
+    G(6, -1) = broadcast<SimdVector<double, 2>>(k91) * radial6 * U(6, -1);
+    C(6, -1) = broadcast<SimdVector<double, 2>>(k00);
+    G(6, 0) = broadcast<SimdVector<double, 2>>(k90) * radial6 * U(6, 0);
+    C(6, 0) = broadcast<SimdVector<double, 2>>(k00);
+    G(6, 1) = broadcast<SimdVector<double, 2>>(k91) * radial6 * U(6, 1);
+    C(6, 1) = broadcast<SimdVector<double, 2>>(k00);
+    G(6, 2) = broadcast<SimdVector<double, 2>>(k92) * radial6 * U(6, 2);
+    C(6, 2) = broadcast<SimdVector<double, 2>>(k00);
+    G(6, 3) = broadcast<SimdVector<double, 2>>(k93) * radial6 * U(6, 3);
+    C(6, 3) = broadcast<SimdVector<double, 2>>(k00);
+    G(6, 4) = broadcast<SimdVector<double, 2>>(k95) * radial6 * U(6, 4);
+    C(6, 4) = broadcast<SimdVector<double, 2>>(k00);
+    G(6, 5) = broadcast<SimdVector<double, 2>>(k96) * radial6 * U(6, 5);
+    C(6, 5) = broadcast<SimdVector<double, 2>>(k00);
+    G(6, 6) = broadcast<SimdVector<double, 2>>(k97) * radial6 * U(6, 6);
+    C(6, 6) = broadcast<SimdVector<double, 2>>(k00);
+    G(0, 0) += broadcast<SimdVector<double, 2>>(k56);
     greenTrace = broadcast<SimdVector<double, 2>>(k62);
     for (int ix = -6; ix <= 6; ++ix) {
         for (int iy = -6; iy <= 6; ++iy) {
@@ -3014,421 +3040,421 @@ void evaluateEwaldWorking(SimdVector<double, 2>& greenTrace, SimdVector<double, 
                         broadcast<SimdVector<double, 2>>(k59) * imageRadius * imageExp;
                     SimdVector<double, 2> inversePower = iR;
                     SimdVector<double, 2> const imageRadial0 = -screening * inversePower;
-                    SimdVector<double, 2> const imageValue0 = imageRadial0 * harmonics[0];
+                    SimdVector<double, 2> const imageValue0 = imageRadial0 * U(0, 0);
                     if (sign < 0) {
-                        imagePair[0] = imageValue0;
+                        I(0, 0) = imageValue0;
                     } else {
-                        imagePair[0] += imageValue0;
+                        I(0, 0) += imageValue0;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * broadcast<SimdVector<double, 2>>(k55);
                     SimdVector<double, 2> const imageRadial1 = screening * inversePower;
                     SimdVector<double, 2> const imageValue1 =
-                        broadcast<SimdVector<double, 2>>(k58) * imageRadial1 * harmonics[1];
+                        broadcast<SimdVector<double, 2>>(k58) * imageRadial1 * U(1, -1);
                     if (sign < 0) {
-                        imagePair[1] = imageValue1;
+                        I(1, -1) = imageValue1;
                     } else {
-                        imagePair[1] += imageValue1;
+                        I(1, -1) += imageValue1;
                     }
-                    SimdVector<double, 2> const imageValue2 = imageRadial1 * harmonics[2];
+                    SimdVector<double, 2> const imageValue2 = imageRadial1 * U(1, 0);
                     if (sign < 0) {
-                        imagePair[2] = imageValue2;
+                        I(1, 0) = imageValue2;
                     } else {
-                        imagePair[2] += imageValue2;
+                        I(1, 0) += imageValue2;
                     }
                     SimdVector<double, 2> const imageValue3 =
-                        broadcast<SimdVector<double, 2>>(k58) * imageRadial1 * harmonics[3];
+                        broadcast<SimdVector<double, 2>>(k58) * imageRadial1 * U(1, 1);
                     if (sign < 0) {
-                        imagePair[3] = imageValue3;
+                        I(1, 1) = imageValue3;
                     } else {
-                        imagePair[3] += imageValue3;
+                        I(1, 1) += imageValue3;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * broadcast<SimdVector<double, 2>>(k53);
                     SimdVector<double, 2> const imageRadial2 = -screening * inversePower;
                     SimdVector<double, 2> const imageValue4 =
-                        broadcast<SimdVector<double, 2>>(k76) * imageRadial2 * harmonics[4];
+                        broadcast<SimdVector<double, 2>>(k76) * imageRadial2 * U(2, -2);
                     if (sign < 0) {
-                        imagePair[4] = imageValue4;
+                        I(2, -2) = imageValue4;
                     } else {
-                        imagePair[4] += imageValue4;
+                        I(2, -2) += imageValue4;
                     }
                     SimdVector<double, 2> const imageValue5 =
-                        broadcast<SimdVector<double, 2>>(k65) * imageRadial2 * harmonics[5];
+                        broadcast<SimdVector<double, 2>>(k65) * imageRadial2 * U(2, -1);
                     if (sign < 0) {
-                        imagePair[5] = imageValue5;
+                        I(2, -1) = imageValue5;
                     } else {
-                        imagePair[5] += imageValue5;
+                        I(2, -1) += imageValue5;
                     }
                     SimdVector<double, 2> const imageValue6 =
-                        broadcast<SimdVector<double, 2>>(k61) * imageRadial2 * harmonics[6];
+                        broadcast<SimdVector<double, 2>>(k61) * imageRadial2 * U(2, 0);
                     if (sign < 0) {
-                        imagePair[6] = imageValue6;
+                        I(2, 0) = imageValue6;
                     } else {
-                        imagePair[6] += imageValue6;
+                        I(2, 0) += imageValue6;
                     }
                     SimdVector<double, 2> const imageValue7 =
-                        broadcast<SimdVector<double, 2>>(k65) * imageRadial2 * harmonics[7];
+                        broadcast<SimdVector<double, 2>>(k65) * imageRadial2 * U(2, 1);
                     if (sign < 0) {
-                        imagePair[7] = imageValue7;
+                        I(2, 1) = imageValue7;
                     } else {
-                        imagePair[7] += imageValue7;
+                        I(2, 1) += imageValue7;
                     }
                     SimdVector<double, 2> const imageValue8 =
-                        broadcast<SimdVector<double, 2>>(k76) * imageRadial2 * harmonics[8];
+                        broadcast<SimdVector<double, 2>>(k76) * imageRadial2 * U(2, 2);
                     if (sign < 0) {
-                        imagePair[8] = imageValue8;
+                        I(2, 2) = imageValue8;
                     } else {
-                        imagePair[8] += imageValue8;
+                        I(2, 2) += imageValue8;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * broadcast<SimdVector<double, 2>>(k52);
                     SimdVector<double, 2> const imageRadial3 = screening * inversePower;
                     SimdVector<double, 2> const imageValue9 =
-                        broadcast<SimdVector<double, 2>>(k81) * imageRadial3 * harmonics[9];
+                        broadcast<SimdVector<double, 2>>(k81) * imageRadial3 * U(3, -3);
                     if (sign < 0) {
-                        imagePair[9] = imageValue9;
+                        I(3, -3) = imageValue9;
                     } else {
-                        imagePair[9] += imageValue9;
+                        I(3, -3) += imageValue9;
                     }
                     SimdVector<double, 2> const imageValue10 =
-                        broadcast<SimdVector<double, 2>>(k79) * imageRadial3 * harmonics[10];
+                        broadcast<SimdVector<double, 2>>(k79) * imageRadial3 * U(3, -2);
                     if (sign < 0) {
-                        imagePair[10] = imageValue10;
+                        I(3, -2) = imageValue10;
                     } else {
-                        imagePair[10] += imageValue10;
+                        I(3, -2) += imageValue10;
                     }
                     SimdVector<double, 2> const imageValue11 =
-                        broadcast<SimdVector<double, 2>>(k78) * imageRadial3 * harmonics[11];
+                        broadcast<SimdVector<double, 2>>(k78) * imageRadial3 * U(3, -1);
                     if (sign < 0) {
-                        imagePair[11] = imageValue11;
+                        I(3, -1) = imageValue11;
                     } else {
-                        imagePair[11] += imageValue11;
+                        I(3, -1) += imageValue11;
                     }
                     SimdVector<double, 2> const imageValue12 =
-                        broadcast<SimdVector<double, 2>>(k77) * imageRadial3 * harmonics[12];
+                        broadcast<SimdVector<double, 2>>(k77) * imageRadial3 * U(3, 0);
                     if (sign < 0) {
-                        imagePair[12] = imageValue12;
+                        I(3, 0) = imageValue12;
                     } else {
-                        imagePair[12] += imageValue12;
+                        I(3, 0) += imageValue12;
                     }
                     SimdVector<double, 2> const imageValue13 =
-                        broadcast<SimdVector<double, 2>>(k78) * imageRadial3 * harmonics[13];
+                        broadcast<SimdVector<double, 2>>(k78) * imageRadial3 * U(3, 1);
                     if (sign < 0) {
-                        imagePair[13] = imageValue13;
+                        I(3, 1) = imageValue13;
                     } else {
-                        imagePair[13] += imageValue13;
+                        I(3, 1) += imageValue13;
                     }
                     SimdVector<double, 2> const imageValue14 =
-                        broadcast<SimdVector<double, 2>>(k79) * imageRadial3 * harmonics[14];
+                        broadcast<SimdVector<double, 2>>(k79) * imageRadial3 * U(3, 2);
                     if (sign < 0) {
-                        imagePair[14] = imageValue14;
+                        I(3, 2) = imageValue14;
                     } else {
-                        imagePair[14] += imageValue14;
+                        I(3, 2) += imageValue14;
                     }
                     SimdVector<double, 2> const imageValue15 =
-                        broadcast<SimdVector<double, 2>>(k81) * imageRadial3 * harmonics[15];
+                        broadcast<SimdVector<double, 2>>(k81) * imageRadial3 * U(3, 3);
                     if (sign < 0) {
-                        imagePair[15] = imageValue15;
+                        I(3, 3) = imageValue15;
                     } else {
-                        imagePair[15] += imageValue15;
+                        I(3, 3) += imageValue15;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * broadcast<SimdVector<double, 2>>(k51);
                     SimdVector<double, 2> const imageRadial4 = -screening * inversePower;
                     SimdVector<double, 2> const imageValue16 =
-                        broadcast<SimdVector<double, 2>>(k87) * imageRadial4 * harmonics[16];
+                        broadcast<SimdVector<double, 2>>(k87) * imageRadial4 * U(4, -4);
                     if (sign < 0) {
-                        imagePair[16] = imageValue16;
+                        I(4, -4) = imageValue16;
                     } else {
-                        imagePair[16] += imageValue16;
+                        I(4, -4) += imageValue16;
                     }
                     SimdVector<double, 2> const imageValue17 =
-                        broadcast<SimdVector<double, 2>>(k83) * imageRadial4 * harmonics[17];
+                        broadcast<SimdVector<double, 2>>(k83) * imageRadial4 * U(4, -3);
                     if (sign < 0) {
-                        imagePair[17] = imageValue17;
+                        I(4, -3) = imageValue17;
                     } else {
-                        imagePair[17] += imageValue17;
+                        I(4, -3) += imageValue17;
                     }
                     SimdVector<double, 2> const imageValue18 =
-                        broadcast<SimdVector<double, 2>>(k82) * imageRadial4 * harmonics[18];
+                        broadcast<SimdVector<double, 2>>(k82) * imageRadial4 * U(4, -2);
                     if (sign < 0) {
-                        imagePair[18] = imageValue18;
+                        I(4, -2) = imageValue18;
                     } else {
-                        imagePair[18] += imageValue18;
+                        I(4, -2) += imageValue18;
                     }
                     SimdVector<double, 2> const imageValue19 =
-                        broadcast<SimdVector<double, 2>>(k81) * imageRadial4 * harmonics[19];
+                        broadcast<SimdVector<double, 2>>(k81) * imageRadial4 * U(4, -1);
                     if (sign < 0) {
-                        imagePair[19] = imageValue19;
+                        I(4, -1) = imageValue19;
                     } else {
-                        imagePair[19] += imageValue19;
+                        I(4, -1) += imageValue19;
                     }
                     SimdVector<double, 2> const imageValue20 =
-                        broadcast<SimdVector<double, 2>>(k80) * imageRadial4 * harmonics[20];
+                        broadcast<SimdVector<double, 2>>(k80) * imageRadial4 * U(4, 0);
                     if (sign < 0) {
-                        imagePair[20] = imageValue20;
+                        I(4, 0) = imageValue20;
                     } else {
-                        imagePair[20] += imageValue20;
+                        I(4, 0) += imageValue20;
                     }
                     SimdVector<double, 2> const imageValue21 =
-                        broadcast<SimdVector<double, 2>>(k81) * imageRadial4 * harmonics[21];
+                        broadcast<SimdVector<double, 2>>(k81) * imageRadial4 * U(4, 1);
                     if (sign < 0) {
-                        imagePair[21] = imageValue21;
+                        I(4, 1) = imageValue21;
                     } else {
-                        imagePair[21] += imageValue21;
+                        I(4, 1) += imageValue21;
                     }
                     SimdVector<double, 2> const imageValue22 =
-                        broadcast<SimdVector<double, 2>>(k82) * imageRadial4 * harmonics[22];
+                        broadcast<SimdVector<double, 2>>(k82) * imageRadial4 * U(4, 2);
                     if (sign < 0) {
-                        imagePair[22] = imageValue22;
+                        I(4, 2) = imageValue22;
                     } else {
-                        imagePair[22] += imageValue22;
+                        I(4, 2) += imageValue22;
                     }
                     SimdVector<double, 2> const imageValue23 =
-                        broadcast<SimdVector<double, 2>>(k83) * imageRadial4 * harmonics[23];
+                        broadcast<SimdVector<double, 2>>(k83) * imageRadial4 * U(4, 3);
                     if (sign < 0) {
-                        imagePair[23] = imageValue23;
+                        I(4, 3) = imageValue23;
                     } else {
-                        imagePair[23] += imageValue23;
+                        I(4, 3) += imageValue23;
                     }
                     SimdVector<double, 2> const imageValue24 =
-                        broadcast<SimdVector<double, 2>>(k87) * imageRadial4 * harmonics[24];
+                        broadcast<SimdVector<double, 2>>(k87) * imageRadial4 * U(4, 4);
                     if (sign < 0) {
-                        imagePair[24] = imageValue24;
+                        I(4, 4) = imageValue24;
                     } else {
-                        imagePair[24] += imageValue24;
+                        I(4, 4) += imageValue24;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * broadcast<SimdVector<double, 2>>(k50);
                     SimdVector<double, 2> const imageRadial5 = screening * inversePower;
                     SimdVector<double, 2> const imageValue25 =
-                        broadcast<SimdVector<double, 2>>(k94) * imageRadial5 * harmonics[25];
+                        broadcast<SimdVector<double, 2>>(k94) * imageRadial5 * U(5, -5);
                     if (sign < 0) {
-                        imagePair[25] = imageValue25;
+                        I(5, -5) = imageValue25;
                     } else {
-                        imagePair[25] += imageValue25;
+                        I(5, -5) += imageValue25;
                     }
                     SimdVector<double, 2> const imageValue26 =
-                        broadcast<SimdVector<double, 2>>(k89) * imageRadial5 * harmonics[26];
+                        broadcast<SimdVector<double, 2>>(k89) * imageRadial5 * U(5, -4);
                     if (sign < 0) {
-                        imagePair[26] = imageValue26;
+                        I(5, -4) = imageValue26;
                     } else {
-                        imagePair[26] += imageValue26;
+                        I(5, -4) += imageValue26;
                     }
                     SimdVector<double, 2> const imageValue27 =
-                        broadcast<SimdVector<double, 2>>(k88) * imageRadial5 * harmonics[27];
+                        broadcast<SimdVector<double, 2>>(k88) * imageRadial5 * U(5, -3);
                     if (sign < 0) {
-                        imagePair[27] = imageValue27;
+                        I(5, -3) = imageValue27;
                     } else {
-                        imagePair[27] += imageValue27;
+                        I(5, -3) += imageValue27;
                     }
                     SimdVector<double, 2> const imageValue28 =
-                        broadcast<SimdVector<double, 2>>(k86) * imageRadial5 * harmonics[28];
+                        broadcast<SimdVector<double, 2>>(k86) * imageRadial5 * U(5, -2);
                     if (sign < 0) {
-                        imagePair[28] = imageValue28;
+                        I(5, -2) = imageValue28;
                     } else {
-                        imagePair[28] += imageValue28;
+                        I(5, -2) += imageValue28;
                     }
                     SimdVector<double, 2> const imageValue29 =
-                        broadcast<SimdVector<double, 2>>(k85) * imageRadial5 * harmonics[29];
+                        broadcast<SimdVector<double, 2>>(k85) * imageRadial5 * U(5, -1);
                     if (sign < 0) {
-                        imagePair[29] = imageValue29;
+                        I(5, -1) = imageValue29;
                     } else {
-                        imagePair[29] += imageValue29;
+                        I(5, -1) += imageValue29;
                     }
                     SimdVector<double, 2> const imageValue30 =
-                        broadcast<SimdVector<double, 2>>(k84) * imageRadial5 * harmonics[30];
+                        broadcast<SimdVector<double, 2>>(k84) * imageRadial5 * U(5, 0);
                     if (sign < 0) {
-                        imagePair[30] = imageValue30;
+                        I(5, 0) = imageValue30;
                     } else {
-                        imagePair[30] += imageValue30;
+                        I(5, 0) += imageValue30;
                     }
                     SimdVector<double, 2> const imageValue31 =
-                        broadcast<SimdVector<double, 2>>(k85) * imageRadial5 * harmonics[31];
+                        broadcast<SimdVector<double, 2>>(k85) * imageRadial5 * U(5, 1);
                     if (sign < 0) {
-                        imagePair[31] = imageValue31;
+                        I(5, 1) = imageValue31;
                     } else {
-                        imagePair[31] += imageValue31;
+                        I(5, 1) += imageValue31;
                     }
                     SimdVector<double, 2> const imageValue32 =
-                        broadcast<SimdVector<double, 2>>(k86) * imageRadial5 * harmonics[32];
+                        broadcast<SimdVector<double, 2>>(k86) * imageRadial5 * U(5, 2);
                     if (sign < 0) {
-                        imagePair[32] = imageValue32;
+                        I(5, 2) = imageValue32;
                     } else {
-                        imagePair[32] += imageValue32;
+                        I(5, 2) += imageValue32;
                     }
                     SimdVector<double, 2> const imageValue33 =
-                        broadcast<SimdVector<double, 2>>(k88) * imageRadial5 * harmonics[33];
+                        broadcast<SimdVector<double, 2>>(k88) * imageRadial5 * U(5, 3);
                     if (sign < 0) {
-                        imagePair[33] = imageValue33;
+                        I(5, 3) = imageValue33;
                     } else {
-                        imagePair[33] += imageValue33;
+                        I(5, 3) += imageValue33;
                     }
                     SimdVector<double, 2> const imageValue34 =
-                        broadcast<SimdVector<double, 2>>(k89) * imageRadial5 * harmonics[34];
+                        broadcast<SimdVector<double, 2>>(k89) * imageRadial5 * U(5, 4);
                     if (sign < 0) {
-                        imagePair[34] = imageValue34;
+                        I(5, 4) = imageValue34;
                     } else {
-                        imagePair[34] += imageValue34;
+                        I(5, 4) += imageValue34;
                     }
                     SimdVector<double, 2> const imageValue35 =
-                        broadcast<SimdVector<double, 2>>(k94) * imageRadial5 * harmonics[35];
+                        broadcast<SimdVector<double, 2>>(k94) * imageRadial5 * U(5, 5);
                     if (sign < 0) {
-                        imagePair[35] = imageValue35;
+                        I(5, 5) = imageValue35;
                     } else {
-                        imagePair[35] += imageValue35;
+                        I(5, 5) += imageValue35;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * broadcast<SimdVector<double, 2>>(k49);
                     SimdVector<double, 2> const imageRadial6 = -screening * inversePower;
                     SimdVector<double, 2> const imageValue36 =
-                        broadcast<SimdVector<double, 2>>(k97) * imageRadial6 * harmonics[36];
+                        broadcast<SimdVector<double, 2>>(k97) * imageRadial6 * U(6, -6);
                     if (sign < 0) {
-                        imagePair[36] = imageValue36;
+                        I(6, -6) = imageValue36;
                     } else {
-                        imagePair[36] += imageValue36;
+                        I(6, -6) += imageValue36;
                     }
                     SimdVector<double, 2> const imageValue37 =
-                        broadcast<SimdVector<double, 2>>(k96) * imageRadial6 * harmonics[37];
+                        broadcast<SimdVector<double, 2>>(k96) * imageRadial6 * U(6, -5);
                     if (sign < 0) {
-                        imagePair[37] = imageValue37;
+                        I(6, -5) = imageValue37;
                     } else {
-                        imagePair[37] += imageValue37;
+                        I(6, -5) += imageValue37;
                     }
                     SimdVector<double, 2> const imageValue38 =
-                        broadcast<SimdVector<double, 2>>(k95) * imageRadial6 * harmonics[38];
+                        broadcast<SimdVector<double, 2>>(k95) * imageRadial6 * U(6, -4);
                     if (sign < 0) {
-                        imagePair[38] = imageValue38;
+                        I(6, -4) = imageValue38;
                     } else {
-                        imagePair[38] += imageValue38;
+                        I(6, -4) += imageValue38;
                     }
                     SimdVector<double, 2> const imageValue39 =
-                        broadcast<SimdVector<double, 2>>(k93) * imageRadial6 * harmonics[39];
+                        broadcast<SimdVector<double, 2>>(k93) * imageRadial6 * U(6, -3);
                     if (sign < 0) {
-                        imagePair[39] = imageValue39;
+                        I(6, -3) = imageValue39;
                     } else {
-                        imagePair[39] += imageValue39;
+                        I(6, -3) += imageValue39;
                     }
                     SimdVector<double, 2> const imageValue40 =
-                        broadcast<SimdVector<double, 2>>(k92) * imageRadial6 * harmonics[40];
+                        broadcast<SimdVector<double, 2>>(k92) * imageRadial6 * U(6, -2);
                     if (sign < 0) {
-                        imagePair[40] = imageValue40;
+                        I(6, -2) = imageValue40;
                     } else {
-                        imagePair[40] += imageValue40;
+                        I(6, -2) += imageValue40;
                     }
                     SimdVector<double, 2> const imageValue41 =
-                        broadcast<SimdVector<double, 2>>(k91) * imageRadial6 * harmonics[41];
+                        broadcast<SimdVector<double, 2>>(k91) * imageRadial6 * U(6, -1);
                     if (sign < 0) {
-                        imagePair[41] = imageValue41;
+                        I(6, -1) = imageValue41;
                     } else {
-                        imagePair[41] += imageValue41;
+                        I(6, -1) += imageValue41;
                     }
                     SimdVector<double, 2> const imageValue42 =
-                        broadcast<SimdVector<double, 2>>(k90) * imageRadial6 * harmonics[42];
+                        broadcast<SimdVector<double, 2>>(k90) * imageRadial6 * U(6, 0);
                     if (sign < 0) {
-                        imagePair[42] = imageValue42;
+                        I(6, 0) = imageValue42;
                     } else {
-                        imagePair[42] += imageValue42;
+                        I(6, 0) += imageValue42;
                     }
                     SimdVector<double, 2> const imageValue43 =
-                        broadcast<SimdVector<double, 2>>(k91) * imageRadial6 * harmonics[43];
+                        broadcast<SimdVector<double, 2>>(k91) * imageRadial6 * U(6, 1);
                     if (sign < 0) {
-                        imagePair[43] = imageValue43;
+                        I(6, 1) = imageValue43;
                     } else {
-                        imagePair[43] += imageValue43;
+                        I(6, 1) += imageValue43;
                     }
                     SimdVector<double, 2> const imageValue44 =
-                        broadcast<SimdVector<double, 2>>(k92) * imageRadial6 * harmonics[44];
+                        broadcast<SimdVector<double, 2>>(k92) * imageRadial6 * U(6, 2);
                     if (sign < 0) {
-                        imagePair[44] = imageValue44;
+                        I(6, 2) = imageValue44;
                     } else {
-                        imagePair[44] += imageValue44;
+                        I(6, 2) += imageValue44;
                     }
                     SimdVector<double, 2> const imageValue45 =
-                        broadcast<SimdVector<double, 2>>(k93) * imageRadial6 * harmonics[45];
+                        broadcast<SimdVector<double, 2>>(k93) * imageRadial6 * U(6, 3);
                     if (sign < 0) {
-                        imagePair[45] = imageValue45;
+                        I(6, 3) = imageValue45;
                     } else {
-                        imagePair[45] += imageValue45;
+                        I(6, 3) += imageValue45;
                     }
                     SimdVector<double, 2> const imageValue46 =
-                        broadcast<SimdVector<double, 2>>(k95) * imageRadial6 * harmonics[46];
+                        broadcast<SimdVector<double, 2>>(k95) * imageRadial6 * U(6, 4);
                     if (sign < 0) {
-                        imagePair[46] = imageValue46;
+                        I(6, 4) = imageValue46;
                     } else {
-                        imagePair[46] += imageValue46;
+                        I(6, 4) += imageValue46;
                     }
                     SimdVector<double, 2> const imageValue47 =
-                        broadcast<SimdVector<double, 2>>(k96) * imageRadial6 * harmonics[47];
+                        broadcast<SimdVector<double, 2>>(k96) * imageRadial6 * U(6, 5);
                     if (sign < 0) {
-                        imagePair[47] = imageValue47;
+                        I(6, 5) = imageValue47;
                     } else {
-                        imagePair[47] += imageValue47;
+                        I(6, 5) += imageValue47;
                     }
                     SimdVector<double, 2> const imageValue48 =
-                        broadcast<SimdVector<double, 2>>(k97) * imageRadial6 * harmonics[48];
+                        broadcast<SimdVector<double, 2>>(k97) * imageRadial6 * U(6, 6);
                     if (sign < 0) {
-                        imagePair[48] = imageValue48;
+                        I(6, 6) = imageValue48;
                     } else {
-                        imagePair[48] += imageValue48;
+                        I(6, 6) += imageValue48;
                     }
                 }
-                detail::ewaldAccumulate(output[0], compensation[0], imagePair[0]);
-                detail::ewaldAccumulate(output[1], compensation[1], imagePair[1]);
-                detail::ewaldAccumulate(output[2], compensation[2], imagePair[2]);
-                detail::ewaldAccumulate(output[3], compensation[3], imagePair[3]);
-                detail::ewaldAccumulate(output[4], compensation[4], imagePair[4]);
-                detail::ewaldAccumulate(output[5], compensation[5], imagePair[5]);
-                detail::ewaldAccumulate(output[6], compensation[6], imagePair[6]);
-                detail::ewaldAccumulate(output[7], compensation[7], imagePair[7]);
-                detail::ewaldAccumulate(output[8], compensation[8], imagePair[8]);
-                detail::ewaldAccumulate(output[9], compensation[9], imagePair[9]);
-                detail::ewaldAccumulate(output[10], compensation[10], imagePair[10]);
-                detail::ewaldAccumulate(output[11], compensation[11], imagePair[11]);
-                detail::ewaldAccumulate(output[12], compensation[12], imagePair[12]);
-                detail::ewaldAccumulate(output[13], compensation[13], imagePair[13]);
-                detail::ewaldAccumulate(output[14], compensation[14], imagePair[14]);
-                detail::ewaldAccumulate(output[15], compensation[15], imagePair[15]);
-                detail::ewaldAccumulate(output[16], compensation[16], imagePair[16]);
-                detail::ewaldAccumulate(output[17], compensation[17], imagePair[17]);
-                detail::ewaldAccumulate(output[18], compensation[18], imagePair[18]);
-                detail::ewaldAccumulate(output[19], compensation[19], imagePair[19]);
-                detail::ewaldAccumulate(output[20], compensation[20], imagePair[20]);
-                detail::ewaldAccumulate(output[21], compensation[21], imagePair[21]);
-                detail::ewaldAccumulate(output[22], compensation[22], imagePair[22]);
-                detail::ewaldAccumulate(output[23], compensation[23], imagePair[23]);
-                detail::ewaldAccumulate(output[24], compensation[24], imagePair[24]);
-                detail::ewaldAccumulate(output[25], compensation[25], imagePair[25]);
-                detail::ewaldAccumulate(output[26], compensation[26], imagePair[26]);
-                detail::ewaldAccumulate(output[27], compensation[27], imagePair[27]);
-                detail::ewaldAccumulate(output[28], compensation[28], imagePair[28]);
-                detail::ewaldAccumulate(output[29], compensation[29], imagePair[29]);
-                detail::ewaldAccumulate(output[30], compensation[30], imagePair[30]);
-                detail::ewaldAccumulate(output[31], compensation[31], imagePair[31]);
-                detail::ewaldAccumulate(output[32], compensation[32], imagePair[32]);
-                detail::ewaldAccumulate(output[33], compensation[33], imagePair[33]);
-                detail::ewaldAccumulate(output[34], compensation[34], imagePair[34]);
-                detail::ewaldAccumulate(output[35], compensation[35], imagePair[35]);
-                detail::ewaldAccumulate(output[36], compensation[36], imagePair[36]);
-                detail::ewaldAccumulate(output[37], compensation[37], imagePair[37]);
-                detail::ewaldAccumulate(output[38], compensation[38], imagePair[38]);
-                detail::ewaldAccumulate(output[39], compensation[39], imagePair[39]);
-                detail::ewaldAccumulate(output[40], compensation[40], imagePair[40]);
-                detail::ewaldAccumulate(output[41], compensation[41], imagePair[41]);
-                detail::ewaldAccumulate(output[42], compensation[42], imagePair[42]);
-                detail::ewaldAccumulate(output[43], compensation[43], imagePair[43]);
-                detail::ewaldAccumulate(output[44], compensation[44], imagePair[44]);
-                detail::ewaldAccumulate(output[45], compensation[45], imagePair[45]);
-                detail::ewaldAccumulate(output[46], compensation[46], imagePair[46]);
-                detail::ewaldAccumulate(output[47], compensation[47], imagePair[47]);
-                detail::ewaldAccumulate(output[48], compensation[48], imagePair[48]);
+                detail::ewaldAccumulate(G(0, 0), C(0, 0), I(0, 0));
+                detail::ewaldAccumulate(G(1, -1), C(1, -1), I(1, -1));
+                detail::ewaldAccumulate(G(1, 0), C(1, 0), I(1, 0));
+                detail::ewaldAccumulate(G(1, 1), C(1, 1), I(1, 1));
+                detail::ewaldAccumulate(G(2, -2), C(2, -2), I(2, -2));
+                detail::ewaldAccumulate(G(2, -1), C(2, -1), I(2, -1));
+                detail::ewaldAccumulate(G(2, 0), C(2, 0), I(2, 0));
+                detail::ewaldAccumulate(G(2, 1), C(2, 1), I(2, 1));
+                detail::ewaldAccumulate(G(2, 2), C(2, 2), I(2, 2));
+                detail::ewaldAccumulate(G(3, -3), C(3, -3), I(3, -3));
+                detail::ewaldAccumulate(G(3, -2), C(3, -2), I(3, -2));
+                detail::ewaldAccumulate(G(3, -1), C(3, -1), I(3, -1));
+                detail::ewaldAccumulate(G(3, 0), C(3, 0), I(3, 0));
+                detail::ewaldAccumulate(G(3, 1), C(3, 1), I(3, 1));
+                detail::ewaldAccumulate(G(3, 2), C(3, 2), I(3, 2));
+                detail::ewaldAccumulate(G(3, 3), C(3, 3), I(3, 3));
+                detail::ewaldAccumulate(G(4, -4), C(4, -4), I(4, -4));
+                detail::ewaldAccumulate(G(4, -3), C(4, -3), I(4, -3));
+                detail::ewaldAccumulate(G(4, -2), C(4, -2), I(4, -2));
+                detail::ewaldAccumulate(G(4, -1), C(4, -1), I(4, -1));
+                detail::ewaldAccumulate(G(4, 0), C(4, 0), I(4, 0));
+                detail::ewaldAccumulate(G(4, 1), C(4, 1), I(4, 1));
+                detail::ewaldAccumulate(G(4, 2), C(4, 2), I(4, 2));
+                detail::ewaldAccumulate(G(4, 3), C(4, 3), I(4, 3));
+                detail::ewaldAccumulate(G(4, 4), C(4, 4), I(4, 4));
+                detail::ewaldAccumulate(G(5, -5), C(5, -5), I(5, -5));
+                detail::ewaldAccumulate(G(5, -4), C(5, -4), I(5, -4));
+                detail::ewaldAccumulate(G(5, -3), C(5, -3), I(5, -3));
+                detail::ewaldAccumulate(G(5, -2), C(5, -2), I(5, -2));
+                detail::ewaldAccumulate(G(5, -1), C(5, -1), I(5, -1));
+                detail::ewaldAccumulate(G(5, 0), C(5, 0), I(5, 0));
+                detail::ewaldAccumulate(G(5, 1), C(5, 1), I(5, 1));
+                detail::ewaldAccumulate(G(5, 2), C(5, 2), I(5, 2));
+                detail::ewaldAccumulate(G(5, 3), C(5, 3), I(5, 3));
+                detail::ewaldAccumulate(G(5, 4), C(5, 4), I(5, 4));
+                detail::ewaldAccumulate(G(5, 5), C(5, 5), I(5, 5));
+                detail::ewaldAccumulate(G(6, -6), C(6, -6), I(6, -6));
+                detail::ewaldAccumulate(G(6, -5), C(6, -5), I(6, -5));
+                detail::ewaldAccumulate(G(6, -4), C(6, -4), I(6, -4));
+                detail::ewaldAccumulate(G(6, -3), C(6, -3), I(6, -3));
+                detail::ewaldAccumulate(G(6, -2), C(6, -2), I(6, -2));
+                detail::ewaldAccumulate(G(6, -1), C(6, -1), I(6, -1));
+                detail::ewaldAccumulate(G(6, 0), C(6, 0), I(6, 0));
+                detail::ewaldAccumulate(G(6, 1), C(6, 1), I(6, 1));
+                detail::ewaldAccumulate(G(6, 2), C(6, 2), I(6, 2));
+                detail::ewaldAccumulate(G(6, 3), C(6, 3), I(6, 3));
+                detail::ewaldAccumulate(G(6, 4), C(6, 4), I(6, 4));
+                detail::ewaldAccumulate(G(6, 5), C(6, 5), I(6, 5));
+                detail::ewaldAccumulate(G(6, 6), C(6, 6), I(6, 6));
                 SimdVector<double, 2> const waveX = broadcast<SimdVector<double, 2>>(ix);
                 SimdVector<double, 2> const waveY = broadcast<SimdVector<double, 2>>(iy);
                 SimdVector<double, 2> const waveZ = broadcast<SimdVector<double, 2>>(iz);
@@ -3444,114 +3470,114 @@ void evaluateEwaldWorking(SimdVector<double, 2>& greenTrace, SimdVector<double, 
                     waveSquared;
                 SimdVector<double, 2> const waveRadial0 =
                     broadcast<SimdVector<double, 2>>(k57) * wavePotential * cosine;
-                detail::ewaldAccumulate(output[0], compensation[0], waveRadial0 * harmonics[0]);
+                detail::ewaldAccumulate(G(0, 0), C(0, 0), waveRadial0 * U(0, 0));
                 SimdVector<double, 2> const waveRadial1 =
                     broadcast<SimdVector<double, 2>>(k67) * wavePotential * -sine;
-                detail::ewaldAccumulate(output[1], compensation[1],
-                    broadcast<SimdVector<double, 2>>(k58) * waveRadial1 * harmonics[1]);
-                detail::ewaldAccumulate(output[2], compensation[2], waveRadial1 * harmonics[2]);
-                detail::ewaldAccumulate(output[3], compensation[3],
-                    broadcast<SimdVector<double, 2>>(k58) * waveRadial1 * harmonics[3]);
+                detail::ewaldAccumulate(G(1, -1), C(1, -1),
+                    broadcast<SimdVector<double, 2>>(k58) * waveRadial1 * U(1, -1));
+                detail::ewaldAccumulate(G(1, 0), C(1, 0), waveRadial1 * U(1, 0));
+                detail::ewaldAccumulate(G(1, 1), C(1, 1),
+                    broadcast<SimdVector<double, 2>>(k58) * waveRadial1 * U(1, 1));
                 SimdVector<double, 2> const waveRadial2 =
                     broadcast<SimdVector<double, 2>>(k73) * wavePotential * -cosine;
-                detail::ewaldAccumulate(output[4], compensation[4],
-                    broadcast<SimdVector<double, 2>>(k76) * waveRadial2 * harmonics[4]);
-                detail::ewaldAccumulate(output[5], compensation[5],
-                    broadcast<SimdVector<double, 2>>(k65) * waveRadial2 * harmonics[5]);
-                detail::ewaldAccumulate(output[6], compensation[6],
-                    broadcast<SimdVector<double, 2>>(k61) * waveRadial2 * harmonics[6]);
-                detail::ewaldAccumulate(output[7], compensation[7],
-                    broadcast<SimdVector<double, 2>>(k65) * waveRadial2 * harmonics[7]);
-                detail::ewaldAccumulate(output[8], compensation[8],
-                    broadcast<SimdVector<double, 2>>(k76) * waveRadial2 * harmonics[8]);
+                detail::ewaldAccumulate(G(2, -2), C(2, -2),
+                    broadcast<SimdVector<double, 2>>(k76) * waveRadial2 * U(2, -2));
+                detail::ewaldAccumulate(G(2, -1), C(2, -1),
+                    broadcast<SimdVector<double, 2>>(k65) * waveRadial2 * U(2, -1));
+                detail::ewaldAccumulate(G(2, 0), C(2, 0),
+                    broadcast<SimdVector<double, 2>>(k61) * waveRadial2 * U(2, 0));
+                detail::ewaldAccumulate(G(2, 1), C(2, 1),
+                    broadcast<SimdVector<double, 2>>(k65) * waveRadial2 * U(2, 1));
+                detail::ewaldAccumulate(G(2, 2), C(2, 2),
+                    broadcast<SimdVector<double, 2>>(k76) * waveRadial2 * U(2, 2));
                 SimdVector<double, 2> const waveRadial3 =
                     broadcast<SimdVector<double, 2>>(k75) * wavePotential * sine;
-                detail::ewaldAccumulate(output[9], compensation[9],
-                    broadcast<SimdVector<double, 2>>(k81) * waveRadial3 * harmonics[9]);
-                detail::ewaldAccumulate(output[10], compensation[10],
-                    broadcast<SimdVector<double, 2>>(k79) * waveRadial3 * harmonics[10]);
-                detail::ewaldAccumulate(output[11], compensation[11],
-                    broadcast<SimdVector<double, 2>>(k78) * waveRadial3 * harmonics[11]);
-                detail::ewaldAccumulate(output[12], compensation[12],
-                    broadcast<SimdVector<double, 2>>(k77) * waveRadial3 * harmonics[12]);
-                detail::ewaldAccumulate(output[13], compensation[13],
-                    broadcast<SimdVector<double, 2>>(k78) * waveRadial3 * harmonics[13]);
-                detail::ewaldAccumulate(output[14], compensation[14],
-                    broadcast<SimdVector<double, 2>>(k79) * waveRadial3 * harmonics[14]);
-                detail::ewaldAccumulate(output[15], compensation[15],
-                    broadcast<SimdVector<double, 2>>(k81) * waveRadial3 * harmonics[15]);
+                detail::ewaldAccumulate(G(3, -3), C(3, -3),
+                    broadcast<SimdVector<double, 2>>(k81) * waveRadial3 * U(3, -3));
+                detail::ewaldAccumulate(G(3, -2), C(3, -2),
+                    broadcast<SimdVector<double, 2>>(k79) * waveRadial3 * U(3, -2));
+                detail::ewaldAccumulate(G(3, -1), C(3, -1),
+                    broadcast<SimdVector<double, 2>>(k78) * waveRadial3 * U(3, -1));
+                detail::ewaldAccumulate(G(3, 0), C(3, 0),
+                    broadcast<SimdVector<double, 2>>(k77) * waveRadial3 * U(3, 0));
+                detail::ewaldAccumulate(G(3, 1), C(3, 1),
+                    broadcast<SimdVector<double, 2>>(k78) * waveRadial3 * U(3, 1));
+                detail::ewaldAccumulate(G(3, 2), C(3, 2),
+                    broadcast<SimdVector<double, 2>>(k79) * waveRadial3 * U(3, 2));
+                detail::ewaldAccumulate(G(3, 3), C(3, 3),
+                    broadcast<SimdVector<double, 2>>(k81) * waveRadial3 * U(3, 3));
                 SimdVector<double, 2> const waveRadial4 =
                     broadcast<SimdVector<double, 2>>(k74) * wavePotential * cosine;
-                detail::ewaldAccumulate(output[16], compensation[16],
-                    broadcast<SimdVector<double, 2>>(k87) * waveRadial4 * harmonics[16]);
-                detail::ewaldAccumulate(output[17], compensation[17],
-                    broadcast<SimdVector<double, 2>>(k83) * waveRadial4 * harmonics[17]);
-                detail::ewaldAccumulate(output[18], compensation[18],
-                    broadcast<SimdVector<double, 2>>(k82) * waveRadial4 * harmonics[18]);
-                detail::ewaldAccumulate(output[19], compensation[19],
-                    broadcast<SimdVector<double, 2>>(k81) * waveRadial4 * harmonics[19]);
-                detail::ewaldAccumulate(output[20], compensation[20],
-                    broadcast<SimdVector<double, 2>>(k80) * waveRadial4 * harmonics[20]);
-                detail::ewaldAccumulate(output[21], compensation[21],
-                    broadcast<SimdVector<double, 2>>(k81) * waveRadial4 * harmonics[21]);
-                detail::ewaldAccumulate(output[22], compensation[22],
-                    broadcast<SimdVector<double, 2>>(k82) * waveRadial4 * harmonics[22]);
-                detail::ewaldAccumulate(output[23], compensation[23],
-                    broadcast<SimdVector<double, 2>>(k83) * waveRadial4 * harmonics[23]);
-                detail::ewaldAccumulate(output[24], compensation[24],
-                    broadcast<SimdVector<double, 2>>(k87) * waveRadial4 * harmonics[24]);
+                detail::ewaldAccumulate(G(4, -4), C(4, -4),
+                    broadcast<SimdVector<double, 2>>(k87) * waveRadial4 * U(4, -4));
+                detail::ewaldAccumulate(G(4, -3), C(4, -3),
+                    broadcast<SimdVector<double, 2>>(k83) * waveRadial4 * U(4, -3));
+                detail::ewaldAccumulate(G(4, -2), C(4, -2),
+                    broadcast<SimdVector<double, 2>>(k82) * waveRadial4 * U(4, -2));
+                detail::ewaldAccumulate(G(4, -1), C(4, -1),
+                    broadcast<SimdVector<double, 2>>(k81) * waveRadial4 * U(4, -1));
+                detail::ewaldAccumulate(G(4, 0), C(4, 0),
+                    broadcast<SimdVector<double, 2>>(k80) * waveRadial4 * U(4, 0));
+                detail::ewaldAccumulate(G(4, 1), C(4, 1),
+                    broadcast<SimdVector<double, 2>>(k81) * waveRadial4 * U(4, 1));
+                detail::ewaldAccumulate(G(4, 2), C(4, 2),
+                    broadcast<SimdVector<double, 2>>(k82) * waveRadial4 * U(4, 2));
+                detail::ewaldAccumulate(G(4, 3), C(4, 3),
+                    broadcast<SimdVector<double, 2>>(k83) * waveRadial4 * U(4, 3));
+                detail::ewaldAccumulate(G(4, 4), C(4, 4),
+                    broadcast<SimdVector<double, 2>>(k87) * waveRadial4 * U(4, 4));
                 SimdVector<double, 2> const waveRadial5 =
                     broadcast<SimdVector<double, 2>>(k71) * wavePotential * -sine;
-                detail::ewaldAccumulate(output[25], compensation[25],
-                    broadcast<SimdVector<double, 2>>(k94) * waveRadial5 * harmonics[25]);
-                detail::ewaldAccumulate(output[26], compensation[26],
-                    broadcast<SimdVector<double, 2>>(k89) * waveRadial5 * harmonics[26]);
-                detail::ewaldAccumulate(output[27], compensation[27],
-                    broadcast<SimdVector<double, 2>>(k88) * waveRadial5 * harmonics[27]);
-                detail::ewaldAccumulate(output[28], compensation[28],
-                    broadcast<SimdVector<double, 2>>(k86) * waveRadial5 * harmonics[28]);
-                detail::ewaldAccumulate(output[29], compensation[29],
-                    broadcast<SimdVector<double, 2>>(k85) * waveRadial5 * harmonics[29]);
-                detail::ewaldAccumulate(output[30], compensation[30],
-                    broadcast<SimdVector<double, 2>>(k84) * waveRadial5 * harmonics[30]);
-                detail::ewaldAccumulate(output[31], compensation[31],
-                    broadcast<SimdVector<double, 2>>(k85) * waveRadial5 * harmonics[31]);
-                detail::ewaldAccumulate(output[32], compensation[32],
-                    broadcast<SimdVector<double, 2>>(k86) * waveRadial5 * harmonics[32]);
-                detail::ewaldAccumulate(output[33], compensation[33],
-                    broadcast<SimdVector<double, 2>>(k88) * waveRadial5 * harmonics[33]);
-                detail::ewaldAccumulate(output[34], compensation[34],
-                    broadcast<SimdVector<double, 2>>(k89) * waveRadial5 * harmonics[34]);
-                detail::ewaldAccumulate(output[35], compensation[35],
-                    broadcast<SimdVector<double, 2>>(k94) * waveRadial5 * harmonics[35]);
+                detail::ewaldAccumulate(G(5, -5), C(5, -5),
+                    broadcast<SimdVector<double, 2>>(k94) * waveRadial5 * U(5, -5));
+                detail::ewaldAccumulate(G(5, -4), C(5, -4),
+                    broadcast<SimdVector<double, 2>>(k89) * waveRadial5 * U(5, -4));
+                detail::ewaldAccumulate(G(5, -3), C(5, -3),
+                    broadcast<SimdVector<double, 2>>(k88) * waveRadial5 * U(5, -3));
+                detail::ewaldAccumulate(G(5, -2), C(5, -2),
+                    broadcast<SimdVector<double, 2>>(k86) * waveRadial5 * U(5, -2));
+                detail::ewaldAccumulate(G(5, -1), C(5, -1),
+                    broadcast<SimdVector<double, 2>>(k85) * waveRadial5 * U(5, -1));
+                detail::ewaldAccumulate(G(5, 0), C(5, 0),
+                    broadcast<SimdVector<double, 2>>(k84) * waveRadial5 * U(5, 0));
+                detail::ewaldAccumulate(G(5, 1), C(5, 1),
+                    broadcast<SimdVector<double, 2>>(k85) * waveRadial5 * U(5, 1));
+                detail::ewaldAccumulate(G(5, 2), C(5, 2),
+                    broadcast<SimdVector<double, 2>>(k86) * waveRadial5 * U(5, 2));
+                detail::ewaldAccumulate(G(5, 3), C(5, 3),
+                    broadcast<SimdVector<double, 2>>(k88) * waveRadial5 * U(5, 3));
+                detail::ewaldAccumulate(G(5, 4), C(5, 4),
+                    broadcast<SimdVector<double, 2>>(k89) * waveRadial5 * U(5, 4));
+                detail::ewaldAccumulate(G(5, 5), C(5, 5),
+                    broadcast<SimdVector<double, 2>>(k94) * waveRadial5 * U(5, 5));
                 SimdVector<double, 2> const waveRadial6 =
                     broadcast<SimdVector<double, 2>>(k64) * wavePotential * -cosine;
-                detail::ewaldAccumulate(output[36], compensation[36],
-                    broadcast<SimdVector<double, 2>>(k97) * waveRadial6 * harmonics[36]);
-                detail::ewaldAccumulate(output[37], compensation[37],
-                    broadcast<SimdVector<double, 2>>(k96) * waveRadial6 * harmonics[37]);
-                detail::ewaldAccumulate(output[38], compensation[38],
-                    broadcast<SimdVector<double, 2>>(k95) * waveRadial6 * harmonics[38]);
-                detail::ewaldAccumulate(output[39], compensation[39],
-                    broadcast<SimdVector<double, 2>>(k93) * waveRadial6 * harmonics[39]);
-                detail::ewaldAccumulate(output[40], compensation[40],
-                    broadcast<SimdVector<double, 2>>(k92) * waveRadial6 * harmonics[40]);
-                detail::ewaldAccumulate(output[41], compensation[41],
-                    broadcast<SimdVector<double, 2>>(k91) * waveRadial6 * harmonics[41]);
-                detail::ewaldAccumulate(output[42], compensation[42],
-                    broadcast<SimdVector<double, 2>>(k90) * waveRadial6 * harmonics[42]);
-                detail::ewaldAccumulate(output[43], compensation[43],
-                    broadcast<SimdVector<double, 2>>(k91) * waveRadial6 * harmonics[43]);
-                detail::ewaldAccumulate(output[44], compensation[44],
-                    broadcast<SimdVector<double, 2>>(k92) * waveRadial6 * harmonics[44]);
-                detail::ewaldAccumulate(output[45], compensation[45],
-                    broadcast<SimdVector<double, 2>>(k93) * waveRadial6 * harmonics[45]);
-                detail::ewaldAccumulate(output[46], compensation[46],
-                    broadcast<SimdVector<double, 2>>(k95) * waveRadial6 * harmonics[46]);
-                detail::ewaldAccumulate(output[47], compensation[47],
-                    broadcast<SimdVector<double, 2>>(k96) * waveRadial6 * harmonics[47]);
-                detail::ewaldAccumulate(output[48], compensation[48],
-                    broadcast<SimdVector<double, 2>>(k97) * waveRadial6 * harmonics[48]);
+                detail::ewaldAccumulate(G(6, -6), C(6, -6),
+                    broadcast<SimdVector<double, 2>>(k97) * waveRadial6 * U(6, -6));
+                detail::ewaldAccumulate(G(6, -5), C(6, -5),
+                    broadcast<SimdVector<double, 2>>(k96) * waveRadial6 * U(6, -5));
+                detail::ewaldAccumulate(G(6, -4), C(6, -4),
+                    broadcast<SimdVector<double, 2>>(k95) * waveRadial6 * U(6, -4));
+                detail::ewaldAccumulate(G(6, -3), C(6, -3),
+                    broadcast<SimdVector<double, 2>>(k93) * waveRadial6 * U(6, -3));
+                detail::ewaldAccumulate(G(6, -2), C(6, -2),
+                    broadcast<SimdVector<double, 2>>(k92) * waveRadial6 * U(6, -2));
+                detail::ewaldAccumulate(G(6, -1), C(6, -1),
+                    broadcast<SimdVector<double, 2>>(k91) * waveRadial6 * U(6, -1));
+                detail::ewaldAccumulate(G(6, 0), C(6, 0),
+                    broadcast<SimdVector<double, 2>>(k90) * waveRadial6 * U(6, 0));
+                detail::ewaldAccumulate(G(6, 1), C(6, 1),
+                    broadcast<SimdVector<double, 2>>(k91) * waveRadial6 * U(6, 1));
+                detail::ewaldAccumulate(G(6, 2), C(6, 2),
+                    broadcast<SimdVector<double, 2>>(k92) * waveRadial6 * U(6, 2));
+                detail::ewaldAccumulate(G(6, 3), C(6, 3),
+                    broadcast<SimdVector<double, 2>>(k93) * waveRadial6 * U(6, 3));
+                detail::ewaldAccumulate(G(6, 4), C(6, 4),
+                    broadcast<SimdVector<double, 2>>(k95) * waveRadial6 * U(6, 4));
+                detail::ewaldAccumulate(G(6, 5), C(6, 5),
+                    broadcast<SimdVector<double, 2>>(k96) * waveRadial6 * U(6, 5));
+                detail::ewaldAccumulate(G(6, 6), C(6, 6),
+                    broadcast<SimdVector<double, 2>>(k97) * waveRadial6 * U(6, 6));
             }
         }
     }
@@ -3660,9 +3686,17 @@ void evaluateEwaldWorking(SimdVector<float, 4>& greenTrace, SimdVector<float, 4>
     constexpr float k95 = 7.25760000e+06f;
     constexpr float k96 = 3.99168000e+07f;
     constexpr float k97 = 4.79001600e+08f;
+    detail::CoefficientView<SimdVector<float, 4>> const G{output};
+
     SimdVector<float, 4> harmonics[49];
+    detail::CoefficientView<SimdVector<float, 4>> const U{harmonics};
+
     SimdVector<float, 4> compensation[49];
+    detail::CoefficientView<SimdVector<float, 4>> const C{compensation};
+
     SimdVector<float, 4> imagePair[49];
+    detail::CoefficientView<SimdVector<float, 4>> const I{imagePair};
+
     SimdVector<float, 4> const radiusSquared = fma(x, x, fma(y, y, z * z));
     ewaldRegular(x, y, z, radiusSquared, harmonics);
     SimdVector<float, 4> const argument = broadcast<SimdVector<float, 4>>(k61) * radiusSquared;
@@ -3766,8 +3800,8 @@ void evaluateEwaldWorking(SimdVector<float, 4>& greenTrace, SimdVector<float, 4>
         broadcast<SimdVector<float, 4>>(k57));
     SimdVector<float, 4> const radial0 =
         broadcast<SimdVector<float, 4>>(k59) * exponential * series0;
-    output[0] = radial0 * harmonics[0];
-    compensation[0] = broadcast<SimdVector<float, 4>>(k00);
+    G(0, 0) = radial0 * U(0, 0);
+    C(0, 0) = broadcast<SimdVector<float, 4>>(k00);
     SimdVector<float, 4> series1 = broadcast<SimdVector<float, 4>>(k57);
     series1 = fma(series1, argument * broadcast<SimdVector<float, 4>>(k06),
         broadcast<SimdVector<float, 4>>(k57));
@@ -3867,12 +3901,12 @@ void evaluateEwaldWorking(SimdVector<float, 4>& greenTrace, SimdVector<float, 4>
         broadcast<SimdVector<float, 4>>(k57));
     SimdVector<float, 4> const radial1 =
         -broadcast<SimdVector<float, 4>>(k66) * exponential * series1;
-    output[1] = broadcast<SimdVector<float, 4>>(k58) * radial1 * harmonics[1];
-    compensation[1] = broadcast<SimdVector<float, 4>>(k00);
-    output[2] = radial1 * harmonics[2];
-    compensation[2] = broadcast<SimdVector<float, 4>>(k00);
-    output[3] = broadcast<SimdVector<float, 4>>(k58) * radial1 * harmonics[3];
-    compensation[3] = broadcast<SimdVector<float, 4>>(k00);
+    G(1, -1) = broadcast<SimdVector<float, 4>>(k58) * radial1 * U(1, -1);
+    C(1, -1) = broadcast<SimdVector<float, 4>>(k00);
+    G(1, 0) = radial1 * U(1, 0);
+    C(1, 0) = broadcast<SimdVector<float, 4>>(k00);
+    G(1, 1) = broadcast<SimdVector<float, 4>>(k58) * radial1 * U(1, 1);
+    C(1, 1) = broadcast<SimdVector<float, 4>>(k00);
     SimdVector<float, 4> series2 = broadcast<SimdVector<float, 4>>(k57);
     series2 = fma(series2, argument * broadcast<SimdVector<float, 4>>(k05),
         broadcast<SimdVector<float, 4>>(k57));
@@ -3972,16 +4006,16 @@ void evaluateEwaldWorking(SimdVector<float, 4>& greenTrace, SimdVector<float, 4>
         broadcast<SimdVector<float, 4>>(k57));
     SimdVector<float, 4> const radial2 =
         broadcast<SimdVector<float, 4>>(k69) * exponential * series2;
-    output[4] = broadcast<SimdVector<float, 4>>(k76) * radial2 * harmonics[4];
-    compensation[4] = broadcast<SimdVector<float, 4>>(k00);
-    output[5] = broadcast<SimdVector<float, 4>>(k65) * radial2 * harmonics[5];
-    compensation[5] = broadcast<SimdVector<float, 4>>(k00);
-    output[6] = broadcast<SimdVector<float, 4>>(k61) * radial2 * harmonics[6];
-    compensation[6] = broadcast<SimdVector<float, 4>>(k00);
-    output[7] = broadcast<SimdVector<float, 4>>(k65) * radial2 * harmonics[7];
-    compensation[7] = broadcast<SimdVector<float, 4>>(k00);
-    output[8] = broadcast<SimdVector<float, 4>>(k76) * radial2 * harmonics[8];
-    compensation[8] = broadcast<SimdVector<float, 4>>(k00);
+    G(2, -2) = broadcast<SimdVector<float, 4>>(k76) * radial2 * U(2, -2);
+    C(2, -2) = broadcast<SimdVector<float, 4>>(k00);
+    G(2, -1) = broadcast<SimdVector<float, 4>>(k65) * radial2 * U(2, -1);
+    C(2, -1) = broadcast<SimdVector<float, 4>>(k00);
+    G(2, 0) = broadcast<SimdVector<float, 4>>(k61) * radial2 * U(2, 0);
+    C(2, 0) = broadcast<SimdVector<float, 4>>(k00);
+    G(2, 1) = broadcast<SimdVector<float, 4>>(k65) * radial2 * U(2, 1);
+    C(2, 1) = broadcast<SimdVector<float, 4>>(k00);
+    G(2, 2) = broadcast<SimdVector<float, 4>>(k76) * radial2 * U(2, 2);
+    C(2, 2) = broadcast<SimdVector<float, 4>>(k00);
     SimdVector<float, 4> series3 = broadcast<SimdVector<float, 4>>(k57);
     series3 = fma(series3, argument * broadcast<SimdVector<float, 4>>(k04),
         broadcast<SimdVector<float, 4>>(k57));
@@ -4081,20 +4115,20 @@ void evaluateEwaldWorking(SimdVector<float, 4>& greenTrace, SimdVector<float, 4>
         broadcast<SimdVector<float, 4>>(k57));
     SimdVector<float, 4> const radial3 =
         -broadcast<SimdVector<float, 4>>(k72) * exponential * series3;
-    output[9] = broadcast<SimdVector<float, 4>>(k81) * radial3 * harmonics[9];
-    compensation[9] = broadcast<SimdVector<float, 4>>(k00);
-    output[10] = broadcast<SimdVector<float, 4>>(k79) * radial3 * harmonics[10];
-    compensation[10] = broadcast<SimdVector<float, 4>>(k00);
-    output[11] = broadcast<SimdVector<float, 4>>(k78) * radial3 * harmonics[11];
-    compensation[11] = broadcast<SimdVector<float, 4>>(k00);
-    output[12] = broadcast<SimdVector<float, 4>>(k77) * radial3 * harmonics[12];
-    compensation[12] = broadcast<SimdVector<float, 4>>(k00);
-    output[13] = broadcast<SimdVector<float, 4>>(k78) * radial3 * harmonics[13];
-    compensation[13] = broadcast<SimdVector<float, 4>>(k00);
-    output[14] = broadcast<SimdVector<float, 4>>(k79) * radial3 * harmonics[14];
-    compensation[14] = broadcast<SimdVector<float, 4>>(k00);
-    output[15] = broadcast<SimdVector<float, 4>>(k81) * radial3 * harmonics[15];
-    compensation[15] = broadcast<SimdVector<float, 4>>(k00);
+    G(3, -3) = broadcast<SimdVector<float, 4>>(k81) * radial3 * U(3, -3);
+    C(3, -3) = broadcast<SimdVector<float, 4>>(k00);
+    G(3, -2) = broadcast<SimdVector<float, 4>>(k79) * radial3 * U(3, -2);
+    C(3, -2) = broadcast<SimdVector<float, 4>>(k00);
+    G(3, -1) = broadcast<SimdVector<float, 4>>(k78) * radial3 * U(3, -1);
+    C(3, -1) = broadcast<SimdVector<float, 4>>(k00);
+    G(3, 0) = broadcast<SimdVector<float, 4>>(k77) * radial3 * U(3, 0);
+    C(3, 0) = broadcast<SimdVector<float, 4>>(k00);
+    G(3, 1) = broadcast<SimdVector<float, 4>>(k78) * radial3 * U(3, 1);
+    C(3, 1) = broadcast<SimdVector<float, 4>>(k00);
+    G(3, 2) = broadcast<SimdVector<float, 4>>(k79) * radial3 * U(3, 2);
+    C(3, 2) = broadcast<SimdVector<float, 4>>(k00);
+    G(3, 3) = broadcast<SimdVector<float, 4>>(k81) * radial3 * U(3, 3);
+    C(3, 3) = broadcast<SimdVector<float, 4>>(k00);
     SimdVector<float, 4> series4 = broadcast<SimdVector<float, 4>>(k57);
     series4 = fma(series4, argument * broadcast<SimdVector<float, 4>>(k03),
         broadcast<SimdVector<float, 4>>(k57));
@@ -4194,24 +4228,24 @@ void evaluateEwaldWorking(SimdVector<float, 4>& greenTrace, SimdVector<float, 4>
         broadcast<SimdVector<float, 4>>(k57));
     SimdVector<float, 4> const radial4 =
         broadcast<SimdVector<float, 4>>(k70) * exponential * series4;
-    output[16] = broadcast<SimdVector<float, 4>>(k87) * radial4 * harmonics[16];
-    compensation[16] = broadcast<SimdVector<float, 4>>(k00);
-    output[17] = broadcast<SimdVector<float, 4>>(k83) * radial4 * harmonics[17];
-    compensation[17] = broadcast<SimdVector<float, 4>>(k00);
-    output[18] = broadcast<SimdVector<float, 4>>(k82) * radial4 * harmonics[18];
-    compensation[18] = broadcast<SimdVector<float, 4>>(k00);
-    output[19] = broadcast<SimdVector<float, 4>>(k81) * radial4 * harmonics[19];
-    compensation[19] = broadcast<SimdVector<float, 4>>(k00);
-    output[20] = broadcast<SimdVector<float, 4>>(k80) * radial4 * harmonics[20];
-    compensation[20] = broadcast<SimdVector<float, 4>>(k00);
-    output[21] = broadcast<SimdVector<float, 4>>(k81) * radial4 * harmonics[21];
-    compensation[21] = broadcast<SimdVector<float, 4>>(k00);
-    output[22] = broadcast<SimdVector<float, 4>>(k82) * radial4 * harmonics[22];
-    compensation[22] = broadcast<SimdVector<float, 4>>(k00);
-    output[23] = broadcast<SimdVector<float, 4>>(k83) * radial4 * harmonics[23];
-    compensation[23] = broadcast<SimdVector<float, 4>>(k00);
-    output[24] = broadcast<SimdVector<float, 4>>(k87) * radial4 * harmonics[24];
-    compensation[24] = broadcast<SimdVector<float, 4>>(k00);
+    G(4, -4) = broadcast<SimdVector<float, 4>>(k87) * radial4 * U(4, -4);
+    C(4, -4) = broadcast<SimdVector<float, 4>>(k00);
+    G(4, -3) = broadcast<SimdVector<float, 4>>(k83) * radial4 * U(4, -3);
+    C(4, -3) = broadcast<SimdVector<float, 4>>(k00);
+    G(4, -2) = broadcast<SimdVector<float, 4>>(k82) * radial4 * U(4, -2);
+    C(4, -2) = broadcast<SimdVector<float, 4>>(k00);
+    G(4, -1) = broadcast<SimdVector<float, 4>>(k81) * radial4 * U(4, -1);
+    C(4, -1) = broadcast<SimdVector<float, 4>>(k00);
+    G(4, 0) = broadcast<SimdVector<float, 4>>(k80) * radial4 * U(4, 0);
+    C(4, 0) = broadcast<SimdVector<float, 4>>(k00);
+    G(4, 1) = broadcast<SimdVector<float, 4>>(k81) * radial4 * U(4, 1);
+    C(4, 1) = broadcast<SimdVector<float, 4>>(k00);
+    G(4, 2) = broadcast<SimdVector<float, 4>>(k82) * radial4 * U(4, 2);
+    C(4, 2) = broadcast<SimdVector<float, 4>>(k00);
+    G(4, 3) = broadcast<SimdVector<float, 4>>(k83) * radial4 * U(4, 3);
+    C(4, 3) = broadcast<SimdVector<float, 4>>(k00);
+    G(4, 4) = broadcast<SimdVector<float, 4>>(k87) * radial4 * U(4, 4);
+    C(4, 4) = broadcast<SimdVector<float, 4>>(k00);
     SimdVector<float, 4> series5 = broadcast<SimdVector<float, 4>>(k57);
     series5 = fma(series5, argument * broadcast<SimdVector<float, 4>>(k02),
         broadcast<SimdVector<float, 4>>(k57));
@@ -4311,28 +4345,28 @@ void evaluateEwaldWorking(SimdVector<float, 4>& greenTrace, SimdVector<float, 4>
         broadcast<SimdVector<float, 4>>(k57));
     SimdVector<float, 4> const radial5 =
         -broadcast<SimdVector<float, 4>>(k68) * exponential * series5;
-    output[25] = broadcast<SimdVector<float, 4>>(k94) * radial5 * harmonics[25];
-    compensation[25] = broadcast<SimdVector<float, 4>>(k00);
-    output[26] = broadcast<SimdVector<float, 4>>(k89) * radial5 * harmonics[26];
-    compensation[26] = broadcast<SimdVector<float, 4>>(k00);
-    output[27] = broadcast<SimdVector<float, 4>>(k88) * radial5 * harmonics[27];
-    compensation[27] = broadcast<SimdVector<float, 4>>(k00);
-    output[28] = broadcast<SimdVector<float, 4>>(k86) * radial5 * harmonics[28];
-    compensation[28] = broadcast<SimdVector<float, 4>>(k00);
-    output[29] = broadcast<SimdVector<float, 4>>(k85) * radial5 * harmonics[29];
-    compensation[29] = broadcast<SimdVector<float, 4>>(k00);
-    output[30] = broadcast<SimdVector<float, 4>>(k84) * radial5 * harmonics[30];
-    compensation[30] = broadcast<SimdVector<float, 4>>(k00);
-    output[31] = broadcast<SimdVector<float, 4>>(k85) * radial5 * harmonics[31];
-    compensation[31] = broadcast<SimdVector<float, 4>>(k00);
-    output[32] = broadcast<SimdVector<float, 4>>(k86) * radial5 * harmonics[32];
-    compensation[32] = broadcast<SimdVector<float, 4>>(k00);
-    output[33] = broadcast<SimdVector<float, 4>>(k88) * radial5 * harmonics[33];
-    compensation[33] = broadcast<SimdVector<float, 4>>(k00);
-    output[34] = broadcast<SimdVector<float, 4>>(k89) * radial5 * harmonics[34];
-    compensation[34] = broadcast<SimdVector<float, 4>>(k00);
-    output[35] = broadcast<SimdVector<float, 4>>(k94) * radial5 * harmonics[35];
-    compensation[35] = broadcast<SimdVector<float, 4>>(k00);
+    G(5, -5) = broadcast<SimdVector<float, 4>>(k94) * radial5 * U(5, -5);
+    C(5, -5) = broadcast<SimdVector<float, 4>>(k00);
+    G(5, -4) = broadcast<SimdVector<float, 4>>(k89) * radial5 * U(5, -4);
+    C(5, -4) = broadcast<SimdVector<float, 4>>(k00);
+    G(5, -3) = broadcast<SimdVector<float, 4>>(k88) * radial5 * U(5, -3);
+    C(5, -3) = broadcast<SimdVector<float, 4>>(k00);
+    G(5, -2) = broadcast<SimdVector<float, 4>>(k86) * radial5 * U(5, -2);
+    C(5, -2) = broadcast<SimdVector<float, 4>>(k00);
+    G(5, -1) = broadcast<SimdVector<float, 4>>(k85) * radial5 * U(5, -1);
+    C(5, -1) = broadcast<SimdVector<float, 4>>(k00);
+    G(5, 0) = broadcast<SimdVector<float, 4>>(k84) * radial5 * U(5, 0);
+    C(5, 0) = broadcast<SimdVector<float, 4>>(k00);
+    G(5, 1) = broadcast<SimdVector<float, 4>>(k85) * radial5 * U(5, 1);
+    C(5, 1) = broadcast<SimdVector<float, 4>>(k00);
+    G(5, 2) = broadcast<SimdVector<float, 4>>(k86) * radial5 * U(5, 2);
+    C(5, 2) = broadcast<SimdVector<float, 4>>(k00);
+    G(5, 3) = broadcast<SimdVector<float, 4>>(k88) * radial5 * U(5, 3);
+    C(5, 3) = broadcast<SimdVector<float, 4>>(k00);
+    G(5, 4) = broadcast<SimdVector<float, 4>>(k89) * radial5 * U(5, 4);
+    C(5, 4) = broadcast<SimdVector<float, 4>>(k00);
+    G(5, 5) = broadcast<SimdVector<float, 4>>(k94) * radial5 * U(5, 5);
+    C(5, 5) = broadcast<SimdVector<float, 4>>(k00);
     SimdVector<float, 4> series6 = broadcast<SimdVector<float, 4>>(k57);
     series6 = fma(series6, argument * broadcast<SimdVector<float, 4>>(k01),
         broadcast<SimdVector<float, 4>>(k57));
@@ -4432,33 +4466,33 @@ void evaluateEwaldWorking(SimdVector<float, 4>& greenTrace, SimdVector<float, 4>
         broadcast<SimdVector<float, 4>>(k57));
     SimdVector<float, 4> const radial6 =
         broadcast<SimdVector<float, 4>>(k63) * exponential * series6;
-    output[36] = broadcast<SimdVector<float, 4>>(k97) * radial6 * harmonics[36];
-    compensation[36] = broadcast<SimdVector<float, 4>>(k00);
-    output[37] = broadcast<SimdVector<float, 4>>(k96) * radial6 * harmonics[37];
-    compensation[37] = broadcast<SimdVector<float, 4>>(k00);
-    output[38] = broadcast<SimdVector<float, 4>>(k95) * radial6 * harmonics[38];
-    compensation[38] = broadcast<SimdVector<float, 4>>(k00);
-    output[39] = broadcast<SimdVector<float, 4>>(k93) * radial6 * harmonics[39];
-    compensation[39] = broadcast<SimdVector<float, 4>>(k00);
-    output[40] = broadcast<SimdVector<float, 4>>(k92) * radial6 * harmonics[40];
-    compensation[40] = broadcast<SimdVector<float, 4>>(k00);
-    output[41] = broadcast<SimdVector<float, 4>>(k91) * radial6 * harmonics[41];
-    compensation[41] = broadcast<SimdVector<float, 4>>(k00);
-    output[42] = broadcast<SimdVector<float, 4>>(k90) * radial6 * harmonics[42];
-    compensation[42] = broadcast<SimdVector<float, 4>>(k00);
-    output[43] = broadcast<SimdVector<float, 4>>(k91) * radial6 * harmonics[43];
-    compensation[43] = broadcast<SimdVector<float, 4>>(k00);
-    output[44] = broadcast<SimdVector<float, 4>>(k92) * radial6 * harmonics[44];
-    compensation[44] = broadcast<SimdVector<float, 4>>(k00);
-    output[45] = broadcast<SimdVector<float, 4>>(k93) * radial6 * harmonics[45];
-    compensation[45] = broadcast<SimdVector<float, 4>>(k00);
-    output[46] = broadcast<SimdVector<float, 4>>(k95) * radial6 * harmonics[46];
-    compensation[46] = broadcast<SimdVector<float, 4>>(k00);
-    output[47] = broadcast<SimdVector<float, 4>>(k96) * radial6 * harmonics[47];
-    compensation[47] = broadcast<SimdVector<float, 4>>(k00);
-    output[48] = broadcast<SimdVector<float, 4>>(k97) * radial6 * harmonics[48];
-    compensation[48] = broadcast<SimdVector<float, 4>>(k00);
-    output[0] += broadcast<SimdVector<float, 4>>(k56);
+    G(6, -6) = broadcast<SimdVector<float, 4>>(k97) * radial6 * U(6, -6);
+    C(6, -6) = broadcast<SimdVector<float, 4>>(k00);
+    G(6, -5) = broadcast<SimdVector<float, 4>>(k96) * radial6 * U(6, -5);
+    C(6, -5) = broadcast<SimdVector<float, 4>>(k00);
+    G(6, -4) = broadcast<SimdVector<float, 4>>(k95) * radial6 * U(6, -4);
+    C(6, -4) = broadcast<SimdVector<float, 4>>(k00);
+    G(6, -3) = broadcast<SimdVector<float, 4>>(k93) * radial6 * U(6, -3);
+    C(6, -3) = broadcast<SimdVector<float, 4>>(k00);
+    G(6, -2) = broadcast<SimdVector<float, 4>>(k92) * radial6 * U(6, -2);
+    C(6, -2) = broadcast<SimdVector<float, 4>>(k00);
+    G(6, -1) = broadcast<SimdVector<float, 4>>(k91) * radial6 * U(6, -1);
+    C(6, -1) = broadcast<SimdVector<float, 4>>(k00);
+    G(6, 0) = broadcast<SimdVector<float, 4>>(k90) * radial6 * U(6, 0);
+    C(6, 0) = broadcast<SimdVector<float, 4>>(k00);
+    G(6, 1) = broadcast<SimdVector<float, 4>>(k91) * radial6 * U(6, 1);
+    C(6, 1) = broadcast<SimdVector<float, 4>>(k00);
+    G(6, 2) = broadcast<SimdVector<float, 4>>(k92) * radial6 * U(6, 2);
+    C(6, 2) = broadcast<SimdVector<float, 4>>(k00);
+    G(6, 3) = broadcast<SimdVector<float, 4>>(k93) * radial6 * U(6, 3);
+    C(6, 3) = broadcast<SimdVector<float, 4>>(k00);
+    G(6, 4) = broadcast<SimdVector<float, 4>>(k95) * radial6 * U(6, 4);
+    C(6, 4) = broadcast<SimdVector<float, 4>>(k00);
+    G(6, 5) = broadcast<SimdVector<float, 4>>(k96) * radial6 * U(6, 5);
+    C(6, 5) = broadcast<SimdVector<float, 4>>(k00);
+    G(6, 6) = broadcast<SimdVector<float, 4>>(k97) * radial6 * U(6, 6);
+    C(6, 6) = broadcast<SimdVector<float, 4>>(k00);
+    G(0, 0) += broadcast<SimdVector<float, 4>>(k56);
     greenTrace = broadcast<SimdVector<float, 4>>(k62);
     for (int ix = -6; ix <= 6; ++ix) {
         for (int iy = -6; iy <= 6; ++iy) {
@@ -4491,421 +4525,421 @@ void evaluateEwaldWorking(SimdVector<float, 4>& greenTrace, SimdVector<float, 4>
                         broadcast<SimdVector<float, 4>>(k59) * imageRadius * imageExp;
                     SimdVector<float, 4> inversePower = iR;
                     SimdVector<float, 4> const imageRadial0 = -screening * inversePower;
-                    SimdVector<float, 4> const imageValue0 = imageRadial0 * harmonics[0];
+                    SimdVector<float, 4> const imageValue0 = imageRadial0 * U(0, 0);
                     if (sign < 0) {
-                        imagePair[0] = imageValue0;
+                        I(0, 0) = imageValue0;
                     } else {
-                        imagePair[0] += imageValue0;
+                        I(0, 0) += imageValue0;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * broadcast<SimdVector<float, 4>>(k55);
                     SimdVector<float, 4> const imageRadial1 = screening * inversePower;
                     SimdVector<float, 4> const imageValue1 =
-                        broadcast<SimdVector<float, 4>>(k58) * imageRadial1 * harmonics[1];
+                        broadcast<SimdVector<float, 4>>(k58) * imageRadial1 * U(1, -1);
                     if (sign < 0) {
-                        imagePair[1] = imageValue1;
+                        I(1, -1) = imageValue1;
                     } else {
-                        imagePair[1] += imageValue1;
+                        I(1, -1) += imageValue1;
                     }
-                    SimdVector<float, 4> const imageValue2 = imageRadial1 * harmonics[2];
+                    SimdVector<float, 4> const imageValue2 = imageRadial1 * U(1, 0);
                     if (sign < 0) {
-                        imagePair[2] = imageValue2;
+                        I(1, 0) = imageValue2;
                     } else {
-                        imagePair[2] += imageValue2;
+                        I(1, 0) += imageValue2;
                     }
                     SimdVector<float, 4> const imageValue3 =
-                        broadcast<SimdVector<float, 4>>(k58) * imageRadial1 * harmonics[3];
+                        broadcast<SimdVector<float, 4>>(k58) * imageRadial1 * U(1, 1);
                     if (sign < 0) {
-                        imagePair[3] = imageValue3;
+                        I(1, 1) = imageValue3;
                     } else {
-                        imagePair[3] += imageValue3;
+                        I(1, 1) += imageValue3;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * broadcast<SimdVector<float, 4>>(k53);
                     SimdVector<float, 4> const imageRadial2 = -screening * inversePower;
                     SimdVector<float, 4> const imageValue4 =
-                        broadcast<SimdVector<float, 4>>(k76) * imageRadial2 * harmonics[4];
+                        broadcast<SimdVector<float, 4>>(k76) * imageRadial2 * U(2, -2);
                     if (sign < 0) {
-                        imagePair[4] = imageValue4;
+                        I(2, -2) = imageValue4;
                     } else {
-                        imagePair[4] += imageValue4;
+                        I(2, -2) += imageValue4;
                     }
                     SimdVector<float, 4> const imageValue5 =
-                        broadcast<SimdVector<float, 4>>(k65) * imageRadial2 * harmonics[5];
+                        broadcast<SimdVector<float, 4>>(k65) * imageRadial2 * U(2, -1);
                     if (sign < 0) {
-                        imagePair[5] = imageValue5;
+                        I(2, -1) = imageValue5;
                     } else {
-                        imagePair[5] += imageValue5;
+                        I(2, -1) += imageValue5;
                     }
                     SimdVector<float, 4> const imageValue6 =
-                        broadcast<SimdVector<float, 4>>(k61) * imageRadial2 * harmonics[6];
+                        broadcast<SimdVector<float, 4>>(k61) * imageRadial2 * U(2, 0);
                     if (sign < 0) {
-                        imagePair[6] = imageValue6;
+                        I(2, 0) = imageValue6;
                     } else {
-                        imagePair[6] += imageValue6;
+                        I(2, 0) += imageValue6;
                     }
                     SimdVector<float, 4> const imageValue7 =
-                        broadcast<SimdVector<float, 4>>(k65) * imageRadial2 * harmonics[7];
+                        broadcast<SimdVector<float, 4>>(k65) * imageRadial2 * U(2, 1);
                     if (sign < 0) {
-                        imagePair[7] = imageValue7;
+                        I(2, 1) = imageValue7;
                     } else {
-                        imagePair[7] += imageValue7;
+                        I(2, 1) += imageValue7;
                     }
                     SimdVector<float, 4> const imageValue8 =
-                        broadcast<SimdVector<float, 4>>(k76) * imageRadial2 * harmonics[8];
+                        broadcast<SimdVector<float, 4>>(k76) * imageRadial2 * U(2, 2);
                     if (sign < 0) {
-                        imagePair[8] = imageValue8;
+                        I(2, 2) = imageValue8;
                     } else {
-                        imagePair[8] += imageValue8;
+                        I(2, 2) += imageValue8;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * broadcast<SimdVector<float, 4>>(k52);
                     SimdVector<float, 4> const imageRadial3 = screening * inversePower;
                     SimdVector<float, 4> const imageValue9 =
-                        broadcast<SimdVector<float, 4>>(k81) * imageRadial3 * harmonics[9];
+                        broadcast<SimdVector<float, 4>>(k81) * imageRadial3 * U(3, -3);
                     if (sign < 0) {
-                        imagePair[9] = imageValue9;
+                        I(3, -3) = imageValue9;
                     } else {
-                        imagePair[9] += imageValue9;
+                        I(3, -3) += imageValue9;
                     }
                     SimdVector<float, 4> const imageValue10 =
-                        broadcast<SimdVector<float, 4>>(k79) * imageRadial3 * harmonics[10];
+                        broadcast<SimdVector<float, 4>>(k79) * imageRadial3 * U(3, -2);
                     if (sign < 0) {
-                        imagePair[10] = imageValue10;
+                        I(3, -2) = imageValue10;
                     } else {
-                        imagePair[10] += imageValue10;
+                        I(3, -2) += imageValue10;
                     }
                     SimdVector<float, 4> const imageValue11 =
-                        broadcast<SimdVector<float, 4>>(k78) * imageRadial3 * harmonics[11];
+                        broadcast<SimdVector<float, 4>>(k78) * imageRadial3 * U(3, -1);
                     if (sign < 0) {
-                        imagePair[11] = imageValue11;
+                        I(3, -1) = imageValue11;
                     } else {
-                        imagePair[11] += imageValue11;
+                        I(3, -1) += imageValue11;
                     }
                     SimdVector<float, 4> const imageValue12 =
-                        broadcast<SimdVector<float, 4>>(k77) * imageRadial3 * harmonics[12];
+                        broadcast<SimdVector<float, 4>>(k77) * imageRadial3 * U(3, 0);
                     if (sign < 0) {
-                        imagePair[12] = imageValue12;
+                        I(3, 0) = imageValue12;
                     } else {
-                        imagePair[12] += imageValue12;
+                        I(3, 0) += imageValue12;
                     }
                     SimdVector<float, 4> const imageValue13 =
-                        broadcast<SimdVector<float, 4>>(k78) * imageRadial3 * harmonics[13];
+                        broadcast<SimdVector<float, 4>>(k78) * imageRadial3 * U(3, 1);
                     if (sign < 0) {
-                        imagePair[13] = imageValue13;
+                        I(3, 1) = imageValue13;
                     } else {
-                        imagePair[13] += imageValue13;
+                        I(3, 1) += imageValue13;
                     }
                     SimdVector<float, 4> const imageValue14 =
-                        broadcast<SimdVector<float, 4>>(k79) * imageRadial3 * harmonics[14];
+                        broadcast<SimdVector<float, 4>>(k79) * imageRadial3 * U(3, 2);
                     if (sign < 0) {
-                        imagePair[14] = imageValue14;
+                        I(3, 2) = imageValue14;
                     } else {
-                        imagePair[14] += imageValue14;
+                        I(3, 2) += imageValue14;
                     }
                     SimdVector<float, 4> const imageValue15 =
-                        broadcast<SimdVector<float, 4>>(k81) * imageRadial3 * harmonics[15];
+                        broadcast<SimdVector<float, 4>>(k81) * imageRadial3 * U(3, 3);
                     if (sign < 0) {
-                        imagePair[15] = imageValue15;
+                        I(3, 3) = imageValue15;
                     } else {
-                        imagePair[15] += imageValue15;
+                        I(3, 3) += imageValue15;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * broadcast<SimdVector<float, 4>>(k51);
                     SimdVector<float, 4> const imageRadial4 = -screening * inversePower;
                     SimdVector<float, 4> const imageValue16 =
-                        broadcast<SimdVector<float, 4>>(k87) * imageRadial4 * harmonics[16];
+                        broadcast<SimdVector<float, 4>>(k87) * imageRadial4 * U(4, -4);
                     if (sign < 0) {
-                        imagePair[16] = imageValue16;
+                        I(4, -4) = imageValue16;
                     } else {
-                        imagePair[16] += imageValue16;
+                        I(4, -4) += imageValue16;
                     }
                     SimdVector<float, 4> const imageValue17 =
-                        broadcast<SimdVector<float, 4>>(k83) * imageRadial4 * harmonics[17];
+                        broadcast<SimdVector<float, 4>>(k83) * imageRadial4 * U(4, -3);
                     if (sign < 0) {
-                        imagePair[17] = imageValue17;
+                        I(4, -3) = imageValue17;
                     } else {
-                        imagePair[17] += imageValue17;
+                        I(4, -3) += imageValue17;
                     }
                     SimdVector<float, 4> const imageValue18 =
-                        broadcast<SimdVector<float, 4>>(k82) * imageRadial4 * harmonics[18];
+                        broadcast<SimdVector<float, 4>>(k82) * imageRadial4 * U(4, -2);
                     if (sign < 0) {
-                        imagePair[18] = imageValue18;
+                        I(4, -2) = imageValue18;
                     } else {
-                        imagePair[18] += imageValue18;
+                        I(4, -2) += imageValue18;
                     }
                     SimdVector<float, 4> const imageValue19 =
-                        broadcast<SimdVector<float, 4>>(k81) * imageRadial4 * harmonics[19];
+                        broadcast<SimdVector<float, 4>>(k81) * imageRadial4 * U(4, -1);
                     if (sign < 0) {
-                        imagePair[19] = imageValue19;
+                        I(4, -1) = imageValue19;
                     } else {
-                        imagePair[19] += imageValue19;
+                        I(4, -1) += imageValue19;
                     }
                     SimdVector<float, 4> const imageValue20 =
-                        broadcast<SimdVector<float, 4>>(k80) * imageRadial4 * harmonics[20];
+                        broadcast<SimdVector<float, 4>>(k80) * imageRadial4 * U(4, 0);
                     if (sign < 0) {
-                        imagePair[20] = imageValue20;
+                        I(4, 0) = imageValue20;
                     } else {
-                        imagePair[20] += imageValue20;
+                        I(4, 0) += imageValue20;
                     }
                     SimdVector<float, 4> const imageValue21 =
-                        broadcast<SimdVector<float, 4>>(k81) * imageRadial4 * harmonics[21];
+                        broadcast<SimdVector<float, 4>>(k81) * imageRadial4 * U(4, 1);
                     if (sign < 0) {
-                        imagePair[21] = imageValue21;
+                        I(4, 1) = imageValue21;
                     } else {
-                        imagePair[21] += imageValue21;
+                        I(4, 1) += imageValue21;
                     }
                     SimdVector<float, 4> const imageValue22 =
-                        broadcast<SimdVector<float, 4>>(k82) * imageRadial4 * harmonics[22];
+                        broadcast<SimdVector<float, 4>>(k82) * imageRadial4 * U(4, 2);
                     if (sign < 0) {
-                        imagePair[22] = imageValue22;
+                        I(4, 2) = imageValue22;
                     } else {
-                        imagePair[22] += imageValue22;
+                        I(4, 2) += imageValue22;
                     }
                     SimdVector<float, 4> const imageValue23 =
-                        broadcast<SimdVector<float, 4>>(k83) * imageRadial4 * harmonics[23];
+                        broadcast<SimdVector<float, 4>>(k83) * imageRadial4 * U(4, 3);
                     if (sign < 0) {
-                        imagePair[23] = imageValue23;
+                        I(4, 3) = imageValue23;
                     } else {
-                        imagePair[23] += imageValue23;
+                        I(4, 3) += imageValue23;
                     }
                     SimdVector<float, 4> const imageValue24 =
-                        broadcast<SimdVector<float, 4>>(k87) * imageRadial4 * harmonics[24];
+                        broadcast<SimdVector<float, 4>>(k87) * imageRadial4 * U(4, 4);
                     if (sign < 0) {
-                        imagePair[24] = imageValue24;
+                        I(4, 4) = imageValue24;
                     } else {
-                        imagePair[24] += imageValue24;
+                        I(4, 4) += imageValue24;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * broadcast<SimdVector<float, 4>>(k50);
                     SimdVector<float, 4> const imageRadial5 = screening * inversePower;
                     SimdVector<float, 4> const imageValue25 =
-                        broadcast<SimdVector<float, 4>>(k94) * imageRadial5 * harmonics[25];
+                        broadcast<SimdVector<float, 4>>(k94) * imageRadial5 * U(5, -5);
                     if (sign < 0) {
-                        imagePair[25] = imageValue25;
+                        I(5, -5) = imageValue25;
                     } else {
-                        imagePair[25] += imageValue25;
+                        I(5, -5) += imageValue25;
                     }
                     SimdVector<float, 4> const imageValue26 =
-                        broadcast<SimdVector<float, 4>>(k89) * imageRadial5 * harmonics[26];
+                        broadcast<SimdVector<float, 4>>(k89) * imageRadial5 * U(5, -4);
                     if (sign < 0) {
-                        imagePair[26] = imageValue26;
+                        I(5, -4) = imageValue26;
                     } else {
-                        imagePair[26] += imageValue26;
+                        I(5, -4) += imageValue26;
                     }
                     SimdVector<float, 4> const imageValue27 =
-                        broadcast<SimdVector<float, 4>>(k88) * imageRadial5 * harmonics[27];
+                        broadcast<SimdVector<float, 4>>(k88) * imageRadial5 * U(5, -3);
                     if (sign < 0) {
-                        imagePair[27] = imageValue27;
+                        I(5, -3) = imageValue27;
                     } else {
-                        imagePair[27] += imageValue27;
+                        I(5, -3) += imageValue27;
                     }
                     SimdVector<float, 4> const imageValue28 =
-                        broadcast<SimdVector<float, 4>>(k86) * imageRadial5 * harmonics[28];
+                        broadcast<SimdVector<float, 4>>(k86) * imageRadial5 * U(5, -2);
                     if (sign < 0) {
-                        imagePair[28] = imageValue28;
+                        I(5, -2) = imageValue28;
                     } else {
-                        imagePair[28] += imageValue28;
+                        I(5, -2) += imageValue28;
                     }
                     SimdVector<float, 4> const imageValue29 =
-                        broadcast<SimdVector<float, 4>>(k85) * imageRadial5 * harmonics[29];
+                        broadcast<SimdVector<float, 4>>(k85) * imageRadial5 * U(5, -1);
                     if (sign < 0) {
-                        imagePair[29] = imageValue29;
+                        I(5, -1) = imageValue29;
                     } else {
-                        imagePair[29] += imageValue29;
+                        I(5, -1) += imageValue29;
                     }
                     SimdVector<float, 4> const imageValue30 =
-                        broadcast<SimdVector<float, 4>>(k84) * imageRadial5 * harmonics[30];
+                        broadcast<SimdVector<float, 4>>(k84) * imageRadial5 * U(5, 0);
                     if (sign < 0) {
-                        imagePair[30] = imageValue30;
+                        I(5, 0) = imageValue30;
                     } else {
-                        imagePair[30] += imageValue30;
+                        I(5, 0) += imageValue30;
                     }
                     SimdVector<float, 4> const imageValue31 =
-                        broadcast<SimdVector<float, 4>>(k85) * imageRadial5 * harmonics[31];
+                        broadcast<SimdVector<float, 4>>(k85) * imageRadial5 * U(5, 1);
                     if (sign < 0) {
-                        imagePair[31] = imageValue31;
+                        I(5, 1) = imageValue31;
                     } else {
-                        imagePair[31] += imageValue31;
+                        I(5, 1) += imageValue31;
                     }
                     SimdVector<float, 4> const imageValue32 =
-                        broadcast<SimdVector<float, 4>>(k86) * imageRadial5 * harmonics[32];
+                        broadcast<SimdVector<float, 4>>(k86) * imageRadial5 * U(5, 2);
                     if (sign < 0) {
-                        imagePair[32] = imageValue32;
+                        I(5, 2) = imageValue32;
                     } else {
-                        imagePair[32] += imageValue32;
+                        I(5, 2) += imageValue32;
                     }
                     SimdVector<float, 4> const imageValue33 =
-                        broadcast<SimdVector<float, 4>>(k88) * imageRadial5 * harmonics[33];
+                        broadcast<SimdVector<float, 4>>(k88) * imageRadial5 * U(5, 3);
                     if (sign < 0) {
-                        imagePair[33] = imageValue33;
+                        I(5, 3) = imageValue33;
                     } else {
-                        imagePair[33] += imageValue33;
+                        I(5, 3) += imageValue33;
                     }
                     SimdVector<float, 4> const imageValue34 =
-                        broadcast<SimdVector<float, 4>>(k89) * imageRadial5 * harmonics[34];
+                        broadcast<SimdVector<float, 4>>(k89) * imageRadial5 * U(5, 4);
                     if (sign < 0) {
-                        imagePair[34] = imageValue34;
+                        I(5, 4) = imageValue34;
                     } else {
-                        imagePair[34] += imageValue34;
+                        I(5, 4) += imageValue34;
                     }
                     SimdVector<float, 4> const imageValue35 =
-                        broadcast<SimdVector<float, 4>>(k94) * imageRadial5 * harmonics[35];
+                        broadcast<SimdVector<float, 4>>(k94) * imageRadial5 * U(5, 5);
                     if (sign < 0) {
-                        imagePair[35] = imageValue35;
+                        I(5, 5) = imageValue35;
                     } else {
-                        imagePair[35] += imageValue35;
+                        I(5, 5) += imageValue35;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * broadcast<SimdVector<float, 4>>(k49);
                     SimdVector<float, 4> const imageRadial6 = -screening * inversePower;
                     SimdVector<float, 4> const imageValue36 =
-                        broadcast<SimdVector<float, 4>>(k97) * imageRadial6 * harmonics[36];
+                        broadcast<SimdVector<float, 4>>(k97) * imageRadial6 * U(6, -6);
                     if (sign < 0) {
-                        imagePair[36] = imageValue36;
+                        I(6, -6) = imageValue36;
                     } else {
-                        imagePair[36] += imageValue36;
+                        I(6, -6) += imageValue36;
                     }
                     SimdVector<float, 4> const imageValue37 =
-                        broadcast<SimdVector<float, 4>>(k96) * imageRadial6 * harmonics[37];
+                        broadcast<SimdVector<float, 4>>(k96) * imageRadial6 * U(6, -5);
                     if (sign < 0) {
-                        imagePair[37] = imageValue37;
+                        I(6, -5) = imageValue37;
                     } else {
-                        imagePair[37] += imageValue37;
+                        I(6, -5) += imageValue37;
                     }
                     SimdVector<float, 4> const imageValue38 =
-                        broadcast<SimdVector<float, 4>>(k95) * imageRadial6 * harmonics[38];
+                        broadcast<SimdVector<float, 4>>(k95) * imageRadial6 * U(6, -4);
                     if (sign < 0) {
-                        imagePair[38] = imageValue38;
+                        I(6, -4) = imageValue38;
                     } else {
-                        imagePair[38] += imageValue38;
+                        I(6, -4) += imageValue38;
                     }
                     SimdVector<float, 4> const imageValue39 =
-                        broadcast<SimdVector<float, 4>>(k93) * imageRadial6 * harmonics[39];
+                        broadcast<SimdVector<float, 4>>(k93) * imageRadial6 * U(6, -3);
                     if (sign < 0) {
-                        imagePair[39] = imageValue39;
+                        I(6, -3) = imageValue39;
                     } else {
-                        imagePair[39] += imageValue39;
+                        I(6, -3) += imageValue39;
                     }
                     SimdVector<float, 4> const imageValue40 =
-                        broadcast<SimdVector<float, 4>>(k92) * imageRadial6 * harmonics[40];
+                        broadcast<SimdVector<float, 4>>(k92) * imageRadial6 * U(6, -2);
                     if (sign < 0) {
-                        imagePair[40] = imageValue40;
+                        I(6, -2) = imageValue40;
                     } else {
-                        imagePair[40] += imageValue40;
+                        I(6, -2) += imageValue40;
                     }
                     SimdVector<float, 4> const imageValue41 =
-                        broadcast<SimdVector<float, 4>>(k91) * imageRadial6 * harmonics[41];
+                        broadcast<SimdVector<float, 4>>(k91) * imageRadial6 * U(6, -1);
                     if (sign < 0) {
-                        imagePair[41] = imageValue41;
+                        I(6, -1) = imageValue41;
                     } else {
-                        imagePair[41] += imageValue41;
+                        I(6, -1) += imageValue41;
                     }
                     SimdVector<float, 4> const imageValue42 =
-                        broadcast<SimdVector<float, 4>>(k90) * imageRadial6 * harmonics[42];
+                        broadcast<SimdVector<float, 4>>(k90) * imageRadial6 * U(6, 0);
                     if (sign < 0) {
-                        imagePair[42] = imageValue42;
+                        I(6, 0) = imageValue42;
                     } else {
-                        imagePair[42] += imageValue42;
+                        I(6, 0) += imageValue42;
                     }
                     SimdVector<float, 4> const imageValue43 =
-                        broadcast<SimdVector<float, 4>>(k91) * imageRadial6 * harmonics[43];
+                        broadcast<SimdVector<float, 4>>(k91) * imageRadial6 * U(6, 1);
                     if (sign < 0) {
-                        imagePair[43] = imageValue43;
+                        I(6, 1) = imageValue43;
                     } else {
-                        imagePair[43] += imageValue43;
+                        I(6, 1) += imageValue43;
                     }
                     SimdVector<float, 4> const imageValue44 =
-                        broadcast<SimdVector<float, 4>>(k92) * imageRadial6 * harmonics[44];
+                        broadcast<SimdVector<float, 4>>(k92) * imageRadial6 * U(6, 2);
                     if (sign < 0) {
-                        imagePair[44] = imageValue44;
+                        I(6, 2) = imageValue44;
                     } else {
-                        imagePair[44] += imageValue44;
+                        I(6, 2) += imageValue44;
                     }
                     SimdVector<float, 4> const imageValue45 =
-                        broadcast<SimdVector<float, 4>>(k93) * imageRadial6 * harmonics[45];
+                        broadcast<SimdVector<float, 4>>(k93) * imageRadial6 * U(6, 3);
                     if (sign < 0) {
-                        imagePair[45] = imageValue45;
+                        I(6, 3) = imageValue45;
                     } else {
-                        imagePair[45] += imageValue45;
+                        I(6, 3) += imageValue45;
                     }
                     SimdVector<float, 4> const imageValue46 =
-                        broadcast<SimdVector<float, 4>>(k95) * imageRadial6 * harmonics[46];
+                        broadcast<SimdVector<float, 4>>(k95) * imageRadial6 * U(6, 4);
                     if (sign < 0) {
-                        imagePair[46] = imageValue46;
+                        I(6, 4) = imageValue46;
                     } else {
-                        imagePair[46] += imageValue46;
+                        I(6, 4) += imageValue46;
                     }
                     SimdVector<float, 4> const imageValue47 =
-                        broadcast<SimdVector<float, 4>>(k96) * imageRadial6 * harmonics[47];
+                        broadcast<SimdVector<float, 4>>(k96) * imageRadial6 * U(6, 5);
                     if (sign < 0) {
-                        imagePair[47] = imageValue47;
+                        I(6, 5) = imageValue47;
                     } else {
-                        imagePair[47] += imageValue47;
+                        I(6, 5) += imageValue47;
                     }
                     SimdVector<float, 4> const imageValue48 =
-                        broadcast<SimdVector<float, 4>>(k97) * imageRadial6 * harmonics[48];
+                        broadcast<SimdVector<float, 4>>(k97) * imageRadial6 * U(6, 6);
                     if (sign < 0) {
-                        imagePair[48] = imageValue48;
+                        I(6, 6) = imageValue48;
                     } else {
-                        imagePair[48] += imageValue48;
+                        I(6, 6) += imageValue48;
                     }
                 }
-                detail::ewaldAccumulate(output[0], compensation[0], imagePair[0]);
-                detail::ewaldAccumulate(output[1], compensation[1], imagePair[1]);
-                detail::ewaldAccumulate(output[2], compensation[2], imagePair[2]);
-                detail::ewaldAccumulate(output[3], compensation[3], imagePair[3]);
-                detail::ewaldAccumulate(output[4], compensation[4], imagePair[4]);
-                detail::ewaldAccumulate(output[5], compensation[5], imagePair[5]);
-                detail::ewaldAccumulate(output[6], compensation[6], imagePair[6]);
-                detail::ewaldAccumulate(output[7], compensation[7], imagePair[7]);
-                detail::ewaldAccumulate(output[8], compensation[8], imagePair[8]);
-                detail::ewaldAccumulate(output[9], compensation[9], imagePair[9]);
-                detail::ewaldAccumulate(output[10], compensation[10], imagePair[10]);
-                detail::ewaldAccumulate(output[11], compensation[11], imagePair[11]);
-                detail::ewaldAccumulate(output[12], compensation[12], imagePair[12]);
-                detail::ewaldAccumulate(output[13], compensation[13], imagePair[13]);
-                detail::ewaldAccumulate(output[14], compensation[14], imagePair[14]);
-                detail::ewaldAccumulate(output[15], compensation[15], imagePair[15]);
-                detail::ewaldAccumulate(output[16], compensation[16], imagePair[16]);
-                detail::ewaldAccumulate(output[17], compensation[17], imagePair[17]);
-                detail::ewaldAccumulate(output[18], compensation[18], imagePair[18]);
-                detail::ewaldAccumulate(output[19], compensation[19], imagePair[19]);
-                detail::ewaldAccumulate(output[20], compensation[20], imagePair[20]);
-                detail::ewaldAccumulate(output[21], compensation[21], imagePair[21]);
-                detail::ewaldAccumulate(output[22], compensation[22], imagePair[22]);
-                detail::ewaldAccumulate(output[23], compensation[23], imagePair[23]);
-                detail::ewaldAccumulate(output[24], compensation[24], imagePair[24]);
-                detail::ewaldAccumulate(output[25], compensation[25], imagePair[25]);
-                detail::ewaldAccumulate(output[26], compensation[26], imagePair[26]);
-                detail::ewaldAccumulate(output[27], compensation[27], imagePair[27]);
-                detail::ewaldAccumulate(output[28], compensation[28], imagePair[28]);
-                detail::ewaldAccumulate(output[29], compensation[29], imagePair[29]);
-                detail::ewaldAccumulate(output[30], compensation[30], imagePair[30]);
-                detail::ewaldAccumulate(output[31], compensation[31], imagePair[31]);
-                detail::ewaldAccumulate(output[32], compensation[32], imagePair[32]);
-                detail::ewaldAccumulate(output[33], compensation[33], imagePair[33]);
-                detail::ewaldAccumulate(output[34], compensation[34], imagePair[34]);
-                detail::ewaldAccumulate(output[35], compensation[35], imagePair[35]);
-                detail::ewaldAccumulate(output[36], compensation[36], imagePair[36]);
-                detail::ewaldAccumulate(output[37], compensation[37], imagePair[37]);
-                detail::ewaldAccumulate(output[38], compensation[38], imagePair[38]);
-                detail::ewaldAccumulate(output[39], compensation[39], imagePair[39]);
-                detail::ewaldAccumulate(output[40], compensation[40], imagePair[40]);
-                detail::ewaldAccumulate(output[41], compensation[41], imagePair[41]);
-                detail::ewaldAccumulate(output[42], compensation[42], imagePair[42]);
-                detail::ewaldAccumulate(output[43], compensation[43], imagePair[43]);
-                detail::ewaldAccumulate(output[44], compensation[44], imagePair[44]);
-                detail::ewaldAccumulate(output[45], compensation[45], imagePair[45]);
-                detail::ewaldAccumulate(output[46], compensation[46], imagePair[46]);
-                detail::ewaldAccumulate(output[47], compensation[47], imagePair[47]);
-                detail::ewaldAccumulate(output[48], compensation[48], imagePair[48]);
+                detail::ewaldAccumulate(G(0, 0), C(0, 0), I(0, 0));
+                detail::ewaldAccumulate(G(1, -1), C(1, -1), I(1, -1));
+                detail::ewaldAccumulate(G(1, 0), C(1, 0), I(1, 0));
+                detail::ewaldAccumulate(G(1, 1), C(1, 1), I(1, 1));
+                detail::ewaldAccumulate(G(2, -2), C(2, -2), I(2, -2));
+                detail::ewaldAccumulate(G(2, -1), C(2, -1), I(2, -1));
+                detail::ewaldAccumulate(G(2, 0), C(2, 0), I(2, 0));
+                detail::ewaldAccumulate(G(2, 1), C(2, 1), I(2, 1));
+                detail::ewaldAccumulate(G(2, 2), C(2, 2), I(2, 2));
+                detail::ewaldAccumulate(G(3, -3), C(3, -3), I(3, -3));
+                detail::ewaldAccumulate(G(3, -2), C(3, -2), I(3, -2));
+                detail::ewaldAccumulate(G(3, -1), C(3, -1), I(3, -1));
+                detail::ewaldAccumulate(G(3, 0), C(3, 0), I(3, 0));
+                detail::ewaldAccumulate(G(3, 1), C(3, 1), I(3, 1));
+                detail::ewaldAccumulate(G(3, 2), C(3, 2), I(3, 2));
+                detail::ewaldAccumulate(G(3, 3), C(3, 3), I(3, 3));
+                detail::ewaldAccumulate(G(4, -4), C(4, -4), I(4, -4));
+                detail::ewaldAccumulate(G(4, -3), C(4, -3), I(4, -3));
+                detail::ewaldAccumulate(G(4, -2), C(4, -2), I(4, -2));
+                detail::ewaldAccumulate(G(4, -1), C(4, -1), I(4, -1));
+                detail::ewaldAccumulate(G(4, 0), C(4, 0), I(4, 0));
+                detail::ewaldAccumulate(G(4, 1), C(4, 1), I(4, 1));
+                detail::ewaldAccumulate(G(4, 2), C(4, 2), I(4, 2));
+                detail::ewaldAccumulate(G(4, 3), C(4, 3), I(4, 3));
+                detail::ewaldAccumulate(G(4, 4), C(4, 4), I(4, 4));
+                detail::ewaldAccumulate(G(5, -5), C(5, -5), I(5, -5));
+                detail::ewaldAccumulate(G(5, -4), C(5, -4), I(5, -4));
+                detail::ewaldAccumulate(G(5, -3), C(5, -3), I(5, -3));
+                detail::ewaldAccumulate(G(5, -2), C(5, -2), I(5, -2));
+                detail::ewaldAccumulate(G(5, -1), C(5, -1), I(5, -1));
+                detail::ewaldAccumulate(G(5, 0), C(5, 0), I(5, 0));
+                detail::ewaldAccumulate(G(5, 1), C(5, 1), I(5, 1));
+                detail::ewaldAccumulate(G(5, 2), C(5, 2), I(5, 2));
+                detail::ewaldAccumulate(G(5, 3), C(5, 3), I(5, 3));
+                detail::ewaldAccumulate(G(5, 4), C(5, 4), I(5, 4));
+                detail::ewaldAccumulate(G(5, 5), C(5, 5), I(5, 5));
+                detail::ewaldAccumulate(G(6, -6), C(6, -6), I(6, -6));
+                detail::ewaldAccumulate(G(6, -5), C(6, -5), I(6, -5));
+                detail::ewaldAccumulate(G(6, -4), C(6, -4), I(6, -4));
+                detail::ewaldAccumulate(G(6, -3), C(6, -3), I(6, -3));
+                detail::ewaldAccumulate(G(6, -2), C(6, -2), I(6, -2));
+                detail::ewaldAccumulate(G(6, -1), C(6, -1), I(6, -1));
+                detail::ewaldAccumulate(G(6, 0), C(6, 0), I(6, 0));
+                detail::ewaldAccumulate(G(6, 1), C(6, 1), I(6, 1));
+                detail::ewaldAccumulate(G(6, 2), C(6, 2), I(6, 2));
+                detail::ewaldAccumulate(G(6, 3), C(6, 3), I(6, 3));
+                detail::ewaldAccumulate(G(6, 4), C(6, 4), I(6, 4));
+                detail::ewaldAccumulate(G(6, 5), C(6, 5), I(6, 5));
+                detail::ewaldAccumulate(G(6, 6), C(6, 6), I(6, 6));
                 SimdVector<float, 4> const waveX = broadcast<SimdVector<float, 4>>(ix);
                 SimdVector<float, 4> const waveY = broadcast<SimdVector<float, 4>>(iy);
                 SimdVector<float, 4> const waveZ = broadcast<SimdVector<float, 4>>(iz);
@@ -4921,114 +4955,114 @@ void evaluateEwaldWorking(SimdVector<float, 4>& greenTrace, SimdVector<float, 4>
                     waveSquared;
                 SimdVector<float, 4> const waveRadial0 =
                     broadcast<SimdVector<float, 4>>(k57) * wavePotential * cosine;
-                detail::ewaldAccumulate(output[0], compensation[0], waveRadial0 * harmonics[0]);
+                detail::ewaldAccumulate(G(0, 0), C(0, 0), waveRadial0 * U(0, 0));
                 SimdVector<float, 4> const waveRadial1 =
                     broadcast<SimdVector<float, 4>>(k67) * wavePotential * -sine;
-                detail::ewaldAccumulate(output[1], compensation[1],
-                    broadcast<SimdVector<float, 4>>(k58) * waveRadial1 * harmonics[1]);
-                detail::ewaldAccumulate(output[2], compensation[2], waveRadial1 * harmonics[2]);
-                detail::ewaldAccumulate(output[3], compensation[3],
-                    broadcast<SimdVector<float, 4>>(k58) * waveRadial1 * harmonics[3]);
+                detail::ewaldAccumulate(G(1, -1), C(1, -1),
+                    broadcast<SimdVector<float, 4>>(k58) * waveRadial1 * U(1, -1));
+                detail::ewaldAccumulate(G(1, 0), C(1, 0), waveRadial1 * U(1, 0));
+                detail::ewaldAccumulate(
+                    G(1, 1), C(1, 1), broadcast<SimdVector<float, 4>>(k58) * waveRadial1 * U(1, 1));
                 SimdVector<float, 4> const waveRadial2 =
                     broadcast<SimdVector<float, 4>>(k73) * wavePotential * -cosine;
-                detail::ewaldAccumulate(output[4], compensation[4],
-                    broadcast<SimdVector<float, 4>>(k76) * waveRadial2 * harmonics[4]);
-                detail::ewaldAccumulate(output[5], compensation[5],
-                    broadcast<SimdVector<float, 4>>(k65) * waveRadial2 * harmonics[5]);
-                detail::ewaldAccumulate(output[6], compensation[6],
-                    broadcast<SimdVector<float, 4>>(k61) * waveRadial2 * harmonics[6]);
-                detail::ewaldAccumulate(output[7], compensation[7],
-                    broadcast<SimdVector<float, 4>>(k65) * waveRadial2 * harmonics[7]);
-                detail::ewaldAccumulate(output[8], compensation[8],
-                    broadcast<SimdVector<float, 4>>(k76) * waveRadial2 * harmonics[8]);
+                detail::ewaldAccumulate(G(2, -2), C(2, -2),
+                    broadcast<SimdVector<float, 4>>(k76) * waveRadial2 * U(2, -2));
+                detail::ewaldAccumulate(G(2, -1), C(2, -1),
+                    broadcast<SimdVector<float, 4>>(k65) * waveRadial2 * U(2, -1));
+                detail::ewaldAccumulate(
+                    G(2, 0), C(2, 0), broadcast<SimdVector<float, 4>>(k61) * waveRadial2 * U(2, 0));
+                detail::ewaldAccumulate(
+                    G(2, 1), C(2, 1), broadcast<SimdVector<float, 4>>(k65) * waveRadial2 * U(2, 1));
+                detail::ewaldAccumulate(
+                    G(2, 2), C(2, 2), broadcast<SimdVector<float, 4>>(k76) * waveRadial2 * U(2, 2));
                 SimdVector<float, 4> const waveRadial3 =
                     broadcast<SimdVector<float, 4>>(k75) * wavePotential * sine;
-                detail::ewaldAccumulate(output[9], compensation[9],
-                    broadcast<SimdVector<float, 4>>(k81) * waveRadial3 * harmonics[9]);
-                detail::ewaldAccumulate(output[10], compensation[10],
-                    broadcast<SimdVector<float, 4>>(k79) * waveRadial3 * harmonics[10]);
-                detail::ewaldAccumulate(output[11], compensation[11],
-                    broadcast<SimdVector<float, 4>>(k78) * waveRadial3 * harmonics[11]);
-                detail::ewaldAccumulate(output[12], compensation[12],
-                    broadcast<SimdVector<float, 4>>(k77) * waveRadial3 * harmonics[12]);
-                detail::ewaldAccumulate(output[13], compensation[13],
-                    broadcast<SimdVector<float, 4>>(k78) * waveRadial3 * harmonics[13]);
-                detail::ewaldAccumulate(output[14], compensation[14],
-                    broadcast<SimdVector<float, 4>>(k79) * waveRadial3 * harmonics[14]);
-                detail::ewaldAccumulate(output[15], compensation[15],
-                    broadcast<SimdVector<float, 4>>(k81) * waveRadial3 * harmonics[15]);
+                detail::ewaldAccumulate(G(3, -3), C(3, -3),
+                    broadcast<SimdVector<float, 4>>(k81) * waveRadial3 * U(3, -3));
+                detail::ewaldAccumulate(G(3, -2), C(3, -2),
+                    broadcast<SimdVector<float, 4>>(k79) * waveRadial3 * U(3, -2));
+                detail::ewaldAccumulate(G(3, -1), C(3, -1),
+                    broadcast<SimdVector<float, 4>>(k78) * waveRadial3 * U(3, -1));
+                detail::ewaldAccumulate(
+                    G(3, 0), C(3, 0), broadcast<SimdVector<float, 4>>(k77) * waveRadial3 * U(3, 0));
+                detail::ewaldAccumulate(
+                    G(3, 1), C(3, 1), broadcast<SimdVector<float, 4>>(k78) * waveRadial3 * U(3, 1));
+                detail::ewaldAccumulate(
+                    G(3, 2), C(3, 2), broadcast<SimdVector<float, 4>>(k79) * waveRadial3 * U(3, 2));
+                detail::ewaldAccumulate(
+                    G(3, 3), C(3, 3), broadcast<SimdVector<float, 4>>(k81) * waveRadial3 * U(3, 3));
                 SimdVector<float, 4> const waveRadial4 =
                     broadcast<SimdVector<float, 4>>(k74) * wavePotential * cosine;
-                detail::ewaldAccumulate(output[16], compensation[16],
-                    broadcast<SimdVector<float, 4>>(k87) * waveRadial4 * harmonics[16]);
-                detail::ewaldAccumulate(output[17], compensation[17],
-                    broadcast<SimdVector<float, 4>>(k83) * waveRadial4 * harmonics[17]);
-                detail::ewaldAccumulate(output[18], compensation[18],
-                    broadcast<SimdVector<float, 4>>(k82) * waveRadial4 * harmonics[18]);
-                detail::ewaldAccumulate(output[19], compensation[19],
-                    broadcast<SimdVector<float, 4>>(k81) * waveRadial4 * harmonics[19]);
-                detail::ewaldAccumulate(output[20], compensation[20],
-                    broadcast<SimdVector<float, 4>>(k80) * waveRadial4 * harmonics[20]);
-                detail::ewaldAccumulate(output[21], compensation[21],
-                    broadcast<SimdVector<float, 4>>(k81) * waveRadial4 * harmonics[21]);
-                detail::ewaldAccumulate(output[22], compensation[22],
-                    broadcast<SimdVector<float, 4>>(k82) * waveRadial4 * harmonics[22]);
-                detail::ewaldAccumulate(output[23], compensation[23],
-                    broadcast<SimdVector<float, 4>>(k83) * waveRadial4 * harmonics[23]);
-                detail::ewaldAccumulate(output[24], compensation[24],
-                    broadcast<SimdVector<float, 4>>(k87) * waveRadial4 * harmonics[24]);
+                detail::ewaldAccumulate(G(4, -4), C(4, -4),
+                    broadcast<SimdVector<float, 4>>(k87) * waveRadial4 * U(4, -4));
+                detail::ewaldAccumulate(G(4, -3), C(4, -3),
+                    broadcast<SimdVector<float, 4>>(k83) * waveRadial4 * U(4, -3));
+                detail::ewaldAccumulate(G(4, -2), C(4, -2),
+                    broadcast<SimdVector<float, 4>>(k82) * waveRadial4 * U(4, -2));
+                detail::ewaldAccumulate(G(4, -1), C(4, -1),
+                    broadcast<SimdVector<float, 4>>(k81) * waveRadial4 * U(4, -1));
+                detail::ewaldAccumulate(
+                    G(4, 0), C(4, 0), broadcast<SimdVector<float, 4>>(k80) * waveRadial4 * U(4, 0));
+                detail::ewaldAccumulate(
+                    G(4, 1), C(4, 1), broadcast<SimdVector<float, 4>>(k81) * waveRadial4 * U(4, 1));
+                detail::ewaldAccumulate(
+                    G(4, 2), C(4, 2), broadcast<SimdVector<float, 4>>(k82) * waveRadial4 * U(4, 2));
+                detail::ewaldAccumulate(
+                    G(4, 3), C(4, 3), broadcast<SimdVector<float, 4>>(k83) * waveRadial4 * U(4, 3));
+                detail::ewaldAccumulate(
+                    G(4, 4), C(4, 4), broadcast<SimdVector<float, 4>>(k87) * waveRadial4 * U(4, 4));
                 SimdVector<float, 4> const waveRadial5 =
                     broadcast<SimdVector<float, 4>>(k71) * wavePotential * -sine;
-                detail::ewaldAccumulate(output[25], compensation[25],
-                    broadcast<SimdVector<float, 4>>(k94) * waveRadial5 * harmonics[25]);
-                detail::ewaldAccumulate(output[26], compensation[26],
-                    broadcast<SimdVector<float, 4>>(k89) * waveRadial5 * harmonics[26]);
-                detail::ewaldAccumulate(output[27], compensation[27],
-                    broadcast<SimdVector<float, 4>>(k88) * waveRadial5 * harmonics[27]);
-                detail::ewaldAccumulate(output[28], compensation[28],
-                    broadcast<SimdVector<float, 4>>(k86) * waveRadial5 * harmonics[28]);
-                detail::ewaldAccumulate(output[29], compensation[29],
-                    broadcast<SimdVector<float, 4>>(k85) * waveRadial5 * harmonics[29]);
-                detail::ewaldAccumulate(output[30], compensation[30],
-                    broadcast<SimdVector<float, 4>>(k84) * waveRadial5 * harmonics[30]);
-                detail::ewaldAccumulate(output[31], compensation[31],
-                    broadcast<SimdVector<float, 4>>(k85) * waveRadial5 * harmonics[31]);
-                detail::ewaldAccumulate(output[32], compensation[32],
-                    broadcast<SimdVector<float, 4>>(k86) * waveRadial5 * harmonics[32]);
-                detail::ewaldAccumulate(output[33], compensation[33],
-                    broadcast<SimdVector<float, 4>>(k88) * waveRadial5 * harmonics[33]);
-                detail::ewaldAccumulate(output[34], compensation[34],
-                    broadcast<SimdVector<float, 4>>(k89) * waveRadial5 * harmonics[34]);
-                detail::ewaldAccumulate(output[35], compensation[35],
-                    broadcast<SimdVector<float, 4>>(k94) * waveRadial5 * harmonics[35]);
+                detail::ewaldAccumulate(G(5, -5), C(5, -5),
+                    broadcast<SimdVector<float, 4>>(k94) * waveRadial5 * U(5, -5));
+                detail::ewaldAccumulate(G(5, -4), C(5, -4),
+                    broadcast<SimdVector<float, 4>>(k89) * waveRadial5 * U(5, -4));
+                detail::ewaldAccumulate(G(5, -3), C(5, -3),
+                    broadcast<SimdVector<float, 4>>(k88) * waveRadial5 * U(5, -3));
+                detail::ewaldAccumulate(G(5, -2), C(5, -2),
+                    broadcast<SimdVector<float, 4>>(k86) * waveRadial5 * U(5, -2));
+                detail::ewaldAccumulate(G(5, -1), C(5, -1),
+                    broadcast<SimdVector<float, 4>>(k85) * waveRadial5 * U(5, -1));
+                detail::ewaldAccumulate(
+                    G(5, 0), C(5, 0), broadcast<SimdVector<float, 4>>(k84) * waveRadial5 * U(5, 0));
+                detail::ewaldAccumulate(
+                    G(5, 1), C(5, 1), broadcast<SimdVector<float, 4>>(k85) * waveRadial5 * U(5, 1));
+                detail::ewaldAccumulate(
+                    G(5, 2), C(5, 2), broadcast<SimdVector<float, 4>>(k86) * waveRadial5 * U(5, 2));
+                detail::ewaldAccumulate(
+                    G(5, 3), C(5, 3), broadcast<SimdVector<float, 4>>(k88) * waveRadial5 * U(5, 3));
+                detail::ewaldAccumulate(
+                    G(5, 4), C(5, 4), broadcast<SimdVector<float, 4>>(k89) * waveRadial5 * U(5, 4));
+                detail::ewaldAccumulate(
+                    G(5, 5), C(5, 5), broadcast<SimdVector<float, 4>>(k94) * waveRadial5 * U(5, 5));
                 SimdVector<float, 4> const waveRadial6 =
                     broadcast<SimdVector<float, 4>>(k64) * wavePotential * -cosine;
-                detail::ewaldAccumulate(output[36], compensation[36],
-                    broadcast<SimdVector<float, 4>>(k97) * waveRadial6 * harmonics[36]);
-                detail::ewaldAccumulate(output[37], compensation[37],
-                    broadcast<SimdVector<float, 4>>(k96) * waveRadial6 * harmonics[37]);
-                detail::ewaldAccumulate(output[38], compensation[38],
-                    broadcast<SimdVector<float, 4>>(k95) * waveRadial6 * harmonics[38]);
-                detail::ewaldAccumulate(output[39], compensation[39],
-                    broadcast<SimdVector<float, 4>>(k93) * waveRadial6 * harmonics[39]);
-                detail::ewaldAccumulate(output[40], compensation[40],
-                    broadcast<SimdVector<float, 4>>(k92) * waveRadial6 * harmonics[40]);
-                detail::ewaldAccumulate(output[41], compensation[41],
-                    broadcast<SimdVector<float, 4>>(k91) * waveRadial6 * harmonics[41]);
-                detail::ewaldAccumulate(output[42], compensation[42],
-                    broadcast<SimdVector<float, 4>>(k90) * waveRadial6 * harmonics[42]);
-                detail::ewaldAccumulate(output[43], compensation[43],
-                    broadcast<SimdVector<float, 4>>(k91) * waveRadial6 * harmonics[43]);
-                detail::ewaldAccumulate(output[44], compensation[44],
-                    broadcast<SimdVector<float, 4>>(k92) * waveRadial6 * harmonics[44]);
-                detail::ewaldAccumulate(output[45], compensation[45],
-                    broadcast<SimdVector<float, 4>>(k93) * waveRadial6 * harmonics[45]);
-                detail::ewaldAccumulate(output[46], compensation[46],
-                    broadcast<SimdVector<float, 4>>(k95) * waveRadial6 * harmonics[46]);
-                detail::ewaldAccumulate(output[47], compensation[47],
-                    broadcast<SimdVector<float, 4>>(k96) * waveRadial6 * harmonics[47]);
-                detail::ewaldAccumulate(output[48], compensation[48],
-                    broadcast<SimdVector<float, 4>>(k97) * waveRadial6 * harmonics[48]);
+                detail::ewaldAccumulate(G(6, -6), C(6, -6),
+                    broadcast<SimdVector<float, 4>>(k97) * waveRadial6 * U(6, -6));
+                detail::ewaldAccumulate(G(6, -5), C(6, -5),
+                    broadcast<SimdVector<float, 4>>(k96) * waveRadial6 * U(6, -5));
+                detail::ewaldAccumulate(G(6, -4), C(6, -4),
+                    broadcast<SimdVector<float, 4>>(k95) * waveRadial6 * U(6, -4));
+                detail::ewaldAccumulate(G(6, -3), C(6, -3),
+                    broadcast<SimdVector<float, 4>>(k93) * waveRadial6 * U(6, -3));
+                detail::ewaldAccumulate(G(6, -2), C(6, -2),
+                    broadcast<SimdVector<float, 4>>(k92) * waveRadial6 * U(6, -2));
+                detail::ewaldAccumulate(G(6, -1), C(6, -1),
+                    broadcast<SimdVector<float, 4>>(k91) * waveRadial6 * U(6, -1));
+                detail::ewaldAccumulate(
+                    G(6, 0), C(6, 0), broadcast<SimdVector<float, 4>>(k90) * waveRadial6 * U(6, 0));
+                detail::ewaldAccumulate(
+                    G(6, 1), C(6, 1), broadcast<SimdVector<float, 4>>(k91) * waveRadial6 * U(6, 1));
+                detail::ewaldAccumulate(
+                    G(6, 2), C(6, 2), broadcast<SimdVector<float, 4>>(k92) * waveRadial6 * U(6, 2));
+                detail::ewaldAccumulate(
+                    G(6, 3), C(6, 3), broadcast<SimdVector<float, 4>>(k93) * waveRadial6 * U(6, 3));
+                detail::ewaldAccumulate(
+                    G(6, 4), C(6, 4), broadcast<SimdVector<float, 4>>(k95) * waveRadial6 * U(6, 4));
+                detail::ewaldAccumulate(
+                    G(6, 5), C(6, 5), broadcast<SimdVector<float, 4>>(k96) * waveRadial6 * U(6, 5));
+                detail::ewaldAccumulate(
+                    G(6, 6), C(6, 6), broadcast<SimdVector<float, 4>>(k97) * waveRadial6 * U(6, 6));
             }
         }
     }
@@ -5137,9 +5171,17 @@ void evaluateEwaldWorking(SimdVector<double, 4>& greenTrace, SimdVector<double, 
     constexpr double k95 = 7.25760000000000000e+06;
     constexpr double k96 = 3.99168000000000000e+07;
     constexpr double k97 = 4.79001600000000000e+08;
+    detail::CoefficientView<SimdVector<double, 4>> const G{output};
+
     SimdVector<double, 4> harmonics[49];
+    detail::CoefficientView<SimdVector<double, 4>> const U{harmonics};
+
     SimdVector<double, 4> compensation[49];
+    detail::CoefficientView<SimdVector<double, 4>> const C{compensation};
+
     SimdVector<double, 4> imagePair[49];
+    detail::CoefficientView<SimdVector<double, 4>> const I{imagePair};
+
     SimdVector<double, 4> const radiusSquared = fma(x, x, fma(y, y, z * z));
     ewaldRegular(x, y, z, radiusSquared, harmonics);
     SimdVector<double, 4> const argument = broadcast<SimdVector<double, 4>>(k61) * radiusSquared;
@@ -5243,8 +5285,8 @@ void evaluateEwaldWorking(SimdVector<double, 4>& greenTrace, SimdVector<double, 
         broadcast<SimdVector<double, 4>>(k57));
     SimdVector<double, 4> const radial0 =
         broadcast<SimdVector<double, 4>>(k59) * exponential * series0;
-    output[0] = radial0 * harmonics[0];
-    compensation[0] = broadcast<SimdVector<double, 4>>(k00);
+    G(0, 0) = radial0 * U(0, 0);
+    C(0, 0) = broadcast<SimdVector<double, 4>>(k00);
     SimdVector<double, 4> series1 = broadcast<SimdVector<double, 4>>(k57);
     series1 = fma(series1, argument * broadcast<SimdVector<double, 4>>(k06),
         broadcast<SimdVector<double, 4>>(k57));
@@ -5344,12 +5386,12 @@ void evaluateEwaldWorking(SimdVector<double, 4>& greenTrace, SimdVector<double, 
         broadcast<SimdVector<double, 4>>(k57));
     SimdVector<double, 4> const radial1 =
         -broadcast<SimdVector<double, 4>>(k66) * exponential * series1;
-    output[1] = broadcast<SimdVector<double, 4>>(k58) * radial1 * harmonics[1];
-    compensation[1] = broadcast<SimdVector<double, 4>>(k00);
-    output[2] = radial1 * harmonics[2];
-    compensation[2] = broadcast<SimdVector<double, 4>>(k00);
-    output[3] = broadcast<SimdVector<double, 4>>(k58) * radial1 * harmonics[3];
-    compensation[3] = broadcast<SimdVector<double, 4>>(k00);
+    G(1, -1) = broadcast<SimdVector<double, 4>>(k58) * radial1 * U(1, -1);
+    C(1, -1) = broadcast<SimdVector<double, 4>>(k00);
+    G(1, 0) = radial1 * U(1, 0);
+    C(1, 0) = broadcast<SimdVector<double, 4>>(k00);
+    G(1, 1) = broadcast<SimdVector<double, 4>>(k58) * radial1 * U(1, 1);
+    C(1, 1) = broadcast<SimdVector<double, 4>>(k00);
     SimdVector<double, 4> series2 = broadcast<SimdVector<double, 4>>(k57);
     series2 = fma(series2, argument * broadcast<SimdVector<double, 4>>(k05),
         broadcast<SimdVector<double, 4>>(k57));
@@ -5449,16 +5491,16 @@ void evaluateEwaldWorking(SimdVector<double, 4>& greenTrace, SimdVector<double, 
         broadcast<SimdVector<double, 4>>(k57));
     SimdVector<double, 4> const radial2 =
         broadcast<SimdVector<double, 4>>(k69) * exponential * series2;
-    output[4] = broadcast<SimdVector<double, 4>>(k76) * radial2 * harmonics[4];
-    compensation[4] = broadcast<SimdVector<double, 4>>(k00);
-    output[5] = broadcast<SimdVector<double, 4>>(k65) * radial2 * harmonics[5];
-    compensation[5] = broadcast<SimdVector<double, 4>>(k00);
-    output[6] = broadcast<SimdVector<double, 4>>(k61) * radial2 * harmonics[6];
-    compensation[6] = broadcast<SimdVector<double, 4>>(k00);
-    output[7] = broadcast<SimdVector<double, 4>>(k65) * radial2 * harmonics[7];
-    compensation[7] = broadcast<SimdVector<double, 4>>(k00);
-    output[8] = broadcast<SimdVector<double, 4>>(k76) * radial2 * harmonics[8];
-    compensation[8] = broadcast<SimdVector<double, 4>>(k00);
+    G(2, -2) = broadcast<SimdVector<double, 4>>(k76) * radial2 * U(2, -2);
+    C(2, -2) = broadcast<SimdVector<double, 4>>(k00);
+    G(2, -1) = broadcast<SimdVector<double, 4>>(k65) * radial2 * U(2, -1);
+    C(2, -1) = broadcast<SimdVector<double, 4>>(k00);
+    G(2, 0) = broadcast<SimdVector<double, 4>>(k61) * radial2 * U(2, 0);
+    C(2, 0) = broadcast<SimdVector<double, 4>>(k00);
+    G(2, 1) = broadcast<SimdVector<double, 4>>(k65) * radial2 * U(2, 1);
+    C(2, 1) = broadcast<SimdVector<double, 4>>(k00);
+    G(2, 2) = broadcast<SimdVector<double, 4>>(k76) * radial2 * U(2, 2);
+    C(2, 2) = broadcast<SimdVector<double, 4>>(k00);
     SimdVector<double, 4> series3 = broadcast<SimdVector<double, 4>>(k57);
     series3 = fma(series3, argument * broadcast<SimdVector<double, 4>>(k04),
         broadcast<SimdVector<double, 4>>(k57));
@@ -5558,20 +5600,20 @@ void evaluateEwaldWorking(SimdVector<double, 4>& greenTrace, SimdVector<double, 
         broadcast<SimdVector<double, 4>>(k57));
     SimdVector<double, 4> const radial3 =
         -broadcast<SimdVector<double, 4>>(k72) * exponential * series3;
-    output[9] = broadcast<SimdVector<double, 4>>(k81) * radial3 * harmonics[9];
-    compensation[9] = broadcast<SimdVector<double, 4>>(k00);
-    output[10] = broadcast<SimdVector<double, 4>>(k79) * radial3 * harmonics[10];
-    compensation[10] = broadcast<SimdVector<double, 4>>(k00);
-    output[11] = broadcast<SimdVector<double, 4>>(k78) * radial3 * harmonics[11];
-    compensation[11] = broadcast<SimdVector<double, 4>>(k00);
-    output[12] = broadcast<SimdVector<double, 4>>(k77) * radial3 * harmonics[12];
-    compensation[12] = broadcast<SimdVector<double, 4>>(k00);
-    output[13] = broadcast<SimdVector<double, 4>>(k78) * radial3 * harmonics[13];
-    compensation[13] = broadcast<SimdVector<double, 4>>(k00);
-    output[14] = broadcast<SimdVector<double, 4>>(k79) * radial3 * harmonics[14];
-    compensation[14] = broadcast<SimdVector<double, 4>>(k00);
-    output[15] = broadcast<SimdVector<double, 4>>(k81) * radial3 * harmonics[15];
-    compensation[15] = broadcast<SimdVector<double, 4>>(k00);
+    G(3, -3) = broadcast<SimdVector<double, 4>>(k81) * radial3 * U(3, -3);
+    C(3, -3) = broadcast<SimdVector<double, 4>>(k00);
+    G(3, -2) = broadcast<SimdVector<double, 4>>(k79) * radial3 * U(3, -2);
+    C(3, -2) = broadcast<SimdVector<double, 4>>(k00);
+    G(3, -1) = broadcast<SimdVector<double, 4>>(k78) * radial3 * U(3, -1);
+    C(3, -1) = broadcast<SimdVector<double, 4>>(k00);
+    G(3, 0) = broadcast<SimdVector<double, 4>>(k77) * radial3 * U(3, 0);
+    C(3, 0) = broadcast<SimdVector<double, 4>>(k00);
+    G(3, 1) = broadcast<SimdVector<double, 4>>(k78) * radial3 * U(3, 1);
+    C(3, 1) = broadcast<SimdVector<double, 4>>(k00);
+    G(3, 2) = broadcast<SimdVector<double, 4>>(k79) * radial3 * U(3, 2);
+    C(3, 2) = broadcast<SimdVector<double, 4>>(k00);
+    G(3, 3) = broadcast<SimdVector<double, 4>>(k81) * radial3 * U(3, 3);
+    C(3, 3) = broadcast<SimdVector<double, 4>>(k00);
     SimdVector<double, 4> series4 = broadcast<SimdVector<double, 4>>(k57);
     series4 = fma(series4, argument * broadcast<SimdVector<double, 4>>(k03),
         broadcast<SimdVector<double, 4>>(k57));
@@ -5671,24 +5713,24 @@ void evaluateEwaldWorking(SimdVector<double, 4>& greenTrace, SimdVector<double, 
         broadcast<SimdVector<double, 4>>(k57));
     SimdVector<double, 4> const radial4 =
         broadcast<SimdVector<double, 4>>(k70) * exponential * series4;
-    output[16] = broadcast<SimdVector<double, 4>>(k87) * radial4 * harmonics[16];
-    compensation[16] = broadcast<SimdVector<double, 4>>(k00);
-    output[17] = broadcast<SimdVector<double, 4>>(k83) * radial4 * harmonics[17];
-    compensation[17] = broadcast<SimdVector<double, 4>>(k00);
-    output[18] = broadcast<SimdVector<double, 4>>(k82) * radial4 * harmonics[18];
-    compensation[18] = broadcast<SimdVector<double, 4>>(k00);
-    output[19] = broadcast<SimdVector<double, 4>>(k81) * radial4 * harmonics[19];
-    compensation[19] = broadcast<SimdVector<double, 4>>(k00);
-    output[20] = broadcast<SimdVector<double, 4>>(k80) * radial4 * harmonics[20];
-    compensation[20] = broadcast<SimdVector<double, 4>>(k00);
-    output[21] = broadcast<SimdVector<double, 4>>(k81) * radial4 * harmonics[21];
-    compensation[21] = broadcast<SimdVector<double, 4>>(k00);
-    output[22] = broadcast<SimdVector<double, 4>>(k82) * radial4 * harmonics[22];
-    compensation[22] = broadcast<SimdVector<double, 4>>(k00);
-    output[23] = broadcast<SimdVector<double, 4>>(k83) * radial4 * harmonics[23];
-    compensation[23] = broadcast<SimdVector<double, 4>>(k00);
-    output[24] = broadcast<SimdVector<double, 4>>(k87) * radial4 * harmonics[24];
-    compensation[24] = broadcast<SimdVector<double, 4>>(k00);
+    G(4, -4) = broadcast<SimdVector<double, 4>>(k87) * radial4 * U(4, -4);
+    C(4, -4) = broadcast<SimdVector<double, 4>>(k00);
+    G(4, -3) = broadcast<SimdVector<double, 4>>(k83) * radial4 * U(4, -3);
+    C(4, -3) = broadcast<SimdVector<double, 4>>(k00);
+    G(4, -2) = broadcast<SimdVector<double, 4>>(k82) * radial4 * U(4, -2);
+    C(4, -2) = broadcast<SimdVector<double, 4>>(k00);
+    G(4, -1) = broadcast<SimdVector<double, 4>>(k81) * radial4 * U(4, -1);
+    C(4, -1) = broadcast<SimdVector<double, 4>>(k00);
+    G(4, 0) = broadcast<SimdVector<double, 4>>(k80) * radial4 * U(4, 0);
+    C(4, 0) = broadcast<SimdVector<double, 4>>(k00);
+    G(4, 1) = broadcast<SimdVector<double, 4>>(k81) * radial4 * U(4, 1);
+    C(4, 1) = broadcast<SimdVector<double, 4>>(k00);
+    G(4, 2) = broadcast<SimdVector<double, 4>>(k82) * radial4 * U(4, 2);
+    C(4, 2) = broadcast<SimdVector<double, 4>>(k00);
+    G(4, 3) = broadcast<SimdVector<double, 4>>(k83) * radial4 * U(4, 3);
+    C(4, 3) = broadcast<SimdVector<double, 4>>(k00);
+    G(4, 4) = broadcast<SimdVector<double, 4>>(k87) * radial4 * U(4, 4);
+    C(4, 4) = broadcast<SimdVector<double, 4>>(k00);
     SimdVector<double, 4> series5 = broadcast<SimdVector<double, 4>>(k57);
     series5 = fma(series5, argument * broadcast<SimdVector<double, 4>>(k02),
         broadcast<SimdVector<double, 4>>(k57));
@@ -5788,28 +5830,28 @@ void evaluateEwaldWorking(SimdVector<double, 4>& greenTrace, SimdVector<double, 
         broadcast<SimdVector<double, 4>>(k57));
     SimdVector<double, 4> const radial5 =
         -broadcast<SimdVector<double, 4>>(k68) * exponential * series5;
-    output[25] = broadcast<SimdVector<double, 4>>(k94) * radial5 * harmonics[25];
-    compensation[25] = broadcast<SimdVector<double, 4>>(k00);
-    output[26] = broadcast<SimdVector<double, 4>>(k89) * radial5 * harmonics[26];
-    compensation[26] = broadcast<SimdVector<double, 4>>(k00);
-    output[27] = broadcast<SimdVector<double, 4>>(k88) * radial5 * harmonics[27];
-    compensation[27] = broadcast<SimdVector<double, 4>>(k00);
-    output[28] = broadcast<SimdVector<double, 4>>(k86) * radial5 * harmonics[28];
-    compensation[28] = broadcast<SimdVector<double, 4>>(k00);
-    output[29] = broadcast<SimdVector<double, 4>>(k85) * radial5 * harmonics[29];
-    compensation[29] = broadcast<SimdVector<double, 4>>(k00);
-    output[30] = broadcast<SimdVector<double, 4>>(k84) * radial5 * harmonics[30];
-    compensation[30] = broadcast<SimdVector<double, 4>>(k00);
-    output[31] = broadcast<SimdVector<double, 4>>(k85) * radial5 * harmonics[31];
-    compensation[31] = broadcast<SimdVector<double, 4>>(k00);
-    output[32] = broadcast<SimdVector<double, 4>>(k86) * radial5 * harmonics[32];
-    compensation[32] = broadcast<SimdVector<double, 4>>(k00);
-    output[33] = broadcast<SimdVector<double, 4>>(k88) * radial5 * harmonics[33];
-    compensation[33] = broadcast<SimdVector<double, 4>>(k00);
-    output[34] = broadcast<SimdVector<double, 4>>(k89) * radial5 * harmonics[34];
-    compensation[34] = broadcast<SimdVector<double, 4>>(k00);
-    output[35] = broadcast<SimdVector<double, 4>>(k94) * radial5 * harmonics[35];
-    compensation[35] = broadcast<SimdVector<double, 4>>(k00);
+    G(5, -5) = broadcast<SimdVector<double, 4>>(k94) * radial5 * U(5, -5);
+    C(5, -5) = broadcast<SimdVector<double, 4>>(k00);
+    G(5, -4) = broadcast<SimdVector<double, 4>>(k89) * radial5 * U(5, -4);
+    C(5, -4) = broadcast<SimdVector<double, 4>>(k00);
+    G(5, -3) = broadcast<SimdVector<double, 4>>(k88) * radial5 * U(5, -3);
+    C(5, -3) = broadcast<SimdVector<double, 4>>(k00);
+    G(5, -2) = broadcast<SimdVector<double, 4>>(k86) * radial5 * U(5, -2);
+    C(5, -2) = broadcast<SimdVector<double, 4>>(k00);
+    G(5, -1) = broadcast<SimdVector<double, 4>>(k85) * radial5 * U(5, -1);
+    C(5, -1) = broadcast<SimdVector<double, 4>>(k00);
+    G(5, 0) = broadcast<SimdVector<double, 4>>(k84) * radial5 * U(5, 0);
+    C(5, 0) = broadcast<SimdVector<double, 4>>(k00);
+    G(5, 1) = broadcast<SimdVector<double, 4>>(k85) * radial5 * U(5, 1);
+    C(5, 1) = broadcast<SimdVector<double, 4>>(k00);
+    G(5, 2) = broadcast<SimdVector<double, 4>>(k86) * radial5 * U(5, 2);
+    C(5, 2) = broadcast<SimdVector<double, 4>>(k00);
+    G(5, 3) = broadcast<SimdVector<double, 4>>(k88) * radial5 * U(5, 3);
+    C(5, 3) = broadcast<SimdVector<double, 4>>(k00);
+    G(5, 4) = broadcast<SimdVector<double, 4>>(k89) * radial5 * U(5, 4);
+    C(5, 4) = broadcast<SimdVector<double, 4>>(k00);
+    G(5, 5) = broadcast<SimdVector<double, 4>>(k94) * radial5 * U(5, 5);
+    C(5, 5) = broadcast<SimdVector<double, 4>>(k00);
     SimdVector<double, 4> series6 = broadcast<SimdVector<double, 4>>(k57);
     series6 = fma(series6, argument * broadcast<SimdVector<double, 4>>(k01),
         broadcast<SimdVector<double, 4>>(k57));
@@ -5909,33 +5951,33 @@ void evaluateEwaldWorking(SimdVector<double, 4>& greenTrace, SimdVector<double, 
         broadcast<SimdVector<double, 4>>(k57));
     SimdVector<double, 4> const radial6 =
         broadcast<SimdVector<double, 4>>(k63) * exponential * series6;
-    output[36] = broadcast<SimdVector<double, 4>>(k97) * radial6 * harmonics[36];
-    compensation[36] = broadcast<SimdVector<double, 4>>(k00);
-    output[37] = broadcast<SimdVector<double, 4>>(k96) * radial6 * harmonics[37];
-    compensation[37] = broadcast<SimdVector<double, 4>>(k00);
-    output[38] = broadcast<SimdVector<double, 4>>(k95) * radial6 * harmonics[38];
-    compensation[38] = broadcast<SimdVector<double, 4>>(k00);
-    output[39] = broadcast<SimdVector<double, 4>>(k93) * radial6 * harmonics[39];
-    compensation[39] = broadcast<SimdVector<double, 4>>(k00);
-    output[40] = broadcast<SimdVector<double, 4>>(k92) * radial6 * harmonics[40];
-    compensation[40] = broadcast<SimdVector<double, 4>>(k00);
-    output[41] = broadcast<SimdVector<double, 4>>(k91) * radial6 * harmonics[41];
-    compensation[41] = broadcast<SimdVector<double, 4>>(k00);
-    output[42] = broadcast<SimdVector<double, 4>>(k90) * radial6 * harmonics[42];
-    compensation[42] = broadcast<SimdVector<double, 4>>(k00);
-    output[43] = broadcast<SimdVector<double, 4>>(k91) * radial6 * harmonics[43];
-    compensation[43] = broadcast<SimdVector<double, 4>>(k00);
-    output[44] = broadcast<SimdVector<double, 4>>(k92) * radial6 * harmonics[44];
-    compensation[44] = broadcast<SimdVector<double, 4>>(k00);
-    output[45] = broadcast<SimdVector<double, 4>>(k93) * radial6 * harmonics[45];
-    compensation[45] = broadcast<SimdVector<double, 4>>(k00);
-    output[46] = broadcast<SimdVector<double, 4>>(k95) * radial6 * harmonics[46];
-    compensation[46] = broadcast<SimdVector<double, 4>>(k00);
-    output[47] = broadcast<SimdVector<double, 4>>(k96) * radial6 * harmonics[47];
-    compensation[47] = broadcast<SimdVector<double, 4>>(k00);
-    output[48] = broadcast<SimdVector<double, 4>>(k97) * radial6 * harmonics[48];
-    compensation[48] = broadcast<SimdVector<double, 4>>(k00);
-    output[0] += broadcast<SimdVector<double, 4>>(k56);
+    G(6, -6) = broadcast<SimdVector<double, 4>>(k97) * radial6 * U(6, -6);
+    C(6, -6) = broadcast<SimdVector<double, 4>>(k00);
+    G(6, -5) = broadcast<SimdVector<double, 4>>(k96) * radial6 * U(6, -5);
+    C(6, -5) = broadcast<SimdVector<double, 4>>(k00);
+    G(6, -4) = broadcast<SimdVector<double, 4>>(k95) * radial6 * U(6, -4);
+    C(6, -4) = broadcast<SimdVector<double, 4>>(k00);
+    G(6, -3) = broadcast<SimdVector<double, 4>>(k93) * radial6 * U(6, -3);
+    C(6, -3) = broadcast<SimdVector<double, 4>>(k00);
+    G(6, -2) = broadcast<SimdVector<double, 4>>(k92) * radial6 * U(6, -2);
+    C(6, -2) = broadcast<SimdVector<double, 4>>(k00);
+    G(6, -1) = broadcast<SimdVector<double, 4>>(k91) * radial6 * U(6, -1);
+    C(6, -1) = broadcast<SimdVector<double, 4>>(k00);
+    G(6, 0) = broadcast<SimdVector<double, 4>>(k90) * radial6 * U(6, 0);
+    C(6, 0) = broadcast<SimdVector<double, 4>>(k00);
+    G(6, 1) = broadcast<SimdVector<double, 4>>(k91) * radial6 * U(6, 1);
+    C(6, 1) = broadcast<SimdVector<double, 4>>(k00);
+    G(6, 2) = broadcast<SimdVector<double, 4>>(k92) * radial6 * U(6, 2);
+    C(6, 2) = broadcast<SimdVector<double, 4>>(k00);
+    G(6, 3) = broadcast<SimdVector<double, 4>>(k93) * radial6 * U(6, 3);
+    C(6, 3) = broadcast<SimdVector<double, 4>>(k00);
+    G(6, 4) = broadcast<SimdVector<double, 4>>(k95) * radial6 * U(6, 4);
+    C(6, 4) = broadcast<SimdVector<double, 4>>(k00);
+    G(6, 5) = broadcast<SimdVector<double, 4>>(k96) * radial6 * U(6, 5);
+    C(6, 5) = broadcast<SimdVector<double, 4>>(k00);
+    G(6, 6) = broadcast<SimdVector<double, 4>>(k97) * radial6 * U(6, 6);
+    C(6, 6) = broadcast<SimdVector<double, 4>>(k00);
+    G(0, 0) += broadcast<SimdVector<double, 4>>(k56);
     greenTrace = broadcast<SimdVector<double, 4>>(k62);
     for (int ix = -6; ix <= 6; ++ix) {
         for (int iy = -6; iy <= 6; ++iy) {
@@ -5968,421 +6010,421 @@ void evaluateEwaldWorking(SimdVector<double, 4>& greenTrace, SimdVector<double, 
                         broadcast<SimdVector<double, 4>>(k59) * imageRadius * imageExp;
                     SimdVector<double, 4> inversePower = iR;
                     SimdVector<double, 4> const imageRadial0 = -screening * inversePower;
-                    SimdVector<double, 4> const imageValue0 = imageRadial0 * harmonics[0];
+                    SimdVector<double, 4> const imageValue0 = imageRadial0 * U(0, 0);
                     if (sign < 0) {
-                        imagePair[0] = imageValue0;
+                        I(0, 0) = imageValue0;
                     } else {
-                        imagePair[0] += imageValue0;
+                        I(0, 0) += imageValue0;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * broadcast<SimdVector<double, 4>>(k55);
                     SimdVector<double, 4> const imageRadial1 = screening * inversePower;
                     SimdVector<double, 4> const imageValue1 =
-                        broadcast<SimdVector<double, 4>>(k58) * imageRadial1 * harmonics[1];
+                        broadcast<SimdVector<double, 4>>(k58) * imageRadial1 * U(1, -1);
                     if (sign < 0) {
-                        imagePair[1] = imageValue1;
+                        I(1, -1) = imageValue1;
                     } else {
-                        imagePair[1] += imageValue1;
+                        I(1, -1) += imageValue1;
                     }
-                    SimdVector<double, 4> const imageValue2 = imageRadial1 * harmonics[2];
+                    SimdVector<double, 4> const imageValue2 = imageRadial1 * U(1, 0);
                     if (sign < 0) {
-                        imagePair[2] = imageValue2;
+                        I(1, 0) = imageValue2;
                     } else {
-                        imagePair[2] += imageValue2;
+                        I(1, 0) += imageValue2;
                     }
                     SimdVector<double, 4> const imageValue3 =
-                        broadcast<SimdVector<double, 4>>(k58) * imageRadial1 * harmonics[3];
+                        broadcast<SimdVector<double, 4>>(k58) * imageRadial1 * U(1, 1);
                     if (sign < 0) {
-                        imagePair[3] = imageValue3;
+                        I(1, 1) = imageValue3;
                     } else {
-                        imagePair[3] += imageValue3;
+                        I(1, 1) += imageValue3;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * broadcast<SimdVector<double, 4>>(k53);
                     SimdVector<double, 4> const imageRadial2 = -screening * inversePower;
                     SimdVector<double, 4> const imageValue4 =
-                        broadcast<SimdVector<double, 4>>(k76) * imageRadial2 * harmonics[4];
+                        broadcast<SimdVector<double, 4>>(k76) * imageRadial2 * U(2, -2);
                     if (sign < 0) {
-                        imagePair[4] = imageValue4;
+                        I(2, -2) = imageValue4;
                     } else {
-                        imagePair[4] += imageValue4;
+                        I(2, -2) += imageValue4;
                     }
                     SimdVector<double, 4> const imageValue5 =
-                        broadcast<SimdVector<double, 4>>(k65) * imageRadial2 * harmonics[5];
+                        broadcast<SimdVector<double, 4>>(k65) * imageRadial2 * U(2, -1);
                     if (sign < 0) {
-                        imagePair[5] = imageValue5;
+                        I(2, -1) = imageValue5;
                     } else {
-                        imagePair[5] += imageValue5;
+                        I(2, -1) += imageValue5;
                     }
                     SimdVector<double, 4> const imageValue6 =
-                        broadcast<SimdVector<double, 4>>(k61) * imageRadial2 * harmonics[6];
+                        broadcast<SimdVector<double, 4>>(k61) * imageRadial2 * U(2, 0);
                     if (sign < 0) {
-                        imagePair[6] = imageValue6;
+                        I(2, 0) = imageValue6;
                     } else {
-                        imagePair[6] += imageValue6;
+                        I(2, 0) += imageValue6;
                     }
                     SimdVector<double, 4> const imageValue7 =
-                        broadcast<SimdVector<double, 4>>(k65) * imageRadial2 * harmonics[7];
+                        broadcast<SimdVector<double, 4>>(k65) * imageRadial2 * U(2, 1);
                     if (sign < 0) {
-                        imagePair[7] = imageValue7;
+                        I(2, 1) = imageValue7;
                     } else {
-                        imagePair[7] += imageValue7;
+                        I(2, 1) += imageValue7;
                     }
                     SimdVector<double, 4> const imageValue8 =
-                        broadcast<SimdVector<double, 4>>(k76) * imageRadial2 * harmonics[8];
+                        broadcast<SimdVector<double, 4>>(k76) * imageRadial2 * U(2, 2);
                     if (sign < 0) {
-                        imagePair[8] = imageValue8;
+                        I(2, 2) = imageValue8;
                     } else {
-                        imagePair[8] += imageValue8;
+                        I(2, 2) += imageValue8;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * broadcast<SimdVector<double, 4>>(k52);
                     SimdVector<double, 4> const imageRadial3 = screening * inversePower;
                     SimdVector<double, 4> const imageValue9 =
-                        broadcast<SimdVector<double, 4>>(k81) * imageRadial3 * harmonics[9];
+                        broadcast<SimdVector<double, 4>>(k81) * imageRadial3 * U(3, -3);
                     if (sign < 0) {
-                        imagePair[9] = imageValue9;
+                        I(3, -3) = imageValue9;
                     } else {
-                        imagePair[9] += imageValue9;
+                        I(3, -3) += imageValue9;
                     }
                     SimdVector<double, 4> const imageValue10 =
-                        broadcast<SimdVector<double, 4>>(k79) * imageRadial3 * harmonics[10];
+                        broadcast<SimdVector<double, 4>>(k79) * imageRadial3 * U(3, -2);
                     if (sign < 0) {
-                        imagePair[10] = imageValue10;
+                        I(3, -2) = imageValue10;
                     } else {
-                        imagePair[10] += imageValue10;
+                        I(3, -2) += imageValue10;
                     }
                     SimdVector<double, 4> const imageValue11 =
-                        broadcast<SimdVector<double, 4>>(k78) * imageRadial3 * harmonics[11];
+                        broadcast<SimdVector<double, 4>>(k78) * imageRadial3 * U(3, -1);
                     if (sign < 0) {
-                        imagePair[11] = imageValue11;
+                        I(3, -1) = imageValue11;
                     } else {
-                        imagePair[11] += imageValue11;
+                        I(3, -1) += imageValue11;
                     }
                     SimdVector<double, 4> const imageValue12 =
-                        broadcast<SimdVector<double, 4>>(k77) * imageRadial3 * harmonics[12];
+                        broadcast<SimdVector<double, 4>>(k77) * imageRadial3 * U(3, 0);
                     if (sign < 0) {
-                        imagePair[12] = imageValue12;
+                        I(3, 0) = imageValue12;
                     } else {
-                        imagePair[12] += imageValue12;
+                        I(3, 0) += imageValue12;
                     }
                     SimdVector<double, 4> const imageValue13 =
-                        broadcast<SimdVector<double, 4>>(k78) * imageRadial3 * harmonics[13];
+                        broadcast<SimdVector<double, 4>>(k78) * imageRadial3 * U(3, 1);
                     if (sign < 0) {
-                        imagePair[13] = imageValue13;
+                        I(3, 1) = imageValue13;
                     } else {
-                        imagePair[13] += imageValue13;
+                        I(3, 1) += imageValue13;
                     }
                     SimdVector<double, 4> const imageValue14 =
-                        broadcast<SimdVector<double, 4>>(k79) * imageRadial3 * harmonics[14];
+                        broadcast<SimdVector<double, 4>>(k79) * imageRadial3 * U(3, 2);
                     if (sign < 0) {
-                        imagePair[14] = imageValue14;
+                        I(3, 2) = imageValue14;
                     } else {
-                        imagePair[14] += imageValue14;
+                        I(3, 2) += imageValue14;
                     }
                     SimdVector<double, 4> const imageValue15 =
-                        broadcast<SimdVector<double, 4>>(k81) * imageRadial3 * harmonics[15];
+                        broadcast<SimdVector<double, 4>>(k81) * imageRadial3 * U(3, 3);
                     if (sign < 0) {
-                        imagePair[15] = imageValue15;
+                        I(3, 3) = imageValue15;
                     } else {
-                        imagePair[15] += imageValue15;
+                        I(3, 3) += imageValue15;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * broadcast<SimdVector<double, 4>>(k51);
                     SimdVector<double, 4> const imageRadial4 = -screening * inversePower;
                     SimdVector<double, 4> const imageValue16 =
-                        broadcast<SimdVector<double, 4>>(k87) * imageRadial4 * harmonics[16];
+                        broadcast<SimdVector<double, 4>>(k87) * imageRadial4 * U(4, -4);
                     if (sign < 0) {
-                        imagePair[16] = imageValue16;
+                        I(4, -4) = imageValue16;
                     } else {
-                        imagePair[16] += imageValue16;
+                        I(4, -4) += imageValue16;
                     }
                     SimdVector<double, 4> const imageValue17 =
-                        broadcast<SimdVector<double, 4>>(k83) * imageRadial4 * harmonics[17];
+                        broadcast<SimdVector<double, 4>>(k83) * imageRadial4 * U(4, -3);
                     if (sign < 0) {
-                        imagePair[17] = imageValue17;
+                        I(4, -3) = imageValue17;
                     } else {
-                        imagePair[17] += imageValue17;
+                        I(4, -3) += imageValue17;
                     }
                     SimdVector<double, 4> const imageValue18 =
-                        broadcast<SimdVector<double, 4>>(k82) * imageRadial4 * harmonics[18];
+                        broadcast<SimdVector<double, 4>>(k82) * imageRadial4 * U(4, -2);
                     if (sign < 0) {
-                        imagePair[18] = imageValue18;
+                        I(4, -2) = imageValue18;
                     } else {
-                        imagePair[18] += imageValue18;
+                        I(4, -2) += imageValue18;
                     }
                     SimdVector<double, 4> const imageValue19 =
-                        broadcast<SimdVector<double, 4>>(k81) * imageRadial4 * harmonics[19];
+                        broadcast<SimdVector<double, 4>>(k81) * imageRadial4 * U(4, -1);
                     if (sign < 0) {
-                        imagePair[19] = imageValue19;
+                        I(4, -1) = imageValue19;
                     } else {
-                        imagePair[19] += imageValue19;
+                        I(4, -1) += imageValue19;
                     }
                     SimdVector<double, 4> const imageValue20 =
-                        broadcast<SimdVector<double, 4>>(k80) * imageRadial4 * harmonics[20];
+                        broadcast<SimdVector<double, 4>>(k80) * imageRadial4 * U(4, 0);
                     if (sign < 0) {
-                        imagePair[20] = imageValue20;
+                        I(4, 0) = imageValue20;
                     } else {
-                        imagePair[20] += imageValue20;
+                        I(4, 0) += imageValue20;
                     }
                     SimdVector<double, 4> const imageValue21 =
-                        broadcast<SimdVector<double, 4>>(k81) * imageRadial4 * harmonics[21];
+                        broadcast<SimdVector<double, 4>>(k81) * imageRadial4 * U(4, 1);
                     if (sign < 0) {
-                        imagePair[21] = imageValue21;
+                        I(4, 1) = imageValue21;
                     } else {
-                        imagePair[21] += imageValue21;
+                        I(4, 1) += imageValue21;
                     }
                     SimdVector<double, 4> const imageValue22 =
-                        broadcast<SimdVector<double, 4>>(k82) * imageRadial4 * harmonics[22];
+                        broadcast<SimdVector<double, 4>>(k82) * imageRadial4 * U(4, 2);
                     if (sign < 0) {
-                        imagePair[22] = imageValue22;
+                        I(4, 2) = imageValue22;
                     } else {
-                        imagePair[22] += imageValue22;
+                        I(4, 2) += imageValue22;
                     }
                     SimdVector<double, 4> const imageValue23 =
-                        broadcast<SimdVector<double, 4>>(k83) * imageRadial4 * harmonics[23];
+                        broadcast<SimdVector<double, 4>>(k83) * imageRadial4 * U(4, 3);
                     if (sign < 0) {
-                        imagePair[23] = imageValue23;
+                        I(4, 3) = imageValue23;
                     } else {
-                        imagePair[23] += imageValue23;
+                        I(4, 3) += imageValue23;
                     }
                     SimdVector<double, 4> const imageValue24 =
-                        broadcast<SimdVector<double, 4>>(k87) * imageRadial4 * harmonics[24];
+                        broadcast<SimdVector<double, 4>>(k87) * imageRadial4 * U(4, 4);
                     if (sign < 0) {
-                        imagePair[24] = imageValue24;
+                        I(4, 4) = imageValue24;
                     } else {
-                        imagePair[24] += imageValue24;
+                        I(4, 4) += imageValue24;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * broadcast<SimdVector<double, 4>>(k50);
                     SimdVector<double, 4> const imageRadial5 = screening * inversePower;
                     SimdVector<double, 4> const imageValue25 =
-                        broadcast<SimdVector<double, 4>>(k94) * imageRadial5 * harmonics[25];
+                        broadcast<SimdVector<double, 4>>(k94) * imageRadial5 * U(5, -5);
                     if (sign < 0) {
-                        imagePair[25] = imageValue25;
+                        I(5, -5) = imageValue25;
                     } else {
-                        imagePair[25] += imageValue25;
+                        I(5, -5) += imageValue25;
                     }
                     SimdVector<double, 4> const imageValue26 =
-                        broadcast<SimdVector<double, 4>>(k89) * imageRadial5 * harmonics[26];
+                        broadcast<SimdVector<double, 4>>(k89) * imageRadial5 * U(5, -4);
                     if (sign < 0) {
-                        imagePair[26] = imageValue26;
+                        I(5, -4) = imageValue26;
                     } else {
-                        imagePair[26] += imageValue26;
+                        I(5, -4) += imageValue26;
                     }
                     SimdVector<double, 4> const imageValue27 =
-                        broadcast<SimdVector<double, 4>>(k88) * imageRadial5 * harmonics[27];
+                        broadcast<SimdVector<double, 4>>(k88) * imageRadial5 * U(5, -3);
                     if (sign < 0) {
-                        imagePair[27] = imageValue27;
+                        I(5, -3) = imageValue27;
                     } else {
-                        imagePair[27] += imageValue27;
+                        I(5, -3) += imageValue27;
                     }
                     SimdVector<double, 4> const imageValue28 =
-                        broadcast<SimdVector<double, 4>>(k86) * imageRadial5 * harmonics[28];
+                        broadcast<SimdVector<double, 4>>(k86) * imageRadial5 * U(5, -2);
                     if (sign < 0) {
-                        imagePair[28] = imageValue28;
+                        I(5, -2) = imageValue28;
                     } else {
-                        imagePair[28] += imageValue28;
+                        I(5, -2) += imageValue28;
                     }
                     SimdVector<double, 4> const imageValue29 =
-                        broadcast<SimdVector<double, 4>>(k85) * imageRadial5 * harmonics[29];
+                        broadcast<SimdVector<double, 4>>(k85) * imageRadial5 * U(5, -1);
                     if (sign < 0) {
-                        imagePair[29] = imageValue29;
+                        I(5, -1) = imageValue29;
                     } else {
-                        imagePair[29] += imageValue29;
+                        I(5, -1) += imageValue29;
                     }
                     SimdVector<double, 4> const imageValue30 =
-                        broadcast<SimdVector<double, 4>>(k84) * imageRadial5 * harmonics[30];
+                        broadcast<SimdVector<double, 4>>(k84) * imageRadial5 * U(5, 0);
                     if (sign < 0) {
-                        imagePair[30] = imageValue30;
+                        I(5, 0) = imageValue30;
                     } else {
-                        imagePair[30] += imageValue30;
+                        I(5, 0) += imageValue30;
                     }
                     SimdVector<double, 4> const imageValue31 =
-                        broadcast<SimdVector<double, 4>>(k85) * imageRadial5 * harmonics[31];
+                        broadcast<SimdVector<double, 4>>(k85) * imageRadial5 * U(5, 1);
                     if (sign < 0) {
-                        imagePair[31] = imageValue31;
+                        I(5, 1) = imageValue31;
                     } else {
-                        imagePair[31] += imageValue31;
+                        I(5, 1) += imageValue31;
                     }
                     SimdVector<double, 4> const imageValue32 =
-                        broadcast<SimdVector<double, 4>>(k86) * imageRadial5 * harmonics[32];
+                        broadcast<SimdVector<double, 4>>(k86) * imageRadial5 * U(5, 2);
                     if (sign < 0) {
-                        imagePair[32] = imageValue32;
+                        I(5, 2) = imageValue32;
                     } else {
-                        imagePair[32] += imageValue32;
+                        I(5, 2) += imageValue32;
                     }
                     SimdVector<double, 4> const imageValue33 =
-                        broadcast<SimdVector<double, 4>>(k88) * imageRadial5 * harmonics[33];
+                        broadcast<SimdVector<double, 4>>(k88) * imageRadial5 * U(5, 3);
                     if (sign < 0) {
-                        imagePair[33] = imageValue33;
+                        I(5, 3) = imageValue33;
                     } else {
-                        imagePair[33] += imageValue33;
+                        I(5, 3) += imageValue33;
                     }
                     SimdVector<double, 4> const imageValue34 =
-                        broadcast<SimdVector<double, 4>>(k89) * imageRadial5 * harmonics[34];
+                        broadcast<SimdVector<double, 4>>(k89) * imageRadial5 * U(5, 4);
                     if (sign < 0) {
-                        imagePair[34] = imageValue34;
+                        I(5, 4) = imageValue34;
                     } else {
-                        imagePair[34] += imageValue34;
+                        I(5, 4) += imageValue34;
                     }
                     SimdVector<double, 4> const imageValue35 =
-                        broadcast<SimdVector<double, 4>>(k94) * imageRadial5 * harmonics[35];
+                        broadcast<SimdVector<double, 4>>(k94) * imageRadial5 * U(5, 5);
                     if (sign < 0) {
-                        imagePair[35] = imageValue35;
+                        I(5, 5) = imageValue35;
                     } else {
-                        imagePair[35] += imageValue35;
+                        I(5, 5) += imageValue35;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * broadcast<SimdVector<double, 4>>(k49);
                     SimdVector<double, 4> const imageRadial6 = -screening * inversePower;
                     SimdVector<double, 4> const imageValue36 =
-                        broadcast<SimdVector<double, 4>>(k97) * imageRadial6 * harmonics[36];
+                        broadcast<SimdVector<double, 4>>(k97) * imageRadial6 * U(6, -6);
                     if (sign < 0) {
-                        imagePair[36] = imageValue36;
+                        I(6, -6) = imageValue36;
                     } else {
-                        imagePair[36] += imageValue36;
+                        I(6, -6) += imageValue36;
                     }
                     SimdVector<double, 4> const imageValue37 =
-                        broadcast<SimdVector<double, 4>>(k96) * imageRadial6 * harmonics[37];
+                        broadcast<SimdVector<double, 4>>(k96) * imageRadial6 * U(6, -5);
                     if (sign < 0) {
-                        imagePair[37] = imageValue37;
+                        I(6, -5) = imageValue37;
                     } else {
-                        imagePair[37] += imageValue37;
+                        I(6, -5) += imageValue37;
                     }
                     SimdVector<double, 4> const imageValue38 =
-                        broadcast<SimdVector<double, 4>>(k95) * imageRadial6 * harmonics[38];
+                        broadcast<SimdVector<double, 4>>(k95) * imageRadial6 * U(6, -4);
                     if (sign < 0) {
-                        imagePair[38] = imageValue38;
+                        I(6, -4) = imageValue38;
                     } else {
-                        imagePair[38] += imageValue38;
+                        I(6, -4) += imageValue38;
                     }
                     SimdVector<double, 4> const imageValue39 =
-                        broadcast<SimdVector<double, 4>>(k93) * imageRadial6 * harmonics[39];
+                        broadcast<SimdVector<double, 4>>(k93) * imageRadial6 * U(6, -3);
                     if (sign < 0) {
-                        imagePair[39] = imageValue39;
+                        I(6, -3) = imageValue39;
                     } else {
-                        imagePair[39] += imageValue39;
+                        I(6, -3) += imageValue39;
                     }
                     SimdVector<double, 4> const imageValue40 =
-                        broadcast<SimdVector<double, 4>>(k92) * imageRadial6 * harmonics[40];
+                        broadcast<SimdVector<double, 4>>(k92) * imageRadial6 * U(6, -2);
                     if (sign < 0) {
-                        imagePair[40] = imageValue40;
+                        I(6, -2) = imageValue40;
                     } else {
-                        imagePair[40] += imageValue40;
+                        I(6, -2) += imageValue40;
                     }
                     SimdVector<double, 4> const imageValue41 =
-                        broadcast<SimdVector<double, 4>>(k91) * imageRadial6 * harmonics[41];
+                        broadcast<SimdVector<double, 4>>(k91) * imageRadial6 * U(6, -1);
                     if (sign < 0) {
-                        imagePair[41] = imageValue41;
+                        I(6, -1) = imageValue41;
                     } else {
-                        imagePair[41] += imageValue41;
+                        I(6, -1) += imageValue41;
                     }
                     SimdVector<double, 4> const imageValue42 =
-                        broadcast<SimdVector<double, 4>>(k90) * imageRadial6 * harmonics[42];
+                        broadcast<SimdVector<double, 4>>(k90) * imageRadial6 * U(6, 0);
                     if (sign < 0) {
-                        imagePair[42] = imageValue42;
+                        I(6, 0) = imageValue42;
                     } else {
-                        imagePair[42] += imageValue42;
+                        I(6, 0) += imageValue42;
                     }
                     SimdVector<double, 4> const imageValue43 =
-                        broadcast<SimdVector<double, 4>>(k91) * imageRadial6 * harmonics[43];
+                        broadcast<SimdVector<double, 4>>(k91) * imageRadial6 * U(6, 1);
                     if (sign < 0) {
-                        imagePair[43] = imageValue43;
+                        I(6, 1) = imageValue43;
                     } else {
-                        imagePair[43] += imageValue43;
+                        I(6, 1) += imageValue43;
                     }
                     SimdVector<double, 4> const imageValue44 =
-                        broadcast<SimdVector<double, 4>>(k92) * imageRadial6 * harmonics[44];
+                        broadcast<SimdVector<double, 4>>(k92) * imageRadial6 * U(6, 2);
                     if (sign < 0) {
-                        imagePair[44] = imageValue44;
+                        I(6, 2) = imageValue44;
                     } else {
-                        imagePair[44] += imageValue44;
+                        I(6, 2) += imageValue44;
                     }
                     SimdVector<double, 4> const imageValue45 =
-                        broadcast<SimdVector<double, 4>>(k93) * imageRadial6 * harmonics[45];
+                        broadcast<SimdVector<double, 4>>(k93) * imageRadial6 * U(6, 3);
                     if (sign < 0) {
-                        imagePair[45] = imageValue45;
+                        I(6, 3) = imageValue45;
                     } else {
-                        imagePair[45] += imageValue45;
+                        I(6, 3) += imageValue45;
                     }
                     SimdVector<double, 4> const imageValue46 =
-                        broadcast<SimdVector<double, 4>>(k95) * imageRadial6 * harmonics[46];
+                        broadcast<SimdVector<double, 4>>(k95) * imageRadial6 * U(6, 4);
                     if (sign < 0) {
-                        imagePair[46] = imageValue46;
+                        I(6, 4) = imageValue46;
                     } else {
-                        imagePair[46] += imageValue46;
+                        I(6, 4) += imageValue46;
                     }
                     SimdVector<double, 4> const imageValue47 =
-                        broadcast<SimdVector<double, 4>>(k96) * imageRadial6 * harmonics[47];
+                        broadcast<SimdVector<double, 4>>(k96) * imageRadial6 * U(6, 5);
                     if (sign < 0) {
-                        imagePair[47] = imageValue47;
+                        I(6, 5) = imageValue47;
                     } else {
-                        imagePair[47] += imageValue47;
+                        I(6, 5) += imageValue47;
                     }
                     SimdVector<double, 4> const imageValue48 =
-                        broadcast<SimdVector<double, 4>>(k97) * imageRadial6 * harmonics[48];
+                        broadcast<SimdVector<double, 4>>(k97) * imageRadial6 * U(6, 6);
                     if (sign < 0) {
-                        imagePair[48] = imageValue48;
+                        I(6, 6) = imageValue48;
                     } else {
-                        imagePair[48] += imageValue48;
+                        I(6, 6) += imageValue48;
                     }
                 }
-                detail::ewaldAccumulate(output[0], compensation[0], imagePair[0]);
-                detail::ewaldAccumulate(output[1], compensation[1], imagePair[1]);
-                detail::ewaldAccumulate(output[2], compensation[2], imagePair[2]);
-                detail::ewaldAccumulate(output[3], compensation[3], imagePair[3]);
-                detail::ewaldAccumulate(output[4], compensation[4], imagePair[4]);
-                detail::ewaldAccumulate(output[5], compensation[5], imagePair[5]);
-                detail::ewaldAccumulate(output[6], compensation[6], imagePair[6]);
-                detail::ewaldAccumulate(output[7], compensation[7], imagePair[7]);
-                detail::ewaldAccumulate(output[8], compensation[8], imagePair[8]);
-                detail::ewaldAccumulate(output[9], compensation[9], imagePair[9]);
-                detail::ewaldAccumulate(output[10], compensation[10], imagePair[10]);
-                detail::ewaldAccumulate(output[11], compensation[11], imagePair[11]);
-                detail::ewaldAccumulate(output[12], compensation[12], imagePair[12]);
-                detail::ewaldAccumulate(output[13], compensation[13], imagePair[13]);
-                detail::ewaldAccumulate(output[14], compensation[14], imagePair[14]);
-                detail::ewaldAccumulate(output[15], compensation[15], imagePair[15]);
-                detail::ewaldAccumulate(output[16], compensation[16], imagePair[16]);
-                detail::ewaldAccumulate(output[17], compensation[17], imagePair[17]);
-                detail::ewaldAccumulate(output[18], compensation[18], imagePair[18]);
-                detail::ewaldAccumulate(output[19], compensation[19], imagePair[19]);
-                detail::ewaldAccumulate(output[20], compensation[20], imagePair[20]);
-                detail::ewaldAccumulate(output[21], compensation[21], imagePair[21]);
-                detail::ewaldAccumulate(output[22], compensation[22], imagePair[22]);
-                detail::ewaldAccumulate(output[23], compensation[23], imagePair[23]);
-                detail::ewaldAccumulate(output[24], compensation[24], imagePair[24]);
-                detail::ewaldAccumulate(output[25], compensation[25], imagePair[25]);
-                detail::ewaldAccumulate(output[26], compensation[26], imagePair[26]);
-                detail::ewaldAccumulate(output[27], compensation[27], imagePair[27]);
-                detail::ewaldAccumulate(output[28], compensation[28], imagePair[28]);
-                detail::ewaldAccumulate(output[29], compensation[29], imagePair[29]);
-                detail::ewaldAccumulate(output[30], compensation[30], imagePair[30]);
-                detail::ewaldAccumulate(output[31], compensation[31], imagePair[31]);
-                detail::ewaldAccumulate(output[32], compensation[32], imagePair[32]);
-                detail::ewaldAccumulate(output[33], compensation[33], imagePair[33]);
-                detail::ewaldAccumulate(output[34], compensation[34], imagePair[34]);
-                detail::ewaldAccumulate(output[35], compensation[35], imagePair[35]);
-                detail::ewaldAccumulate(output[36], compensation[36], imagePair[36]);
-                detail::ewaldAccumulate(output[37], compensation[37], imagePair[37]);
-                detail::ewaldAccumulate(output[38], compensation[38], imagePair[38]);
-                detail::ewaldAccumulate(output[39], compensation[39], imagePair[39]);
-                detail::ewaldAccumulate(output[40], compensation[40], imagePair[40]);
-                detail::ewaldAccumulate(output[41], compensation[41], imagePair[41]);
-                detail::ewaldAccumulate(output[42], compensation[42], imagePair[42]);
-                detail::ewaldAccumulate(output[43], compensation[43], imagePair[43]);
-                detail::ewaldAccumulate(output[44], compensation[44], imagePair[44]);
-                detail::ewaldAccumulate(output[45], compensation[45], imagePair[45]);
-                detail::ewaldAccumulate(output[46], compensation[46], imagePair[46]);
-                detail::ewaldAccumulate(output[47], compensation[47], imagePair[47]);
-                detail::ewaldAccumulate(output[48], compensation[48], imagePair[48]);
+                detail::ewaldAccumulate(G(0, 0), C(0, 0), I(0, 0));
+                detail::ewaldAccumulate(G(1, -1), C(1, -1), I(1, -1));
+                detail::ewaldAccumulate(G(1, 0), C(1, 0), I(1, 0));
+                detail::ewaldAccumulate(G(1, 1), C(1, 1), I(1, 1));
+                detail::ewaldAccumulate(G(2, -2), C(2, -2), I(2, -2));
+                detail::ewaldAccumulate(G(2, -1), C(2, -1), I(2, -1));
+                detail::ewaldAccumulate(G(2, 0), C(2, 0), I(2, 0));
+                detail::ewaldAccumulate(G(2, 1), C(2, 1), I(2, 1));
+                detail::ewaldAccumulate(G(2, 2), C(2, 2), I(2, 2));
+                detail::ewaldAccumulate(G(3, -3), C(3, -3), I(3, -3));
+                detail::ewaldAccumulate(G(3, -2), C(3, -2), I(3, -2));
+                detail::ewaldAccumulate(G(3, -1), C(3, -1), I(3, -1));
+                detail::ewaldAccumulate(G(3, 0), C(3, 0), I(3, 0));
+                detail::ewaldAccumulate(G(3, 1), C(3, 1), I(3, 1));
+                detail::ewaldAccumulate(G(3, 2), C(3, 2), I(3, 2));
+                detail::ewaldAccumulate(G(3, 3), C(3, 3), I(3, 3));
+                detail::ewaldAccumulate(G(4, -4), C(4, -4), I(4, -4));
+                detail::ewaldAccumulate(G(4, -3), C(4, -3), I(4, -3));
+                detail::ewaldAccumulate(G(4, -2), C(4, -2), I(4, -2));
+                detail::ewaldAccumulate(G(4, -1), C(4, -1), I(4, -1));
+                detail::ewaldAccumulate(G(4, 0), C(4, 0), I(4, 0));
+                detail::ewaldAccumulate(G(4, 1), C(4, 1), I(4, 1));
+                detail::ewaldAccumulate(G(4, 2), C(4, 2), I(4, 2));
+                detail::ewaldAccumulate(G(4, 3), C(4, 3), I(4, 3));
+                detail::ewaldAccumulate(G(4, 4), C(4, 4), I(4, 4));
+                detail::ewaldAccumulate(G(5, -5), C(5, -5), I(5, -5));
+                detail::ewaldAccumulate(G(5, -4), C(5, -4), I(5, -4));
+                detail::ewaldAccumulate(G(5, -3), C(5, -3), I(5, -3));
+                detail::ewaldAccumulate(G(5, -2), C(5, -2), I(5, -2));
+                detail::ewaldAccumulate(G(5, -1), C(5, -1), I(5, -1));
+                detail::ewaldAccumulate(G(5, 0), C(5, 0), I(5, 0));
+                detail::ewaldAccumulate(G(5, 1), C(5, 1), I(5, 1));
+                detail::ewaldAccumulate(G(5, 2), C(5, 2), I(5, 2));
+                detail::ewaldAccumulate(G(5, 3), C(5, 3), I(5, 3));
+                detail::ewaldAccumulate(G(5, 4), C(5, 4), I(5, 4));
+                detail::ewaldAccumulate(G(5, 5), C(5, 5), I(5, 5));
+                detail::ewaldAccumulate(G(6, -6), C(6, -6), I(6, -6));
+                detail::ewaldAccumulate(G(6, -5), C(6, -5), I(6, -5));
+                detail::ewaldAccumulate(G(6, -4), C(6, -4), I(6, -4));
+                detail::ewaldAccumulate(G(6, -3), C(6, -3), I(6, -3));
+                detail::ewaldAccumulate(G(6, -2), C(6, -2), I(6, -2));
+                detail::ewaldAccumulate(G(6, -1), C(6, -1), I(6, -1));
+                detail::ewaldAccumulate(G(6, 0), C(6, 0), I(6, 0));
+                detail::ewaldAccumulate(G(6, 1), C(6, 1), I(6, 1));
+                detail::ewaldAccumulate(G(6, 2), C(6, 2), I(6, 2));
+                detail::ewaldAccumulate(G(6, 3), C(6, 3), I(6, 3));
+                detail::ewaldAccumulate(G(6, 4), C(6, 4), I(6, 4));
+                detail::ewaldAccumulate(G(6, 5), C(6, 5), I(6, 5));
+                detail::ewaldAccumulate(G(6, 6), C(6, 6), I(6, 6));
                 SimdVector<double, 4> const waveX = broadcast<SimdVector<double, 4>>(ix);
                 SimdVector<double, 4> const waveY = broadcast<SimdVector<double, 4>>(iy);
                 SimdVector<double, 4> const waveZ = broadcast<SimdVector<double, 4>>(iz);
@@ -6398,114 +6440,114 @@ void evaluateEwaldWorking(SimdVector<double, 4>& greenTrace, SimdVector<double, 
                     waveSquared;
                 SimdVector<double, 4> const waveRadial0 =
                     broadcast<SimdVector<double, 4>>(k57) * wavePotential * cosine;
-                detail::ewaldAccumulate(output[0], compensation[0], waveRadial0 * harmonics[0]);
+                detail::ewaldAccumulate(G(0, 0), C(0, 0), waveRadial0 * U(0, 0));
                 SimdVector<double, 4> const waveRadial1 =
                     broadcast<SimdVector<double, 4>>(k67) * wavePotential * -sine;
-                detail::ewaldAccumulate(output[1], compensation[1],
-                    broadcast<SimdVector<double, 4>>(k58) * waveRadial1 * harmonics[1]);
-                detail::ewaldAccumulate(output[2], compensation[2], waveRadial1 * harmonics[2]);
-                detail::ewaldAccumulate(output[3], compensation[3],
-                    broadcast<SimdVector<double, 4>>(k58) * waveRadial1 * harmonics[3]);
+                detail::ewaldAccumulate(G(1, -1), C(1, -1),
+                    broadcast<SimdVector<double, 4>>(k58) * waveRadial1 * U(1, -1));
+                detail::ewaldAccumulate(G(1, 0), C(1, 0), waveRadial1 * U(1, 0));
+                detail::ewaldAccumulate(G(1, 1), C(1, 1),
+                    broadcast<SimdVector<double, 4>>(k58) * waveRadial1 * U(1, 1));
                 SimdVector<double, 4> const waveRadial2 =
                     broadcast<SimdVector<double, 4>>(k73) * wavePotential * -cosine;
-                detail::ewaldAccumulate(output[4], compensation[4],
-                    broadcast<SimdVector<double, 4>>(k76) * waveRadial2 * harmonics[4]);
-                detail::ewaldAccumulate(output[5], compensation[5],
-                    broadcast<SimdVector<double, 4>>(k65) * waveRadial2 * harmonics[5]);
-                detail::ewaldAccumulate(output[6], compensation[6],
-                    broadcast<SimdVector<double, 4>>(k61) * waveRadial2 * harmonics[6]);
-                detail::ewaldAccumulate(output[7], compensation[7],
-                    broadcast<SimdVector<double, 4>>(k65) * waveRadial2 * harmonics[7]);
-                detail::ewaldAccumulate(output[8], compensation[8],
-                    broadcast<SimdVector<double, 4>>(k76) * waveRadial2 * harmonics[8]);
+                detail::ewaldAccumulate(G(2, -2), C(2, -2),
+                    broadcast<SimdVector<double, 4>>(k76) * waveRadial2 * U(2, -2));
+                detail::ewaldAccumulate(G(2, -1), C(2, -1),
+                    broadcast<SimdVector<double, 4>>(k65) * waveRadial2 * U(2, -1));
+                detail::ewaldAccumulate(G(2, 0), C(2, 0),
+                    broadcast<SimdVector<double, 4>>(k61) * waveRadial2 * U(2, 0));
+                detail::ewaldAccumulate(G(2, 1), C(2, 1),
+                    broadcast<SimdVector<double, 4>>(k65) * waveRadial2 * U(2, 1));
+                detail::ewaldAccumulate(G(2, 2), C(2, 2),
+                    broadcast<SimdVector<double, 4>>(k76) * waveRadial2 * U(2, 2));
                 SimdVector<double, 4> const waveRadial3 =
                     broadcast<SimdVector<double, 4>>(k75) * wavePotential * sine;
-                detail::ewaldAccumulate(output[9], compensation[9],
-                    broadcast<SimdVector<double, 4>>(k81) * waveRadial3 * harmonics[9]);
-                detail::ewaldAccumulate(output[10], compensation[10],
-                    broadcast<SimdVector<double, 4>>(k79) * waveRadial3 * harmonics[10]);
-                detail::ewaldAccumulate(output[11], compensation[11],
-                    broadcast<SimdVector<double, 4>>(k78) * waveRadial3 * harmonics[11]);
-                detail::ewaldAccumulate(output[12], compensation[12],
-                    broadcast<SimdVector<double, 4>>(k77) * waveRadial3 * harmonics[12]);
-                detail::ewaldAccumulate(output[13], compensation[13],
-                    broadcast<SimdVector<double, 4>>(k78) * waveRadial3 * harmonics[13]);
-                detail::ewaldAccumulate(output[14], compensation[14],
-                    broadcast<SimdVector<double, 4>>(k79) * waveRadial3 * harmonics[14]);
-                detail::ewaldAccumulate(output[15], compensation[15],
-                    broadcast<SimdVector<double, 4>>(k81) * waveRadial3 * harmonics[15]);
+                detail::ewaldAccumulate(G(3, -3), C(3, -3),
+                    broadcast<SimdVector<double, 4>>(k81) * waveRadial3 * U(3, -3));
+                detail::ewaldAccumulate(G(3, -2), C(3, -2),
+                    broadcast<SimdVector<double, 4>>(k79) * waveRadial3 * U(3, -2));
+                detail::ewaldAccumulate(G(3, -1), C(3, -1),
+                    broadcast<SimdVector<double, 4>>(k78) * waveRadial3 * U(3, -1));
+                detail::ewaldAccumulate(G(3, 0), C(3, 0),
+                    broadcast<SimdVector<double, 4>>(k77) * waveRadial3 * U(3, 0));
+                detail::ewaldAccumulate(G(3, 1), C(3, 1),
+                    broadcast<SimdVector<double, 4>>(k78) * waveRadial3 * U(3, 1));
+                detail::ewaldAccumulate(G(3, 2), C(3, 2),
+                    broadcast<SimdVector<double, 4>>(k79) * waveRadial3 * U(3, 2));
+                detail::ewaldAccumulate(G(3, 3), C(3, 3),
+                    broadcast<SimdVector<double, 4>>(k81) * waveRadial3 * U(3, 3));
                 SimdVector<double, 4> const waveRadial4 =
                     broadcast<SimdVector<double, 4>>(k74) * wavePotential * cosine;
-                detail::ewaldAccumulate(output[16], compensation[16],
-                    broadcast<SimdVector<double, 4>>(k87) * waveRadial4 * harmonics[16]);
-                detail::ewaldAccumulate(output[17], compensation[17],
-                    broadcast<SimdVector<double, 4>>(k83) * waveRadial4 * harmonics[17]);
-                detail::ewaldAccumulate(output[18], compensation[18],
-                    broadcast<SimdVector<double, 4>>(k82) * waveRadial4 * harmonics[18]);
-                detail::ewaldAccumulate(output[19], compensation[19],
-                    broadcast<SimdVector<double, 4>>(k81) * waveRadial4 * harmonics[19]);
-                detail::ewaldAccumulate(output[20], compensation[20],
-                    broadcast<SimdVector<double, 4>>(k80) * waveRadial4 * harmonics[20]);
-                detail::ewaldAccumulate(output[21], compensation[21],
-                    broadcast<SimdVector<double, 4>>(k81) * waveRadial4 * harmonics[21]);
-                detail::ewaldAccumulate(output[22], compensation[22],
-                    broadcast<SimdVector<double, 4>>(k82) * waveRadial4 * harmonics[22]);
-                detail::ewaldAccumulate(output[23], compensation[23],
-                    broadcast<SimdVector<double, 4>>(k83) * waveRadial4 * harmonics[23]);
-                detail::ewaldAccumulate(output[24], compensation[24],
-                    broadcast<SimdVector<double, 4>>(k87) * waveRadial4 * harmonics[24]);
+                detail::ewaldAccumulate(G(4, -4), C(4, -4),
+                    broadcast<SimdVector<double, 4>>(k87) * waveRadial4 * U(4, -4));
+                detail::ewaldAccumulate(G(4, -3), C(4, -3),
+                    broadcast<SimdVector<double, 4>>(k83) * waveRadial4 * U(4, -3));
+                detail::ewaldAccumulate(G(4, -2), C(4, -2),
+                    broadcast<SimdVector<double, 4>>(k82) * waveRadial4 * U(4, -2));
+                detail::ewaldAccumulate(G(4, -1), C(4, -1),
+                    broadcast<SimdVector<double, 4>>(k81) * waveRadial4 * U(4, -1));
+                detail::ewaldAccumulate(G(4, 0), C(4, 0),
+                    broadcast<SimdVector<double, 4>>(k80) * waveRadial4 * U(4, 0));
+                detail::ewaldAccumulate(G(4, 1), C(4, 1),
+                    broadcast<SimdVector<double, 4>>(k81) * waveRadial4 * U(4, 1));
+                detail::ewaldAccumulate(G(4, 2), C(4, 2),
+                    broadcast<SimdVector<double, 4>>(k82) * waveRadial4 * U(4, 2));
+                detail::ewaldAccumulate(G(4, 3), C(4, 3),
+                    broadcast<SimdVector<double, 4>>(k83) * waveRadial4 * U(4, 3));
+                detail::ewaldAccumulate(G(4, 4), C(4, 4),
+                    broadcast<SimdVector<double, 4>>(k87) * waveRadial4 * U(4, 4));
                 SimdVector<double, 4> const waveRadial5 =
                     broadcast<SimdVector<double, 4>>(k71) * wavePotential * -sine;
-                detail::ewaldAccumulate(output[25], compensation[25],
-                    broadcast<SimdVector<double, 4>>(k94) * waveRadial5 * harmonics[25]);
-                detail::ewaldAccumulate(output[26], compensation[26],
-                    broadcast<SimdVector<double, 4>>(k89) * waveRadial5 * harmonics[26]);
-                detail::ewaldAccumulate(output[27], compensation[27],
-                    broadcast<SimdVector<double, 4>>(k88) * waveRadial5 * harmonics[27]);
-                detail::ewaldAccumulate(output[28], compensation[28],
-                    broadcast<SimdVector<double, 4>>(k86) * waveRadial5 * harmonics[28]);
-                detail::ewaldAccumulate(output[29], compensation[29],
-                    broadcast<SimdVector<double, 4>>(k85) * waveRadial5 * harmonics[29]);
-                detail::ewaldAccumulate(output[30], compensation[30],
-                    broadcast<SimdVector<double, 4>>(k84) * waveRadial5 * harmonics[30]);
-                detail::ewaldAccumulate(output[31], compensation[31],
-                    broadcast<SimdVector<double, 4>>(k85) * waveRadial5 * harmonics[31]);
-                detail::ewaldAccumulate(output[32], compensation[32],
-                    broadcast<SimdVector<double, 4>>(k86) * waveRadial5 * harmonics[32]);
-                detail::ewaldAccumulate(output[33], compensation[33],
-                    broadcast<SimdVector<double, 4>>(k88) * waveRadial5 * harmonics[33]);
-                detail::ewaldAccumulate(output[34], compensation[34],
-                    broadcast<SimdVector<double, 4>>(k89) * waveRadial5 * harmonics[34]);
-                detail::ewaldAccumulate(output[35], compensation[35],
-                    broadcast<SimdVector<double, 4>>(k94) * waveRadial5 * harmonics[35]);
+                detail::ewaldAccumulate(G(5, -5), C(5, -5),
+                    broadcast<SimdVector<double, 4>>(k94) * waveRadial5 * U(5, -5));
+                detail::ewaldAccumulate(G(5, -4), C(5, -4),
+                    broadcast<SimdVector<double, 4>>(k89) * waveRadial5 * U(5, -4));
+                detail::ewaldAccumulate(G(5, -3), C(5, -3),
+                    broadcast<SimdVector<double, 4>>(k88) * waveRadial5 * U(5, -3));
+                detail::ewaldAccumulate(G(5, -2), C(5, -2),
+                    broadcast<SimdVector<double, 4>>(k86) * waveRadial5 * U(5, -2));
+                detail::ewaldAccumulate(G(5, -1), C(5, -1),
+                    broadcast<SimdVector<double, 4>>(k85) * waveRadial5 * U(5, -1));
+                detail::ewaldAccumulate(G(5, 0), C(5, 0),
+                    broadcast<SimdVector<double, 4>>(k84) * waveRadial5 * U(5, 0));
+                detail::ewaldAccumulate(G(5, 1), C(5, 1),
+                    broadcast<SimdVector<double, 4>>(k85) * waveRadial5 * U(5, 1));
+                detail::ewaldAccumulate(G(5, 2), C(5, 2),
+                    broadcast<SimdVector<double, 4>>(k86) * waveRadial5 * U(5, 2));
+                detail::ewaldAccumulate(G(5, 3), C(5, 3),
+                    broadcast<SimdVector<double, 4>>(k88) * waveRadial5 * U(5, 3));
+                detail::ewaldAccumulate(G(5, 4), C(5, 4),
+                    broadcast<SimdVector<double, 4>>(k89) * waveRadial5 * U(5, 4));
+                detail::ewaldAccumulate(G(5, 5), C(5, 5),
+                    broadcast<SimdVector<double, 4>>(k94) * waveRadial5 * U(5, 5));
                 SimdVector<double, 4> const waveRadial6 =
                     broadcast<SimdVector<double, 4>>(k64) * wavePotential * -cosine;
-                detail::ewaldAccumulate(output[36], compensation[36],
-                    broadcast<SimdVector<double, 4>>(k97) * waveRadial6 * harmonics[36]);
-                detail::ewaldAccumulate(output[37], compensation[37],
-                    broadcast<SimdVector<double, 4>>(k96) * waveRadial6 * harmonics[37]);
-                detail::ewaldAccumulate(output[38], compensation[38],
-                    broadcast<SimdVector<double, 4>>(k95) * waveRadial6 * harmonics[38]);
-                detail::ewaldAccumulate(output[39], compensation[39],
-                    broadcast<SimdVector<double, 4>>(k93) * waveRadial6 * harmonics[39]);
-                detail::ewaldAccumulate(output[40], compensation[40],
-                    broadcast<SimdVector<double, 4>>(k92) * waveRadial6 * harmonics[40]);
-                detail::ewaldAccumulate(output[41], compensation[41],
-                    broadcast<SimdVector<double, 4>>(k91) * waveRadial6 * harmonics[41]);
-                detail::ewaldAccumulate(output[42], compensation[42],
-                    broadcast<SimdVector<double, 4>>(k90) * waveRadial6 * harmonics[42]);
-                detail::ewaldAccumulate(output[43], compensation[43],
-                    broadcast<SimdVector<double, 4>>(k91) * waveRadial6 * harmonics[43]);
-                detail::ewaldAccumulate(output[44], compensation[44],
-                    broadcast<SimdVector<double, 4>>(k92) * waveRadial6 * harmonics[44]);
-                detail::ewaldAccumulate(output[45], compensation[45],
-                    broadcast<SimdVector<double, 4>>(k93) * waveRadial6 * harmonics[45]);
-                detail::ewaldAccumulate(output[46], compensation[46],
-                    broadcast<SimdVector<double, 4>>(k95) * waveRadial6 * harmonics[46]);
-                detail::ewaldAccumulate(output[47], compensation[47],
-                    broadcast<SimdVector<double, 4>>(k96) * waveRadial6 * harmonics[47]);
-                detail::ewaldAccumulate(output[48], compensation[48],
-                    broadcast<SimdVector<double, 4>>(k97) * waveRadial6 * harmonics[48]);
+                detail::ewaldAccumulate(G(6, -6), C(6, -6),
+                    broadcast<SimdVector<double, 4>>(k97) * waveRadial6 * U(6, -6));
+                detail::ewaldAccumulate(G(6, -5), C(6, -5),
+                    broadcast<SimdVector<double, 4>>(k96) * waveRadial6 * U(6, -5));
+                detail::ewaldAccumulate(G(6, -4), C(6, -4),
+                    broadcast<SimdVector<double, 4>>(k95) * waveRadial6 * U(6, -4));
+                detail::ewaldAccumulate(G(6, -3), C(6, -3),
+                    broadcast<SimdVector<double, 4>>(k93) * waveRadial6 * U(6, -3));
+                detail::ewaldAccumulate(G(6, -2), C(6, -2),
+                    broadcast<SimdVector<double, 4>>(k92) * waveRadial6 * U(6, -2));
+                detail::ewaldAccumulate(G(6, -1), C(6, -1),
+                    broadcast<SimdVector<double, 4>>(k91) * waveRadial6 * U(6, -1));
+                detail::ewaldAccumulate(G(6, 0), C(6, 0),
+                    broadcast<SimdVector<double, 4>>(k90) * waveRadial6 * U(6, 0));
+                detail::ewaldAccumulate(G(6, 1), C(6, 1),
+                    broadcast<SimdVector<double, 4>>(k91) * waveRadial6 * U(6, 1));
+                detail::ewaldAccumulate(G(6, 2), C(6, 2),
+                    broadcast<SimdVector<double, 4>>(k92) * waveRadial6 * U(6, 2));
+                detail::ewaldAccumulate(G(6, 3), C(6, 3),
+                    broadcast<SimdVector<double, 4>>(k93) * waveRadial6 * U(6, 3));
+                detail::ewaldAccumulate(G(6, 4), C(6, 4),
+                    broadcast<SimdVector<double, 4>>(k95) * waveRadial6 * U(6, 4));
+                detail::ewaldAccumulate(G(6, 5), C(6, 5),
+                    broadcast<SimdVector<double, 4>>(k96) * waveRadial6 * U(6, 5));
+                detail::ewaldAccumulate(G(6, 6), C(6, 6),
+                    broadcast<SimdVector<double, 4>>(k97) * waveRadial6 * U(6, 6));
             }
         }
     }
@@ -6614,9 +6656,17 @@ void evaluateEwaldWorking(SimdVector<double, 8>& greenTrace, SimdVector<double, 
     constexpr double k95 = 7.25760000000000000e+06;
     constexpr double k96 = 3.99168000000000000e+07;
     constexpr double k97 = 4.79001600000000000e+08;
+    detail::CoefficientView<SimdVector<double, 8>> const G{output};
+
     SimdVector<double, 8> harmonics[49];
+    detail::CoefficientView<SimdVector<double, 8>> const U{harmonics};
+
     SimdVector<double, 8> compensation[49];
+    detail::CoefficientView<SimdVector<double, 8>> const C{compensation};
+
     SimdVector<double, 8> imagePair[49];
+    detail::CoefficientView<SimdVector<double, 8>> const I{imagePair};
+
     SimdVector<double, 8> const radiusSquared = fma(x, x, fma(y, y, z * z));
     ewaldRegular(x, y, z, radiusSquared, harmonics);
     SimdVector<double, 8> const argument = broadcast<SimdVector<double, 8>>(k61) * radiusSquared;
@@ -6720,8 +6770,8 @@ void evaluateEwaldWorking(SimdVector<double, 8>& greenTrace, SimdVector<double, 
         broadcast<SimdVector<double, 8>>(k57));
     SimdVector<double, 8> const radial0 =
         broadcast<SimdVector<double, 8>>(k59) * exponential * series0;
-    output[0] = radial0 * harmonics[0];
-    compensation[0] = broadcast<SimdVector<double, 8>>(k00);
+    G(0, 0) = radial0 * U(0, 0);
+    C(0, 0) = broadcast<SimdVector<double, 8>>(k00);
     SimdVector<double, 8> series1 = broadcast<SimdVector<double, 8>>(k57);
     series1 = fma(series1, argument * broadcast<SimdVector<double, 8>>(k06),
         broadcast<SimdVector<double, 8>>(k57));
@@ -6821,12 +6871,12 @@ void evaluateEwaldWorking(SimdVector<double, 8>& greenTrace, SimdVector<double, 
         broadcast<SimdVector<double, 8>>(k57));
     SimdVector<double, 8> const radial1 =
         -broadcast<SimdVector<double, 8>>(k66) * exponential * series1;
-    output[1] = broadcast<SimdVector<double, 8>>(k58) * radial1 * harmonics[1];
-    compensation[1] = broadcast<SimdVector<double, 8>>(k00);
-    output[2] = radial1 * harmonics[2];
-    compensation[2] = broadcast<SimdVector<double, 8>>(k00);
-    output[3] = broadcast<SimdVector<double, 8>>(k58) * radial1 * harmonics[3];
-    compensation[3] = broadcast<SimdVector<double, 8>>(k00);
+    G(1, -1) = broadcast<SimdVector<double, 8>>(k58) * radial1 * U(1, -1);
+    C(1, -1) = broadcast<SimdVector<double, 8>>(k00);
+    G(1, 0) = radial1 * U(1, 0);
+    C(1, 0) = broadcast<SimdVector<double, 8>>(k00);
+    G(1, 1) = broadcast<SimdVector<double, 8>>(k58) * radial1 * U(1, 1);
+    C(1, 1) = broadcast<SimdVector<double, 8>>(k00);
     SimdVector<double, 8> series2 = broadcast<SimdVector<double, 8>>(k57);
     series2 = fma(series2, argument * broadcast<SimdVector<double, 8>>(k05),
         broadcast<SimdVector<double, 8>>(k57));
@@ -6926,16 +6976,16 @@ void evaluateEwaldWorking(SimdVector<double, 8>& greenTrace, SimdVector<double, 
         broadcast<SimdVector<double, 8>>(k57));
     SimdVector<double, 8> const radial2 =
         broadcast<SimdVector<double, 8>>(k69) * exponential * series2;
-    output[4] = broadcast<SimdVector<double, 8>>(k76) * radial2 * harmonics[4];
-    compensation[4] = broadcast<SimdVector<double, 8>>(k00);
-    output[5] = broadcast<SimdVector<double, 8>>(k65) * radial2 * harmonics[5];
-    compensation[5] = broadcast<SimdVector<double, 8>>(k00);
-    output[6] = broadcast<SimdVector<double, 8>>(k61) * radial2 * harmonics[6];
-    compensation[6] = broadcast<SimdVector<double, 8>>(k00);
-    output[7] = broadcast<SimdVector<double, 8>>(k65) * radial2 * harmonics[7];
-    compensation[7] = broadcast<SimdVector<double, 8>>(k00);
-    output[8] = broadcast<SimdVector<double, 8>>(k76) * radial2 * harmonics[8];
-    compensation[8] = broadcast<SimdVector<double, 8>>(k00);
+    G(2, -2) = broadcast<SimdVector<double, 8>>(k76) * radial2 * U(2, -2);
+    C(2, -2) = broadcast<SimdVector<double, 8>>(k00);
+    G(2, -1) = broadcast<SimdVector<double, 8>>(k65) * radial2 * U(2, -1);
+    C(2, -1) = broadcast<SimdVector<double, 8>>(k00);
+    G(2, 0) = broadcast<SimdVector<double, 8>>(k61) * radial2 * U(2, 0);
+    C(2, 0) = broadcast<SimdVector<double, 8>>(k00);
+    G(2, 1) = broadcast<SimdVector<double, 8>>(k65) * radial2 * U(2, 1);
+    C(2, 1) = broadcast<SimdVector<double, 8>>(k00);
+    G(2, 2) = broadcast<SimdVector<double, 8>>(k76) * radial2 * U(2, 2);
+    C(2, 2) = broadcast<SimdVector<double, 8>>(k00);
     SimdVector<double, 8> series3 = broadcast<SimdVector<double, 8>>(k57);
     series3 = fma(series3, argument * broadcast<SimdVector<double, 8>>(k04),
         broadcast<SimdVector<double, 8>>(k57));
@@ -7035,20 +7085,20 @@ void evaluateEwaldWorking(SimdVector<double, 8>& greenTrace, SimdVector<double, 
         broadcast<SimdVector<double, 8>>(k57));
     SimdVector<double, 8> const radial3 =
         -broadcast<SimdVector<double, 8>>(k72) * exponential * series3;
-    output[9] = broadcast<SimdVector<double, 8>>(k81) * radial3 * harmonics[9];
-    compensation[9] = broadcast<SimdVector<double, 8>>(k00);
-    output[10] = broadcast<SimdVector<double, 8>>(k79) * radial3 * harmonics[10];
-    compensation[10] = broadcast<SimdVector<double, 8>>(k00);
-    output[11] = broadcast<SimdVector<double, 8>>(k78) * radial3 * harmonics[11];
-    compensation[11] = broadcast<SimdVector<double, 8>>(k00);
-    output[12] = broadcast<SimdVector<double, 8>>(k77) * radial3 * harmonics[12];
-    compensation[12] = broadcast<SimdVector<double, 8>>(k00);
-    output[13] = broadcast<SimdVector<double, 8>>(k78) * radial3 * harmonics[13];
-    compensation[13] = broadcast<SimdVector<double, 8>>(k00);
-    output[14] = broadcast<SimdVector<double, 8>>(k79) * radial3 * harmonics[14];
-    compensation[14] = broadcast<SimdVector<double, 8>>(k00);
-    output[15] = broadcast<SimdVector<double, 8>>(k81) * radial3 * harmonics[15];
-    compensation[15] = broadcast<SimdVector<double, 8>>(k00);
+    G(3, -3) = broadcast<SimdVector<double, 8>>(k81) * radial3 * U(3, -3);
+    C(3, -3) = broadcast<SimdVector<double, 8>>(k00);
+    G(3, -2) = broadcast<SimdVector<double, 8>>(k79) * radial3 * U(3, -2);
+    C(3, -2) = broadcast<SimdVector<double, 8>>(k00);
+    G(3, -1) = broadcast<SimdVector<double, 8>>(k78) * radial3 * U(3, -1);
+    C(3, -1) = broadcast<SimdVector<double, 8>>(k00);
+    G(3, 0) = broadcast<SimdVector<double, 8>>(k77) * radial3 * U(3, 0);
+    C(3, 0) = broadcast<SimdVector<double, 8>>(k00);
+    G(3, 1) = broadcast<SimdVector<double, 8>>(k78) * radial3 * U(3, 1);
+    C(3, 1) = broadcast<SimdVector<double, 8>>(k00);
+    G(3, 2) = broadcast<SimdVector<double, 8>>(k79) * radial3 * U(3, 2);
+    C(3, 2) = broadcast<SimdVector<double, 8>>(k00);
+    G(3, 3) = broadcast<SimdVector<double, 8>>(k81) * radial3 * U(3, 3);
+    C(3, 3) = broadcast<SimdVector<double, 8>>(k00);
     SimdVector<double, 8> series4 = broadcast<SimdVector<double, 8>>(k57);
     series4 = fma(series4, argument * broadcast<SimdVector<double, 8>>(k03),
         broadcast<SimdVector<double, 8>>(k57));
@@ -7148,24 +7198,24 @@ void evaluateEwaldWorking(SimdVector<double, 8>& greenTrace, SimdVector<double, 
         broadcast<SimdVector<double, 8>>(k57));
     SimdVector<double, 8> const radial4 =
         broadcast<SimdVector<double, 8>>(k70) * exponential * series4;
-    output[16] = broadcast<SimdVector<double, 8>>(k87) * radial4 * harmonics[16];
-    compensation[16] = broadcast<SimdVector<double, 8>>(k00);
-    output[17] = broadcast<SimdVector<double, 8>>(k83) * radial4 * harmonics[17];
-    compensation[17] = broadcast<SimdVector<double, 8>>(k00);
-    output[18] = broadcast<SimdVector<double, 8>>(k82) * radial4 * harmonics[18];
-    compensation[18] = broadcast<SimdVector<double, 8>>(k00);
-    output[19] = broadcast<SimdVector<double, 8>>(k81) * radial4 * harmonics[19];
-    compensation[19] = broadcast<SimdVector<double, 8>>(k00);
-    output[20] = broadcast<SimdVector<double, 8>>(k80) * radial4 * harmonics[20];
-    compensation[20] = broadcast<SimdVector<double, 8>>(k00);
-    output[21] = broadcast<SimdVector<double, 8>>(k81) * radial4 * harmonics[21];
-    compensation[21] = broadcast<SimdVector<double, 8>>(k00);
-    output[22] = broadcast<SimdVector<double, 8>>(k82) * radial4 * harmonics[22];
-    compensation[22] = broadcast<SimdVector<double, 8>>(k00);
-    output[23] = broadcast<SimdVector<double, 8>>(k83) * radial4 * harmonics[23];
-    compensation[23] = broadcast<SimdVector<double, 8>>(k00);
-    output[24] = broadcast<SimdVector<double, 8>>(k87) * radial4 * harmonics[24];
-    compensation[24] = broadcast<SimdVector<double, 8>>(k00);
+    G(4, -4) = broadcast<SimdVector<double, 8>>(k87) * radial4 * U(4, -4);
+    C(4, -4) = broadcast<SimdVector<double, 8>>(k00);
+    G(4, -3) = broadcast<SimdVector<double, 8>>(k83) * radial4 * U(4, -3);
+    C(4, -3) = broadcast<SimdVector<double, 8>>(k00);
+    G(4, -2) = broadcast<SimdVector<double, 8>>(k82) * radial4 * U(4, -2);
+    C(4, -2) = broadcast<SimdVector<double, 8>>(k00);
+    G(4, -1) = broadcast<SimdVector<double, 8>>(k81) * radial4 * U(4, -1);
+    C(4, -1) = broadcast<SimdVector<double, 8>>(k00);
+    G(4, 0) = broadcast<SimdVector<double, 8>>(k80) * radial4 * U(4, 0);
+    C(4, 0) = broadcast<SimdVector<double, 8>>(k00);
+    G(4, 1) = broadcast<SimdVector<double, 8>>(k81) * radial4 * U(4, 1);
+    C(4, 1) = broadcast<SimdVector<double, 8>>(k00);
+    G(4, 2) = broadcast<SimdVector<double, 8>>(k82) * radial4 * U(4, 2);
+    C(4, 2) = broadcast<SimdVector<double, 8>>(k00);
+    G(4, 3) = broadcast<SimdVector<double, 8>>(k83) * radial4 * U(4, 3);
+    C(4, 3) = broadcast<SimdVector<double, 8>>(k00);
+    G(4, 4) = broadcast<SimdVector<double, 8>>(k87) * radial4 * U(4, 4);
+    C(4, 4) = broadcast<SimdVector<double, 8>>(k00);
     SimdVector<double, 8> series5 = broadcast<SimdVector<double, 8>>(k57);
     series5 = fma(series5, argument * broadcast<SimdVector<double, 8>>(k02),
         broadcast<SimdVector<double, 8>>(k57));
@@ -7265,28 +7315,28 @@ void evaluateEwaldWorking(SimdVector<double, 8>& greenTrace, SimdVector<double, 
         broadcast<SimdVector<double, 8>>(k57));
     SimdVector<double, 8> const radial5 =
         -broadcast<SimdVector<double, 8>>(k68) * exponential * series5;
-    output[25] = broadcast<SimdVector<double, 8>>(k94) * radial5 * harmonics[25];
-    compensation[25] = broadcast<SimdVector<double, 8>>(k00);
-    output[26] = broadcast<SimdVector<double, 8>>(k89) * radial5 * harmonics[26];
-    compensation[26] = broadcast<SimdVector<double, 8>>(k00);
-    output[27] = broadcast<SimdVector<double, 8>>(k88) * radial5 * harmonics[27];
-    compensation[27] = broadcast<SimdVector<double, 8>>(k00);
-    output[28] = broadcast<SimdVector<double, 8>>(k86) * radial5 * harmonics[28];
-    compensation[28] = broadcast<SimdVector<double, 8>>(k00);
-    output[29] = broadcast<SimdVector<double, 8>>(k85) * radial5 * harmonics[29];
-    compensation[29] = broadcast<SimdVector<double, 8>>(k00);
-    output[30] = broadcast<SimdVector<double, 8>>(k84) * radial5 * harmonics[30];
-    compensation[30] = broadcast<SimdVector<double, 8>>(k00);
-    output[31] = broadcast<SimdVector<double, 8>>(k85) * radial5 * harmonics[31];
-    compensation[31] = broadcast<SimdVector<double, 8>>(k00);
-    output[32] = broadcast<SimdVector<double, 8>>(k86) * radial5 * harmonics[32];
-    compensation[32] = broadcast<SimdVector<double, 8>>(k00);
-    output[33] = broadcast<SimdVector<double, 8>>(k88) * radial5 * harmonics[33];
-    compensation[33] = broadcast<SimdVector<double, 8>>(k00);
-    output[34] = broadcast<SimdVector<double, 8>>(k89) * radial5 * harmonics[34];
-    compensation[34] = broadcast<SimdVector<double, 8>>(k00);
-    output[35] = broadcast<SimdVector<double, 8>>(k94) * radial5 * harmonics[35];
-    compensation[35] = broadcast<SimdVector<double, 8>>(k00);
+    G(5, -5) = broadcast<SimdVector<double, 8>>(k94) * radial5 * U(5, -5);
+    C(5, -5) = broadcast<SimdVector<double, 8>>(k00);
+    G(5, -4) = broadcast<SimdVector<double, 8>>(k89) * radial5 * U(5, -4);
+    C(5, -4) = broadcast<SimdVector<double, 8>>(k00);
+    G(5, -3) = broadcast<SimdVector<double, 8>>(k88) * radial5 * U(5, -3);
+    C(5, -3) = broadcast<SimdVector<double, 8>>(k00);
+    G(5, -2) = broadcast<SimdVector<double, 8>>(k86) * radial5 * U(5, -2);
+    C(5, -2) = broadcast<SimdVector<double, 8>>(k00);
+    G(5, -1) = broadcast<SimdVector<double, 8>>(k85) * radial5 * U(5, -1);
+    C(5, -1) = broadcast<SimdVector<double, 8>>(k00);
+    G(5, 0) = broadcast<SimdVector<double, 8>>(k84) * radial5 * U(5, 0);
+    C(5, 0) = broadcast<SimdVector<double, 8>>(k00);
+    G(5, 1) = broadcast<SimdVector<double, 8>>(k85) * radial5 * U(5, 1);
+    C(5, 1) = broadcast<SimdVector<double, 8>>(k00);
+    G(5, 2) = broadcast<SimdVector<double, 8>>(k86) * radial5 * U(5, 2);
+    C(5, 2) = broadcast<SimdVector<double, 8>>(k00);
+    G(5, 3) = broadcast<SimdVector<double, 8>>(k88) * radial5 * U(5, 3);
+    C(5, 3) = broadcast<SimdVector<double, 8>>(k00);
+    G(5, 4) = broadcast<SimdVector<double, 8>>(k89) * radial5 * U(5, 4);
+    C(5, 4) = broadcast<SimdVector<double, 8>>(k00);
+    G(5, 5) = broadcast<SimdVector<double, 8>>(k94) * radial5 * U(5, 5);
+    C(5, 5) = broadcast<SimdVector<double, 8>>(k00);
     SimdVector<double, 8> series6 = broadcast<SimdVector<double, 8>>(k57);
     series6 = fma(series6, argument * broadcast<SimdVector<double, 8>>(k01),
         broadcast<SimdVector<double, 8>>(k57));
@@ -7386,33 +7436,33 @@ void evaluateEwaldWorking(SimdVector<double, 8>& greenTrace, SimdVector<double, 
         broadcast<SimdVector<double, 8>>(k57));
     SimdVector<double, 8> const radial6 =
         broadcast<SimdVector<double, 8>>(k63) * exponential * series6;
-    output[36] = broadcast<SimdVector<double, 8>>(k97) * radial6 * harmonics[36];
-    compensation[36] = broadcast<SimdVector<double, 8>>(k00);
-    output[37] = broadcast<SimdVector<double, 8>>(k96) * radial6 * harmonics[37];
-    compensation[37] = broadcast<SimdVector<double, 8>>(k00);
-    output[38] = broadcast<SimdVector<double, 8>>(k95) * radial6 * harmonics[38];
-    compensation[38] = broadcast<SimdVector<double, 8>>(k00);
-    output[39] = broadcast<SimdVector<double, 8>>(k93) * radial6 * harmonics[39];
-    compensation[39] = broadcast<SimdVector<double, 8>>(k00);
-    output[40] = broadcast<SimdVector<double, 8>>(k92) * radial6 * harmonics[40];
-    compensation[40] = broadcast<SimdVector<double, 8>>(k00);
-    output[41] = broadcast<SimdVector<double, 8>>(k91) * radial6 * harmonics[41];
-    compensation[41] = broadcast<SimdVector<double, 8>>(k00);
-    output[42] = broadcast<SimdVector<double, 8>>(k90) * radial6 * harmonics[42];
-    compensation[42] = broadcast<SimdVector<double, 8>>(k00);
-    output[43] = broadcast<SimdVector<double, 8>>(k91) * radial6 * harmonics[43];
-    compensation[43] = broadcast<SimdVector<double, 8>>(k00);
-    output[44] = broadcast<SimdVector<double, 8>>(k92) * radial6 * harmonics[44];
-    compensation[44] = broadcast<SimdVector<double, 8>>(k00);
-    output[45] = broadcast<SimdVector<double, 8>>(k93) * radial6 * harmonics[45];
-    compensation[45] = broadcast<SimdVector<double, 8>>(k00);
-    output[46] = broadcast<SimdVector<double, 8>>(k95) * radial6 * harmonics[46];
-    compensation[46] = broadcast<SimdVector<double, 8>>(k00);
-    output[47] = broadcast<SimdVector<double, 8>>(k96) * radial6 * harmonics[47];
-    compensation[47] = broadcast<SimdVector<double, 8>>(k00);
-    output[48] = broadcast<SimdVector<double, 8>>(k97) * radial6 * harmonics[48];
-    compensation[48] = broadcast<SimdVector<double, 8>>(k00);
-    output[0] += broadcast<SimdVector<double, 8>>(k56);
+    G(6, -6) = broadcast<SimdVector<double, 8>>(k97) * radial6 * U(6, -6);
+    C(6, -6) = broadcast<SimdVector<double, 8>>(k00);
+    G(6, -5) = broadcast<SimdVector<double, 8>>(k96) * radial6 * U(6, -5);
+    C(6, -5) = broadcast<SimdVector<double, 8>>(k00);
+    G(6, -4) = broadcast<SimdVector<double, 8>>(k95) * radial6 * U(6, -4);
+    C(6, -4) = broadcast<SimdVector<double, 8>>(k00);
+    G(6, -3) = broadcast<SimdVector<double, 8>>(k93) * radial6 * U(6, -3);
+    C(6, -3) = broadcast<SimdVector<double, 8>>(k00);
+    G(6, -2) = broadcast<SimdVector<double, 8>>(k92) * radial6 * U(6, -2);
+    C(6, -2) = broadcast<SimdVector<double, 8>>(k00);
+    G(6, -1) = broadcast<SimdVector<double, 8>>(k91) * radial6 * U(6, -1);
+    C(6, -1) = broadcast<SimdVector<double, 8>>(k00);
+    G(6, 0) = broadcast<SimdVector<double, 8>>(k90) * radial6 * U(6, 0);
+    C(6, 0) = broadcast<SimdVector<double, 8>>(k00);
+    G(6, 1) = broadcast<SimdVector<double, 8>>(k91) * radial6 * U(6, 1);
+    C(6, 1) = broadcast<SimdVector<double, 8>>(k00);
+    G(6, 2) = broadcast<SimdVector<double, 8>>(k92) * radial6 * U(6, 2);
+    C(6, 2) = broadcast<SimdVector<double, 8>>(k00);
+    G(6, 3) = broadcast<SimdVector<double, 8>>(k93) * radial6 * U(6, 3);
+    C(6, 3) = broadcast<SimdVector<double, 8>>(k00);
+    G(6, 4) = broadcast<SimdVector<double, 8>>(k95) * radial6 * U(6, 4);
+    C(6, 4) = broadcast<SimdVector<double, 8>>(k00);
+    G(6, 5) = broadcast<SimdVector<double, 8>>(k96) * radial6 * U(6, 5);
+    C(6, 5) = broadcast<SimdVector<double, 8>>(k00);
+    G(6, 6) = broadcast<SimdVector<double, 8>>(k97) * radial6 * U(6, 6);
+    C(6, 6) = broadcast<SimdVector<double, 8>>(k00);
+    G(0, 0) += broadcast<SimdVector<double, 8>>(k56);
     greenTrace = broadcast<SimdVector<double, 8>>(k62);
     for (int ix = -6; ix <= 6; ++ix) {
         for (int iy = -6; iy <= 6; ++iy) {
@@ -7445,421 +7495,421 @@ void evaluateEwaldWorking(SimdVector<double, 8>& greenTrace, SimdVector<double, 
                         broadcast<SimdVector<double, 8>>(k59) * imageRadius * imageExp;
                     SimdVector<double, 8> inversePower = iR;
                     SimdVector<double, 8> const imageRadial0 = -screening * inversePower;
-                    SimdVector<double, 8> const imageValue0 = imageRadial0 * harmonics[0];
+                    SimdVector<double, 8> const imageValue0 = imageRadial0 * U(0, 0);
                     if (sign < 0) {
-                        imagePair[0] = imageValue0;
+                        I(0, 0) = imageValue0;
                     } else {
-                        imagePair[0] += imageValue0;
+                        I(0, 0) += imageValue0;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * broadcast<SimdVector<double, 8>>(k55);
                     SimdVector<double, 8> const imageRadial1 = screening * inversePower;
                     SimdVector<double, 8> const imageValue1 =
-                        broadcast<SimdVector<double, 8>>(k58) * imageRadial1 * harmonics[1];
+                        broadcast<SimdVector<double, 8>>(k58) * imageRadial1 * U(1, -1);
                     if (sign < 0) {
-                        imagePair[1] = imageValue1;
+                        I(1, -1) = imageValue1;
                     } else {
-                        imagePair[1] += imageValue1;
+                        I(1, -1) += imageValue1;
                     }
-                    SimdVector<double, 8> const imageValue2 = imageRadial1 * harmonics[2];
+                    SimdVector<double, 8> const imageValue2 = imageRadial1 * U(1, 0);
                     if (sign < 0) {
-                        imagePair[2] = imageValue2;
+                        I(1, 0) = imageValue2;
                     } else {
-                        imagePair[2] += imageValue2;
+                        I(1, 0) += imageValue2;
                     }
                     SimdVector<double, 8> const imageValue3 =
-                        broadcast<SimdVector<double, 8>>(k58) * imageRadial1 * harmonics[3];
+                        broadcast<SimdVector<double, 8>>(k58) * imageRadial1 * U(1, 1);
                     if (sign < 0) {
-                        imagePair[3] = imageValue3;
+                        I(1, 1) = imageValue3;
                     } else {
-                        imagePair[3] += imageValue3;
+                        I(1, 1) += imageValue3;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * broadcast<SimdVector<double, 8>>(k53);
                     SimdVector<double, 8> const imageRadial2 = -screening * inversePower;
                     SimdVector<double, 8> const imageValue4 =
-                        broadcast<SimdVector<double, 8>>(k76) * imageRadial2 * harmonics[4];
+                        broadcast<SimdVector<double, 8>>(k76) * imageRadial2 * U(2, -2);
                     if (sign < 0) {
-                        imagePair[4] = imageValue4;
+                        I(2, -2) = imageValue4;
                     } else {
-                        imagePair[4] += imageValue4;
+                        I(2, -2) += imageValue4;
                     }
                     SimdVector<double, 8> const imageValue5 =
-                        broadcast<SimdVector<double, 8>>(k65) * imageRadial2 * harmonics[5];
+                        broadcast<SimdVector<double, 8>>(k65) * imageRadial2 * U(2, -1);
                     if (sign < 0) {
-                        imagePair[5] = imageValue5;
+                        I(2, -1) = imageValue5;
                     } else {
-                        imagePair[5] += imageValue5;
+                        I(2, -1) += imageValue5;
                     }
                     SimdVector<double, 8> const imageValue6 =
-                        broadcast<SimdVector<double, 8>>(k61) * imageRadial2 * harmonics[6];
+                        broadcast<SimdVector<double, 8>>(k61) * imageRadial2 * U(2, 0);
                     if (sign < 0) {
-                        imagePair[6] = imageValue6;
+                        I(2, 0) = imageValue6;
                     } else {
-                        imagePair[6] += imageValue6;
+                        I(2, 0) += imageValue6;
                     }
                     SimdVector<double, 8> const imageValue7 =
-                        broadcast<SimdVector<double, 8>>(k65) * imageRadial2 * harmonics[7];
+                        broadcast<SimdVector<double, 8>>(k65) * imageRadial2 * U(2, 1);
                     if (sign < 0) {
-                        imagePair[7] = imageValue7;
+                        I(2, 1) = imageValue7;
                     } else {
-                        imagePair[7] += imageValue7;
+                        I(2, 1) += imageValue7;
                     }
                     SimdVector<double, 8> const imageValue8 =
-                        broadcast<SimdVector<double, 8>>(k76) * imageRadial2 * harmonics[8];
+                        broadcast<SimdVector<double, 8>>(k76) * imageRadial2 * U(2, 2);
                     if (sign < 0) {
-                        imagePair[8] = imageValue8;
+                        I(2, 2) = imageValue8;
                     } else {
-                        imagePair[8] += imageValue8;
+                        I(2, 2) += imageValue8;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * broadcast<SimdVector<double, 8>>(k52);
                     SimdVector<double, 8> const imageRadial3 = screening * inversePower;
                     SimdVector<double, 8> const imageValue9 =
-                        broadcast<SimdVector<double, 8>>(k81) * imageRadial3 * harmonics[9];
+                        broadcast<SimdVector<double, 8>>(k81) * imageRadial3 * U(3, -3);
                     if (sign < 0) {
-                        imagePair[9] = imageValue9;
+                        I(3, -3) = imageValue9;
                     } else {
-                        imagePair[9] += imageValue9;
+                        I(3, -3) += imageValue9;
                     }
                     SimdVector<double, 8> const imageValue10 =
-                        broadcast<SimdVector<double, 8>>(k79) * imageRadial3 * harmonics[10];
+                        broadcast<SimdVector<double, 8>>(k79) * imageRadial3 * U(3, -2);
                     if (sign < 0) {
-                        imagePair[10] = imageValue10;
+                        I(3, -2) = imageValue10;
                     } else {
-                        imagePair[10] += imageValue10;
+                        I(3, -2) += imageValue10;
                     }
                     SimdVector<double, 8> const imageValue11 =
-                        broadcast<SimdVector<double, 8>>(k78) * imageRadial3 * harmonics[11];
+                        broadcast<SimdVector<double, 8>>(k78) * imageRadial3 * U(3, -1);
                     if (sign < 0) {
-                        imagePair[11] = imageValue11;
+                        I(3, -1) = imageValue11;
                     } else {
-                        imagePair[11] += imageValue11;
+                        I(3, -1) += imageValue11;
                     }
                     SimdVector<double, 8> const imageValue12 =
-                        broadcast<SimdVector<double, 8>>(k77) * imageRadial3 * harmonics[12];
+                        broadcast<SimdVector<double, 8>>(k77) * imageRadial3 * U(3, 0);
                     if (sign < 0) {
-                        imagePair[12] = imageValue12;
+                        I(3, 0) = imageValue12;
                     } else {
-                        imagePair[12] += imageValue12;
+                        I(3, 0) += imageValue12;
                     }
                     SimdVector<double, 8> const imageValue13 =
-                        broadcast<SimdVector<double, 8>>(k78) * imageRadial3 * harmonics[13];
+                        broadcast<SimdVector<double, 8>>(k78) * imageRadial3 * U(3, 1);
                     if (sign < 0) {
-                        imagePair[13] = imageValue13;
+                        I(3, 1) = imageValue13;
                     } else {
-                        imagePair[13] += imageValue13;
+                        I(3, 1) += imageValue13;
                     }
                     SimdVector<double, 8> const imageValue14 =
-                        broadcast<SimdVector<double, 8>>(k79) * imageRadial3 * harmonics[14];
+                        broadcast<SimdVector<double, 8>>(k79) * imageRadial3 * U(3, 2);
                     if (sign < 0) {
-                        imagePair[14] = imageValue14;
+                        I(3, 2) = imageValue14;
                     } else {
-                        imagePair[14] += imageValue14;
+                        I(3, 2) += imageValue14;
                     }
                     SimdVector<double, 8> const imageValue15 =
-                        broadcast<SimdVector<double, 8>>(k81) * imageRadial3 * harmonics[15];
+                        broadcast<SimdVector<double, 8>>(k81) * imageRadial3 * U(3, 3);
                     if (sign < 0) {
-                        imagePair[15] = imageValue15;
+                        I(3, 3) = imageValue15;
                     } else {
-                        imagePair[15] += imageValue15;
+                        I(3, 3) += imageValue15;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * broadcast<SimdVector<double, 8>>(k51);
                     SimdVector<double, 8> const imageRadial4 = -screening * inversePower;
                     SimdVector<double, 8> const imageValue16 =
-                        broadcast<SimdVector<double, 8>>(k87) * imageRadial4 * harmonics[16];
+                        broadcast<SimdVector<double, 8>>(k87) * imageRadial4 * U(4, -4);
                     if (sign < 0) {
-                        imagePair[16] = imageValue16;
+                        I(4, -4) = imageValue16;
                     } else {
-                        imagePair[16] += imageValue16;
+                        I(4, -4) += imageValue16;
                     }
                     SimdVector<double, 8> const imageValue17 =
-                        broadcast<SimdVector<double, 8>>(k83) * imageRadial4 * harmonics[17];
+                        broadcast<SimdVector<double, 8>>(k83) * imageRadial4 * U(4, -3);
                     if (sign < 0) {
-                        imagePair[17] = imageValue17;
+                        I(4, -3) = imageValue17;
                     } else {
-                        imagePair[17] += imageValue17;
+                        I(4, -3) += imageValue17;
                     }
                     SimdVector<double, 8> const imageValue18 =
-                        broadcast<SimdVector<double, 8>>(k82) * imageRadial4 * harmonics[18];
+                        broadcast<SimdVector<double, 8>>(k82) * imageRadial4 * U(4, -2);
                     if (sign < 0) {
-                        imagePair[18] = imageValue18;
+                        I(4, -2) = imageValue18;
                     } else {
-                        imagePair[18] += imageValue18;
+                        I(4, -2) += imageValue18;
                     }
                     SimdVector<double, 8> const imageValue19 =
-                        broadcast<SimdVector<double, 8>>(k81) * imageRadial4 * harmonics[19];
+                        broadcast<SimdVector<double, 8>>(k81) * imageRadial4 * U(4, -1);
                     if (sign < 0) {
-                        imagePair[19] = imageValue19;
+                        I(4, -1) = imageValue19;
                     } else {
-                        imagePair[19] += imageValue19;
+                        I(4, -1) += imageValue19;
                     }
                     SimdVector<double, 8> const imageValue20 =
-                        broadcast<SimdVector<double, 8>>(k80) * imageRadial4 * harmonics[20];
+                        broadcast<SimdVector<double, 8>>(k80) * imageRadial4 * U(4, 0);
                     if (sign < 0) {
-                        imagePair[20] = imageValue20;
+                        I(4, 0) = imageValue20;
                     } else {
-                        imagePair[20] += imageValue20;
+                        I(4, 0) += imageValue20;
                     }
                     SimdVector<double, 8> const imageValue21 =
-                        broadcast<SimdVector<double, 8>>(k81) * imageRadial4 * harmonics[21];
+                        broadcast<SimdVector<double, 8>>(k81) * imageRadial4 * U(4, 1);
                     if (sign < 0) {
-                        imagePair[21] = imageValue21;
+                        I(4, 1) = imageValue21;
                     } else {
-                        imagePair[21] += imageValue21;
+                        I(4, 1) += imageValue21;
                     }
                     SimdVector<double, 8> const imageValue22 =
-                        broadcast<SimdVector<double, 8>>(k82) * imageRadial4 * harmonics[22];
+                        broadcast<SimdVector<double, 8>>(k82) * imageRadial4 * U(4, 2);
                     if (sign < 0) {
-                        imagePair[22] = imageValue22;
+                        I(4, 2) = imageValue22;
                     } else {
-                        imagePair[22] += imageValue22;
+                        I(4, 2) += imageValue22;
                     }
                     SimdVector<double, 8> const imageValue23 =
-                        broadcast<SimdVector<double, 8>>(k83) * imageRadial4 * harmonics[23];
+                        broadcast<SimdVector<double, 8>>(k83) * imageRadial4 * U(4, 3);
                     if (sign < 0) {
-                        imagePair[23] = imageValue23;
+                        I(4, 3) = imageValue23;
                     } else {
-                        imagePair[23] += imageValue23;
+                        I(4, 3) += imageValue23;
                     }
                     SimdVector<double, 8> const imageValue24 =
-                        broadcast<SimdVector<double, 8>>(k87) * imageRadial4 * harmonics[24];
+                        broadcast<SimdVector<double, 8>>(k87) * imageRadial4 * U(4, 4);
                     if (sign < 0) {
-                        imagePair[24] = imageValue24;
+                        I(4, 4) = imageValue24;
                     } else {
-                        imagePair[24] += imageValue24;
+                        I(4, 4) += imageValue24;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * broadcast<SimdVector<double, 8>>(k50);
                     SimdVector<double, 8> const imageRadial5 = screening * inversePower;
                     SimdVector<double, 8> const imageValue25 =
-                        broadcast<SimdVector<double, 8>>(k94) * imageRadial5 * harmonics[25];
+                        broadcast<SimdVector<double, 8>>(k94) * imageRadial5 * U(5, -5);
                     if (sign < 0) {
-                        imagePair[25] = imageValue25;
+                        I(5, -5) = imageValue25;
                     } else {
-                        imagePair[25] += imageValue25;
+                        I(5, -5) += imageValue25;
                     }
                     SimdVector<double, 8> const imageValue26 =
-                        broadcast<SimdVector<double, 8>>(k89) * imageRadial5 * harmonics[26];
+                        broadcast<SimdVector<double, 8>>(k89) * imageRadial5 * U(5, -4);
                     if (sign < 0) {
-                        imagePair[26] = imageValue26;
+                        I(5, -4) = imageValue26;
                     } else {
-                        imagePair[26] += imageValue26;
+                        I(5, -4) += imageValue26;
                     }
                     SimdVector<double, 8> const imageValue27 =
-                        broadcast<SimdVector<double, 8>>(k88) * imageRadial5 * harmonics[27];
+                        broadcast<SimdVector<double, 8>>(k88) * imageRadial5 * U(5, -3);
                     if (sign < 0) {
-                        imagePair[27] = imageValue27;
+                        I(5, -3) = imageValue27;
                     } else {
-                        imagePair[27] += imageValue27;
+                        I(5, -3) += imageValue27;
                     }
                     SimdVector<double, 8> const imageValue28 =
-                        broadcast<SimdVector<double, 8>>(k86) * imageRadial5 * harmonics[28];
+                        broadcast<SimdVector<double, 8>>(k86) * imageRadial5 * U(5, -2);
                     if (sign < 0) {
-                        imagePair[28] = imageValue28;
+                        I(5, -2) = imageValue28;
                     } else {
-                        imagePair[28] += imageValue28;
+                        I(5, -2) += imageValue28;
                     }
                     SimdVector<double, 8> const imageValue29 =
-                        broadcast<SimdVector<double, 8>>(k85) * imageRadial5 * harmonics[29];
+                        broadcast<SimdVector<double, 8>>(k85) * imageRadial5 * U(5, -1);
                     if (sign < 0) {
-                        imagePair[29] = imageValue29;
+                        I(5, -1) = imageValue29;
                     } else {
-                        imagePair[29] += imageValue29;
+                        I(5, -1) += imageValue29;
                     }
                     SimdVector<double, 8> const imageValue30 =
-                        broadcast<SimdVector<double, 8>>(k84) * imageRadial5 * harmonics[30];
+                        broadcast<SimdVector<double, 8>>(k84) * imageRadial5 * U(5, 0);
                     if (sign < 0) {
-                        imagePair[30] = imageValue30;
+                        I(5, 0) = imageValue30;
                     } else {
-                        imagePair[30] += imageValue30;
+                        I(5, 0) += imageValue30;
                     }
                     SimdVector<double, 8> const imageValue31 =
-                        broadcast<SimdVector<double, 8>>(k85) * imageRadial5 * harmonics[31];
+                        broadcast<SimdVector<double, 8>>(k85) * imageRadial5 * U(5, 1);
                     if (sign < 0) {
-                        imagePair[31] = imageValue31;
+                        I(5, 1) = imageValue31;
                     } else {
-                        imagePair[31] += imageValue31;
+                        I(5, 1) += imageValue31;
                     }
                     SimdVector<double, 8> const imageValue32 =
-                        broadcast<SimdVector<double, 8>>(k86) * imageRadial5 * harmonics[32];
+                        broadcast<SimdVector<double, 8>>(k86) * imageRadial5 * U(5, 2);
                     if (sign < 0) {
-                        imagePair[32] = imageValue32;
+                        I(5, 2) = imageValue32;
                     } else {
-                        imagePair[32] += imageValue32;
+                        I(5, 2) += imageValue32;
                     }
                     SimdVector<double, 8> const imageValue33 =
-                        broadcast<SimdVector<double, 8>>(k88) * imageRadial5 * harmonics[33];
+                        broadcast<SimdVector<double, 8>>(k88) * imageRadial5 * U(5, 3);
                     if (sign < 0) {
-                        imagePair[33] = imageValue33;
+                        I(5, 3) = imageValue33;
                     } else {
-                        imagePair[33] += imageValue33;
+                        I(5, 3) += imageValue33;
                     }
                     SimdVector<double, 8> const imageValue34 =
-                        broadcast<SimdVector<double, 8>>(k89) * imageRadial5 * harmonics[34];
+                        broadcast<SimdVector<double, 8>>(k89) * imageRadial5 * U(5, 4);
                     if (sign < 0) {
-                        imagePair[34] = imageValue34;
+                        I(5, 4) = imageValue34;
                     } else {
-                        imagePair[34] += imageValue34;
+                        I(5, 4) += imageValue34;
                     }
                     SimdVector<double, 8> const imageValue35 =
-                        broadcast<SimdVector<double, 8>>(k94) * imageRadial5 * harmonics[35];
+                        broadcast<SimdVector<double, 8>>(k94) * imageRadial5 * U(5, 5);
                     if (sign < 0) {
-                        imagePair[35] = imageValue35;
+                        I(5, 5) = imageValue35;
                     } else {
-                        imagePair[35] += imageValue35;
+                        I(5, 5) += imageValue35;
                     }
                     inversePower *= inverseSquared;
                     screening += gammaTerm;
                     gammaTerm *= imageArgument * broadcast<SimdVector<double, 8>>(k49);
                     SimdVector<double, 8> const imageRadial6 = -screening * inversePower;
                     SimdVector<double, 8> const imageValue36 =
-                        broadcast<SimdVector<double, 8>>(k97) * imageRadial6 * harmonics[36];
+                        broadcast<SimdVector<double, 8>>(k97) * imageRadial6 * U(6, -6);
                     if (sign < 0) {
-                        imagePair[36] = imageValue36;
+                        I(6, -6) = imageValue36;
                     } else {
-                        imagePair[36] += imageValue36;
+                        I(6, -6) += imageValue36;
                     }
                     SimdVector<double, 8> const imageValue37 =
-                        broadcast<SimdVector<double, 8>>(k96) * imageRadial6 * harmonics[37];
+                        broadcast<SimdVector<double, 8>>(k96) * imageRadial6 * U(6, -5);
                     if (sign < 0) {
-                        imagePair[37] = imageValue37;
+                        I(6, -5) = imageValue37;
                     } else {
-                        imagePair[37] += imageValue37;
+                        I(6, -5) += imageValue37;
                     }
                     SimdVector<double, 8> const imageValue38 =
-                        broadcast<SimdVector<double, 8>>(k95) * imageRadial6 * harmonics[38];
+                        broadcast<SimdVector<double, 8>>(k95) * imageRadial6 * U(6, -4);
                     if (sign < 0) {
-                        imagePair[38] = imageValue38;
+                        I(6, -4) = imageValue38;
                     } else {
-                        imagePair[38] += imageValue38;
+                        I(6, -4) += imageValue38;
                     }
                     SimdVector<double, 8> const imageValue39 =
-                        broadcast<SimdVector<double, 8>>(k93) * imageRadial6 * harmonics[39];
+                        broadcast<SimdVector<double, 8>>(k93) * imageRadial6 * U(6, -3);
                     if (sign < 0) {
-                        imagePair[39] = imageValue39;
+                        I(6, -3) = imageValue39;
                     } else {
-                        imagePair[39] += imageValue39;
+                        I(6, -3) += imageValue39;
                     }
                     SimdVector<double, 8> const imageValue40 =
-                        broadcast<SimdVector<double, 8>>(k92) * imageRadial6 * harmonics[40];
+                        broadcast<SimdVector<double, 8>>(k92) * imageRadial6 * U(6, -2);
                     if (sign < 0) {
-                        imagePair[40] = imageValue40;
+                        I(6, -2) = imageValue40;
                     } else {
-                        imagePair[40] += imageValue40;
+                        I(6, -2) += imageValue40;
                     }
                     SimdVector<double, 8> const imageValue41 =
-                        broadcast<SimdVector<double, 8>>(k91) * imageRadial6 * harmonics[41];
+                        broadcast<SimdVector<double, 8>>(k91) * imageRadial6 * U(6, -1);
                     if (sign < 0) {
-                        imagePair[41] = imageValue41;
+                        I(6, -1) = imageValue41;
                     } else {
-                        imagePair[41] += imageValue41;
+                        I(6, -1) += imageValue41;
                     }
                     SimdVector<double, 8> const imageValue42 =
-                        broadcast<SimdVector<double, 8>>(k90) * imageRadial6 * harmonics[42];
+                        broadcast<SimdVector<double, 8>>(k90) * imageRadial6 * U(6, 0);
                     if (sign < 0) {
-                        imagePair[42] = imageValue42;
+                        I(6, 0) = imageValue42;
                     } else {
-                        imagePair[42] += imageValue42;
+                        I(6, 0) += imageValue42;
                     }
                     SimdVector<double, 8> const imageValue43 =
-                        broadcast<SimdVector<double, 8>>(k91) * imageRadial6 * harmonics[43];
+                        broadcast<SimdVector<double, 8>>(k91) * imageRadial6 * U(6, 1);
                     if (sign < 0) {
-                        imagePair[43] = imageValue43;
+                        I(6, 1) = imageValue43;
                     } else {
-                        imagePair[43] += imageValue43;
+                        I(6, 1) += imageValue43;
                     }
                     SimdVector<double, 8> const imageValue44 =
-                        broadcast<SimdVector<double, 8>>(k92) * imageRadial6 * harmonics[44];
+                        broadcast<SimdVector<double, 8>>(k92) * imageRadial6 * U(6, 2);
                     if (sign < 0) {
-                        imagePair[44] = imageValue44;
+                        I(6, 2) = imageValue44;
                     } else {
-                        imagePair[44] += imageValue44;
+                        I(6, 2) += imageValue44;
                     }
                     SimdVector<double, 8> const imageValue45 =
-                        broadcast<SimdVector<double, 8>>(k93) * imageRadial6 * harmonics[45];
+                        broadcast<SimdVector<double, 8>>(k93) * imageRadial6 * U(6, 3);
                     if (sign < 0) {
-                        imagePair[45] = imageValue45;
+                        I(6, 3) = imageValue45;
                     } else {
-                        imagePair[45] += imageValue45;
+                        I(6, 3) += imageValue45;
                     }
                     SimdVector<double, 8> const imageValue46 =
-                        broadcast<SimdVector<double, 8>>(k95) * imageRadial6 * harmonics[46];
+                        broadcast<SimdVector<double, 8>>(k95) * imageRadial6 * U(6, 4);
                     if (sign < 0) {
-                        imagePair[46] = imageValue46;
+                        I(6, 4) = imageValue46;
                     } else {
-                        imagePair[46] += imageValue46;
+                        I(6, 4) += imageValue46;
                     }
                     SimdVector<double, 8> const imageValue47 =
-                        broadcast<SimdVector<double, 8>>(k96) * imageRadial6 * harmonics[47];
+                        broadcast<SimdVector<double, 8>>(k96) * imageRadial6 * U(6, 5);
                     if (sign < 0) {
-                        imagePair[47] = imageValue47;
+                        I(6, 5) = imageValue47;
                     } else {
-                        imagePair[47] += imageValue47;
+                        I(6, 5) += imageValue47;
                     }
                     SimdVector<double, 8> const imageValue48 =
-                        broadcast<SimdVector<double, 8>>(k97) * imageRadial6 * harmonics[48];
+                        broadcast<SimdVector<double, 8>>(k97) * imageRadial6 * U(6, 6);
                     if (sign < 0) {
-                        imagePair[48] = imageValue48;
+                        I(6, 6) = imageValue48;
                     } else {
-                        imagePair[48] += imageValue48;
+                        I(6, 6) += imageValue48;
                     }
                 }
-                detail::ewaldAccumulate(output[0], compensation[0], imagePair[0]);
-                detail::ewaldAccumulate(output[1], compensation[1], imagePair[1]);
-                detail::ewaldAccumulate(output[2], compensation[2], imagePair[2]);
-                detail::ewaldAccumulate(output[3], compensation[3], imagePair[3]);
-                detail::ewaldAccumulate(output[4], compensation[4], imagePair[4]);
-                detail::ewaldAccumulate(output[5], compensation[5], imagePair[5]);
-                detail::ewaldAccumulate(output[6], compensation[6], imagePair[6]);
-                detail::ewaldAccumulate(output[7], compensation[7], imagePair[7]);
-                detail::ewaldAccumulate(output[8], compensation[8], imagePair[8]);
-                detail::ewaldAccumulate(output[9], compensation[9], imagePair[9]);
-                detail::ewaldAccumulate(output[10], compensation[10], imagePair[10]);
-                detail::ewaldAccumulate(output[11], compensation[11], imagePair[11]);
-                detail::ewaldAccumulate(output[12], compensation[12], imagePair[12]);
-                detail::ewaldAccumulate(output[13], compensation[13], imagePair[13]);
-                detail::ewaldAccumulate(output[14], compensation[14], imagePair[14]);
-                detail::ewaldAccumulate(output[15], compensation[15], imagePair[15]);
-                detail::ewaldAccumulate(output[16], compensation[16], imagePair[16]);
-                detail::ewaldAccumulate(output[17], compensation[17], imagePair[17]);
-                detail::ewaldAccumulate(output[18], compensation[18], imagePair[18]);
-                detail::ewaldAccumulate(output[19], compensation[19], imagePair[19]);
-                detail::ewaldAccumulate(output[20], compensation[20], imagePair[20]);
-                detail::ewaldAccumulate(output[21], compensation[21], imagePair[21]);
-                detail::ewaldAccumulate(output[22], compensation[22], imagePair[22]);
-                detail::ewaldAccumulate(output[23], compensation[23], imagePair[23]);
-                detail::ewaldAccumulate(output[24], compensation[24], imagePair[24]);
-                detail::ewaldAccumulate(output[25], compensation[25], imagePair[25]);
-                detail::ewaldAccumulate(output[26], compensation[26], imagePair[26]);
-                detail::ewaldAccumulate(output[27], compensation[27], imagePair[27]);
-                detail::ewaldAccumulate(output[28], compensation[28], imagePair[28]);
-                detail::ewaldAccumulate(output[29], compensation[29], imagePair[29]);
-                detail::ewaldAccumulate(output[30], compensation[30], imagePair[30]);
-                detail::ewaldAccumulate(output[31], compensation[31], imagePair[31]);
-                detail::ewaldAccumulate(output[32], compensation[32], imagePair[32]);
-                detail::ewaldAccumulate(output[33], compensation[33], imagePair[33]);
-                detail::ewaldAccumulate(output[34], compensation[34], imagePair[34]);
-                detail::ewaldAccumulate(output[35], compensation[35], imagePair[35]);
-                detail::ewaldAccumulate(output[36], compensation[36], imagePair[36]);
-                detail::ewaldAccumulate(output[37], compensation[37], imagePair[37]);
-                detail::ewaldAccumulate(output[38], compensation[38], imagePair[38]);
-                detail::ewaldAccumulate(output[39], compensation[39], imagePair[39]);
-                detail::ewaldAccumulate(output[40], compensation[40], imagePair[40]);
-                detail::ewaldAccumulate(output[41], compensation[41], imagePair[41]);
-                detail::ewaldAccumulate(output[42], compensation[42], imagePair[42]);
-                detail::ewaldAccumulate(output[43], compensation[43], imagePair[43]);
-                detail::ewaldAccumulate(output[44], compensation[44], imagePair[44]);
-                detail::ewaldAccumulate(output[45], compensation[45], imagePair[45]);
-                detail::ewaldAccumulate(output[46], compensation[46], imagePair[46]);
-                detail::ewaldAccumulate(output[47], compensation[47], imagePair[47]);
-                detail::ewaldAccumulate(output[48], compensation[48], imagePair[48]);
+                detail::ewaldAccumulate(G(0, 0), C(0, 0), I(0, 0));
+                detail::ewaldAccumulate(G(1, -1), C(1, -1), I(1, -1));
+                detail::ewaldAccumulate(G(1, 0), C(1, 0), I(1, 0));
+                detail::ewaldAccumulate(G(1, 1), C(1, 1), I(1, 1));
+                detail::ewaldAccumulate(G(2, -2), C(2, -2), I(2, -2));
+                detail::ewaldAccumulate(G(2, -1), C(2, -1), I(2, -1));
+                detail::ewaldAccumulate(G(2, 0), C(2, 0), I(2, 0));
+                detail::ewaldAccumulate(G(2, 1), C(2, 1), I(2, 1));
+                detail::ewaldAccumulate(G(2, 2), C(2, 2), I(2, 2));
+                detail::ewaldAccumulate(G(3, -3), C(3, -3), I(3, -3));
+                detail::ewaldAccumulate(G(3, -2), C(3, -2), I(3, -2));
+                detail::ewaldAccumulate(G(3, -1), C(3, -1), I(3, -1));
+                detail::ewaldAccumulate(G(3, 0), C(3, 0), I(3, 0));
+                detail::ewaldAccumulate(G(3, 1), C(3, 1), I(3, 1));
+                detail::ewaldAccumulate(G(3, 2), C(3, 2), I(3, 2));
+                detail::ewaldAccumulate(G(3, 3), C(3, 3), I(3, 3));
+                detail::ewaldAccumulate(G(4, -4), C(4, -4), I(4, -4));
+                detail::ewaldAccumulate(G(4, -3), C(4, -3), I(4, -3));
+                detail::ewaldAccumulate(G(4, -2), C(4, -2), I(4, -2));
+                detail::ewaldAccumulate(G(4, -1), C(4, -1), I(4, -1));
+                detail::ewaldAccumulate(G(4, 0), C(4, 0), I(4, 0));
+                detail::ewaldAccumulate(G(4, 1), C(4, 1), I(4, 1));
+                detail::ewaldAccumulate(G(4, 2), C(4, 2), I(4, 2));
+                detail::ewaldAccumulate(G(4, 3), C(4, 3), I(4, 3));
+                detail::ewaldAccumulate(G(4, 4), C(4, 4), I(4, 4));
+                detail::ewaldAccumulate(G(5, -5), C(5, -5), I(5, -5));
+                detail::ewaldAccumulate(G(5, -4), C(5, -4), I(5, -4));
+                detail::ewaldAccumulate(G(5, -3), C(5, -3), I(5, -3));
+                detail::ewaldAccumulate(G(5, -2), C(5, -2), I(5, -2));
+                detail::ewaldAccumulate(G(5, -1), C(5, -1), I(5, -1));
+                detail::ewaldAccumulate(G(5, 0), C(5, 0), I(5, 0));
+                detail::ewaldAccumulate(G(5, 1), C(5, 1), I(5, 1));
+                detail::ewaldAccumulate(G(5, 2), C(5, 2), I(5, 2));
+                detail::ewaldAccumulate(G(5, 3), C(5, 3), I(5, 3));
+                detail::ewaldAccumulate(G(5, 4), C(5, 4), I(5, 4));
+                detail::ewaldAccumulate(G(5, 5), C(5, 5), I(5, 5));
+                detail::ewaldAccumulate(G(6, -6), C(6, -6), I(6, -6));
+                detail::ewaldAccumulate(G(6, -5), C(6, -5), I(6, -5));
+                detail::ewaldAccumulate(G(6, -4), C(6, -4), I(6, -4));
+                detail::ewaldAccumulate(G(6, -3), C(6, -3), I(6, -3));
+                detail::ewaldAccumulate(G(6, -2), C(6, -2), I(6, -2));
+                detail::ewaldAccumulate(G(6, -1), C(6, -1), I(6, -1));
+                detail::ewaldAccumulate(G(6, 0), C(6, 0), I(6, 0));
+                detail::ewaldAccumulate(G(6, 1), C(6, 1), I(6, 1));
+                detail::ewaldAccumulate(G(6, 2), C(6, 2), I(6, 2));
+                detail::ewaldAccumulate(G(6, 3), C(6, 3), I(6, 3));
+                detail::ewaldAccumulate(G(6, 4), C(6, 4), I(6, 4));
+                detail::ewaldAccumulate(G(6, 5), C(6, 5), I(6, 5));
+                detail::ewaldAccumulate(G(6, 6), C(6, 6), I(6, 6));
                 SimdVector<double, 8> const waveX = broadcast<SimdVector<double, 8>>(ix);
                 SimdVector<double, 8> const waveY = broadcast<SimdVector<double, 8>>(iy);
                 SimdVector<double, 8> const waveZ = broadcast<SimdVector<double, 8>>(iz);
@@ -7875,114 +7925,114 @@ void evaluateEwaldWorking(SimdVector<double, 8>& greenTrace, SimdVector<double, 
                     waveSquared;
                 SimdVector<double, 8> const waveRadial0 =
                     broadcast<SimdVector<double, 8>>(k57) * wavePotential * cosine;
-                detail::ewaldAccumulate(output[0], compensation[0], waveRadial0 * harmonics[0]);
+                detail::ewaldAccumulate(G(0, 0), C(0, 0), waveRadial0 * U(0, 0));
                 SimdVector<double, 8> const waveRadial1 =
                     broadcast<SimdVector<double, 8>>(k67) * wavePotential * -sine;
-                detail::ewaldAccumulate(output[1], compensation[1],
-                    broadcast<SimdVector<double, 8>>(k58) * waveRadial1 * harmonics[1]);
-                detail::ewaldAccumulate(output[2], compensation[2], waveRadial1 * harmonics[2]);
-                detail::ewaldAccumulate(output[3], compensation[3],
-                    broadcast<SimdVector<double, 8>>(k58) * waveRadial1 * harmonics[3]);
+                detail::ewaldAccumulate(G(1, -1), C(1, -1),
+                    broadcast<SimdVector<double, 8>>(k58) * waveRadial1 * U(1, -1));
+                detail::ewaldAccumulate(G(1, 0), C(1, 0), waveRadial1 * U(1, 0));
+                detail::ewaldAccumulate(G(1, 1), C(1, 1),
+                    broadcast<SimdVector<double, 8>>(k58) * waveRadial1 * U(1, 1));
                 SimdVector<double, 8> const waveRadial2 =
                     broadcast<SimdVector<double, 8>>(k73) * wavePotential * -cosine;
-                detail::ewaldAccumulate(output[4], compensation[4],
-                    broadcast<SimdVector<double, 8>>(k76) * waveRadial2 * harmonics[4]);
-                detail::ewaldAccumulate(output[5], compensation[5],
-                    broadcast<SimdVector<double, 8>>(k65) * waveRadial2 * harmonics[5]);
-                detail::ewaldAccumulate(output[6], compensation[6],
-                    broadcast<SimdVector<double, 8>>(k61) * waveRadial2 * harmonics[6]);
-                detail::ewaldAccumulate(output[7], compensation[7],
-                    broadcast<SimdVector<double, 8>>(k65) * waveRadial2 * harmonics[7]);
-                detail::ewaldAccumulate(output[8], compensation[8],
-                    broadcast<SimdVector<double, 8>>(k76) * waveRadial2 * harmonics[8]);
+                detail::ewaldAccumulate(G(2, -2), C(2, -2),
+                    broadcast<SimdVector<double, 8>>(k76) * waveRadial2 * U(2, -2));
+                detail::ewaldAccumulate(G(2, -1), C(2, -1),
+                    broadcast<SimdVector<double, 8>>(k65) * waveRadial2 * U(2, -1));
+                detail::ewaldAccumulate(G(2, 0), C(2, 0),
+                    broadcast<SimdVector<double, 8>>(k61) * waveRadial2 * U(2, 0));
+                detail::ewaldAccumulate(G(2, 1), C(2, 1),
+                    broadcast<SimdVector<double, 8>>(k65) * waveRadial2 * U(2, 1));
+                detail::ewaldAccumulate(G(2, 2), C(2, 2),
+                    broadcast<SimdVector<double, 8>>(k76) * waveRadial2 * U(2, 2));
                 SimdVector<double, 8> const waveRadial3 =
                     broadcast<SimdVector<double, 8>>(k75) * wavePotential * sine;
-                detail::ewaldAccumulate(output[9], compensation[9],
-                    broadcast<SimdVector<double, 8>>(k81) * waveRadial3 * harmonics[9]);
-                detail::ewaldAccumulate(output[10], compensation[10],
-                    broadcast<SimdVector<double, 8>>(k79) * waveRadial3 * harmonics[10]);
-                detail::ewaldAccumulate(output[11], compensation[11],
-                    broadcast<SimdVector<double, 8>>(k78) * waveRadial3 * harmonics[11]);
-                detail::ewaldAccumulate(output[12], compensation[12],
-                    broadcast<SimdVector<double, 8>>(k77) * waveRadial3 * harmonics[12]);
-                detail::ewaldAccumulate(output[13], compensation[13],
-                    broadcast<SimdVector<double, 8>>(k78) * waveRadial3 * harmonics[13]);
-                detail::ewaldAccumulate(output[14], compensation[14],
-                    broadcast<SimdVector<double, 8>>(k79) * waveRadial3 * harmonics[14]);
-                detail::ewaldAccumulate(output[15], compensation[15],
-                    broadcast<SimdVector<double, 8>>(k81) * waveRadial3 * harmonics[15]);
+                detail::ewaldAccumulate(G(3, -3), C(3, -3),
+                    broadcast<SimdVector<double, 8>>(k81) * waveRadial3 * U(3, -3));
+                detail::ewaldAccumulate(G(3, -2), C(3, -2),
+                    broadcast<SimdVector<double, 8>>(k79) * waveRadial3 * U(3, -2));
+                detail::ewaldAccumulate(G(3, -1), C(3, -1),
+                    broadcast<SimdVector<double, 8>>(k78) * waveRadial3 * U(3, -1));
+                detail::ewaldAccumulate(G(3, 0), C(3, 0),
+                    broadcast<SimdVector<double, 8>>(k77) * waveRadial3 * U(3, 0));
+                detail::ewaldAccumulate(G(3, 1), C(3, 1),
+                    broadcast<SimdVector<double, 8>>(k78) * waveRadial3 * U(3, 1));
+                detail::ewaldAccumulate(G(3, 2), C(3, 2),
+                    broadcast<SimdVector<double, 8>>(k79) * waveRadial3 * U(3, 2));
+                detail::ewaldAccumulate(G(3, 3), C(3, 3),
+                    broadcast<SimdVector<double, 8>>(k81) * waveRadial3 * U(3, 3));
                 SimdVector<double, 8> const waveRadial4 =
                     broadcast<SimdVector<double, 8>>(k74) * wavePotential * cosine;
-                detail::ewaldAccumulate(output[16], compensation[16],
-                    broadcast<SimdVector<double, 8>>(k87) * waveRadial4 * harmonics[16]);
-                detail::ewaldAccumulate(output[17], compensation[17],
-                    broadcast<SimdVector<double, 8>>(k83) * waveRadial4 * harmonics[17]);
-                detail::ewaldAccumulate(output[18], compensation[18],
-                    broadcast<SimdVector<double, 8>>(k82) * waveRadial4 * harmonics[18]);
-                detail::ewaldAccumulate(output[19], compensation[19],
-                    broadcast<SimdVector<double, 8>>(k81) * waveRadial4 * harmonics[19]);
-                detail::ewaldAccumulate(output[20], compensation[20],
-                    broadcast<SimdVector<double, 8>>(k80) * waveRadial4 * harmonics[20]);
-                detail::ewaldAccumulate(output[21], compensation[21],
-                    broadcast<SimdVector<double, 8>>(k81) * waveRadial4 * harmonics[21]);
-                detail::ewaldAccumulate(output[22], compensation[22],
-                    broadcast<SimdVector<double, 8>>(k82) * waveRadial4 * harmonics[22]);
-                detail::ewaldAccumulate(output[23], compensation[23],
-                    broadcast<SimdVector<double, 8>>(k83) * waveRadial4 * harmonics[23]);
-                detail::ewaldAccumulate(output[24], compensation[24],
-                    broadcast<SimdVector<double, 8>>(k87) * waveRadial4 * harmonics[24]);
+                detail::ewaldAccumulate(G(4, -4), C(4, -4),
+                    broadcast<SimdVector<double, 8>>(k87) * waveRadial4 * U(4, -4));
+                detail::ewaldAccumulate(G(4, -3), C(4, -3),
+                    broadcast<SimdVector<double, 8>>(k83) * waveRadial4 * U(4, -3));
+                detail::ewaldAccumulate(G(4, -2), C(4, -2),
+                    broadcast<SimdVector<double, 8>>(k82) * waveRadial4 * U(4, -2));
+                detail::ewaldAccumulate(G(4, -1), C(4, -1),
+                    broadcast<SimdVector<double, 8>>(k81) * waveRadial4 * U(4, -1));
+                detail::ewaldAccumulate(G(4, 0), C(4, 0),
+                    broadcast<SimdVector<double, 8>>(k80) * waveRadial4 * U(4, 0));
+                detail::ewaldAccumulate(G(4, 1), C(4, 1),
+                    broadcast<SimdVector<double, 8>>(k81) * waveRadial4 * U(4, 1));
+                detail::ewaldAccumulate(G(4, 2), C(4, 2),
+                    broadcast<SimdVector<double, 8>>(k82) * waveRadial4 * U(4, 2));
+                detail::ewaldAccumulate(G(4, 3), C(4, 3),
+                    broadcast<SimdVector<double, 8>>(k83) * waveRadial4 * U(4, 3));
+                detail::ewaldAccumulate(G(4, 4), C(4, 4),
+                    broadcast<SimdVector<double, 8>>(k87) * waveRadial4 * U(4, 4));
                 SimdVector<double, 8> const waveRadial5 =
                     broadcast<SimdVector<double, 8>>(k71) * wavePotential * -sine;
-                detail::ewaldAccumulate(output[25], compensation[25],
-                    broadcast<SimdVector<double, 8>>(k94) * waveRadial5 * harmonics[25]);
-                detail::ewaldAccumulate(output[26], compensation[26],
-                    broadcast<SimdVector<double, 8>>(k89) * waveRadial5 * harmonics[26]);
-                detail::ewaldAccumulate(output[27], compensation[27],
-                    broadcast<SimdVector<double, 8>>(k88) * waveRadial5 * harmonics[27]);
-                detail::ewaldAccumulate(output[28], compensation[28],
-                    broadcast<SimdVector<double, 8>>(k86) * waveRadial5 * harmonics[28]);
-                detail::ewaldAccumulate(output[29], compensation[29],
-                    broadcast<SimdVector<double, 8>>(k85) * waveRadial5 * harmonics[29]);
-                detail::ewaldAccumulate(output[30], compensation[30],
-                    broadcast<SimdVector<double, 8>>(k84) * waveRadial5 * harmonics[30]);
-                detail::ewaldAccumulate(output[31], compensation[31],
-                    broadcast<SimdVector<double, 8>>(k85) * waveRadial5 * harmonics[31]);
-                detail::ewaldAccumulate(output[32], compensation[32],
-                    broadcast<SimdVector<double, 8>>(k86) * waveRadial5 * harmonics[32]);
-                detail::ewaldAccumulate(output[33], compensation[33],
-                    broadcast<SimdVector<double, 8>>(k88) * waveRadial5 * harmonics[33]);
-                detail::ewaldAccumulate(output[34], compensation[34],
-                    broadcast<SimdVector<double, 8>>(k89) * waveRadial5 * harmonics[34]);
-                detail::ewaldAccumulate(output[35], compensation[35],
-                    broadcast<SimdVector<double, 8>>(k94) * waveRadial5 * harmonics[35]);
+                detail::ewaldAccumulate(G(5, -5), C(5, -5),
+                    broadcast<SimdVector<double, 8>>(k94) * waveRadial5 * U(5, -5));
+                detail::ewaldAccumulate(G(5, -4), C(5, -4),
+                    broadcast<SimdVector<double, 8>>(k89) * waveRadial5 * U(5, -4));
+                detail::ewaldAccumulate(G(5, -3), C(5, -3),
+                    broadcast<SimdVector<double, 8>>(k88) * waveRadial5 * U(5, -3));
+                detail::ewaldAccumulate(G(5, -2), C(5, -2),
+                    broadcast<SimdVector<double, 8>>(k86) * waveRadial5 * U(5, -2));
+                detail::ewaldAccumulate(G(5, -1), C(5, -1),
+                    broadcast<SimdVector<double, 8>>(k85) * waveRadial5 * U(5, -1));
+                detail::ewaldAccumulate(G(5, 0), C(5, 0),
+                    broadcast<SimdVector<double, 8>>(k84) * waveRadial5 * U(5, 0));
+                detail::ewaldAccumulate(G(5, 1), C(5, 1),
+                    broadcast<SimdVector<double, 8>>(k85) * waveRadial5 * U(5, 1));
+                detail::ewaldAccumulate(G(5, 2), C(5, 2),
+                    broadcast<SimdVector<double, 8>>(k86) * waveRadial5 * U(5, 2));
+                detail::ewaldAccumulate(G(5, 3), C(5, 3),
+                    broadcast<SimdVector<double, 8>>(k88) * waveRadial5 * U(5, 3));
+                detail::ewaldAccumulate(G(5, 4), C(5, 4),
+                    broadcast<SimdVector<double, 8>>(k89) * waveRadial5 * U(5, 4));
+                detail::ewaldAccumulate(G(5, 5), C(5, 5),
+                    broadcast<SimdVector<double, 8>>(k94) * waveRadial5 * U(5, 5));
                 SimdVector<double, 8> const waveRadial6 =
                     broadcast<SimdVector<double, 8>>(k64) * wavePotential * -cosine;
-                detail::ewaldAccumulate(output[36], compensation[36],
-                    broadcast<SimdVector<double, 8>>(k97) * waveRadial6 * harmonics[36]);
-                detail::ewaldAccumulate(output[37], compensation[37],
-                    broadcast<SimdVector<double, 8>>(k96) * waveRadial6 * harmonics[37]);
-                detail::ewaldAccumulate(output[38], compensation[38],
-                    broadcast<SimdVector<double, 8>>(k95) * waveRadial6 * harmonics[38]);
-                detail::ewaldAccumulate(output[39], compensation[39],
-                    broadcast<SimdVector<double, 8>>(k93) * waveRadial6 * harmonics[39]);
-                detail::ewaldAccumulate(output[40], compensation[40],
-                    broadcast<SimdVector<double, 8>>(k92) * waveRadial6 * harmonics[40]);
-                detail::ewaldAccumulate(output[41], compensation[41],
-                    broadcast<SimdVector<double, 8>>(k91) * waveRadial6 * harmonics[41]);
-                detail::ewaldAccumulate(output[42], compensation[42],
-                    broadcast<SimdVector<double, 8>>(k90) * waveRadial6 * harmonics[42]);
-                detail::ewaldAccumulate(output[43], compensation[43],
-                    broadcast<SimdVector<double, 8>>(k91) * waveRadial6 * harmonics[43]);
-                detail::ewaldAccumulate(output[44], compensation[44],
-                    broadcast<SimdVector<double, 8>>(k92) * waveRadial6 * harmonics[44]);
-                detail::ewaldAccumulate(output[45], compensation[45],
-                    broadcast<SimdVector<double, 8>>(k93) * waveRadial6 * harmonics[45]);
-                detail::ewaldAccumulate(output[46], compensation[46],
-                    broadcast<SimdVector<double, 8>>(k95) * waveRadial6 * harmonics[46]);
-                detail::ewaldAccumulate(output[47], compensation[47],
-                    broadcast<SimdVector<double, 8>>(k96) * waveRadial6 * harmonics[47]);
-                detail::ewaldAccumulate(output[48], compensation[48],
-                    broadcast<SimdVector<double, 8>>(k97) * waveRadial6 * harmonics[48]);
+                detail::ewaldAccumulate(G(6, -6), C(6, -6),
+                    broadcast<SimdVector<double, 8>>(k97) * waveRadial6 * U(6, -6));
+                detail::ewaldAccumulate(G(6, -5), C(6, -5),
+                    broadcast<SimdVector<double, 8>>(k96) * waveRadial6 * U(6, -5));
+                detail::ewaldAccumulate(G(6, -4), C(6, -4),
+                    broadcast<SimdVector<double, 8>>(k95) * waveRadial6 * U(6, -4));
+                detail::ewaldAccumulate(G(6, -3), C(6, -3),
+                    broadcast<SimdVector<double, 8>>(k93) * waveRadial6 * U(6, -3));
+                detail::ewaldAccumulate(G(6, -2), C(6, -2),
+                    broadcast<SimdVector<double, 8>>(k92) * waveRadial6 * U(6, -2));
+                detail::ewaldAccumulate(G(6, -1), C(6, -1),
+                    broadcast<SimdVector<double, 8>>(k91) * waveRadial6 * U(6, -1));
+                detail::ewaldAccumulate(G(6, 0), C(6, 0),
+                    broadcast<SimdVector<double, 8>>(k90) * waveRadial6 * U(6, 0));
+                detail::ewaldAccumulate(G(6, 1), C(6, 1),
+                    broadcast<SimdVector<double, 8>>(k91) * waveRadial6 * U(6, 1));
+                detail::ewaldAccumulate(G(6, 2), C(6, 2),
+                    broadcast<SimdVector<double, 8>>(k92) * waveRadial6 * U(6, 2));
+                detail::ewaldAccumulate(G(6, 3), C(6, 3),
+                    broadcast<SimdVector<double, 8>>(k93) * waveRadial6 * U(6, 3));
+                detail::ewaldAccumulate(G(6, 4), C(6, 4),
+                    broadcast<SimdVector<double, 8>>(k95) * waveRadial6 * U(6, 4));
+                detail::ewaldAccumulate(G(6, 5), C(6, 5),
+                    broadcast<SimdVector<double, 8>>(k96) * waveRadial6 * U(6, 5));
+                detail::ewaldAccumulate(G(6, 6), C(6, 6),
+                    broadcast<SimdVector<double, 8>>(k97) * waveRadial6 * U(6, 6));
             }
         }
     }

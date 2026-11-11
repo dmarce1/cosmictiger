@@ -124,42 +124,42 @@ Multipole<SimdVector<float, 8>>::operator spherical::Multipole<SimdVector<float,
     SimdVector<float, 8> const t151 = fma(broadcast<SimdVector<float, 8>>(k22), source[28], t150);
     SimdVector<float, 8> const t153 = t151 - source[30];
     SimdVector<float, 8> const t154 = broadcast<SimdVector<float, 8>>(k00) * t153;
-    target[0] = source[0];
-    target[1] = t5;
-    target[2] = (-source[3]);
-    target[3] = t10;
-    target[4] = t13;
-    target[5] = t16;
-    target[6] = t21;
-    target[7] = t23;
-    target[8] = t27;
-    target[9] = t33;
-    target[10] = t36;
-    target[11] = t39;
-    target[12] = t44;
-    target[13] = t48;
-    target[14] = t51;
-    target[15] = t56;
-    target[16] = t62;
-    target[17] = t67;
-    target[18] = t70;
-    target[19] = t72;
-    target[20] = t80;
-    target[21] = t84;
-    target[22] = t88;
-    target[23] = t91;
-    target[24] = t96;
-    target[25] = t106;
-    target[26] = t111;
-    target[27] = t115;
-    target[28] = t118;
-    target[29] = t122;
-    target[30] = t129;
-    target[31] = t135;
-    target[32] = t139;
-    target[33] = t144;
-    target[34] = t149;
-    target[35] = t154;
+    target(0, 0) = source[0];
+    target(1, -1) = t5;
+    target(1, 0) = (-source[3]);
+    target(1, 1) = t10;
+    target(2, -2) = t13;
+    target(2, -1) = t16;
+    target(2, 0) = t21;
+    target(2, 1) = t23;
+    target(2, 2) = t27;
+    target(3, -3) = t33;
+    target(3, -2) = t36;
+    target(3, -1) = t39;
+    target(3, 0) = t44;
+    target(3, 1) = t48;
+    target(3, 2) = t51;
+    target(3, 3) = t56;
+    target(4, -4) = t62;
+    target(4, -3) = t67;
+    target(4, -2) = t70;
+    target(4, -1) = t72;
+    target(4, 0) = t80;
+    target(4, 1) = t84;
+    target(4, 2) = t88;
+    target(4, 3) = t91;
+    target(4, 4) = t96;
+    target(5, -5) = t106;
+    target(5, -4) = t111;
+    target(5, -3) = t115;
+    target(5, -2) = t118;
+    target(5, -1) = t122;
+    target(5, 0) = t129;
+    target(5, 1) = t135;
+    target(5, 2) = t139;
+    target(5, 3) = t144;
+    target(5, 4) = t149;
+    target(5, 5) = t154;
     return target;
 }
 }    // namespace cosmictiger::gravity::cartesian
@@ -281,42 +281,42 @@ Multipole<SimdVector<double, 2>>::operator spherical::Multipole<SimdVector<doubl
     SimdVector<double, 2> const t151 = fma(broadcast<SimdVector<double, 2>>(k22), source[28], t150);
     SimdVector<double, 2> const t153 = t151 - source[30];
     SimdVector<double, 2> const t154 = broadcast<SimdVector<double, 2>>(k00) * t153;
-    target[0] = source[0];
-    target[1] = t5;
-    target[2] = (-source[3]);
-    target[3] = t10;
-    target[4] = t13;
-    target[5] = t16;
-    target[6] = t21;
-    target[7] = t23;
-    target[8] = t27;
-    target[9] = t33;
-    target[10] = t36;
-    target[11] = t39;
-    target[12] = t44;
-    target[13] = t48;
-    target[14] = t51;
-    target[15] = t56;
-    target[16] = t62;
-    target[17] = t67;
-    target[18] = t70;
-    target[19] = t72;
-    target[20] = t80;
-    target[21] = t84;
-    target[22] = t88;
-    target[23] = t91;
-    target[24] = t96;
-    target[25] = t106;
-    target[26] = t111;
-    target[27] = t115;
-    target[28] = t118;
-    target[29] = t122;
-    target[30] = t129;
-    target[31] = t135;
-    target[32] = t139;
-    target[33] = t144;
-    target[34] = t149;
-    target[35] = t154;
+    target(0, 0) = source[0];
+    target(1, -1) = t5;
+    target(1, 0) = (-source[3]);
+    target(1, 1) = t10;
+    target(2, -2) = t13;
+    target(2, -1) = t16;
+    target(2, 0) = t21;
+    target(2, 1) = t23;
+    target(2, 2) = t27;
+    target(3, -3) = t33;
+    target(3, -2) = t36;
+    target(3, -1) = t39;
+    target(3, 0) = t44;
+    target(3, 1) = t48;
+    target(3, 2) = t51;
+    target(3, 3) = t56;
+    target(4, -4) = t62;
+    target(4, -3) = t67;
+    target(4, -2) = t70;
+    target(4, -1) = t72;
+    target(4, 0) = t80;
+    target(4, 1) = t84;
+    target(4, 2) = t88;
+    target(4, 3) = t91;
+    target(4, 4) = t96;
+    target(5, -5) = t106;
+    target(5, -4) = t111;
+    target(5, -3) = t115;
+    target(5, -2) = t118;
+    target(5, -1) = t122;
+    target(5, 0) = t129;
+    target(5, 1) = t135;
+    target(5, 2) = t139;
+    target(5, 3) = t144;
+    target(5, 4) = t149;
+    target(5, 5) = t154;
     return target;
 }
 }    // namespace cosmictiger::gravity::cartesian
@@ -436,42 +436,42 @@ Multipole<SimdVector<float, 4>>::operator spherical::Multipole<SimdVector<float,
     SimdVector<float, 4> const t151 = fma(broadcast<SimdVector<float, 4>>(k22), source[28], t150);
     SimdVector<float, 4> const t153 = t151 - source[30];
     SimdVector<float, 4> const t154 = broadcast<SimdVector<float, 4>>(k00) * t153;
-    target[0] = source[0];
-    target[1] = t5;
-    target[2] = (-source[3]);
-    target[3] = t10;
-    target[4] = t13;
-    target[5] = t16;
-    target[6] = t21;
-    target[7] = t23;
-    target[8] = t27;
-    target[9] = t33;
-    target[10] = t36;
-    target[11] = t39;
-    target[12] = t44;
-    target[13] = t48;
-    target[14] = t51;
-    target[15] = t56;
-    target[16] = t62;
-    target[17] = t67;
-    target[18] = t70;
-    target[19] = t72;
-    target[20] = t80;
-    target[21] = t84;
-    target[22] = t88;
-    target[23] = t91;
-    target[24] = t96;
-    target[25] = t106;
-    target[26] = t111;
-    target[27] = t115;
-    target[28] = t118;
-    target[29] = t122;
-    target[30] = t129;
-    target[31] = t135;
-    target[32] = t139;
-    target[33] = t144;
-    target[34] = t149;
-    target[35] = t154;
+    target(0, 0) = source[0];
+    target(1, -1) = t5;
+    target(1, 0) = (-source[3]);
+    target(1, 1) = t10;
+    target(2, -2) = t13;
+    target(2, -1) = t16;
+    target(2, 0) = t21;
+    target(2, 1) = t23;
+    target(2, 2) = t27;
+    target(3, -3) = t33;
+    target(3, -2) = t36;
+    target(3, -1) = t39;
+    target(3, 0) = t44;
+    target(3, 1) = t48;
+    target(3, 2) = t51;
+    target(3, 3) = t56;
+    target(4, -4) = t62;
+    target(4, -3) = t67;
+    target(4, -2) = t70;
+    target(4, -1) = t72;
+    target(4, 0) = t80;
+    target(4, 1) = t84;
+    target(4, 2) = t88;
+    target(4, 3) = t91;
+    target(4, 4) = t96;
+    target(5, -5) = t106;
+    target(5, -4) = t111;
+    target(5, -3) = t115;
+    target(5, -2) = t118;
+    target(5, -1) = t122;
+    target(5, 0) = t129;
+    target(5, 1) = t135;
+    target(5, 2) = t139;
+    target(5, 3) = t144;
+    target(5, 4) = t149;
+    target(5, 5) = t154;
     return target;
 }
 }    // namespace cosmictiger::gravity::cartesian
@@ -593,42 +593,42 @@ Multipole<SimdVector<double, 4>>::operator spherical::Multipole<SimdVector<doubl
     SimdVector<double, 4> const t151 = fma(broadcast<SimdVector<double, 4>>(k22), source[28], t150);
     SimdVector<double, 4> const t153 = t151 - source[30];
     SimdVector<double, 4> const t154 = broadcast<SimdVector<double, 4>>(k00) * t153;
-    target[0] = source[0];
-    target[1] = t5;
-    target[2] = (-source[3]);
-    target[3] = t10;
-    target[4] = t13;
-    target[5] = t16;
-    target[6] = t21;
-    target[7] = t23;
-    target[8] = t27;
-    target[9] = t33;
-    target[10] = t36;
-    target[11] = t39;
-    target[12] = t44;
-    target[13] = t48;
-    target[14] = t51;
-    target[15] = t56;
-    target[16] = t62;
-    target[17] = t67;
-    target[18] = t70;
-    target[19] = t72;
-    target[20] = t80;
-    target[21] = t84;
-    target[22] = t88;
-    target[23] = t91;
-    target[24] = t96;
-    target[25] = t106;
-    target[26] = t111;
-    target[27] = t115;
-    target[28] = t118;
-    target[29] = t122;
-    target[30] = t129;
-    target[31] = t135;
-    target[32] = t139;
-    target[33] = t144;
-    target[34] = t149;
-    target[35] = t154;
+    target(0, 0) = source[0];
+    target(1, -1) = t5;
+    target(1, 0) = (-source[3]);
+    target(1, 1) = t10;
+    target(2, -2) = t13;
+    target(2, -1) = t16;
+    target(2, 0) = t21;
+    target(2, 1) = t23;
+    target(2, 2) = t27;
+    target(3, -3) = t33;
+    target(3, -2) = t36;
+    target(3, -1) = t39;
+    target(3, 0) = t44;
+    target(3, 1) = t48;
+    target(3, 2) = t51;
+    target(3, 3) = t56;
+    target(4, -4) = t62;
+    target(4, -3) = t67;
+    target(4, -2) = t70;
+    target(4, -1) = t72;
+    target(4, 0) = t80;
+    target(4, 1) = t84;
+    target(4, 2) = t88;
+    target(4, 3) = t91;
+    target(4, 4) = t96;
+    target(5, -5) = t106;
+    target(5, -4) = t111;
+    target(5, -3) = t115;
+    target(5, -2) = t118;
+    target(5, -1) = t122;
+    target(5, 0) = t129;
+    target(5, 1) = t135;
+    target(5, 2) = t139;
+    target(5, 3) = t144;
+    target(5, 4) = t149;
+    target(5, 5) = t154;
     return target;
 }
 }    // namespace cosmictiger::gravity::cartesian
@@ -750,42 +750,42 @@ Multipole<SimdVector<double, 8>>::operator spherical::Multipole<SimdVector<doubl
     SimdVector<double, 8> const t151 = fma(broadcast<SimdVector<double, 8>>(k22), source[28], t150);
     SimdVector<double, 8> const t153 = t151 - source[30];
     SimdVector<double, 8> const t154 = broadcast<SimdVector<double, 8>>(k00) * t153;
-    target[0] = source[0];
-    target[1] = t5;
-    target[2] = (-source[3]);
-    target[3] = t10;
-    target[4] = t13;
-    target[5] = t16;
-    target[6] = t21;
-    target[7] = t23;
-    target[8] = t27;
-    target[9] = t33;
-    target[10] = t36;
-    target[11] = t39;
-    target[12] = t44;
-    target[13] = t48;
-    target[14] = t51;
-    target[15] = t56;
-    target[16] = t62;
-    target[17] = t67;
-    target[18] = t70;
-    target[19] = t72;
-    target[20] = t80;
-    target[21] = t84;
-    target[22] = t88;
-    target[23] = t91;
-    target[24] = t96;
-    target[25] = t106;
-    target[26] = t111;
-    target[27] = t115;
-    target[28] = t118;
-    target[29] = t122;
-    target[30] = t129;
-    target[31] = t135;
-    target[32] = t139;
-    target[33] = t144;
-    target[34] = t149;
-    target[35] = t154;
+    target(0, 0) = source[0];
+    target(1, -1) = t5;
+    target(1, 0) = (-source[3]);
+    target(1, 1) = t10;
+    target(2, -2) = t13;
+    target(2, -1) = t16;
+    target(2, 0) = t21;
+    target(2, 1) = t23;
+    target(2, 2) = t27;
+    target(3, -3) = t33;
+    target(3, -2) = t36;
+    target(3, -1) = t39;
+    target(3, 0) = t44;
+    target(3, 1) = t48;
+    target(3, 2) = t51;
+    target(3, 3) = t56;
+    target(4, -4) = t62;
+    target(4, -3) = t67;
+    target(4, -2) = t70;
+    target(4, -1) = t72;
+    target(4, 0) = t80;
+    target(4, 1) = t84;
+    target(4, 2) = t88;
+    target(4, 3) = t91;
+    target(4, 4) = t96;
+    target(5, -5) = t106;
+    target(5, -4) = t111;
+    target(5, -3) = t115;
+    target(5, -2) = t118;
+    target(5, -1) = t122;
+    target(5, 0) = t129;
+    target(5, 1) = t135;
+    target(5, 2) = t139;
+    target(5, 3) = t144;
+    target(5, 4) = t149;
+    target(5, 5) = t154;
     return target;
 }
 }    // namespace cosmictiger::gravity::cartesian
@@ -808,149 +808,160 @@ Expansion<SimdVector<float, 8>>::operator cartesian::Expansion<SimdVector<float,
     constexpr float k11 = 1.50000000e+01f;
     cartesian::Expansion<SimdVector<float, 8>> target{};
     auto const& source = *this;
-    SimdVector<float, 8> const t8 = source[6] + source[8];
+    SimdVector<float, 8> const t8 = source(2, 0) + source(2, 2);
     SimdVector<float, 8> const t10 = t8 * -broadcast<SimdVector<float, 8>>(k04);
-    SimdVector<float, 8> const t13 = source[4] * broadcast<SimdVector<float, 8>>(k04);
-    SimdVector<float, 8> const t16 = source[8] - source[6];
+    SimdVector<float, 8> const t13 = source(2, -2) * broadcast<SimdVector<float, 8>>(k04);
+    SimdVector<float, 8> const t16 = source(2, 2) - source(2, 0);
     SimdVector<float, 8> const t17 = broadcast<SimdVector<float, 8>>(k04) * t16;
     SimdVector<float, 8> const t23 =
-        fma(broadcast<SimdVector<float, 8>>(k06), source[11], source[9]);
+        fma(broadcast<SimdVector<float, 8>>(k06), source(3, -1), source(3, -3));
     SimdVector<float, 8> const t25 = t23 * -broadcast<SimdVector<float, 8>>(k03);
-    SimdVector<float, 8> const t28 = source[13] + source[15];
+    SimdVector<float, 8> const t28 = source(3, 1) + source(3, 3);
     SimdVector<float, 8> const t29 = -broadcast<SimdVector<float, 8>>(k03) * t28;
-    SimdVector<float, 8> const t31 = source[9] - source[11];
+    SimdVector<float, 8> const t31 = source(3, -3) - source(3, -1);
     SimdVector<float, 8> const t33 = t31 * broadcast<SimdVector<float, 8>>(k03);
-    SimdVector<float, 8> const t35 = source[13] * -broadcast<SimdVector<float, 8>>(k06);
-    SimdVector<float, 8> const t36 = source[15] + t35;
+    SimdVector<float, 8> const t35 = source(3, 1) * -broadcast<SimdVector<float, 8>>(k06);
+    SimdVector<float, 8> const t36 = source(3, 3) + t35;
     SimdVector<float, 8> const t37 = broadcast<SimdVector<float, 8>>(k03) * t36;
-    SimdVector<float, 8> const t40 = source[12] + source[14];
+    SimdVector<float, 8> const t40 = source(3, 0) + source(3, 2);
     SimdVector<float, 8> const t41 = -broadcast<SimdVector<float, 8>>(k04) * t40;
-    SimdVector<float, 8> const t43 = broadcast<SimdVector<float, 8>>(k04) * source[10];
-    SimdVector<float, 8> const t45 = source[14] - source[12];
+    SimdVector<float, 8> const t43 = broadcast<SimdVector<float, 8>>(k04) * source(3, -2);
+    SimdVector<float, 8> const t45 = source(3, 2) - source(3, 0);
     SimdVector<float, 8> const t46 = broadcast<SimdVector<float, 8>>(k04) * t45;
-    SimdVector<float, 8> const t48 = broadcast<SimdVector<float, 8>>(k06) * source[20];
-    SimdVector<float, 8> const t51 = fma(broadcast<SimdVector<float, 8>>(k07), source[22], t48);
-    SimdVector<float, 8> const t53 = t51 + source[24];
+    SimdVector<float, 8> const t48 = broadcast<SimdVector<float, 8>>(k06) * source(4, 0);
+    SimdVector<float, 8> const t51 = fma(broadcast<SimdVector<float, 8>>(k07), source(4, 2), t48);
+    SimdVector<float, 8> const t53 = t51 + source(4, 4);
     SimdVector<float, 8> const t55 = t53 * broadcast<SimdVector<float, 8>>(k02);
     SimdVector<float, 8> const t59 =
-        fma(broadcast<SimdVector<float, 8>>(k05), source[18], source[16]);
+        fma(broadcast<SimdVector<float, 8>>(k05), source(4, -2), source(4, -4));
     SimdVector<float, 8> const t61 = t59 * -broadcast<SimdVector<float, 8>>(k02);
-    SimdVector<float, 8> const t63 = source[20] - source[24];
+    SimdVector<float, 8> const t63 = source(4, 0) - source(4, 4);
     SimdVector<float, 8> const t64 = broadcast<SimdVector<float, 8>>(k02) * t63;
     SimdVector<float, 8> const t66 =
-        fma(source[18], -broadcast<SimdVector<float, 8>>(k05), source[16]);
+        fma(source(4, -2), -broadcast<SimdVector<float, 8>>(k05), source(4, -4));
     SimdVector<float, 8> const t67 = broadcast<SimdVector<float, 8>>(k02) * t66;
-    SimdVector<float, 8> const t69 = fma(source[22], -broadcast<SimdVector<float, 8>>(k07), t48);
-    SimdVector<float, 8> const t70 = source[24] + t69;
+    SimdVector<float, 8> const t69 = fma(source(4, 2), -broadcast<SimdVector<float, 8>>(k07), t48);
+    SimdVector<float, 8> const t70 = source(4, 4) + t69;
     SimdVector<float, 8> const t71 = broadcast<SimdVector<float, 8>>(k02) * t70;
     SimdVector<float, 8> const t74 =
-        fma(broadcast<SimdVector<float, 8>>(k06), source[19], source[17]);
+        fma(broadcast<SimdVector<float, 8>>(k06), source(4, -1), source(4, -3));
     SimdVector<float, 8> const t75 = -broadcast<SimdVector<float, 8>>(k03) * t74;
-    SimdVector<float, 8> const t78 = source[21] + source[23];
+    SimdVector<float, 8> const t78 = source(4, 1) + source(4, 3);
     SimdVector<float, 8> const t79 = -broadcast<SimdVector<float, 8>>(k03) * t78;
-    SimdVector<float, 8> const t81 = source[17] - source[19];
+    SimdVector<float, 8> const t81 = source(4, -3) - source(4, -1);
     SimdVector<float, 8> const t82 = broadcast<SimdVector<float, 8>>(k03) * t81;
-    SimdVector<float, 8> const t83 = -broadcast<SimdVector<float, 8>>(k06) * source[21];
-    SimdVector<float, 8> const t84 = source[23] + t83;
+    SimdVector<float, 8> const t83 = -broadcast<SimdVector<float, 8>>(k06) * source(4, 1);
+    SimdVector<float, 8> const t84 = source(4, 3) + t83;
     SimdVector<float, 8> const t85 = broadcast<SimdVector<float, 8>>(k03) * t84;
     SimdVector<float, 8> const t89 =
-        fma(broadcast<SimdVector<float, 8>>(k08), source[27], source[25]);
-    SimdVector<float, 8> const t92 = fma(broadcast<SimdVector<float, 8>>(k10), source[29], t89);
+        fma(broadcast<SimdVector<float, 8>>(k08), source(5, -3), source(5, -5));
+    SimdVector<float, 8> const t92 = fma(broadcast<SimdVector<float, 8>>(k10), source(5, -1), t89);
     SimdVector<float, 8> const t94 = t92 * broadcast<SimdVector<float, 8>>(k01);
-    SimdVector<float, 8> const t96 = broadcast<SimdVector<float, 8>>(k05) * source[31];
-    SimdVector<float, 8> const t98 = fma(broadcast<SimdVector<float, 8>>(k06), source[33], t96);
-    SimdVector<float, 8> const t100 = t98 + source[35];
+    SimdVector<float, 8> const t96 = broadcast<SimdVector<float, 8>>(k05) * source(5, 1);
+    SimdVector<float, 8> const t98 = fma(broadcast<SimdVector<float, 8>>(k06), source(5, 3), t96);
+    SimdVector<float, 8> const t100 = t98 + source(5, 5);
     SimdVector<float, 8> const t101 = broadcast<SimdVector<float, 8>>(k01) * t100;
-    SimdVector<float, 8> const t104 = (-source[27]) - source[25];
-    SimdVector<float, 8> const t105 = fma(broadcast<SimdVector<float, 8>>(k05), source[29], t104);
+    SimdVector<float, 8> const t104 = (-source(5, -3)) - source(5, -5);
+    SimdVector<float, 8> const t105 =
+        fma(broadcast<SimdVector<float, 8>>(k05), source(5, -1), t104);
     SimdVector<float, 8> const t106 = broadcast<SimdVector<float, 8>>(k01) * t105;
-    SimdVector<float, 8> const t107 = t96 + source[33];
-    SimdVector<float, 8> const t109 = t107 - source[35];
+    SimdVector<float, 8> const t107 = t96 + source(5, 3);
+    SimdVector<float, 8> const t109 = t107 - source(5, 5);
     SimdVector<float, 8> const t110 = broadcast<SimdVector<float, 8>>(k01) * t109;
     SimdVector<float, 8> const t111 =
-        fma(-broadcast<SimdVector<float, 8>>(k06), source[27], source[25]);
-    SimdVector<float, 8> const t112 = fma(broadcast<SimdVector<float, 8>>(k05), source[29], t111);
+        fma(-broadcast<SimdVector<float, 8>>(k06), source(5, -3), source(5, -5));
+    SimdVector<float, 8> const t112 =
+        fma(broadcast<SimdVector<float, 8>>(k05), source(5, -1), t111);
     SimdVector<float, 8> const t113 = broadcast<SimdVector<float, 8>>(k01) * t112;
-    SimdVector<float, 8> const t114 = broadcast<SimdVector<float, 8>>(k10) * source[31];
-    SimdVector<float, 8> const t116 = fma(source[33], -broadcast<SimdVector<float, 8>>(k08), t114);
-    SimdVector<float, 8> const t117 = source[35] + t116;
+    SimdVector<float, 8> const t114 = broadcast<SimdVector<float, 8>>(k10) * source(5, 1);
+    SimdVector<float, 8> const t116 =
+        fma(source(5, 3), -broadcast<SimdVector<float, 8>>(k08), t114);
+    SimdVector<float, 8> const t117 = source(5, 5) + t116;
     SimdVector<float, 8> const t118 = broadcast<SimdVector<float, 8>>(k01) * t117;
-    SimdVector<float, 8> const t120 = broadcast<SimdVector<float, 8>>(k06) * source[30];
-    SimdVector<float, 8> const t122 = fma(broadcast<SimdVector<float, 8>>(k07), source[32], t120);
-    SimdVector<float, 8> const t124 = t122 + source[34];
+    SimdVector<float, 8> const t120 = broadcast<SimdVector<float, 8>>(k06) * source(5, 0);
+    SimdVector<float, 8> const t122 = fma(broadcast<SimdVector<float, 8>>(k07), source(5, 2), t120);
+    SimdVector<float, 8> const t124 = t122 + source(5, 4);
     SimdVector<float, 8> const t125 = broadcast<SimdVector<float, 8>>(k02) * t124;
     SimdVector<float, 8> const t128 =
-        fma(broadcast<SimdVector<float, 8>>(k05), source[28], source[26]);
+        fma(broadcast<SimdVector<float, 8>>(k05), source(5, -2), source(5, -4));
     SimdVector<float, 8> const t129 = -broadcast<SimdVector<float, 8>>(k02) * t128;
-    SimdVector<float, 8> const t131 = source[30] - source[34];
+    SimdVector<float, 8> const t131 = source(5, 0) - source(5, 4);
     SimdVector<float, 8> const t132 = broadcast<SimdVector<float, 8>>(k02) * t131;
     SimdVector<float, 8> const t133 =
-        fma(-broadcast<SimdVector<float, 8>>(k05), source[28], source[26]);
+        fma(-broadcast<SimdVector<float, 8>>(k05), source(5, -2), source(5, -4));
     SimdVector<float, 8> const t134 = broadcast<SimdVector<float, 8>>(k02) * t133;
-    SimdVector<float, 8> const t135 = fma(-broadcast<SimdVector<float, 8>>(k07), source[32], t120);
-    SimdVector<float, 8> const t136 = source[34] + t135;
+    SimdVector<float, 8> const t135 =
+        fma(-broadcast<SimdVector<float, 8>>(k07), source(5, 2), t120);
+    SimdVector<float, 8> const t136 = source(5, 4) + t135;
     SimdVector<float, 8> const t137 = broadcast<SimdVector<float, 8>>(k02) * t136;
-    SimdVector<float, 8> const t139 = broadcast<SimdVector<float, 8>>(k10) * source[42];
-    SimdVector<float, 8> const t142 = fma(broadcast<SimdVector<float, 8>>(k11), source[44], t139);
-    SimdVector<float, 8> const t145 = fma(broadcast<SimdVector<float, 8>>(k09), source[46], t142);
-    SimdVector<float, 8> const t147 = t145 + source[48];
+    SimdVector<float, 8> const t139 = broadcast<SimdVector<float, 8>>(k10) * source(6, 0);
+    SimdVector<float, 8> const t142 = fma(broadcast<SimdVector<float, 8>>(k11), source(6, 2), t139);
+    SimdVector<float, 8> const t145 = fma(broadcast<SimdVector<float, 8>>(k09), source(6, 4), t142);
+    SimdVector<float, 8> const t147 = t145 + source(6, 6);
     SimdVector<float, 8> const t149 = t147 * -broadcast<SimdVector<float, 8>>(k00);
     SimdVector<float, 8> const t152 =
-        fma(broadcast<SimdVector<float, 8>>(k07), source[38], source[36]);
-    SimdVector<float, 8> const t154 = fma(broadcast<SimdVector<float, 8>>(k08), source[40], t152);
+        fma(broadcast<SimdVector<float, 8>>(k07), source(6, -4), source(6, -6));
+    SimdVector<float, 8> const t154 =
+        fma(broadcast<SimdVector<float, 8>>(k08), source(6, -2), t152);
     SimdVector<float, 8> const t156 = t154 * broadcast<SimdVector<float, 8>>(k00);
-    SimdVector<float, 8> const t157 = -broadcast<SimdVector<float, 8>>(k05) * source[42];
-    SimdVector<float, 8> const t159 = t157 - source[44];
-    SimdVector<float, 8> const t160 = fma(broadcast<SimdVector<float, 8>>(k05), source[46], t159);
-    SimdVector<float, 8> const t161 = source[48] + t160;
+    SimdVector<float, 8> const t157 = -broadcast<SimdVector<float, 8>>(k05) * source(6, 0);
+    SimdVector<float, 8> const t159 = t157 - source(6, 2);
+    SimdVector<float, 8> const t160 = fma(broadcast<SimdVector<float, 8>>(k05), source(6, 4), t159);
+    SimdVector<float, 8> const t161 = source(6, 6) + t160;
     SimdVector<float, 8> const t162 = broadcast<SimdVector<float, 8>>(k00) * t161;
     SimdVector<float, 8> const t164 =
-        fma(broadcast<SimdVector<float, 8>>(k06), source[40], (-source[36]));
+        fma(broadcast<SimdVector<float, 8>>(k06), source(6, -2), (-source(6, -6)));
     SimdVector<float, 8> const t165 = broadcast<SimdVector<float, 8>>(k00) * t164;
-    SimdVector<float, 8> const t166 = source[44] + t157;
-    SimdVector<float, 8> const t167 = fma(broadcast<SimdVector<float, 8>>(k05), source[46], t166);
-    SimdVector<float, 8> const t169 = t167 - source[48];
+    SimdVector<float, 8> const t166 = source(6, 2) + t157;
+    SimdVector<float, 8> const t167 = fma(broadcast<SimdVector<float, 8>>(k05), source(6, 4), t166);
+    SimdVector<float, 8> const t169 = t167 - source(6, 6);
     SimdVector<float, 8> const t170 = broadcast<SimdVector<float, 8>>(k00) * t169;
     SimdVector<float, 8> const t171 =
-        fma(-broadcast<SimdVector<float, 8>>(k07), source[38], source[36]);
-    SimdVector<float, 8> const t172 = fma(broadcast<SimdVector<float, 8>>(k08), source[40], t171);
+        fma(-broadcast<SimdVector<float, 8>>(k07), source(6, -4), source(6, -6));
+    SimdVector<float, 8> const t172 =
+        fma(broadcast<SimdVector<float, 8>>(k08), source(6, -2), t171);
     SimdVector<float, 8> const t173 = broadcast<SimdVector<float, 8>>(k00) * t172;
-    SimdVector<float, 8> const t175 = source[42] * -broadcast<SimdVector<float, 8>>(k10);
-    SimdVector<float, 8> const t176 = fma(broadcast<SimdVector<float, 8>>(k11), source[44], t175);
-    SimdVector<float, 8> const t178 = fma(source[46], -broadcast<SimdVector<float, 8>>(k09), t176);
-    SimdVector<float, 8> const t179 = source[48] + t178;
+    SimdVector<float, 8> const t175 = source(6, 0) * -broadcast<SimdVector<float, 8>>(k10);
+    SimdVector<float, 8> const t176 = fma(broadcast<SimdVector<float, 8>>(k11), source(6, 2), t175);
+    SimdVector<float, 8> const t178 =
+        fma(source(6, 4), -broadcast<SimdVector<float, 8>>(k09), t176);
+    SimdVector<float, 8> const t179 = source(6, 6) + t178;
     SimdVector<float, 8> const t180 = broadcast<SimdVector<float, 8>>(k00) * t179;
     SimdVector<float, 8> const t183 =
-        fma(broadcast<SimdVector<float, 8>>(k08), source[39], source[37]);
-    SimdVector<float, 8> const t185 = fma(broadcast<SimdVector<float, 8>>(k10), source[41], t183);
+        fma(broadcast<SimdVector<float, 8>>(k08), source(6, -3), source(6, -5));
+    SimdVector<float, 8> const t185 =
+        fma(broadcast<SimdVector<float, 8>>(k10), source(6, -1), t183);
     SimdVector<float, 8> const t186 = broadcast<SimdVector<float, 8>>(k01) * t185;
-    SimdVector<float, 8> const t188 = broadcast<SimdVector<float, 8>>(k05) * source[43];
-    SimdVector<float, 8> const t190 = fma(broadcast<SimdVector<float, 8>>(k06), source[45], t188);
-    SimdVector<float, 8> const t192 = t190 + source[47];
+    SimdVector<float, 8> const t188 = broadcast<SimdVector<float, 8>>(k05) * source(6, 1);
+    SimdVector<float, 8> const t190 = fma(broadcast<SimdVector<float, 8>>(k06), source(6, 3), t188);
+    SimdVector<float, 8> const t192 = t190 + source(6, 5);
     SimdVector<float, 8> const t193 = broadcast<SimdVector<float, 8>>(k01) * t192;
-    SimdVector<float, 8> const t196 = (-source[39]) - source[37];
-    SimdVector<float, 8> const t197 = fma(broadcast<SimdVector<float, 8>>(k05), source[41], t196);
+    SimdVector<float, 8> const t196 = (-source(6, -3)) - source(6, -5);
+    SimdVector<float, 8> const t197 =
+        fma(broadcast<SimdVector<float, 8>>(k05), source(6, -1), t196);
     SimdVector<float, 8> const t198 = broadcast<SimdVector<float, 8>>(k01) * t197;
-    SimdVector<float, 8> const t199 = t188 + source[45];
-    SimdVector<float, 8> const t201 = t199 - source[47];
+    SimdVector<float, 8> const t199 = t188 + source(6, 3);
+    SimdVector<float, 8> const t201 = t199 - source(6, 5);
     SimdVector<float, 8> const t202 = broadcast<SimdVector<float, 8>>(k01) * t201;
     SimdVector<float, 8> const t203 =
-        fma(-broadcast<SimdVector<float, 8>>(k06), source[39], source[37]);
-    SimdVector<float, 8> const t204 = fma(broadcast<SimdVector<float, 8>>(k05), source[41], t203);
+        fma(-broadcast<SimdVector<float, 8>>(k06), source(6, -3), source(6, -5));
+    SimdVector<float, 8> const t204 =
+        fma(broadcast<SimdVector<float, 8>>(k05), source(6, -1), t203);
     SimdVector<float, 8> const t205 = broadcast<SimdVector<float, 8>>(k01) * t204;
-    SimdVector<float, 8> const t206 = broadcast<SimdVector<float, 8>>(k10) * source[43];
-    SimdVector<float, 8> const t207 = fma(-broadcast<SimdVector<float, 8>>(k08), source[45], t206);
-    SimdVector<float, 8> const t208 = source[47] + t207;
+    SimdVector<float, 8> const t206 = broadcast<SimdVector<float, 8>>(k10) * source(6, 1);
+    SimdVector<float, 8> const t207 =
+        fma(-broadcast<SimdVector<float, 8>>(k08), source(6, 3), t206);
+    SimdVector<float, 8> const t208 = source(6, 5) + t207;
     SimdVector<float, 8> const t209 = broadcast<SimdVector<float, 8>>(k01) * t208;
-    target[0] = source[0];
-    target[1] = source[1];
-    target[2] = source[3];
-    target[3] = source[2];
+    target[0] = source(0, 0);
+    target[1] = source(1, -1);
+    target[2] = source(1, 1);
+    target[3] = source(1, 0);
     target[4] = t10;
     target[5] = t13;
     target[6] = t17;
-    target[7] = source[5];
-    target[8] = source[7];
+    target[7] = source(2, -1);
+    target[8] = source(2, 1);
     target[9] = t25;
     target[10] = t29;
     target[11] = t33;
@@ -1013,153 +1024,169 @@ Expansion<SimdVector<double, 2>>::operator cartesian::Expansion<SimdVector<doubl
     constexpr double k11 = 1.50000000000000000e+01;
     cartesian::Expansion<SimdVector<double, 2>> target{};
     auto const& source = *this;
-    SimdVector<double, 2> const t8 = source[6] + source[8];
+    SimdVector<double, 2> const t8 = source(2, 0) + source(2, 2);
     SimdVector<double, 2> const t10 = t8 * -broadcast<SimdVector<double, 2>>(k04);
-    SimdVector<double, 2> const t13 = source[4] * broadcast<SimdVector<double, 2>>(k04);
-    SimdVector<double, 2> const t16 = source[8] - source[6];
+    SimdVector<double, 2> const t13 = source(2, -2) * broadcast<SimdVector<double, 2>>(k04);
+    SimdVector<double, 2> const t16 = source(2, 2) - source(2, 0);
     SimdVector<double, 2> const t17 = broadcast<SimdVector<double, 2>>(k04) * t16;
     SimdVector<double, 2> const t23 =
-        fma(broadcast<SimdVector<double, 2>>(k06), source[11], source[9]);
+        fma(broadcast<SimdVector<double, 2>>(k06), source(3, -1), source(3, -3));
     SimdVector<double, 2> const t25 = t23 * -broadcast<SimdVector<double, 2>>(k03);
-    SimdVector<double, 2> const t28 = source[13] + source[15];
+    SimdVector<double, 2> const t28 = source(3, 1) + source(3, 3);
     SimdVector<double, 2> const t29 = -broadcast<SimdVector<double, 2>>(k03) * t28;
-    SimdVector<double, 2> const t31 = source[9] - source[11];
+    SimdVector<double, 2> const t31 = source(3, -3) - source(3, -1);
     SimdVector<double, 2> const t33 = t31 * broadcast<SimdVector<double, 2>>(k03);
-    SimdVector<double, 2> const t35 = source[13] * -broadcast<SimdVector<double, 2>>(k06);
-    SimdVector<double, 2> const t36 = source[15] + t35;
+    SimdVector<double, 2> const t35 = source(3, 1) * -broadcast<SimdVector<double, 2>>(k06);
+    SimdVector<double, 2> const t36 = source(3, 3) + t35;
     SimdVector<double, 2> const t37 = broadcast<SimdVector<double, 2>>(k03) * t36;
-    SimdVector<double, 2> const t40 = source[12] + source[14];
+    SimdVector<double, 2> const t40 = source(3, 0) + source(3, 2);
     SimdVector<double, 2> const t41 = -broadcast<SimdVector<double, 2>>(k04) * t40;
-    SimdVector<double, 2> const t43 = broadcast<SimdVector<double, 2>>(k04) * source[10];
-    SimdVector<double, 2> const t45 = source[14] - source[12];
+    SimdVector<double, 2> const t43 = broadcast<SimdVector<double, 2>>(k04) * source(3, -2);
+    SimdVector<double, 2> const t45 = source(3, 2) - source(3, 0);
     SimdVector<double, 2> const t46 = broadcast<SimdVector<double, 2>>(k04) * t45;
-    SimdVector<double, 2> const t48 = broadcast<SimdVector<double, 2>>(k06) * source[20];
-    SimdVector<double, 2> const t51 = fma(broadcast<SimdVector<double, 2>>(k07), source[22], t48);
-    SimdVector<double, 2> const t53 = t51 + source[24];
+    SimdVector<double, 2> const t48 = broadcast<SimdVector<double, 2>>(k06) * source(4, 0);
+    SimdVector<double, 2> const t51 = fma(broadcast<SimdVector<double, 2>>(k07), source(4, 2), t48);
+    SimdVector<double, 2> const t53 = t51 + source(4, 4);
     SimdVector<double, 2> const t55 = t53 * broadcast<SimdVector<double, 2>>(k02);
     SimdVector<double, 2> const t59 =
-        fma(broadcast<SimdVector<double, 2>>(k05), source[18], source[16]);
+        fma(broadcast<SimdVector<double, 2>>(k05), source(4, -2), source(4, -4));
     SimdVector<double, 2> const t61 = t59 * -broadcast<SimdVector<double, 2>>(k02);
-    SimdVector<double, 2> const t63 = source[20] - source[24];
+    SimdVector<double, 2> const t63 = source(4, 0) - source(4, 4);
     SimdVector<double, 2> const t64 = broadcast<SimdVector<double, 2>>(k02) * t63;
     SimdVector<double, 2> const t66 =
-        fma(source[18], -broadcast<SimdVector<double, 2>>(k05), source[16]);
+        fma(source(4, -2), -broadcast<SimdVector<double, 2>>(k05), source(4, -4));
     SimdVector<double, 2> const t67 = broadcast<SimdVector<double, 2>>(k02) * t66;
-    SimdVector<double, 2> const t69 = fma(source[22], -broadcast<SimdVector<double, 2>>(k07), t48);
-    SimdVector<double, 2> const t70 = source[24] + t69;
+    SimdVector<double, 2> const t69 =
+        fma(source(4, 2), -broadcast<SimdVector<double, 2>>(k07), t48);
+    SimdVector<double, 2> const t70 = source(4, 4) + t69;
     SimdVector<double, 2> const t71 = broadcast<SimdVector<double, 2>>(k02) * t70;
     SimdVector<double, 2> const t74 =
-        fma(broadcast<SimdVector<double, 2>>(k06), source[19], source[17]);
+        fma(broadcast<SimdVector<double, 2>>(k06), source(4, -1), source(4, -3));
     SimdVector<double, 2> const t75 = -broadcast<SimdVector<double, 2>>(k03) * t74;
-    SimdVector<double, 2> const t78 = source[21] + source[23];
+    SimdVector<double, 2> const t78 = source(4, 1) + source(4, 3);
     SimdVector<double, 2> const t79 = -broadcast<SimdVector<double, 2>>(k03) * t78;
-    SimdVector<double, 2> const t81 = source[17] - source[19];
+    SimdVector<double, 2> const t81 = source(4, -3) - source(4, -1);
     SimdVector<double, 2> const t82 = broadcast<SimdVector<double, 2>>(k03) * t81;
-    SimdVector<double, 2> const t83 = -broadcast<SimdVector<double, 2>>(k06) * source[21];
-    SimdVector<double, 2> const t84 = source[23] + t83;
+    SimdVector<double, 2> const t83 = -broadcast<SimdVector<double, 2>>(k06) * source(4, 1);
+    SimdVector<double, 2> const t84 = source(4, 3) + t83;
     SimdVector<double, 2> const t85 = broadcast<SimdVector<double, 2>>(k03) * t84;
     SimdVector<double, 2> const t89 =
-        fma(broadcast<SimdVector<double, 2>>(k08), source[27], source[25]);
-    SimdVector<double, 2> const t92 = fma(broadcast<SimdVector<double, 2>>(k10), source[29], t89);
+        fma(broadcast<SimdVector<double, 2>>(k08), source(5, -3), source(5, -5));
+    SimdVector<double, 2> const t92 =
+        fma(broadcast<SimdVector<double, 2>>(k10), source(5, -1), t89);
     SimdVector<double, 2> const t94 = t92 * broadcast<SimdVector<double, 2>>(k01);
-    SimdVector<double, 2> const t96 = broadcast<SimdVector<double, 2>>(k05) * source[31];
-    SimdVector<double, 2> const t98 = fma(broadcast<SimdVector<double, 2>>(k06), source[33], t96);
-    SimdVector<double, 2> const t100 = t98 + source[35];
+    SimdVector<double, 2> const t96 = broadcast<SimdVector<double, 2>>(k05) * source(5, 1);
+    SimdVector<double, 2> const t98 = fma(broadcast<SimdVector<double, 2>>(k06), source(5, 3), t96);
+    SimdVector<double, 2> const t100 = t98 + source(5, 5);
     SimdVector<double, 2> const t101 = broadcast<SimdVector<double, 2>>(k01) * t100;
-    SimdVector<double, 2> const t104 = (-source[27]) - source[25];
-    SimdVector<double, 2> const t105 = fma(broadcast<SimdVector<double, 2>>(k05), source[29], t104);
+    SimdVector<double, 2> const t104 = (-source(5, -3)) - source(5, -5);
+    SimdVector<double, 2> const t105 =
+        fma(broadcast<SimdVector<double, 2>>(k05), source(5, -1), t104);
     SimdVector<double, 2> const t106 = broadcast<SimdVector<double, 2>>(k01) * t105;
-    SimdVector<double, 2> const t107 = t96 + source[33];
-    SimdVector<double, 2> const t109 = t107 - source[35];
+    SimdVector<double, 2> const t107 = t96 + source(5, 3);
+    SimdVector<double, 2> const t109 = t107 - source(5, 5);
     SimdVector<double, 2> const t110 = broadcast<SimdVector<double, 2>>(k01) * t109;
     SimdVector<double, 2> const t111 =
-        fma(-broadcast<SimdVector<double, 2>>(k06), source[27], source[25]);
-    SimdVector<double, 2> const t112 = fma(broadcast<SimdVector<double, 2>>(k05), source[29], t111);
+        fma(-broadcast<SimdVector<double, 2>>(k06), source(5, -3), source(5, -5));
+    SimdVector<double, 2> const t112 =
+        fma(broadcast<SimdVector<double, 2>>(k05), source(5, -1), t111);
     SimdVector<double, 2> const t113 = broadcast<SimdVector<double, 2>>(k01) * t112;
-    SimdVector<double, 2> const t114 = broadcast<SimdVector<double, 2>>(k10) * source[31];
+    SimdVector<double, 2> const t114 = broadcast<SimdVector<double, 2>>(k10) * source(5, 1);
     SimdVector<double, 2> const t116 =
-        fma(source[33], -broadcast<SimdVector<double, 2>>(k08), t114);
-    SimdVector<double, 2> const t117 = source[35] + t116;
+        fma(source(5, 3), -broadcast<SimdVector<double, 2>>(k08), t114);
+    SimdVector<double, 2> const t117 = source(5, 5) + t116;
     SimdVector<double, 2> const t118 = broadcast<SimdVector<double, 2>>(k01) * t117;
-    SimdVector<double, 2> const t120 = broadcast<SimdVector<double, 2>>(k06) * source[30];
-    SimdVector<double, 2> const t122 = fma(broadcast<SimdVector<double, 2>>(k07), source[32], t120);
-    SimdVector<double, 2> const t124 = t122 + source[34];
+    SimdVector<double, 2> const t120 = broadcast<SimdVector<double, 2>>(k06) * source(5, 0);
+    SimdVector<double, 2> const t122 =
+        fma(broadcast<SimdVector<double, 2>>(k07), source(5, 2), t120);
+    SimdVector<double, 2> const t124 = t122 + source(5, 4);
     SimdVector<double, 2> const t125 = broadcast<SimdVector<double, 2>>(k02) * t124;
     SimdVector<double, 2> const t128 =
-        fma(broadcast<SimdVector<double, 2>>(k05), source[28], source[26]);
+        fma(broadcast<SimdVector<double, 2>>(k05), source(5, -2), source(5, -4));
     SimdVector<double, 2> const t129 = -broadcast<SimdVector<double, 2>>(k02) * t128;
-    SimdVector<double, 2> const t131 = source[30] - source[34];
+    SimdVector<double, 2> const t131 = source(5, 0) - source(5, 4);
     SimdVector<double, 2> const t132 = broadcast<SimdVector<double, 2>>(k02) * t131;
     SimdVector<double, 2> const t133 =
-        fma(-broadcast<SimdVector<double, 2>>(k05), source[28], source[26]);
+        fma(-broadcast<SimdVector<double, 2>>(k05), source(5, -2), source(5, -4));
     SimdVector<double, 2> const t134 = broadcast<SimdVector<double, 2>>(k02) * t133;
     SimdVector<double, 2> const t135 =
-        fma(-broadcast<SimdVector<double, 2>>(k07), source[32], t120);
-    SimdVector<double, 2> const t136 = source[34] + t135;
+        fma(-broadcast<SimdVector<double, 2>>(k07), source(5, 2), t120);
+    SimdVector<double, 2> const t136 = source(5, 4) + t135;
     SimdVector<double, 2> const t137 = broadcast<SimdVector<double, 2>>(k02) * t136;
-    SimdVector<double, 2> const t139 = broadcast<SimdVector<double, 2>>(k10) * source[42];
-    SimdVector<double, 2> const t142 = fma(broadcast<SimdVector<double, 2>>(k11), source[44], t139);
-    SimdVector<double, 2> const t145 = fma(broadcast<SimdVector<double, 2>>(k09), source[46], t142);
-    SimdVector<double, 2> const t147 = t145 + source[48];
+    SimdVector<double, 2> const t139 = broadcast<SimdVector<double, 2>>(k10) * source(6, 0);
+    SimdVector<double, 2> const t142 =
+        fma(broadcast<SimdVector<double, 2>>(k11), source(6, 2), t139);
+    SimdVector<double, 2> const t145 =
+        fma(broadcast<SimdVector<double, 2>>(k09), source(6, 4), t142);
+    SimdVector<double, 2> const t147 = t145 + source(6, 6);
     SimdVector<double, 2> const t149 = t147 * -broadcast<SimdVector<double, 2>>(k00);
     SimdVector<double, 2> const t152 =
-        fma(broadcast<SimdVector<double, 2>>(k07), source[38], source[36]);
-    SimdVector<double, 2> const t154 = fma(broadcast<SimdVector<double, 2>>(k08), source[40], t152);
+        fma(broadcast<SimdVector<double, 2>>(k07), source(6, -4), source(6, -6));
+    SimdVector<double, 2> const t154 =
+        fma(broadcast<SimdVector<double, 2>>(k08), source(6, -2), t152);
     SimdVector<double, 2> const t156 = t154 * broadcast<SimdVector<double, 2>>(k00);
-    SimdVector<double, 2> const t157 = -broadcast<SimdVector<double, 2>>(k05) * source[42];
-    SimdVector<double, 2> const t159 = t157 - source[44];
-    SimdVector<double, 2> const t160 = fma(broadcast<SimdVector<double, 2>>(k05), source[46], t159);
-    SimdVector<double, 2> const t161 = source[48] + t160;
+    SimdVector<double, 2> const t157 = -broadcast<SimdVector<double, 2>>(k05) * source(6, 0);
+    SimdVector<double, 2> const t159 = t157 - source(6, 2);
+    SimdVector<double, 2> const t160 =
+        fma(broadcast<SimdVector<double, 2>>(k05), source(6, 4), t159);
+    SimdVector<double, 2> const t161 = source(6, 6) + t160;
     SimdVector<double, 2> const t162 = broadcast<SimdVector<double, 2>>(k00) * t161;
     SimdVector<double, 2> const t164 =
-        fma(broadcast<SimdVector<double, 2>>(k06), source[40], (-source[36]));
+        fma(broadcast<SimdVector<double, 2>>(k06), source(6, -2), (-source(6, -6)));
     SimdVector<double, 2> const t165 = broadcast<SimdVector<double, 2>>(k00) * t164;
-    SimdVector<double, 2> const t166 = source[44] + t157;
-    SimdVector<double, 2> const t167 = fma(broadcast<SimdVector<double, 2>>(k05), source[46], t166);
-    SimdVector<double, 2> const t169 = t167 - source[48];
+    SimdVector<double, 2> const t166 = source(6, 2) + t157;
+    SimdVector<double, 2> const t167 =
+        fma(broadcast<SimdVector<double, 2>>(k05), source(6, 4), t166);
+    SimdVector<double, 2> const t169 = t167 - source(6, 6);
     SimdVector<double, 2> const t170 = broadcast<SimdVector<double, 2>>(k00) * t169;
     SimdVector<double, 2> const t171 =
-        fma(-broadcast<SimdVector<double, 2>>(k07), source[38], source[36]);
-    SimdVector<double, 2> const t172 = fma(broadcast<SimdVector<double, 2>>(k08), source[40], t171);
+        fma(-broadcast<SimdVector<double, 2>>(k07), source(6, -4), source(6, -6));
+    SimdVector<double, 2> const t172 =
+        fma(broadcast<SimdVector<double, 2>>(k08), source(6, -2), t171);
     SimdVector<double, 2> const t173 = broadcast<SimdVector<double, 2>>(k00) * t172;
-    SimdVector<double, 2> const t175 = source[42] * -broadcast<SimdVector<double, 2>>(k10);
-    SimdVector<double, 2> const t176 = fma(broadcast<SimdVector<double, 2>>(k11), source[44], t175);
+    SimdVector<double, 2> const t175 = source(6, 0) * -broadcast<SimdVector<double, 2>>(k10);
+    SimdVector<double, 2> const t176 =
+        fma(broadcast<SimdVector<double, 2>>(k11), source(6, 2), t175);
     SimdVector<double, 2> const t178 =
-        fma(source[46], -broadcast<SimdVector<double, 2>>(k09), t176);
-    SimdVector<double, 2> const t179 = source[48] + t178;
+        fma(source(6, 4), -broadcast<SimdVector<double, 2>>(k09), t176);
+    SimdVector<double, 2> const t179 = source(6, 6) + t178;
     SimdVector<double, 2> const t180 = broadcast<SimdVector<double, 2>>(k00) * t179;
     SimdVector<double, 2> const t183 =
-        fma(broadcast<SimdVector<double, 2>>(k08), source[39], source[37]);
-    SimdVector<double, 2> const t185 = fma(broadcast<SimdVector<double, 2>>(k10), source[41], t183);
+        fma(broadcast<SimdVector<double, 2>>(k08), source(6, -3), source(6, -5));
+    SimdVector<double, 2> const t185 =
+        fma(broadcast<SimdVector<double, 2>>(k10), source(6, -1), t183);
     SimdVector<double, 2> const t186 = broadcast<SimdVector<double, 2>>(k01) * t185;
-    SimdVector<double, 2> const t188 = broadcast<SimdVector<double, 2>>(k05) * source[43];
-    SimdVector<double, 2> const t190 = fma(broadcast<SimdVector<double, 2>>(k06), source[45], t188);
-    SimdVector<double, 2> const t192 = t190 + source[47];
+    SimdVector<double, 2> const t188 = broadcast<SimdVector<double, 2>>(k05) * source(6, 1);
+    SimdVector<double, 2> const t190 =
+        fma(broadcast<SimdVector<double, 2>>(k06), source(6, 3), t188);
+    SimdVector<double, 2> const t192 = t190 + source(6, 5);
     SimdVector<double, 2> const t193 = broadcast<SimdVector<double, 2>>(k01) * t192;
-    SimdVector<double, 2> const t196 = (-source[39]) - source[37];
-    SimdVector<double, 2> const t197 = fma(broadcast<SimdVector<double, 2>>(k05), source[41], t196);
+    SimdVector<double, 2> const t196 = (-source(6, -3)) - source(6, -5);
+    SimdVector<double, 2> const t197 =
+        fma(broadcast<SimdVector<double, 2>>(k05), source(6, -1), t196);
     SimdVector<double, 2> const t198 = broadcast<SimdVector<double, 2>>(k01) * t197;
-    SimdVector<double, 2> const t199 = t188 + source[45];
-    SimdVector<double, 2> const t201 = t199 - source[47];
+    SimdVector<double, 2> const t199 = t188 + source(6, 3);
+    SimdVector<double, 2> const t201 = t199 - source(6, 5);
     SimdVector<double, 2> const t202 = broadcast<SimdVector<double, 2>>(k01) * t201;
     SimdVector<double, 2> const t203 =
-        fma(-broadcast<SimdVector<double, 2>>(k06), source[39], source[37]);
-    SimdVector<double, 2> const t204 = fma(broadcast<SimdVector<double, 2>>(k05), source[41], t203);
+        fma(-broadcast<SimdVector<double, 2>>(k06), source(6, -3), source(6, -5));
+    SimdVector<double, 2> const t204 =
+        fma(broadcast<SimdVector<double, 2>>(k05), source(6, -1), t203);
     SimdVector<double, 2> const t205 = broadcast<SimdVector<double, 2>>(k01) * t204;
-    SimdVector<double, 2> const t206 = broadcast<SimdVector<double, 2>>(k10) * source[43];
+    SimdVector<double, 2> const t206 = broadcast<SimdVector<double, 2>>(k10) * source(6, 1);
     SimdVector<double, 2> const t207 =
-        fma(-broadcast<SimdVector<double, 2>>(k08), source[45], t206);
-    SimdVector<double, 2> const t208 = source[47] + t207;
+        fma(-broadcast<SimdVector<double, 2>>(k08), source(6, 3), t206);
+    SimdVector<double, 2> const t208 = source(6, 5) + t207;
     SimdVector<double, 2> const t209 = broadcast<SimdVector<double, 2>>(k01) * t208;
-    target[0] = source[0];
-    target[1] = source[1];
-    target[2] = source[3];
-    target[3] = source[2];
+    target[0] = source(0, 0);
+    target[1] = source(1, -1);
+    target[2] = source(1, 1);
+    target[3] = source(1, 0);
     target[4] = t10;
     target[5] = t13;
     target[6] = t17;
-    target[7] = source[5];
-    target[8] = source[7];
+    target[7] = source(2, -1);
+    target[8] = source(2, 1);
     target[9] = t25;
     target[10] = t29;
     target[11] = t33;
@@ -1222,149 +1249,160 @@ Expansion<SimdVector<float, 4>>::operator cartesian::Expansion<SimdVector<float,
     constexpr float k11 = 1.50000000e+01f;
     cartesian::Expansion<SimdVector<float, 4>> target{};
     auto const& source = *this;
-    SimdVector<float, 4> const t8 = source[6] + source[8];
+    SimdVector<float, 4> const t8 = source(2, 0) + source(2, 2);
     SimdVector<float, 4> const t10 = t8 * -broadcast<SimdVector<float, 4>>(k04);
-    SimdVector<float, 4> const t13 = source[4] * broadcast<SimdVector<float, 4>>(k04);
-    SimdVector<float, 4> const t16 = source[8] - source[6];
+    SimdVector<float, 4> const t13 = source(2, -2) * broadcast<SimdVector<float, 4>>(k04);
+    SimdVector<float, 4> const t16 = source(2, 2) - source(2, 0);
     SimdVector<float, 4> const t17 = broadcast<SimdVector<float, 4>>(k04) * t16;
     SimdVector<float, 4> const t23 =
-        fma(broadcast<SimdVector<float, 4>>(k06), source[11], source[9]);
+        fma(broadcast<SimdVector<float, 4>>(k06), source(3, -1), source(3, -3));
     SimdVector<float, 4> const t25 = t23 * -broadcast<SimdVector<float, 4>>(k03);
-    SimdVector<float, 4> const t28 = source[13] + source[15];
+    SimdVector<float, 4> const t28 = source(3, 1) + source(3, 3);
     SimdVector<float, 4> const t29 = -broadcast<SimdVector<float, 4>>(k03) * t28;
-    SimdVector<float, 4> const t31 = source[9] - source[11];
+    SimdVector<float, 4> const t31 = source(3, -3) - source(3, -1);
     SimdVector<float, 4> const t33 = t31 * broadcast<SimdVector<float, 4>>(k03);
-    SimdVector<float, 4> const t35 = source[13] * -broadcast<SimdVector<float, 4>>(k06);
-    SimdVector<float, 4> const t36 = source[15] + t35;
+    SimdVector<float, 4> const t35 = source(3, 1) * -broadcast<SimdVector<float, 4>>(k06);
+    SimdVector<float, 4> const t36 = source(3, 3) + t35;
     SimdVector<float, 4> const t37 = broadcast<SimdVector<float, 4>>(k03) * t36;
-    SimdVector<float, 4> const t40 = source[12] + source[14];
+    SimdVector<float, 4> const t40 = source(3, 0) + source(3, 2);
     SimdVector<float, 4> const t41 = -broadcast<SimdVector<float, 4>>(k04) * t40;
-    SimdVector<float, 4> const t43 = broadcast<SimdVector<float, 4>>(k04) * source[10];
-    SimdVector<float, 4> const t45 = source[14] - source[12];
+    SimdVector<float, 4> const t43 = broadcast<SimdVector<float, 4>>(k04) * source(3, -2);
+    SimdVector<float, 4> const t45 = source(3, 2) - source(3, 0);
     SimdVector<float, 4> const t46 = broadcast<SimdVector<float, 4>>(k04) * t45;
-    SimdVector<float, 4> const t48 = broadcast<SimdVector<float, 4>>(k06) * source[20];
-    SimdVector<float, 4> const t51 = fma(broadcast<SimdVector<float, 4>>(k07), source[22], t48);
-    SimdVector<float, 4> const t53 = t51 + source[24];
+    SimdVector<float, 4> const t48 = broadcast<SimdVector<float, 4>>(k06) * source(4, 0);
+    SimdVector<float, 4> const t51 = fma(broadcast<SimdVector<float, 4>>(k07), source(4, 2), t48);
+    SimdVector<float, 4> const t53 = t51 + source(4, 4);
     SimdVector<float, 4> const t55 = t53 * broadcast<SimdVector<float, 4>>(k02);
     SimdVector<float, 4> const t59 =
-        fma(broadcast<SimdVector<float, 4>>(k05), source[18], source[16]);
+        fma(broadcast<SimdVector<float, 4>>(k05), source(4, -2), source(4, -4));
     SimdVector<float, 4> const t61 = t59 * -broadcast<SimdVector<float, 4>>(k02);
-    SimdVector<float, 4> const t63 = source[20] - source[24];
+    SimdVector<float, 4> const t63 = source(4, 0) - source(4, 4);
     SimdVector<float, 4> const t64 = broadcast<SimdVector<float, 4>>(k02) * t63;
     SimdVector<float, 4> const t66 =
-        fma(source[18], -broadcast<SimdVector<float, 4>>(k05), source[16]);
+        fma(source(4, -2), -broadcast<SimdVector<float, 4>>(k05), source(4, -4));
     SimdVector<float, 4> const t67 = broadcast<SimdVector<float, 4>>(k02) * t66;
-    SimdVector<float, 4> const t69 = fma(source[22], -broadcast<SimdVector<float, 4>>(k07), t48);
-    SimdVector<float, 4> const t70 = source[24] + t69;
+    SimdVector<float, 4> const t69 = fma(source(4, 2), -broadcast<SimdVector<float, 4>>(k07), t48);
+    SimdVector<float, 4> const t70 = source(4, 4) + t69;
     SimdVector<float, 4> const t71 = broadcast<SimdVector<float, 4>>(k02) * t70;
     SimdVector<float, 4> const t74 =
-        fma(broadcast<SimdVector<float, 4>>(k06), source[19], source[17]);
+        fma(broadcast<SimdVector<float, 4>>(k06), source(4, -1), source(4, -3));
     SimdVector<float, 4> const t75 = -broadcast<SimdVector<float, 4>>(k03) * t74;
-    SimdVector<float, 4> const t78 = source[21] + source[23];
+    SimdVector<float, 4> const t78 = source(4, 1) + source(4, 3);
     SimdVector<float, 4> const t79 = -broadcast<SimdVector<float, 4>>(k03) * t78;
-    SimdVector<float, 4> const t81 = source[17] - source[19];
+    SimdVector<float, 4> const t81 = source(4, -3) - source(4, -1);
     SimdVector<float, 4> const t82 = broadcast<SimdVector<float, 4>>(k03) * t81;
-    SimdVector<float, 4> const t83 = -broadcast<SimdVector<float, 4>>(k06) * source[21];
-    SimdVector<float, 4> const t84 = source[23] + t83;
+    SimdVector<float, 4> const t83 = -broadcast<SimdVector<float, 4>>(k06) * source(4, 1);
+    SimdVector<float, 4> const t84 = source(4, 3) + t83;
     SimdVector<float, 4> const t85 = broadcast<SimdVector<float, 4>>(k03) * t84;
     SimdVector<float, 4> const t89 =
-        fma(broadcast<SimdVector<float, 4>>(k08), source[27], source[25]);
-    SimdVector<float, 4> const t92 = fma(broadcast<SimdVector<float, 4>>(k10), source[29], t89);
+        fma(broadcast<SimdVector<float, 4>>(k08), source(5, -3), source(5, -5));
+    SimdVector<float, 4> const t92 = fma(broadcast<SimdVector<float, 4>>(k10), source(5, -1), t89);
     SimdVector<float, 4> const t94 = t92 * broadcast<SimdVector<float, 4>>(k01);
-    SimdVector<float, 4> const t96 = broadcast<SimdVector<float, 4>>(k05) * source[31];
-    SimdVector<float, 4> const t98 = fma(broadcast<SimdVector<float, 4>>(k06), source[33], t96);
-    SimdVector<float, 4> const t100 = t98 + source[35];
+    SimdVector<float, 4> const t96 = broadcast<SimdVector<float, 4>>(k05) * source(5, 1);
+    SimdVector<float, 4> const t98 = fma(broadcast<SimdVector<float, 4>>(k06), source(5, 3), t96);
+    SimdVector<float, 4> const t100 = t98 + source(5, 5);
     SimdVector<float, 4> const t101 = broadcast<SimdVector<float, 4>>(k01) * t100;
-    SimdVector<float, 4> const t104 = (-source[27]) - source[25];
-    SimdVector<float, 4> const t105 = fma(broadcast<SimdVector<float, 4>>(k05), source[29], t104);
+    SimdVector<float, 4> const t104 = (-source(5, -3)) - source(5, -5);
+    SimdVector<float, 4> const t105 =
+        fma(broadcast<SimdVector<float, 4>>(k05), source(5, -1), t104);
     SimdVector<float, 4> const t106 = broadcast<SimdVector<float, 4>>(k01) * t105;
-    SimdVector<float, 4> const t107 = t96 + source[33];
-    SimdVector<float, 4> const t109 = t107 - source[35];
+    SimdVector<float, 4> const t107 = t96 + source(5, 3);
+    SimdVector<float, 4> const t109 = t107 - source(5, 5);
     SimdVector<float, 4> const t110 = broadcast<SimdVector<float, 4>>(k01) * t109;
     SimdVector<float, 4> const t111 =
-        fma(-broadcast<SimdVector<float, 4>>(k06), source[27], source[25]);
-    SimdVector<float, 4> const t112 = fma(broadcast<SimdVector<float, 4>>(k05), source[29], t111);
+        fma(-broadcast<SimdVector<float, 4>>(k06), source(5, -3), source(5, -5));
+    SimdVector<float, 4> const t112 =
+        fma(broadcast<SimdVector<float, 4>>(k05), source(5, -1), t111);
     SimdVector<float, 4> const t113 = broadcast<SimdVector<float, 4>>(k01) * t112;
-    SimdVector<float, 4> const t114 = broadcast<SimdVector<float, 4>>(k10) * source[31];
-    SimdVector<float, 4> const t116 = fma(source[33], -broadcast<SimdVector<float, 4>>(k08), t114);
-    SimdVector<float, 4> const t117 = source[35] + t116;
+    SimdVector<float, 4> const t114 = broadcast<SimdVector<float, 4>>(k10) * source(5, 1);
+    SimdVector<float, 4> const t116 =
+        fma(source(5, 3), -broadcast<SimdVector<float, 4>>(k08), t114);
+    SimdVector<float, 4> const t117 = source(5, 5) + t116;
     SimdVector<float, 4> const t118 = broadcast<SimdVector<float, 4>>(k01) * t117;
-    SimdVector<float, 4> const t120 = broadcast<SimdVector<float, 4>>(k06) * source[30];
-    SimdVector<float, 4> const t122 = fma(broadcast<SimdVector<float, 4>>(k07), source[32], t120);
-    SimdVector<float, 4> const t124 = t122 + source[34];
+    SimdVector<float, 4> const t120 = broadcast<SimdVector<float, 4>>(k06) * source(5, 0);
+    SimdVector<float, 4> const t122 = fma(broadcast<SimdVector<float, 4>>(k07), source(5, 2), t120);
+    SimdVector<float, 4> const t124 = t122 + source(5, 4);
     SimdVector<float, 4> const t125 = broadcast<SimdVector<float, 4>>(k02) * t124;
     SimdVector<float, 4> const t128 =
-        fma(broadcast<SimdVector<float, 4>>(k05), source[28], source[26]);
+        fma(broadcast<SimdVector<float, 4>>(k05), source(5, -2), source(5, -4));
     SimdVector<float, 4> const t129 = -broadcast<SimdVector<float, 4>>(k02) * t128;
-    SimdVector<float, 4> const t131 = source[30] - source[34];
+    SimdVector<float, 4> const t131 = source(5, 0) - source(5, 4);
     SimdVector<float, 4> const t132 = broadcast<SimdVector<float, 4>>(k02) * t131;
     SimdVector<float, 4> const t133 =
-        fma(-broadcast<SimdVector<float, 4>>(k05), source[28], source[26]);
+        fma(-broadcast<SimdVector<float, 4>>(k05), source(5, -2), source(5, -4));
     SimdVector<float, 4> const t134 = broadcast<SimdVector<float, 4>>(k02) * t133;
-    SimdVector<float, 4> const t135 = fma(-broadcast<SimdVector<float, 4>>(k07), source[32], t120);
-    SimdVector<float, 4> const t136 = source[34] + t135;
+    SimdVector<float, 4> const t135 =
+        fma(-broadcast<SimdVector<float, 4>>(k07), source(5, 2), t120);
+    SimdVector<float, 4> const t136 = source(5, 4) + t135;
     SimdVector<float, 4> const t137 = broadcast<SimdVector<float, 4>>(k02) * t136;
-    SimdVector<float, 4> const t139 = broadcast<SimdVector<float, 4>>(k10) * source[42];
-    SimdVector<float, 4> const t142 = fma(broadcast<SimdVector<float, 4>>(k11), source[44], t139);
-    SimdVector<float, 4> const t145 = fma(broadcast<SimdVector<float, 4>>(k09), source[46], t142);
-    SimdVector<float, 4> const t147 = t145 + source[48];
+    SimdVector<float, 4> const t139 = broadcast<SimdVector<float, 4>>(k10) * source(6, 0);
+    SimdVector<float, 4> const t142 = fma(broadcast<SimdVector<float, 4>>(k11), source(6, 2), t139);
+    SimdVector<float, 4> const t145 = fma(broadcast<SimdVector<float, 4>>(k09), source(6, 4), t142);
+    SimdVector<float, 4> const t147 = t145 + source(6, 6);
     SimdVector<float, 4> const t149 = t147 * -broadcast<SimdVector<float, 4>>(k00);
     SimdVector<float, 4> const t152 =
-        fma(broadcast<SimdVector<float, 4>>(k07), source[38], source[36]);
-    SimdVector<float, 4> const t154 = fma(broadcast<SimdVector<float, 4>>(k08), source[40], t152);
+        fma(broadcast<SimdVector<float, 4>>(k07), source(6, -4), source(6, -6));
+    SimdVector<float, 4> const t154 =
+        fma(broadcast<SimdVector<float, 4>>(k08), source(6, -2), t152);
     SimdVector<float, 4> const t156 = t154 * broadcast<SimdVector<float, 4>>(k00);
-    SimdVector<float, 4> const t157 = -broadcast<SimdVector<float, 4>>(k05) * source[42];
-    SimdVector<float, 4> const t159 = t157 - source[44];
-    SimdVector<float, 4> const t160 = fma(broadcast<SimdVector<float, 4>>(k05), source[46], t159);
-    SimdVector<float, 4> const t161 = source[48] + t160;
+    SimdVector<float, 4> const t157 = -broadcast<SimdVector<float, 4>>(k05) * source(6, 0);
+    SimdVector<float, 4> const t159 = t157 - source(6, 2);
+    SimdVector<float, 4> const t160 = fma(broadcast<SimdVector<float, 4>>(k05), source(6, 4), t159);
+    SimdVector<float, 4> const t161 = source(6, 6) + t160;
     SimdVector<float, 4> const t162 = broadcast<SimdVector<float, 4>>(k00) * t161;
     SimdVector<float, 4> const t164 =
-        fma(broadcast<SimdVector<float, 4>>(k06), source[40], (-source[36]));
+        fma(broadcast<SimdVector<float, 4>>(k06), source(6, -2), (-source(6, -6)));
     SimdVector<float, 4> const t165 = broadcast<SimdVector<float, 4>>(k00) * t164;
-    SimdVector<float, 4> const t166 = source[44] + t157;
-    SimdVector<float, 4> const t167 = fma(broadcast<SimdVector<float, 4>>(k05), source[46], t166);
-    SimdVector<float, 4> const t169 = t167 - source[48];
+    SimdVector<float, 4> const t166 = source(6, 2) + t157;
+    SimdVector<float, 4> const t167 = fma(broadcast<SimdVector<float, 4>>(k05), source(6, 4), t166);
+    SimdVector<float, 4> const t169 = t167 - source(6, 6);
     SimdVector<float, 4> const t170 = broadcast<SimdVector<float, 4>>(k00) * t169;
     SimdVector<float, 4> const t171 =
-        fma(-broadcast<SimdVector<float, 4>>(k07), source[38], source[36]);
-    SimdVector<float, 4> const t172 = fma(broadcast<SimdVector<float, 4>>(k08), source[40], t171);
+        fma(-broadcast<SimdVector<float, 4>>(k07), source(6, -4), source(6, -6));
+    SimdVector<float, 4> const t172 =
+        fma(broadcast<SimdVector<float, 4>>(k08), source(6, -2), t171);
     SimdVector<float, 4> const t173 = broadcast<SimdVector<float, 4>>(k00) * t172;
-    SimdVector<float, 4> const t175 = source[42] * -broadcast<SimdVector<float, 4>>(k10);
-    SimdVector<float, 4> const t176 = fma(broadcast<SimdVector<float, 4>>(k11), source[44], t175);
-    SimdVector<float, 4> const t178 = fma(source[46], -broadcast<SimdVector<float, 4>>(k09), t176);
-    SimdVector<float, 4> const t179 = source[48] + t178;
+    SimdVector<float, 4> const t175 = source(6, 0) * -broadcast<SimdVector<float, 4>>(k10);
+    SimdVector<float, 4> const t176 = fma(broadcast<SimdVector<float, 4>>(k11), source(6, 2), t175);
+    SimdVector<float, 4> const t178 =
+        fma(source(6, 4), -broadcast<SimdVector<float, 4>>(k09), t176);
+    SimdVector<float, 4> const t179 = source(6, 6) + t178;
     SimdVector<float, 4> const t180 = broadcast<SimdVector<float, 4>>(k00) * t179;
     SimdVector<float, 4> const t183 =
-        fma(broadcast<SimdVector<float, 4>>(k08), source[39], source[37]);
-    SimdVector<float, 4> const t185 = fma(broadcast<SimdVector<float, 4>>(k10), source[41], t183);
+        fma(broadcast<SimdVector<float, 4>>(k08), source(6, -3), source(6, -5));
+    SimdVector<float, 4> const t185 =
+        fma(broadcast<SimdVector<float, 4>>(k10), source(6, -1), t183);
     SimdVector<float, 4> const t186 = broadcast<SimdVector<float, 4>>(k01) * t185;
-    SimdVector<float, 4> const t188 = broadcast<SimdVector<float, 4>>(k05) * source[43];
-    SimdVector<float, 4> const t190 = fma(broadcast<SimdVector<float, 4>>(k06), source[45], t188);
-    SimdVector<float, 4> const t192 = t190 + source[47];
+    SimdVector<float, 4> const t188 = broadcast<SimdVector<float, 4>>(k05) * source(6, 1);
+    SimdVector<float, 4> const t190 = fma(broadcast<SimdVector<float, 4>>(k06), source(6, 3), t188);
+    SimdVector<float, 4> const t192 = t190 + source(6, 5);
     SimdVector<float, 4> const t193 = broadcast<SimdVector<float, 4>>(k01) * t192;
-    SimdVector<float, 4> const t196 = (-source[39]) - source[37];
-    SimdVector<float, 4> const t197 = fma(broadcast<SimdVector<float, 4>>(k05), source[41], t196);
+    SimdVector<float, 4> const t196 = (-source(6, -3)) - source(6, -5);
+    SimdVector<float, 4> const t197 =
+        fma(broadcast<SimdVector<float, 4>>(k05), source(6, -1), t196);
     SimdVector<float, 4> const t198 = broadcast<SimdVector<float, 4>>(k01) * t197;
-    SimdVector<float, 4> const t199 = t188 + source[45];
-    SimdVector<float, 4> const t201 = t199 - source[47];
+    SimdVector<float, 4> const t199 = t188 + source(6, 3);
+    SimdVector<float, 4> const t201 = t199 - source(6, 5);
     SimdVector<float, 4> const t202 = broadcast<SimdVector<float, 4>>(k01) * t201;
     SimdVector<float, 4> const t203 =
-        fma(-broadcast<SimdVector<float, 4>>(k06), source[39], source[37]);
-    SimdVector<float, 4> const t204 = fma(broadcast<SimdVector<float, 4>>(k05), source[41], t203);
+        fma(-broadcast<SimdVector<float, 4>>(k06), source(6, -3), source(6, -5));
+    SimdVector<float, 4> const t204 =
+        fma(broadcast<SimdVector<float, 4>>(k05), source(6, -1), t203);
     SimdVector<float, 4> const t205 = broadcast<SimdVector<float, 4>>(k01) * t204;
-    SimdVector<float, 4> const t206 = broadcast<SimdVector<float, 4>>(k10) * source[43];
-    SimdVector<float, 4> const t207 = fma(-broadcast<SimdVector<float, 4>>(k08), source[45], t206);
-    SimdVector<float, 4> const t208 = source[47] + t207;
+    SimdVector<float, 4> const t206 = broadcast<SimdVector<float, 4>>(k10) * source(6, 1);
+    SimdVector<float, 4> const t207 =
+        fma(-broadcast<SimdVector<float, 4>>(k08), source(6, 3), t206);
+    SimdVector<float, 4> const t208 = source(6, 5) + t207;
     SimdVector<float, 4> const t209 = broadcast<SimdVector<float, 4>>(k01) * t208;
-    target[0] = source[0];
-    target[1] = source[1];
-    target[2] = source[3];
-    target[3] = source[2];
+    target[0] = source(0, 0);
+    target[1] = source(1, -1);
+    target[2] = source(1, 1);
+    target[3] = source(1, 0);
     target[4] = t10;
     target[5] = t13;
     target[6] = t17;
-    target[7] = source[5];
-    target[8] = source[7];
+    target[7] = source(2, -1);
+    target[8] = source(2, 1);
     target[9] = t25;
     target[10] = t29;
     target[11] = t33;
@@ -1427,153 +1465,169 @@ Expansion<SimdVector<double, 4>>::operator cartesian::Expansion<SimdVector<doubl
     constexpr double k11 = 1.50000000000000000e+01;
     cartesian::Expansion<SimdVector<double, 4>> target{};
     auto const& source = *this;
-    SimdVector<double, 4> const t8 = source[6] + source[8];
+    SimdVector<double, 4> const t8 = source(2, 0) + source(2, 2);
     SimdVector<double, 4> const t10 = t8 * -broadcast<SimdVector<double, 4>>(k04);
-    SimdVector<double, 4> const t13 = source[4] * broadcast<SimdVector<double, 4>>(k04);
-    SimdVector<double, 4> const t16 = source[8] - source[6];
+    SimdVector<double, 4> const t13 = source(2, -2) * broadcast<SimdVector<double, 4>>(k04);
+    SimdVector<double, 4> const t16 = source(2, 2) - source(2, 0);
     SimdVector<double, 4> const t17 = broadcast<SimdVector<double, 4>>(k04) * t16;
     SimdVector<double, 4> const t23 =
-        fma(broadcast<SimdVector<double, 4>>(k06), source[11], source[9]);
+        fma(broadcast<SimdVector<double, 4>>(k06), source(3, -1), source(3, -3));
     SimdVector<double, 4> const t25 = t23 * -broadcast<SimdVector<double, 4>>(k03);
-    SimdVector<double, 4> const t28 = source[13] + source[15];
+    SimdVector<double, 4> const t28 = source(3, 1) + source(3, 3);
     SimdVector<double, 4> const t29 = -broadcast<SimdVector<double, 4>>(k03) * t28;
-    SimdVector<double, 4> const t31 = source[9] - source[11];
+    SimdVector<double, 4> const t31 = source(3, -3) - source(3, -1);
     SimdVector<double, 4> const t33 = t31 * broadcast<SimdVector<double, 4>>(k03);
-    SimdVector<double, 4> const t35 = source[13] * -broadcast<SimdVector<double, 4>>(k06);
-    SimdVector<double, 4> const t36 = source[15] + t35;
+    SimdVector<double, 4> const t35 = source(3, 1) * -broadcast<SimdVector<double, 4>>(k06);
+    SimdVector<double, 4> const t36 = source(3, 3) + t35;
     SimdVector<double, 4> const t37 = broadcast<SimdVector<double, 4>>(k03) * t36;
-    SimdVector<double, 4> const t40 = source[12] + source[14];
+    SimdVector<double, 4> const t40 = source(3, 0) + source(3, 2);
     SimdVector<double, 4> const t41 = -broadcast<SimdVector<double, 4>>(k04) * t40;
-    SimdVector<double, 4> const t43 = broadcast<SimdVector<double, 4>>(k04) * source[10];
-    SimdVector<double, 4> const t45 = source[14] - source[12];
+    SimdVector<double, 4> const t43 = broadcast<SimdVector<double, 4>>(k04) * source(3, -2);
+    SimdVector<double, 4> const t45 = source(3, 2) - source(3, 0);
     SimdVector<double, 4> const t46 = broadcast<SimdVector<double, 4>>(k04) * t45;
-    SimdVector<double, 4> const t48 = broadcast<SimdVector<double, 4>>(k06) * source[20];
-    SimdVector<double, 4> const t51 = fma(broadcast<SimdVector<double, 4>>(k07), source[22], t48);
-    SimdVector<double, 4> const t53 = t51 + source[24];
+    SimdVector<double, 4> const t48 = broadcast<SimdVector<double, 4>>(k06) * source(4, 0);
+    SimdVector<double, 4> const t51 = fma(broadcast<SimdVector<double, 4>>(k07), source(4, 2), t48);
+    SimdVector<double, 4> const t53 = t51 + source(4, 4);
     SimdVector<double, 4> const t55 = t53 * broadcast<SimdVector<double, 4>>(k02);
     SimdVector<double, 4> const t59 =
-        fma(broadcast<SimdVector<double, 4>>(k05), source[18], source[16]);
+        fma(broadcast<SimdVector<double, 4>>(k05), source(4, -2), source(4, -4));
     SimdVector<double, 4> const t61 = t59 * -broadcast<SimdVector<double, 4>>(k02);
-    SimdVector<double, 4> const t63 = source[20] - source[24];
+    SimdVector<double, 4> const t63 = source(4, 0) - source(4, 4);
     SimdVector<double, 4> const t64 = broadcast<SimdVector<double, 4>>(k02) * t63;
     SimdVector<double, 4> const t66 =
-        fma(source[18], -broadcast<SimdVector<double, 4>>(k05), source[16]);
+        fma(source(4, -2), -broadcast<SimdVector<double, 4>>(k05), source(4, -4));
     SimdVector<double, 4> const t67 = broadcast<SimdVector<double, 4>>(k02) * t66;
-    SimdVector<double, 4> const t69 = fma(source[22], -broadcast<SimdVector<double, 4>>(k07), t48);
-    SimdVector<double, 4> const t70 = source[24] + t69;
+    SimdVector<double, 4> const t69 =
+        fma(source(4, 2), -broadcast<SimdVector<double, 4>>(k07), t48);
+    SimdVector<double, 4> const t70 = source(4, 4) + t69;
     SimdVector<double, 4> const t71 = broadcast<SimdVector<double, 4>>(k02) * t70;
     SimdVector<double, 4> const t74 =
-        fma(broadcast<SimdVector<double, 4>>(k06), source[19], source[17]);
+        fma(broadcast<SimdVector<double, 4>>(k06), source(4, -1), source(4, -3));
     SimdVector<double, 4> const t75 = -broadcast<SimdVector<double, 4>>(k03) * t74;
-    SimdVector<double, 4> const t78 = source[21] + source[23];
+    SimdVector<double, 4> const t78 = source(4, 1) + source(4, 3);
     SimdVector<double, 4> const t79 = -broadcast<SimdVector<double, 4>>(k03) * t78;
-    SimdVector<double, 4> const t81 = source[17] - source[19];
+    SimdVector<double, 4> const t81 = source(4, -3) - source(4, -1);
     SimdVector<double, 4> const t82 = broadcast<SimdVector<double, 4>>(k03) * t81;
-    SimdVector<double, 4> const t83 = -broadcast<SimdVector<double, 4>>(k06) * source[21];
-    SimdVector<double, 4> const t84 = source[23] + t83;
+    SimdVector<double, 4> const t83 = -broadcast<SimdVector<double, 4>>(k06) * source(4, 1);
+    SimdVector<double, 4> const t84 = source(4, 3) + t83;
     SimdVector<double, 4> const t85 = broadcast<SimdVector<double, 4>>(k03) * t84;
     SimdVector<double, 4> const t89 =
-        fma(broadcast<SimdVector<double, 4>>(k08), source[27], source[25]);
-    SimdVector<double, 4> const t92 = fma(broadcast<SimdVector<double, 4>>(k10), source[29], t89);
+        fma(broadcast<SimdVector<double, 4>>(k08), source(5, -3), source(5, -5));
+    SimdVector<double, 4> const t92 =
+        fma(broadcast<SimdVector<double, 4>>(k10), source(5, -1), t89);
     SimdVector<double, 4> const t94 = t92 * broadcast<SimdVector<double, 4>>(k01);
-    SimdVector<double, 4> const t96 = broadcast<SimdVector<double, 4>>(k05) * source[31];
-    SimdVector<double, 4> const t98 = fma(broadcast<SimdVector<double, 4>>(k06), source[33], t96);
-    SimdVector<double, 4> const t100 = t98 + source[35];
+    SimdVector<double, 4> const t96 = broadcast<SimdVector<double, 4>>(k05) * source(5, 1);
+    SimdVector<double, 4> const t98 = fma(broadcast<SimdVector<double, 4>>(k06), source(5, 3), t96);
+    SimdVector<double, 4> const t100 = t98 + source(5, 5);
     SimdVector<double, 4> const t101 = broadcast<SimdVector<double, 4>>(k01) * t100;
-    SimdVector<double, 4> const t104 = (-source[27]) - source[25];
-    SimdVector<double, 4> const t105 = fma(broadcast<SimdVector<double, 4>>(k05), source[29], t104);
+    SimdVector<double, 4> const t104 = (-source(5, -3)) - source(5, -5);
+    SimdVector<double, 4> const t105 =
+        fma(broadcast<SimdVector<double, 4>>(k05), source(5, -1), t104);
     SimdVector<double, 4> const t106 = broadcast<SimdVector<double, 4>>(k01) * t105;
-    SimdVector<double, 4> const t107 = t96 + source[33];
-    SimdVector<double, 4> const t109 = t107 - source[35];
+    SimdVector<double, 4> const t107 = t96 + source(5, 3);
+    SimdVector<double, 4> const t109 = t107 - source(5, 5);
     SimdVector<double, 4> const t110 = broadcast<SimdVector<double, 4>>(k01) * t109;
     SimdVector<double, 4> const t111 =
-        fma(-broadcast<SimdVector<double, 4>>(k06), source[27], source[25]);
-    SimdVector<double, 4> const t112 = fma(broadcast<SimdVector<double, 4>>(k05), source[29], t111);
+        fma(-broadcast<SimdVector<double, 4>>(k06), source(5, -3), source(5, -5));
+    SimdVector<double, 4> const t112 =
+        fma(broadcast<SimdVector<double, 4>>(k05), source(5, -1), t111);
     SimdVector<double, 4> const t113 = broadcast<SimdVector<double, 4>>(k01) * t112;
-    SimdVector<double, 4> const t114 = broadcast<SimdVector<double, 4>>(k10) * source[31];
+    SimdVector<double, 4> const t114 = broadcast<SimdVector<double, 4>>(k10) * source(5, 1);
     SimdVector<double, 4> const t116 =
-        fma(source[33], -broadcast<SimdVector<double, 4>>(k08), t114);
-    SimdVector<double, 4> const t117 = source[35] + t116;
+        fma(source(5, 3), -broadcast<SimdVector<double, 4>>(k08), t114);
+    SimdVector<double, 4> const t117 = source(5, 5) + t116;
     SimdVector<double, 4> const t118 = broadcast<SimdVector<double, 4>>(k01) * t117;
-    SimdVector<double, 4> const t120 = broadcast<SimdVector<double, 4>>(k06) * source[30];
-    SimdVector<double, 4> const t122 = fma(broadcast<SimdVector<double, 4>>(k07), source[32], t120);
-    SimdVector<double, 4> const t124 = t122 + source[34];
+    SimdVector<double, 4> const t120 = broadcast<SimdVector<double, 4>>(k06) * source(5, 0);
+    SimdVector<double, 4> const t122 =
+        fma(broadcast<SimdVector<double, 4>>(k07), source(5, 2), t120);
+    SimdVector<double, 4> const t124 = t122 + source(5, 4);
     SimdVector<double, 4> const t125 = broadcast<SimdVector<double, 4>>(k02) * t124;
     SimdVector<double, 4> const t128 =
-        fma(broadcast<SimdVector<double, 4>>(k05), source[28], source[26]);
+        fma(broadcast<SimdVector<double, 4>>(k05), source(5, -2), source(5, -4));
     SimdVector<double, 4> const t129 = -broadcast<SimdVector<double, 4>>(k02) * t128;
-    SimdVector<double, 4> const t131 = source[30] - source[34];
+    SimdVector<double, 4> const t131 = source(5, 0) - source(5, 4);
     SimdVector<double, 4> const t132 = broadcast<SimdVector<double, 4>>(k02) * t131;
     SimdVector<double, 4> const t133 =
-        fma(-broadcast<SimdVector<double, 4>>(k05), source[28], source[26]);
+        fma(-broadcast<SimdVector<double, 4>>(k05), source(5, -2), source(5, -4));
     SimdVector<double, 4> const t134 = broadcast<SimdVector<double, 4>>(k02) * t133;
     SimdVector<double, 4> const t135 =
-        fma(-broadcast<SimdVector<double, 4>>(k07), source[32], t120);
-    SimdVector<double, 4> const t136 = source[34] + t135;
+        fma(-broadcast<SimdVector<double, 4>>(k07), source(5, 2), t120);
+    SimdVector<double, 4> const t136 = source(5, 4) + t135;
     SimdVector<double, 4> const t137 = broadcast<SimdVector<double, 4>>(k02) * t136;
-    SimdVector<double, 4> const t139 = broadcast<SimdVector<double, 4>>(k10) * source[42];
-    SimdVector<double, 4> const t142 = fma(broadcast<SimdVector<double, 4>>(k11), source[44], t139);
-    SimdVector<double, 4> const t145 = fma(broadcast<SimdVector<double, 4>>(k09), source[46], t142);
-    SimdVector<double, 4> const t147 = t145 + source[48];
+    SimdVector<double, 4> const t139 = broadcast<SimdVector<double, 4>>(k10) * source(6, 0);
+    SimdVector<double, 4> const t142 =
+        fma(broadcast<SimdVector<double, 4>>(k11), source(6, 2), t139);
+    SimdVector<double, 4> const t145 =
+        fma(broadcast<SimdVector<double, 4>>(k09), source(6, 4), t142);
+    SimdVector<double, 4> const t147 = t145 + source(6, 6);
     SimdVector<double, 4> const t149 = t147 * -broadcast<SimdVector<double, 4>>(k00);
     SimdVector<double, 4> const t152 =
-        fma(broadcast<SimdVector<double, 4>>(k07), source[38], source[36]);
-    SimdVector<double, 4> const t154 = fma(broadcast<SimdVector<double, 4>>(k08), source[40], t152);
+        fma(broadcast<SimdVector<double, 4>>(k07), source(6, -4), source(6, -6));
+    SimdVector<double, 4> const t154 =
+        fma(broadcast<SimdVector<double, 4>>(k08), source(6, -2), t152);
     SimdVector<double, 4> const t156 = t154 * broadcast<SimdVector<double, 4>>(k00);
-    SimdVector<double, 4> const t157 = -broadcast<SimdVector<double, 4>>(k05) * source[42];
-    SimdVector<double, 4> const t159 = t157 - source[44];
-    SimdVector<double, 4> const t160 = fma(broadcast<SimdVector<double, 4>>(k05), source[46], t159);
-    SimdVector<double, 4> const t161 = source[48] + t160;
+    SimdVector<double, 4> const t157 = -broadcast<SimdVector<double, 4>>(k05) * source(6, 0);
+    SimdVector<double, 4> const t159 = t157 - source(6, 2);
+    SimdVector<double, 4> const t160 =
+        fma(broadcast<SimdVector<double, 4>>(k05), source(6, 4), t159);
+    SimdVector<double, 4> const t161 = source(6, 6) + t160;
     SimdVector<double, 4> const t162 = broadcast<SimdVector<double, 4>>(k00) * t161;
     SimdVector<double, 4> const t164 =
-        fma(broadcast<SimdVector<double, 4>>(k06), source[40], (-source[36]));
+        fma(broadcast<SimdVector<double, 4>>(k06), source(6, -2), (-source(6, -6)));
     SimdVector<double, 4> const t165 = broadcast<SimdVector<double, 4>>(k00) * t164;
-    SimdVector<double, 4> const t166 = source[44] + t157;
-    SimdVector<double, 4> const t167 = fma(broadcast<SimdVector<double, 4>>(k05), source[46], t166);
-    SimdVector<double, 4> const t169 = t167 - source[48];
+    SimdVector<double, 4> const t166 = source(6, 2) + t157;
+    SimdVector<double, 4> const t167 =
+        fma(broadcast<SimdVector<double, 4>>(k05), source(6, 4), t166);
+    SimdVector<double, 4> const t169 = t167 - source(6, 6);
     SimdVector<double, 4> const t170 = broadcast<SimdVector<double, 4>>(k00) * t169;
     SimdVector<double, 4> const t171 =
-        fma(-broadcast<SimdVector<double, 4>>(k07), source[38], source[36]);
-    SimdVector<double, 4> const t172 = fma(broadcast<SimdVector<double, 4>>(k08), source[40], t171);
+        fma(-broadcast<SimdVector<double, 4>>(k07), source(6, -4), source(6, -6));
+    SimdVector<double, 4> const t172 =
+        fma(broadcast<SimdVector<double, 4>>(k08), source(6, -2), t171);
     SimdVector<double, 4> const t173 = broadcast<SimdVector<double, 4>>(k00) * t172;
-    SimdVector<double, 4> const t175 = source[42] * -broadcast<SimdVector<double, 4>>(k10);
-    SimdVector<double, 4> const t176 = fma(broadcast<SimdVector<double, 4>>(k11), source[44], t175);
+    SimdVector<double, 4> const t175 = source(6, 0) * -broadcast<SimdVector<double, 4>>(k10);
+    SimdVector<double, 4> const t176 =
+        fma(broadcast<SimdVector<double, 4>>(k11), source(6, 2), t175);
     SimdVector<double, 4> const t178 =
-        fma(source[46], -broadcast<SimdVector<double, 4>>(k09), t176);
-    SimdVector<double, 4> const t179 = source[48] + t178;
+        fma(source(6, 4), -broadcast<SimdVector<double, 4>>(k09), t176);
+    SimdVector<double, 4> const t179 = source(6, 6) + t178;
     SimdVector<double, 4> const t180 = broadcast<SimdVector<double, 4>>(k00) * t179;
     SimdVector<double, 4> const t183 =
-        fma(broadcast<SimdVector<double, 4>>(k08), source[39], source[37]);
-    SimdVector<double, 4> const t185 = fma(broadcast<SimdVector<double, 4>>(k10), source[41], t183);
+        fma(broadcast<SimdVector<double, 4>>(k08), source(6, -3), source(6, -5));
+    SimdVector<double, 4> const t185 =
+        fma(broadcast<SimdVector<double, 4>>(k10), source(6, -1), t183);
     SimdVector<double, 4> const t186 = broadcast<SimdVector<double, 4>>(k01) * t185;
-    SimdVector<double, 4> const t188 = broadcast<SimdVector<double, 4>>(k05) * source[43];
-    SimdVector<double, 4> const t190 = fma(broadcast<SimdVector<double, 4>>(k06), source[45], t188);
-    SimdVector<double, 4> const t192 = t190 + source[47];
+    SimdVector<double, 4> const t188 = broadcast<SimdVector<double, 4>>(k05) * source(6, 1);
+    SimdVector<double, 4> const t190 =
+        fma(broadcast<SimdVector<double, 4>>(k06), source(6, 3), t188);
+    SimdVector<double, 4> const t192 = t190 + source(6, 5);
     SimdVector<double, 4> const t193 = broadcast<SimdVector<double, 4>>(k01) * t192;
-    SimdVector<double, 4> const t196 = (-source[39]) - source[37];
-    SimdVector<double, 4> const t197 = fma(broadcast<SimdVector<double, 4>>(k05), source[41], t196);
+    SimdVector<double, 4> const t196 = (-source(6, -3)) - source(6, -5);
+    SimdVector<double, 4> const t197 =
+        fma(broadcast<SimdVector<double, 4>>(k05), source(6, -1), t196);
     SimdVector<double, 4> const t198 = broadcast<SimdVector<double, 4>>(k01) * t197;
-    SimdVector<double, 4> const t199 = t188 + source[45];
-    SimdVector<double, 4> const t201 = t199 - source[47];
+    SimdVector<double, 4> const t199 = t188 + source(6, 3);
+    SimdVector<double, 4> const t201 = t199 - source(6, 5);
     SimdVector<double, 4> const t202 = broadcast<SimdVector<double, 4>>(k01) * t201;
     SimdVector<double, 4> const t203 =
-        fma(-broadcast<SimdVector<double, 4>>(k06), source[39], source[37]);
-    SimdVector<double, 4> const t204 = fma(broadcast<SimdVector<double, 4>>(k05), source[41], t203);
+        fma(-broadcast<SimdVector<double, 4>>(k06), source(6, -3), source(6, -5));
+    SimdVector<double, 4> const t204 =
+        fma(broadcast<SimdVector<double, 4>>(k05), source(6, -1), t203);
     SimdVector<double, 4> const t205 = broadcast<SimdVector<double, 4>>(k01) * t204;
-    SimdVector<double, 4> const t206 = broadcast<SimdVector<double, 4>>(k10) * source[43];
+    SimdVector<double, 4> const t206 = broadcast<SimdVector<double, 4>>(k10) * source(6, 1);
     SimdVector<double, 4> const t207 =
-        fma(-broadcast<SimdVector<double, 4>>(k08), source[45], t206);
-    SimdVector<double, 4> const t208 = source[47] + t207;
+        fma(-broadcast<SimdVector<double, 4>>(k08), source(6, 3), t206);
+    SimdVector<double, 4> const t208 = source(6, 5) + t207;
     SimdVector<double, 4> const t209 = broadcast<SimdVector<double, 4>>(k01) * t208;
-    target[0] = source[0];
-    target[1] = source[1];
-    target[2] = source[3];
-    target[3] = source[2];
+    target[0] = source(0, 0);
+    target[1] = source(1, -1);
+    target[2] = source(1, 1);
+    target[3] = source(1, 0);
     target[4] = t10;
     target[5] = t13;
     target[6] = t17;
-    target[7] = source[5];
-    target[8] = source[7];
+    target[7] = source(2, -1);
+    target[8] = source(2, 1);
     target[9] = t25;
     target[10] = t29;
     target[11] = t33;
@@ -1636,153 +1690,169 @@ Expansion<SimdVector<double, 8>>::operator cartesian::Expansion<SimdVector<doubl
     constexpr double k11 = 1.50000000000000000e+01;
     cartesian::Expansion<SimdVector<double, 8>> target{};
     auto const& source = *this;
-    SimdVector<double, 8> const t8 = source[6] + source[8];
+    SimdVector<double, 8> const t8 = source(2, 0) + source(2, 2);
     SimdVector<double, 8> const t10 = t8 * -broadcast<SimdVector<double, 8>>(k04);
-    SimdVector<double, 8> const t13 = source[4] * broadcast<SimdVector<double, 8>>(k04);
-    SimdVector<double, 8> const t16 = source[8] - source[6];
+    SimdVector<double, 8> const t13 = source(2, -2) * broadcast<SimdVector<double, 8>>(k04);
+    SimdVector<double, 8> const t16 = source(2, 2) - source(2, 0);
     SimdVector<double, 8> const t17 = broadcast<SimdVector<double, 8>>(k04) * t16;
     SimdVector<double, 8> const t23 =
-        fma(broadcast<SimdVector<double, 8>>(k06), source[11], source[9]);
+        fma(broadcast<SimdVector<double, 8>>(k06), source(3, -1), source(3, -3));
     SimdVector<double, 8> const t25 = t23 * -broadcast<SimdVector<double, 8>>(k03);
-    SimdVector<double, 8> const t28 = source[13] + source[15];
+    SimdVector<double, 8> const t28 = source(3, 1) + source(3, 3);
     SimdVector<double, 8> const t29 = -broadcast<SimdVector<double, 8>>(k03) * t28;
-    SimdVector<double, 8> const t31 = source[9] - source[11];
+    SimdVector<double, 8> const t31 = source(3, -3) - source(3, -1);
     SimdVector<double, 8> const t33 = t31 * broadcast<SimdVector<double, 8>>(k03);
-    SimdVector<double, 8> const t35 = source[13] * -broadcast<SimdVector<double, 8>>(k06);
-    SimdVector<double, 8> const t36 = source[15] + t35;
+    SimdVector<double, 8> const t35 = source(3, 1) * -broadcast<SimdVector<double, 8>>(k06);
+    SimdVector<double, 8> const t36 = source(3, 3) + t35;
     SimdVector<double, 8> const t37 = broadcast<SimdVector<double, 8>>(k03) * t36;
-    SimdVector<double, 8> const t40 = source[12] + source[14];
+    SimdVector<double, 8> const t40 = source(3, 0) + source(3, 2);
     SimdVector<double, 8> const t41 = -broadcast<SimdVector<double, 8>>(k04) * t40;
-    SimdVector<double, 8> const t43 = broadcast<SimdVector<double, 8>>(k04) * source[10];
-    SimdVector<double, 8> const t45 = source[14] - source[12];
+    SimdVector<double, 8> const t43 = broadcast<SimdVector<double, 8>>(k04) * source(3, -2);
+    SimdVector<double, 8> const t45 = source(3, 2) - source(3, 0);
     SimdVector<double, 8> const t46 = broadcast<SimdVector<double, 8>>(k04) * t45;
-    SimdVector<double, 8> const t48 = broadcast<SimdVector<double, 8>>(k06) * source[20];
-    SimdVector<double, 8> const t51 = fma(broadcast<SimdVector<double, 8>>(k07), source[22], t48);
-    SimdVector<double, 8> const t53 = t51 + source[24];
+    SimdVector<double, 8> const t48 = broadcast<SimdVector<double, 8>>(k06) * source(4, 0);
+    SimdVector<double, 8> const t51 = fma(broadcast<SimdVector<double, 8>>(k07), source(4, 2), t48);
+    SimdVector<double, 8> const t53 = t51 + source(4, 4);
     SimdVector<double, 8> const t55 = t53 * broadcast<SimdVector<double, 8>>(k02);
     SimdVector<double, 8> const t59 =
-        fma(broadcast<SimdVector<double, 8>>(k05), source[18], source[16]);
+        fma(broadcast<SimdVector<double, 8>>(k05), source(4, -2), source(4, -4));
     SimdVector<double, 8> const t61 = t59 * -broadcast<SimdVector<double, 8>>(k02);
-    SimdVector<double, 8> const t63 = source[20] - source[24];
+    SimdVector<double, 8> const t63 = source(4, 0) - source(4, 4);
     SimdVector<double, 8> const t64 = broadcast<SimdVector<double, 8>>(k02) * t63;
     SimdVector<double, 8> const t66 =
-        fma(source[18], -broadcast<SimdVector<double, 8>>(k05), source[16]);
+        fma(source(4, -2), -broadcast<SimdVector<double, 8>>(k05), source(4, -4));
     SimdVector<double, 8> const t67 = broadcast<SimdVector<double, 8>>(k02) * t66;
-    SimdVector<double, 8> const t69 = fma(source[22], -broadcast<SimdVector<double, 8>>(k07), t48);
-    SimdVector<double, 8> const t70 = source[24] + t69;
+    SimdVector<double, 8> const t69 =
+        fma(source(4, 2), -broadcast<SimdVector<double, 8>>(k07), t48);
+    SimdVector<double, 8> const t70 = source(4, 4) + t69;
     SimdVector<double, 8> const t71 = broadcast<SimdVector<double, 8>>(k02) * t70;
     SimdVector<double, 8> const t74 =
-        fma(broadcast<SimdVector<double, 8>>(k06), source[19], source[17]);
+        fma(broadcast<SimdVector<double, 8>>(k06), source(4, -1), source(4, -3));
     SimdVector<double, 8> const t75 = -broadcast<SimdVector<double, 8>>(k03) * t74;
-    SimdVector<double, 8> const t78 = source[21] + source[23];
+    SimdVector<double, 8> const t78 = source(4, 1) + source(4, 3);
     SimdVector<double, 8> const t79 = -broadcast<SimdVector<double, 8>>(k03) * t78;
-    SimdVector<double, 8> const t81 = source[17] - source[19];
+    SimdVector<double, 8> const t81 = source(4, -3) - source(4, -1);
     SimdVector<double, 8> const t82 = broadcast<SimdVector<double, 8>>(k03) * t81;
-    SimdVector<double, 8> const t83 = -broadcast<SimdVector<double, 8>>(k06) * source[21];
-    SimdVector<double, 8> const t84 = source[23] + t83;
+    SimdVector<double, 8> const t83 = -broadcast<SimdVector<double, 8>>(k06) * source(4, 1);
+    SimdVector<double, 8> const t84 = source(4, 3) + t83;
     SimdVector<double, 8> const t85 = broadcast<SimdVector<double, 8>>(k03) * t84;
     SimdVector<double, 8> const t89 =
-        fma(broadcast<SimdVector<double, 8>>(k08), source[27], source[25]);
-    SimdVector<double, 8> const t92 = fma(broadcast<SimdVector<double, 8>>(k10), source[29], t89);
+        fma(broadcast<SimdVector<double, 8>>(k08), source(5, -3), source(5, -5));
+    SimdVector<double, 8> const t92 =
+        fma(broadcast<SimdVector<double, 8>>(k10), source(5, -1), t89);
     SimdVector<double, 8> const t94 = t92 * broadcast<SimdVector<double, 8>>(k01);
-    SimdVector<double, 8> const t96 = broadcast<SimdVector<double, 8>>(k05) * source[31];
-    SimdVector<double, 8> const t98 = fma(broadcast<SimdVector<double, 8>>(k06), source[33], t96);
-    SimdVector<double, 8> const t100 = t98 + source[35];
+    SimdVector<double, 8> const t96 = broadcast<SimdVector<double, 8>>(k05) * source(5, 1);
+    SimdVector<double, 8> const t98 = fma(broadcast<SimdVector<double, 8>>(k06), source(5, 3), t96);
+    SimdVector<double, 8> const t100 = t98 + source(5, 5);
     SimdVector<double, 8> const t101 = broadcast<SimdVector<double, 8>>(k01) * t100;
-    SimdVector<double, 8> const t104 = (-source[27]) - source[25];
-    SimdVector<double, 8> const t105 = fma(broadcast<SimdVector<double, 8>>(k05), source[29], t104);
+    SimdVector<double, 8> const t104 = (-source(5, -3)) - source(5, -5);
+    SimdVector<double, 8> const t105 =
+        fma(broadcast<SimdVector<double, 8>>(k05), source(5, -1), t104);
     SimdVector<double, 8> const t106 = broadcast<SimdVector<double, 8>>(k01) * t105;
-    SimdVector<double, 8> const t107 = t96 + source[33];
-    SimdVector<double, 8> const t109 = t107 - source[35];
+    SimdVector<double, 8> const t107 = t96 + source(5, 3);
+    SimdVector<double, 8> const t109 = t107 - source(5, 5);
     SimdVector<double, 8> const t110 = broadcast<SimdVector<double, 8>>(k01) * t109;
     SimdVector<double, 8> const t111 =
-        fma(-broadcast<SimdVector<double, 8>>(k06), source[27], source[25]);
-    SimdVector<double, 8> const t112 = fma(broadcast<SimdVector<double, 8>>(k05), source[29], t111);
+        fma(-broadcast<SimdVector<double, 8>>(k06), source(5, -3), source(5, -5));
+    SimdVector<double, 8> const t112 =
+        fma(broadcast<SimdVector<double, 8>>(k05), source(5, -1), t111);
     SimdVector<double, 8> const t113 = broadcast<SimdVector<double, 8>>(k01) * t112;
-    SimdVector<double, 8> const t114 = broadcast<SimdVector<double, 8>>(k10) * source[31];
+    SimdVector<double, 8> const t114 = broadcast<SimdVector<double, 8>>(k10) * source(5, 1);
     SimdVector<double, 8> const t116 =
-        fma(source[33], -broadcast<SimdVector<double, 8>>(k08), t114);
-    SimdVector<double, 8> const t117 = source[35] + t116;
+        fma(source(5, 3), -broadcast<SimdVector<double, 8>>(k08), t114);
+    SimdVector<double, 8> const t117 = source(5, 5) + t116;
     SimdVector<double, 8> const t118 = broadcast<SimdVector<double, 8>>(k01) * t117;
-    SimdVector<double, 8> const t120 = broadcast<SimdVector<double, 8>>(k06) * source[30];
-    SimdVector<double, 8> const t122 = fma(broadcast<SimdVector<double, 8>>(k07), source[32], t120);
-    SimdVector<double, 8> const t124 = t122 + source[34];
+    SimdVector<double, 8> const t120 = broadcast<SimdVector<double, 8>>(k06) * source(5, 0);
+    SimdVector<double, 8> const t122 =
+        fma(broadcast<SimdVector<double, 8>>(k07), source(5, 2), t120);
+    SimdVector<double, 8> const t124 = t122 + source(5, 4);
     SimdVector<double, 8> const t125 = broadcast<SimdVector<double, 8>>(k02) * t124;
     SimdVector<double, 8> const t128 =
-        fma(broadcast<SimdVector<double, 8>>(k05), source[28], source[26]);
+        fma(broadcast<SimdVector<double, 8>>(k05), source(5, -2), source(5, -4));
     SimdVector<double, 8> const t129 = -broadcast<SimdVector<double, 8>>(k02) * t128;
-    SimdVector<double, 8> const t131 = source[30] - source[34];
+    SimdVector<double, 8> const t131 = source(5, 0) - source(5, 4);
     SimdVector<double, 8> const t132 = broadcast<SimdVector<double, 8>>(k02) * t131;
     SimdVector<double, 8> const t133 =
-        fma(-broadcast<SimdVector<double, 8>>(k05), source[28], source[26]);
+        fma(-broadcast<SimdVector<double, 8>>(k05), source(5, -2), source(5, -4));
     SimdVector<double, 8> const t134 = broadcast<SimdVector<double, 8>>(k02) * t133;
     SimdVector<double, 8> const t135 =
-        fma(-broadcast<SimdVector<double, 8>>(k07), source[32], t120);
-    SimdVector<double, 8> const t136 = source[34] + t135;
+        fma(-broadcast<SimdVector<double, 8>>(k07), source(5, 2), t120);
+    SimdVector<double, 8> const t136 = source(5, 4) + t135;
     SimdVector<double, 8> const t137 = broadcast<SimdVector<double, 8>>(k02) * t136;
-    SimdVector<double, 8> const t139 = broadcast<SimdVector<double, 8>>(k10) * source[42];
-    SimdVector<double, 8> const t142 = fma(broadcast<SimdVector<double, 8>>(k11), source[44], t139);
-    SimdVector<double, 8> const t145 = fma(broadcast<SimdVector<double, 8>>(k09), source[46], t142);
-    SimdVector<double, 8> const t147 = t145 + source[48];
+    SimdVector<double, 8> const t139 = broadcast<SimdVector<double, 8>>(k10) * source(6, 0);
+    SimdVector<double, 8> const t142 =
+        fma(broadcast<SimdVector<double, 8>>(k11), source(6, 2), t139);
+    SimdVector<double, 8> const t145 =
+        fma(broadcast<SimdVector<double, 8>>(k09), source(6, 4), t142);
+    SimdVector<double, 8> const t147 = t145 + source(6, 6);
     SimdVector<double, 8> const t149 = t147 * -broadcast<SimdVector<double, 8>>(k00);
     SimdVector<double, 8> const t152 =
-        fma(broadcast<SimdVector<double, 8>>(k07), source[38], source[36]);
-    SimdVector<double, 8> const t154 = fma(broadcast<SimdVector<double, 8>>(k08), source[40], t152);
+        fma(broadcast<SimdVector<double, 8>>(k07), source(6, -4), source(6, -6));
+    SimdVector<double, 8> const t154 =
+        fma(broadcast<SimdVector<double, 8>>(k08), source(6, -2), t152);
     SimdVector<double, 8> const t156 = t154 * broadcast<SimdVector<double, 8>>(k00);
-    SimdVector<double, 8> const t157 = -broadcast<SimdVector<double, 8>>(k05) * source[42];
-    SimdVector<double, 8> const t159 = t157 - source[44];
-    SimdVector<double, 8> const t160 = fma(broadcast<SimdVector<double, 8>>(k05), source[46], t159);
-    SimdVector<double, 8> const t161 = source[48] + t160;
+    SimdVector<double, 8> const t157 = -broadcast<SimdVector<double, 8>>(k05) * source(6, 0);
+    SimdVector<double, 8> const t159 = t157 - source(6, 2);
+    SimdVector<double, 8> const t160 =
+        fma(broadcast<SimdVector<double, 8>>(k05), source(6, 4), t159);
+    SimdVector<double, 8> const t161 = source(6, 6) + t160;
     SimdVector<double, 8> const t162 = broadcast<SimdVector<double, 8>>(k00) * t161;
     SimdVector<double, 8> const t164 =
-        fma(broadcast<SimdVector<double, 8>>(k06), source[40], (-source[36]));
+        fma(broadcast<SimdVector<double, 8>>(k06), source(6, -2), (-source(6, -6)));
     SimdVector<double, 8> const t165 = broadcast<SimdVector<double, 8>>(k00) * t164;
-    SimdVector<double, 8> const t166 = source[44] + t157;
-    SimdVector<double, 8> const t167 = fma(broadcast<SimdVector<double, 8>>(k05), source[46], t166);
-    SimdVector<double, 8> const t169 = t167 - source[48];
+    SimdVector<double, 8> const t166 = source(6, 2) + t157;
+    SimdVector<double, 8> const t167 =
+        fma(broadcast<SimdVector<double, 8>>(k05), source(6, 4), t166);
+    SimdVector<double, 8> const t169 = t167 - source(6, 6);
     SimdVector<double, 8> const t170 = broadcast<SimdVector<double, 8>>(k00) * t169;
     SimdVector<double, 8> const t171 =
-        fma(-broadcast<SimdVector<double, 8>>(k07), source[38], source[36]);
-    SimdVector<double, 8> const t172 = fma(broadcast<SimdVector<double, 8>>(k08), source[40], t171);
+        fma(-broadcast<SimdVector<double, 8>>(k07), source(6, -4), source(6, -6));
+    SimdVector<double, 8> const t172 =
+        fma(broadcast<SimdVector<double, 8>>(k08), source(6, -2), t171);
     SimdVector<double, 8> const t173 = broadcast<SimdVector<double, 8>>(k00) * t172;
-    SimdVector<double, 8> const t175 = source[42] * -broadcast<SimdVector<double, 8>>(k10);
-    SimdVector<double, 8> const t176 = fma(broadcast<SimdVector<double, 8>>(k11), source[44], t175);
+    SimdVector<double, 8> const t175 = source(6, 0) * -broadcast<SimdVector<double, 8>>(k10);
+    SimdVector<double, 8> const t176 =
+        fma(broadcast<SimdVector<double, 8>>(k11), source(6, 2), t175);
     SimdVector<double, 8> const t178 =
-        fma(source[46], -broadcast<SimdVector<double, 8>>(k09), t176);
-    SimdVector<double, 8> const t179 = source[48] + t178;
+        fma(source(6, 4), -broadcast<SimdVector<double, 8>>(k09), t176);
+    SimdVector<double, 8> const t179 = source(6, 6) + t178;
     SimdVector<double, 8> const t180 = broadcast<SimdVector<double, 8>>(k00) * t179;
     SimdVector<double, 8> const t183 =
-        fma(broadcast<SimdVector<double, 8>>(k08), source[39], source[37]);
-    SimdVector<double, 8> const t185 = fma(broadcast<SimdVector<double, 8>>(k10), source[41], t183);
+        fma(broadcast<SimdVector<double, 8>>(k08), source(6, -3), source(6, -5));
+    SimdVector<double, 8> const t185 =
+        fma(broadcast<SimdVector<double, 8>>(k10), source(6, -1), t183);
     SimdVector<double, 8> const t186 = broadcast<SimdVector<double, 8>>(k01) * t185;
-    SimdVector<double, 8> const t188 = broadcast<SimdVector<double, 8>>(k05) * source[43];
-    SimdVector<double, 8> const t190 = fma(broadcast<SimdVector<double, 8>>(k06), source[45], t188);
-    SimdVector<double, 8> const t192 = t190 + source[47];
+    SimdVector<double, 8> const t188 = broadcast<SimdVector<double, 8>>(k05) * source(6, 1);
+    SimdVector<double, 8> const t190 =
+        fma(broadcast<SimdVector<double, 8>>(k06), source(6, 3), t188);
+    SimdVector<double, 8> const t192 = t190 + source(6, 5);
     SimdVector<double, 8> const t193 = broadcast<SimdVector<double, 8>>(k01) * t192;
-    SimdVector<double, 8> const t196 = (-source[39]) - source[37];
-    SimdVector<double, 8> const t197 = fma(broadcast<SimdVector<double, 8>>(k05), source[41], t196);
+    SimdVector<double, 8> const t196 = (-source(6, -3)) - source(6, -5);
+    SimdVector<double, 8> const t197 =
+        fma(broadcast<SimdVector<double, 8>>(k05), source(6, -1), t196);
     SimdVector<double, 8> const t198 = broadcast<SimdVector<double, 8>>(k01) * t197;
-    SimdVector<double, 8> const t199 = t188 + source[45];
-    SimdVector<double, 8> const t201 = t199 - source[47];
+    SimdVector<double, 8> const t199 = t188 + source(6, 3);
+    SimdVector<double, 8> const t201 = t199 - source(6, 5);
     SimdVector<double, 8> const t202 = broadcast<SimdVector<double, 8>>(k01) * t201;
     SimdVector<double, 8> const t203 =
-        fma(-broadcast<SimdVector<double, 8>>(k06), source[39], source[37]);
-    SimdVector<double, 8> const t204 = fma(broadcast<SimdVector<double, 8>>(k05), source[41], t203);
+        fma(-broadcast<SimdVector<double, 8>>(k06), source(6, -3), source(6, -5));
+    SimdVector<double, 8> const t204 =
+        fma(broadcast<SimdVector<double, 8>>(k05), source(6, -1), t203);
     SimdVector<double, 8> const t205 = broadcast<SimdVector<double, 8>>(k01) * t204;
-    SimdVector<double, 8> const t206 = broadcast<SimdVector<double, 8>>(k10) * source[43];
+    SimdVector<double, 8> const t206 = broadcast<SimdVector<double, 8>>(k10) * source(6, 1);
     SimdVector<double, 8> const t207 =
-        fma(-broadcast<SimdVector<double, 8>>(k08), source[45], t206);
-    SimdVector<double, 8> const t208 = source[47] + t207;
+        fma(-broadcast<SimdVector<double, 8>>(k08), source(6, 3), t206);
+    SimdVector<double, 8> const t208 = source(6, 5) + t207;
     SimdVector<double, 8> const t209 = broadcast<SimdVector<double, 8>>(k01) * t208;
-    target[0] = source[0];
-    target[1] = source[1];
-    target[2] = source[3];
-    target[3] = source[2];
+    target[0] = source(0, 0);
+    target[1] = source(1, -1);
+    target[2] = source(1, 1);
+    target[3] = source(1, 0);
     target[4] = t10;
     target[5] = t13;
     target[6] = t17;
-    target[7] = source[5];
-    target[8] = source[7];
+    target[7] = source(2, -1);
+    target[8] = source(2, 1);
     target[9] = t25;
     target[10] = t29;
     target[11] = t33;

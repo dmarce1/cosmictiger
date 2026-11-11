@@ -89,13 +89,13 @@ TEST(FmmApi, SphericalDipolePacking) {
     SphericalMultipole moments{};
     Vector3<double> const offset{0.4, -0.3, 0.2};
     cosmictiger::gravity::spherical::detail::P2M(2.0, offset[0], offset[1], offset[2], moments);
-    EXPECT_DOUBLE_EQ(moments.real(0, 0), 2.0);
-    EXPECT_DOUBLE_EQ(moments.real(1, 0), -0.4);
-    EXPECT_DOUBLE_EQ(moments.real(1, 1), -0.4);
-    EXPECT_DOUBLE_EQ(moments.imaginary(1, 1), 0.3);
-    EXPECT_EQ(&moments.imaginary(1, 1), &moments[1]);
-    EXPECT_EQ(&moments.real(1, 0), &moments[2]);
-    EXPECT_EQ(&moments.real(1, 1), &moments[3]);
+    EXPECT_DOUBLE_EQ(moments(0, 0), 2.0);
+    EXPECT_DOUBLE_EQ(moments(1, 0), -0.4);
+    EXPECT_DOUBLE_EQ(moments(1, +1), -0.4);
+    EXPECT_DOUBLE_EQ(moments(1, -1), 0.3);
+    EXPECT_EQ(&moments(1, -1), &moments[1]);
+    EXPECT_EQ(&moments(1, 0), &moments[2]);
+    EXPECT_EQ(&moments(1, +1), &moments[3]);
 }
 
 }    // namespace

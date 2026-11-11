@@ -11,7 +11,7 @@ All polynomial projection and verification take place during generation.
 from fractions import Fraction as Q
 from pathlib import Path
 from functools import lru_cache, reduce
-from math import gcd, lcm
+from math import gcd, lcm, isqrt
 
 from cartesian.translations import (
     cartesianMonomial, indexFactorial, reduceSourceIndex, tensorIndices,
@@ -125,6 +125,12 @@ def localRows(degree):
 
 
 def emit(name, order, rows, targetType, sourceType):
+    def access(name, kind, slot):
+        if kind.startswith('spherical::'):
+            l = isqrt(slot)
+            return f'{name}({l}, {slot - l * l - l})'
+        return f'{name}[{slot}]'
+
     graph = Dag()
     roots = []
     for _, row in sorted(rows.items()):
@@ -136,7 +142,7 @@ def emit(name, order, rows, targetType, sourceType):
         value = graph.zero
         for slot, coefficient in sorted(row.items()):
             value = graph.fma(graph.constant(coefficient / common),
-                              graph.symbol(f'source[{slot}]'), value)
+                              graph.symbol(access('source', sourceType, slot)), value)
         roots.append(graph.scale(value, common))
     code, arithmetic, weighted = graph.emit(roots)
     conventional = weighted + arithmetic.get('fma', 0)
@@ -153,7 +159,7 @@ def emit(name, order, rows, targetType, sourceType):
              f'    {targetType}<Real, order> target{{}};',
              '    auto const& source = *this;', *code]
     for slot, root in zip(sorted(rows), roots):
-        lines.append(f'    target[{slot}] = {graph.expression(root)};')
+        lines.append(f'    {access("target", targetType, slot)} = {graph.expression(root)};')
     lines += ['    return target;', '}', '}', '']
     return '\n'.join(lines), dict(operator=name, fmm_order=order, arithmetic=arithmetic,
         weighted_flops=weighted, conventional_flops=conventional)

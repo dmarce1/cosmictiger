@@ -8,6 +8,7 @@
 
 #pragma once
 #include <cosmictiger/gravity/kernels/spherical/ewald_common.hpp>
+#include <cosmictiger/gravity/kernels/spherical_types.hpp>
 
 namespace cosmictiger::gravity::spherical {
 template <>
