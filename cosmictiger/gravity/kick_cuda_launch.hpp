@@ -239,16 +239,24 @@ bool kickBuildLayout(Gravity const& gravity, bool massPlane, int residency, int 
     if (arenaBudget < scratchBytes) {
         return false;
     }
-    // Leaves never exceed the runtime bucket, which is capped by kMaxBucketSize,
-    // so an automatic tile first tries to hold the whole bucket and only then
-    // falls back to bounded sink tiles.
-    int const bucket = std::min(getOptions().compute.bucketSize, kMaxBucketSize);
+    // The runtime bucket bounds a leaf; the shared budget bounds a sink tile.
+    // Clamp before rounding or computing bytes so a large bucket cannot
+    // overflow layout arithmetic. Source staging can reduce the tile further.
+    int const bucket = getOptions().compute.bucketSize;
+    int const maximumSinkCapacity =
+        kickRoundDown(arenaBudget / (4 * int(sizeof(float))), kWarpSize);
     bool const sinkAuto = gravity.cudaKickSinkTile == 0;
     int sinkCapacity = 0;
     if (gravity.cudaKickSinkTile > 0) {
+        if (gravity.cudaKickSinkTile > maximumSinkCapacity) {
+            return false;
+        }
         sinkCapacity = kickRoundUp(gravity.cudaKickSinkTile, kWarpSize);
     } else if (sinkAuto) {
-        sinkCapacity = kickRoundUp(bucket, kWarpSize);
+        if (maximumSinkCapacity == 0) {
+            return false;
+        }
+        sinkCapacity = kickRoundUp(std::min(bucket, maximumSinkCapacity), kWarpSize);
     }
     int const particleBytesPerSource =
         int(sizeof(Position)) * kDimensions + (massPlane ? int(sizeof(float)) : 0);
@@ -290,7 +298,12 @@ bool kickBuildLayout(Gravity const& gravity, bool massPlane, int residency, int 
             layout.listSlabBytes = 0;
             if (layout.listReserve > 0) {
                 CudaKickListStorage<order> storage;
-                layout.listSlabBytes = kickCarveListStorage<order>(layout, nullptr, storage);
+                size_t const bytes = kickCarveListStorage<order>(layout, nullptr, storage);
+                if (bytes > size_t(std::numeric_limits<int>::max())) {
+                    throw std::length_error(
+                        "CUDA kick per-block list storage exceeds its byte-offset range");
+                }
+                layout.listSlabBytes = int(bytes);
             }
             return layout.totalBytes <= budget;
         }

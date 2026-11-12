@@ -226,6 +226,18 @@ def main():
             if "unrecognized option" not in rejected or "timeIntegrator" not in rejected:
                 raise RuntimeError(f"retired INI integrator {mode} lacked a clear diagnostic")
         if gravity_compiled:
+            assertNumericSetting(output, "compute.bucketSize", 128)
+            for bucket in (257, 2048):
+                larger = run(f"startup_bucket_{bucket}",
+                             startupOptions + [f"--compute.bucketSize={bucket}"],
+                             selectors=False)
+                assertNumericSetting(larger, "compute.bucketSize", bucket)
+                assertNumericSetting(larger, "compute.sphBucketSize", 106)
+            rejected = run("startup_bucket_index_overflow",
+                           startupOptions + ["--compute.bucketSize=2147483647"],
+                           success=False, selectors=False)
+            if "force-buffer index range" not in rejected:
+                raise RuntimeError("bucket index overflow lacked a clear diagnostic")
             rejected = run("startup_reject_unsplit",
                            startupOptions + ["--gravity.pmmmOuterInterval=false"],
                            success=False, selectors=False)
@@ -1136,7 +1148,7 @@ mapSize = 8
         assertNumericSetting(defaults, key, value)
 
     # SPH leaf capacity follows its own explicit setting or neighbor-derived
-    # automatic value, independently of the gravity bucket and its compile-time cap.
+    # automatic value, independently of the gravity bucket.
     output = run("sph_bucket_gravity_independent", metadata_options + [
         "--compute.bucketSize=32"])
     assertNumericSetting(output, "compute.bucketSize", 32)

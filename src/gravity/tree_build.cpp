@@ -258,7 +258,7 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
         // Global nodes have no rank-local particle range to rescan.
         bool const canRescan = processRange.second - processRange.first == 1 &&
             processRange.first == hpxRank() && particleRange.first >= 0 && numberOfParticles > 0 &&
-            numberOfParticles <= 64 * getOptions().compute.bucketSize;
+            numberOfParticles <= 64LL * getOptions().compute.bucketSize;
         flops += canRescan ? 1 : 0;
         if (canRescan && (rbox.end[xdim] - rbox.begin[xdim] <= 0.5)) {
             tried1 = true;

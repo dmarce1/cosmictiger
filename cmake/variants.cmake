@@ -56,8 +56,7 @@ target_compile_definitions(cosmictiger_default_config INTERFACE
     COSMICTIGER_WITH_SPH=$<BOOL:${COSMICTIGER_WITH_SPH}>
     COSMICTIGER_DIMENSION_COUNT=${COSMICTIGER_DIMENSION_COUNT}
     COSMICTIGER_POSITION_BITS=${COSMICTIGER_POSITION_BITS}
-    ORDER=${cosmictiger_default_fmm_order}
-    MAX_BUCKET_SIZE=${COSMICTIGER_WITH_MAX_BUCKET})
+    ORDER=${cosmictiger_default_fmm_order})
 
 if(COSMICTIGER_WITH_GRAVITY)
     add_library(cosmictiger_fmm STATIC ${cosmictiger_fmm_library_sources})
@@ -65,7 +64,7 @@ if(COSMICTIGER_WITH_GRAVITY)
     target_include_directories(cosmictiger_fmm PUBLIC
         ${COSMICTIGER_GENERATED_INCLUDE_DIR} ${PROJECT_SOURCE_DIR})
     target_compile_definitions(cosmictiger_fmm PUBLIC
-        ORDER=${cosmictiger_default_fmm_order} MAX_BUCKET_SIZE=${COSMICTIGER_WITH_MAX_BUCKET})
+        ORDER=${cosmictiger_default_fmm_order})
     # Preserve the emitted arithmetic graph and Ewald compensated sums. Only
     # explicit math::fma calls may fuse, independent of consumer build flags.
     target_compile_options(cosmictiger_fmm PRIVATE

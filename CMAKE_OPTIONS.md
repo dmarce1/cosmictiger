@@ -36,7 +36,6 @@ direct formulas. See [matrix algorithms and measurements](docs/matrix.md).
 | `COSMICTIGER_EXPANSION_DEGREE` | `6` | One potential degree per executable, from 2 through 8. |
 | `COSMICTIGER_POSITION_TYPE` | `fixed32` | `fixed32` or `fixed64` particle positions for the build. |
 | `COSMICTIGER_WITH_CUDA` | `ON` | Compile CUDA; requires a CUDA-enabled HPX installation. |
-| `COSMICTIGER_WITH_MAX_BUCKET` | `128` | Maximum tree leaf bucket: 32, 64, 128, 256, 512, or 1024. |
 | `COSMICTIGER_WITH_LONG_LONG_PART_INT` | `OFF` | Use long long local particle indices. |
 | `COSMICTIGER_PROFILE` | `ON` | Manual phase profiler (`profileBegin`/`profileEnd`, `profile.txt`). |
 | `COSMICTIGER_DEVICE_PROFILE` | `OFF` | Per-block CUDA gravity phase cycles in `profile.txt`; requires `COSMICTIGER_PROFILE` and `COSMICTIGER_WITH_CUDA`. |
@@ -103,6 +102,11 @@ the configured capabilities. Old exclusive CMake selections are retired; a fresh
 build directory avoids ambiguous cached selections. See configure diagnostics for
 migration guidance. CPU/CUDA and position width remain build-directory settings.
 An explicit runtime `compute.positionType` must match the compiled width.
+
+Gravity leaf capacity is the runtime option `compute.bucketSize` (default 128),
+with no build-time ceiling or power-of-two requirement. CUDA shared-memory
+capacity limits the sink tile; larger leaves span multiple tiles. Runtime
+force-buffer index and allocation limits still apply.
 
 ## Common CMake and toolchain settings
 

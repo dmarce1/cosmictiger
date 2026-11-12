@@ -704,8 +704,7 @@ bool processOptions(int argc, char* argv[]) {
             ->default_value(kPositionBits == 64 ? "fixed64" : "fixed32"),
         "position storage: fixed32 (Q0.32) or fixed64 (Q0.64); must match "
         "COSMICTIGER_POSITION_TYPE at build time")("compute.bucketSize",
-        po::value<int>(&opts.compute.bucketSize)
-            ->default_value(std::min(128, int(MAX_BUCKET_SIZE))),
+        po::value<int>(&opts.compute.bucketSize)->default_value(128),
         "gravity tree leaf bucket size")("compute.sphBucketSize",
         po::value<int>(&opts.compute.sphBucketSize)->default_value(0),
         "SPH tree leaf bucket size; 0 uses floor(8/pi * hydro.neighborNumber)")(
@@ -1469,10 +1468,9 @@ bool processOptions(int argc, char* argv[]) {
         detail::throwOptionError(
             "compute.sphTreeRebuildFraction must be finite and between 0 and 1\n");
     }
-    if (opts.compute.bucketSize > MAX_BUCKET_SIZE) {
-        detail::throwOptionError("compute.bucketSize must not exceed the compile-time maximum %i "
-                                 "(COSMICTIGER_WITH_MAX_BUCKET)\n",
-            int(MAX_BUCKET_SIZE));
+    // The four force planes use int-sized element counts on the CUDA backend.
+    if (opts.compute.bucketSize > std::numeric_limits<int>::max() / 4) {
+        detail::throwOptionError("compute.bucketSize exceeds the force-buffer index range\n");
     }
     if (opts.gravity.cudaKickResidency < 0 || opts.gravity.cudaKickSinkTile < -1 ||
         opts.gravity.cudaKickParticleTile < 0 || opts.gravity.cudaKickMultipoleTile < 0 ||

@@ -69,15 +69,6 @@ option(COSMICTIGER_REQUIRE_APEX "Require HPX task profiling through an APEX-enab
 option(COSMICTIGER_WITH_LONG_LONG_PART_INT "Use long long to index local particles" OFF)
 include(cmake/features.cmake)
 include(cmake/matrix.cmake)
-# Compile-time cap on the tree leaf bucket. compute.bucketSize may be any
-# runtime value up to this power of two; leaves then hold between half the
-# runtime bucket plus one and the runtime bucket particles. The CUDA kick
-# shared-memory policy is tuned for a runtime bucket equal to this cap.
-set(COSMICTIGER_WITH_MAX_BUCKET "128" CACHE STRING "Maximum gravity tree leaf bucket size (power of two)")
-if(NOT COSMICTIGER_WITH_MAX_BUCKET MATCHES "^(32|64|128|256|512|1024)$")
-    message(FATAL_ERROR
-        "COSMICTIGER_WITH_MAX_BUCKET must be a power of two from 32 to 1024; got '${COSMICTIGER_WITH_MAX_BUCKET}'")
-endif()
 if(COSMICTIGER_WITH_CUDA)
     if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES AND "$ENV{CUDAARCHS}" STREQUAL "")
         set(CMAKE_CUDA_ARCHITECTURES native)
@@ -192,7 +183,6 @@ message(STATUS "cosmictiger gravity = ${COSMICTIGER_WITH_GRAVITY} (PMMM-FMM)")
 if(COSMICTIGER_WITH_GRAVITY)
     message(STATUS "cosmictiger potential expansion degree = ${COSMICTIGER_EXPANSION_DEGREE}")
 endif()
-message(STATUS "cosmictiger maximum bucket size = ${COSMICTIGER_WITH_MAX_BUCKET}")
 
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-march=native" COMPILER_SUPPORTS_MARCH_NATIVE)
@@ -549,7 +539,7 @@ add_custom_command(OUTPUT ${COSMICTIGER_GENERATED_FMM_FILES}
 add_custom_target(generate_fmm_kernels DEPENDS ${COSMICTIGER_GENERATED_FMM_FILES})
 add_custom_target(generate_cartesian_kernels DEPENDS generate_fmm_kernels)
 add_custom_target(cosmictiger_generated_kernels DEPENDS generate_fmm_kernels)
-# Compile a target against the generated kernels and selected order/bucket cap.
+# Compile a target against the generated kernels and selected order.
 function(cosmictiger_use_generated_kernels target)
     if(COSMICTIGER_WITH_GRAVITY)
         add_dependencies(${target} generate_fmm_kernels)
@@ -559,8 +549,7 @@ function(cosmictiger_use_generated_kernels target)
         endif()
         target_include_directories(${target} BEFORE PRIVATE ${COSMICTIGER_GENERATED_INCLUDE_DIR})
     endif()
-    target_compile_definitions(${target} PRIVATE ORDER=${cosmictiger_default_fmm_order}
-        MAX_BUCKET_SIZE=${COSMICTIGER_WITH_MAX_BUCKET})
+    target_compile_definitions(${target} PRIVATE ORDER=${cosmictiger_default_fmm_order})
 endfunction()
 include(cmake/variants.cmake)
 

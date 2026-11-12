@@ -66,13 +66,14 @@ order-dependent code is instantiated per internal order from templates:
 - Ewald tables (`EwaldConst`) are filled once for the runtime order into
   buffers sized for order 9 (about 29 KB of constant memory).
 
-## Bucket cap
+## Runtime bucket size
 
-`COSMICTIGER_WITH_MAX_BUCKET` (power of two, default 128) caps the runtime
-`compute.bucketSize`. Leaves hold between half the runtime bucket plus one and
-the runtime bucket particles. The kick arena is tuned for a runtime bucket
-equal to the cap: its automatic sink-force tile covers the whole bucket
-whenever the shared budget allows and only then falls back to bounded tiles.
+`compute.bucketSize` sets the gravity leaf capacity at runtime, with default 128.
+It has no compile-time ceiling or power-of-two requirement. Force-buffer index
+and allocation ranges still apply. The automatic sink-force tile covers a leaf
+when it fits the device's shared-memory budget and otherwise processes the leaf
+in bounded tiles. The explicit global-force mode reserves its backing storage
+from the runtime bucket size.
 
 ## Shared-memory arena
 
@@ -324,15 +325,14 @@ potential error rises again: the single-precision floor the order cap is based
 on. A matched-accuracy comparison needs the opening angle varied per order; the
 theta sweep below provides it.
 
-### Bucket cap of the benchmark build (`cap_effect_bucket64/`)
+### Historical bucket-cap comparison (`cap_effect_bucket64/`)
 
-Buckets above 128 need a build with `COSMICTIGER_WITH_MAX_BUCKET=1024`. The
-automatic sink tile follows the runtime bucket (`min(compute.bucketSize,
-kMaxBucketSize)`), so at bucket 64 the 1024-cap build selects the same layout
-as the 128-cap build of the measurements above (7,904 dynamic shared bytes,
-64-particle sink tile, 512-particle source tile, 38 multipoles) and its force
-exports are byte-identical to the 128-cap build's. Timings agree within the
-pair spread; the 1024-cap build is used for everything below.
+These measurements predate removal of the compile-time bucket ceiling. At
+runtime bucket 64, builds with ceilings of 128 and 1024 selected the same layout
+(7,904 dynamic shared bytes, 64-particle sink tile, 512-particle source tile,
+38 multipoles), and their force exports were byte-identical. Timings agreed
+within the pair spread. The historical 1024-cap build was used for the results
+below; current builds select the bucket entirely at runtime.
 
 | variant | lattice (forces) | clustered (forces) | adaptive (forces) | adaptive (forces + potential) |
 |---|---:|---:|---:|---:|

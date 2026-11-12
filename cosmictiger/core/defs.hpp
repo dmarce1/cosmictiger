@@ -75,9 +75,4 @@ inline constexpr int kSortOversubscription = 2;
 inline constexpr int kTreeCacheSize = 1024;
 inline constexpr int kTreeNodeAllocationSize = 8;
 
-// Compile-time cap on compute.bucketSize (COSMICTIGER_WITH_MAX_BUCKET); see kick.hpp.
-#ifndef MAX_BUCKET_SIZE
-#define MAX_BUCKET_SIZE 128
-#endif
-
 #endif /* DEFS_HPP_ */

@@ -14,6 +14,8 @@
 // instantiated once per FMM order by the CMake-generated instance translation
 // units (kick_cuda_instances.hpp). kick.cu calls the build-order specialization directly.
 
+#include <cstddef>
+
 #include <cooperative_groups.h>
 #include <cuda/barrier>
 
@@ -79,7 +81,7 @@ namespace detail {
 
 struct KickListCarver {
     char* base;    // nullptr: measure only
-    int offset;
+    size_t offset;
     /// Reserve an aligned typed region in the kick-list slab, advancing its offset even
     /// during size-only layout calculation.
     template <class T>
@@ -87,7 +89,7 @@ struct KickListCarver {
         offset = ((offset + kKickListRegionAlignment - 1) / kKickListRegionAlignment) *
             kKickListRegionAlignment;
         T* pointer = base ? reinterpret_cast<T*>(base + offset) : nullptr;
-        offset += count * int(sizeof(T));
+        offset += size_t(count) * sizeof(T);
         return pointer;
     }
 };
@@ -98,7 +100,7 @@ struct KickListCarver {
 // it when base is null. Returns the bytes per block. The host sizes the slab
 // and the kernel resolves its block's regions with this same function.
 template <int order>
-CUDA_EXPORT inline int kickCarveListStorage(
+CUDA_EXPORT inline size_t kickCarveListStorage(
     CudaKickArenaLayout const& layout, char* base, CudaKickListStorage<order>& storage) {
     detail::KickListCarver carver{base, 0};
     storage.listEntries = layout.listReserve;

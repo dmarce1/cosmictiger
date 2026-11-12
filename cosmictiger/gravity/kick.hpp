@@ -20,15 +20,6 @@
 #include <cosmictiger/gravity/tree.hpp>
 #include <cosmictiger/math/vector3.hpp>
 
-// Runtime compute.bucketSize is validated against this power-of-two cap. Tree
-// leaves hold between half the runtime bucket plus one and the runtime bucket
-// particles, and the CUDA kick arena is tuned for a runtime bucket equal to the
-// cap: its automatic sink-force tile covers the whole bucket when it fits.
-inline constexpr int kMaxBucketSize = MAX_BUCKET_SIZE;
-static_assert(
-    kMaxBucketSize >= 32 && kMaxBucketSize <= 1024 && (kMaxBucketSize & (kMaxBucketSize - 1)) == 0,
-    "MAX_BUCKET_SIZE must be a power of two from 32 to 1024");
-
 struct SphParticleFlags;
 
 struct CudaKickData {

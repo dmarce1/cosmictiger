@@ -29,6 +29,5 @@ cmake \
     -DCOSMICTIGER_REQUIRE_APEX=ON \
     -DCOSMICTIGER_WITH_CUDA=ON \
     -DCOSMICTIGER_WITH_LONG_LONG_PART_INT=ON \
-    -DCOSMICTIGER_WITH_MAX_BUCKET=128 \
     -DHPX_DIR="$HOME/local/hpx/${directory^}/lib/cmake/HPX/" \
     ..
