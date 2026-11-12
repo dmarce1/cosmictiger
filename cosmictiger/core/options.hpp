@@ -186,6 +186,7 @@ struct Gravity {
     int kernelDegree{4};
     // Shared FMM opening angle and filled-cell PMMM near-stencil criterion.
     double openingAngle{0.5773502691896257};
+    std::string openingSchedule{};    // Cosmological redshift:theta pairs; empty means constant.
     // Open only the larger of two rejected cells instead of both.
     bool openLargerCell{};
     // Fixed comoving compact support in box units; effectiveRadius is 2 sigma.
@@ -432,6 +433,7 @@ struct Options {
         arc & lightcone.mapSize;
         arc & lightcone.linkingLength;
         arc & gravity.openingAngle;
+        arc & gravity.openingSchedule;
         arc & gravity.openLargerCell;
         arc & analysis.sliceSize;
         arc & analysis.linkingLength;

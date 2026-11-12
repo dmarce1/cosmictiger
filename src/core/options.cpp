@@ -35,6 +35,7 @@
 #include <cosmictiger/core/startup.hpp>
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/gravity/mesh_size.hpp>
+#include <cosmictiger/gravity/opening_schedule.hpp>
 #if COSMICTIGER_WITH_GRAVITY
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/gravity/tree.hpp>
@@ -542,6 +543,7 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"gravity.kernelFamily", options.gravity.kernelFamily},
         {"gravity.kernelDegree", options.gravity.kernelDegree},
         {"gravity.openingAngle", options.gravity.openingAngle},
+        {"gravity.openingSchedule", options.gravity.openingSchedule},
         {"gravity.openLargerCell", options.gravity.openLargerCell},
         {"gravity.effectiveRadius", effectiveRadius},
         {"gravity.smoothingLength",
@@ -906,7 +908,10 @@ bool processOptions(int argc, char* argv[]) {
         "gravity.openingAngle",
         po::value<double>(&opts.gravity.openingAngle)->default_value(opts.gravity.openingAngle),
         "FMM opening angle in (0, 1]; also sets the filled-cell PMMM near stencil")(
-        "gravity.pmmmOuterInterval",
+        "gravity.openingSchedule",
+        po::value<std::string>(&opts.gravity.openingSchedule)->default_value(""),
+        "cosmological redshift:theta pairs, comma separated; applied at PMMM outer boundaries; "
+        "none selects a constant angle")("gravity.pmmmOuterInterval",
         po::value<bool>(&opts.gravity.pmmmOuterInterval)->default_value(true),
         "required true with gravity: solve the FFT far field only at outer interval boundaries and "
         "keep the near-stencil "
@@ -1175,6 +1180,13 @@ bool processOptions(int argc, char* argv[]) {
         opts.gravity.openingAngle > 1.0) {
         detail::throwOptionError("gravity.openingAngle must be in (0, 1]\n");
     }
+    auto const openingSchedule = gravity::parseOpeningSchedule(opts.gravity.openingSchedule);
+    if (!openingSchedule.empty() && (!opts.gravity.enabled || opts.run.scenario != "cosmology")) {
+        detail::throwOptionError(
+            "gravity.openingSchedule requires enabled gravity and run.scenario=cosmology\n");
+    }
+    opts.gravity.openingAngle = gravity::openingScheduleInitialTheta(
+        openingSchedule, opts.cosmology.startRedshift, opts.gravity.openingAngle);
     detail::validateRockstar(opts);
 #if !COSMICTIGER_WITH_GRAVITY
     if (opts.gravity.enabled) {
@@ -1228,8 +1240,13 @@ bool processOptions(int argc, char* argv[]) {
         if (opts.gravity.meshSize < 1) {
             detail::throwOptionError("gravity.meshSize must be positive for PMMM\n");
         }
+        // Keep one domain decomposition throughout the schedule, including restarts.
+        double minimumAngle = opts.gravity.openingAngle;
+        for (auto const& point : openingSchedule) {
+            minimumAngle = std::min(minimumAngle, point.theta);
+        }
         opts.gravity.pmmmCoarseMeshSize = pmmm::detail::resolvedCoarseMeshSize(
-            opts.gravity.meshSize, opts.gravity.pmmmCoarseMeshSize, opts.gravity.openingAngle);
+            opts.gravity.meshSize, opts.gravity.pmmmCoarseMeshSize, minimumAngle);
         if (opts.gravity.pmmmCoarseMeshSize < 1 ||
             opts.gravity.pmmmCoarseMeshSize > opts.gravity.meshSize ||
             opts.gravity.meshSize % opts.gravity.pmmmCoarseMeshSize != 0) {
@@ -1905,6 +1922,13 @@ bool processOptions(int argc, char* argv[]) {
         detail::throwOptionError(
             "PMMM requires the normalized gravity.smoothingLength to be no larger than "
             "the minimum separation of cells outside the opening-angle near stencil\n");
+    }
+    for (auto const& point : openingSchedule) {
+        if (opts.gravity.smoothingLength >
+            pmmm::detail::nearStencilSupport(opts.gravity.meshSize, point.theta)) {
+            detail::throwOptionError("gravity.openingSchedule has an angle whose near stencil does "
+                                     "not contain the gravitational softening support\n");
+        }
     }
     detail::displayOptions = true;
     if (hpxRank() == 0 && opts.run.test.empty()) {

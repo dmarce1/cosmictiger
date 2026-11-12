@@ -260,6 +260,7 @@ set(cosmictiger_header_files
     cosmictiger/cuda/cuda_unordered_map.hpp
     cosmictiger/cuda/device_vector.hpp
     cosmictiger/gravity/kernels/cartesian_tracefree_types.hpp
+    cosmictiger/gravity/opening_schedule.hpp
     cosmictiger/gravity/fmm_acceptance.hpp
     cosmictiger/gravity/softening.hpp
     cosmictiger/gravity/kernels/cartesian_tracefree_operators.hpp
@@ -1779,6 +1780,10 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
     endif()
 
     if(COSMICTIGER_WITH_GRAVITY)
+        add_executable(opening_schedule_test tests/gravity/opening_schedule.cpp)
+        target_include_directories(opening_schedule_test PRIVATE ${PROJECT_SOURCE_DIR})
+        target_compile_options(opening_schedule_test PRIVATE -ffast-math)
+        cosmictiger_add_gtest(NAME opening_schedule TARGET opening_schedule_test PROPERTIES TIMEOUT 10)
         add_executable(softening_flops_test tests/softening_flops.cpp)
         target_include_directories(softening_flops_test PRIVATE ${PROJECT_SOURCE_DIR})
         target_include_directories(softening_flops_test SYSTEM PRIVATE ${CHEALPIX_INCLUDE_DIR})
@@ -1898,6 +1903,11 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
         endif()
         # Outer interval with frozen near membership (docs/pmmm.md).
         if(COSMICTIGER_WITH_GRAVITY)
+            add_test(NAME opening_schedule_cpu COMMAND ${Python3_EXECUTABLE}
+                ${PROJECT_SOURCE_DIR}/tests/gravity/run_opening_schedule.py $<TARGET_FILE:cosmictiger>
+                ${PROJECT_BINARY_DIR}/tests/opening_schedule_cpu)
+            set_tests_properties(opening_schedule_cpu PROPERTIES TIMEOUT 600 PROCESSORS 2
+                RUN_SERIAL TRUE LABELS "pmmm;checkpoint;cpu")
             add_test(NAME pmmm_interval_cpu COMMAND ${Python3_EXECUTABLE}
                 ${PROJECT_SOURCE_DIR}/tests/gravity/run_pmmm_interval.py $<TARGET_FILE:cosmictiger>
                 ${PROJECT_BINARY_DIR}/tests/pmmm_interval_cpu
@@ -1949,6 +1959,11 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             foreach(flag IN LISTS MPIEXEC_POSTFLAGS)
                 list(APPEND pm_launcher_args "--mpi-postflag=${flag}")
             endforeach()
+            add_test(NAME opening_schedule_mpi COMMAND ${Python3_EXECUTABLE}
+                ${PROJECT_SOURCE_DIR}/tests/gravity/run_opening_schedule.py $<TARGET_FILE:cosmictiger>
+                ${PROJECT_BINARY_DIR}/tests/opening_schedule_mpi ${pm_launcher_args})
+            set_tests_properties(opening_schedule_mpi PROPERTIES TIMEOUT 900 PROCESSORS 2
+                RUN_SERIAL TRUE LABELS "pmmm;checkpoint;mpi")
             set(pmmm_threaded_workdir "${PROJECT_BINARY_DIR}/tests/pmmm_mpi_threads")
             file(MAKE_DIRECTORY "${pmmm_threaded_workdir}")
             add_test(NAME pmmm_mpi_threads COMMAND ${MPIEXEC_EXECUTABLE}

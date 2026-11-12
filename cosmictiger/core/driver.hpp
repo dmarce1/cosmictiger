@@ -69,6 +69,9 @@ struct DriverParameters {
     double outerInterval{};
     double outerStart{};
     uint64_t outerIndex{};
+    // Read from PMMM checkpoint metadata and transported to the coordinator;
+    // not part of the historical on-disk driver record.
+    double checkpointOpeningAngle{};
     /// Archive `bucketSize`, `maxRung`, `adot`, `minrung0`, `step`, `a` and the
     /// remaining fields in transport order.
     template <typename A>
@@ -94,6 +97,7 @@ struct DriverParameters {
         arc & outerInterval;
         arc & outerStart;
         arc & outerIndex;
+        arc & checkpointOpeningAngle;
     }
 };
 

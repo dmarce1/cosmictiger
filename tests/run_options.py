@@ -146,7 +146,7 @@ def main():
                 "hydro.viscosityEpsilon", "hydro.conductionCoefficient",
                 "hydro.neighborNumber", "gravity.enabled",
                 "gravity.kernelFamily", "gravity.kernelDegree",
-                "gravity.meshSize", "gravity.openingAngle", "gravity.pmmmCoarseMeshSize",
+                "gravity.meshSize", "gravity.openingAngle", "gravity.openingSchedule", "gravity.pmmmCoarseMeshSize",
                 "gravity.errorInterval", "gravity.errorSampleSize",
                 "hydro.kernelFamily", "hydro.kernelDegree",
                 "gravity.effectiveRadius", "gravity.smoothingLength",

@@ -6,7 +6,9 @@
  See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
+#include <algorithm>
 #include <array>
+#include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -37,6 +39,10 @@
 #include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/gravity/mesh_size.hpp>
+#include <cosmictiger/gravity/opening_schedule.hpp>
+#if COSMICTIGER_WITH_GRAVITY
+#include <cosmictiger/gravity/solver.hpp>
+#endif
 #include <cosmictiger/io/checkpoint.hpp>
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/kernel.hpp>
@@ -685,7 +691,11 @@ std::array<uint64_t, 11> pmmmCheckpointParameters(Options const& opts) {
     // Version six changes the primary near/far split from a cube to the
     // filled-cell opening-angle stencil. Slot three is reserved (zero).
     // Earlier versions remain decodable but cannot resume frozen old fields.
-    return {6, static_cast<uint64_t>(opts.gravity.meshSize),
+    // Version seven appends normalized schedule points and the original start
+    // redshift. Slot nine remains the angle active in the saved frozen interval.
+    uint64_t const version =
+        gravity::parseOpeningSchedule(opts.gravity.openingSchedule).empty() ? 6 : 7;
+    return {version, static_cast<uint64_t>(opts.gravity.meshSize),
         static_cast<uint64_t>(gravity::kBuildFmmOrder), 0, static_cast<uint64_t>(opts.run.minRung),
         timestepEtaBits, 1, 1U, static_cast<uint64_t>(gravity::kBuildFmmOrder), openingAngleBits,
         static_cast<uint64_t>(pmmm::detail::resolvedCoarseMeshSize(
@@ -700,7 +710,8 @@ std::array<uint64_t, 11> readPmmmCheckpointParameters(FILE* fp) {
         FREAD(&parameters[7], sizeof(uint64_t), 1, fp);
     } else if (parameters[0] == 3) {
         FREAD(&parameters[7], sizeof(uint64_t), 3, fp);
-    } else if (parameters[0] == 4 || parameters[0] == 5 || parameters[0] == 6) {
+    } else if (parameters[0] == 4 || parameters[0] == 5 || parameters[0] == 6 ||
+        parameters[0] == 7) {
         FREAD(&parameters[7], sizeof(uint64_t), 4, fp);
     } else if (parameters[0] != 1) {
         throw std::runtime_error("Unsupported PMMM checkpoint parameter version");
@@ -766,6 +777,17 @@ void writeDriverState(FILE* fp, DriverParameters const& params) {
         if (fwrite(meshParameters.data(), sizeof(uint64_t), meshParameters.size(), fp) !=
             meshParameters.size()) {
             throw std::ios_base::failure("Unable to write PMMM checkpoint parameters");
+        }
+        if (meshParameters[0] == 7) {
+            auto const points = gravity::parseOpeningSchedule(getOptions().gravity.openingSchedule);
+            uint64_t const count = points.size();
+            FWRITE(&count, sizeof(count), 1, fp);
+            double const start = getOptions().cosmology.startRedshift;
+            FWRITE(&start, sizeof(start), 1, fp);
+            for (auto const& point : points) {
+                FWRITE(&point.redshift, sizeof(double), 1, fp);
+                FWRITE(&point.theta, sizeof(double), 1, fp);
+            }
         }
     }
     if ((header.flags & kIndependentParticleCounts) != 0U) {
@@ -846,6 +868,7 @@ void writeDriverState(FILE* fp, DriverParameters const& params) {
 /// extensions.
 DriverParameters readDriverState(FILE* fp) {
     DriverParameters params{};
+    double checkpointOpeningAngle = 0.0;
     CheckpointHeader header{};
     uint64_t magic = 0;
     FREAD(&magic, sizeof(magic), 1, fp);
@@ -908,9 +931,38 @@ DriverParameters readDriverState(FILE* fp) {
         }
         if ((header.flags & kParticleMultipoleMesh) != 0U) {
             auto const meshParameters = readPmmmCheckpointParameters(fp);
-            bool const requireMeshMatch =
-                getOptions().gravity.enabled || !getOptions().hydro.enabled;
-            if (requireMeshMatch && !pmmmCheckpointCompatible(meshParameters, getOptions())) {
+            auto requested = getOptions();
+            if (meshParameters[0] == 7) {
+                auto const points =
+                    gravity::parseOpeningSchedule(requested.gravity.openingSchedule);
+                uint64_t count;
+                double start;
+                FREAD(&count, sizeof(count), 1, fp);
+                FREAD(&start, sizeof(start), 1, fp);
+                if (count != points.size() || count == 0 ||
+                    start != requested.cosmology.startRedshift) {
+                    throw std::runtime_error("PMMM checkpoint opening schedule or start redshift "
+                                             "differs from the requested run");
+                }
+                for (auto const& point : points) {
+                    double redshift, theta;
+                    FREAD(&redshift, sizeof(double), 1, fp);
+                    FREAD(&theta, sizeof(double), 1, fp);
+                    if (redshift != point.redshift || theta != point.theta) {
+                        throw std::runtime_error(
+                            "PMMM checkpoint opening schedule differs from the requested run");
+                    }
+                }
+                std::memcpy(&checkpointOpeningAngle, &meshParameters[9], sizeof(double));
+                if (std::none_of(points.begin(), points.end(), [&](auto const& point) {
+                        return std::bit_cast<uint64_t>(point.theta) == meshParameters[9];
+                    })) {
+                    throw std::runtime_error("PMMM checkpoint has an invalid active opening angle");
+                }
+                requested.gravity.openingAngle = checkpointOpeningAngle;
+            }
+            bool const requireMeshMatch = requested.gravity.enabled || !requested.hydro.enabled;
+            if (requireMeshMatch && !pmmmCheckpointCompatible(meshParameters, requested)) {
                 throw std::runtime_error(
                     "PMMM checkpoint version, mesh size, near/far expansion orders, opening angle, "
                     "near stencil/method, gravity.pmmmCoarseMeshSize, timestep parameters or "
@@ -1070,6 +1122,7 @@ DriverParameters readDriverState(FILE* fp) {
         params.years = old.years;
         params.itime = old.itime;
     }
+    params.checkpointOpeningAngle = checkpointOpeningAngle;
     return params;
 }
 
@@ -1165,7 +1218,9 @@ void checkpointStateTest() {
     }
     changed = getOptions();
     auto const pmmmParameters = detail::pmmmCheckpointParameters(changed);
-    ALWAYS_ASSERT(pmmmParameters[0] == 6 &&
+    uint64_t const expectedPmmmVersion =
+        gravity::parseOpeningSchedule(changed.gravity.openingSchedule).empty() ? 6 : 7;
+    ALWAYS_ASSERT(pmmmParameters[0] == expectedPmmmVersion &&
         pmmmParameters[10] ==
             uint64_t(pmmm::detail::resolvedCoarseMeshSize(changed.gravity.meshSize,
                 changed.gravity.pmmmCoarseMeshSize, changed.gravity.openingAngle)));
@@ -1203,9 +1258,9 @@ void checkpointStateTest() {
     }
     // Decode each historical extension without consuming any following driver
     // bytes.
-    constexpr std::array<size_t, 6> kPmmmParameterWords{7, 8, 10, 11, 11, 11};
+    constexpr std::array<size_t, 7> kPmmmParameterWords{7, 8, 10, 11, 11, 11, 11};
     constexpr uint64_t kFollowingPayload = 0x0123456789abcdefULL;
-    for (uint64_t version = 1; version <= 6; ++version) {
+    for (uint64_t version = 1; version <= 7; ++version) {
         changed = getOptions();
         auto serialized = detail::pmmmCheckpointParameters(changed);
         serialized[0] = version;
@@ -1219,7 +1274,8 @@ void checkpointStateTest() {
         ALWAYS_ASSERT(fwrite(&kFollowingPayload, sizeof(uint64_t), 1, stream.get()) == 1);
         rewind(stream.get());
         auto const decoded = detail::readPmmmCheckpointParameters(stream.get());
-        ALWAYS_ASSERT(detail::pmmmCheckpointCompatible(decoded, changed) == (version == 6));
+        ALWAYS_ASSERT(
+            detail::pmmmCheckpointCompatible(decoded, changed) == (version == expectedPmmmVersion));
         uint64_t followingPayload = 0;
         ALWAYS_ASSERT(fread(&followingPayload, sizeof(uint64_t), 1, stream.get()) == 1 &&
             followingPayload == kFollowingPayload);
@@ -1645,10 +1701,24 @@ DriverParameters readCheckpoint() {
     {
         profile::ScopedPhase profilePhase("readCheckpoint.wait", hpxRank() == 0);
         for (auto& future : futs) {
-            future.get();
+            auto const child = future.get();
+            if (child.checkpointOpeningAngle != params.checkpointOpeningAngle) {
+                throw std::runtime_error(
+                    "PMMM checkpoint active opening angle differs between ranks");
+            }
         }
     }
     if (hpxRank() == 0) {
+        if (params.checkpointOpeningAngle > 0.0) {
+            auto opts = getOptions();
+#if COSMICTIGER_WITH_GRAVITY
+            if (opts.gravity.openingAngle != params.checkpointOpeningAngle) {
+                pmmmDestroy();
+            }
+#endif
+            opts.gravity.openingAngle = params.checkpointOpeningAngle;
+            setOptions(opts);
+        }
         std::cout << "Done reading checkpoint\n" << std::flush;
     }
     return params;

@@ -121,8 +121,20 @@ def read_prefix(data):
                 "checkpoint algorithm and integrator flags disagree")
     if flags & (1 << 17):
         version = reader.take("Q")[0]
-        require(version in (1, 2, 3, 4, 5, 6), "unsupported PMMM checkpoint version")
-        result.pmmm = (version, *reader.take("Q", {1: 6, 2: 7, 3: 9, 4: 10, 5: 10, 6: 10}[version]))
+        require(version in (1, 2, 3, 4, 5, 6, 7), "unsupported PMMM checkpoint version")
+        result.pmmm = (version, *reader.take("Q", {1: 6, 2: 7, 3: 9, 4: 10, 5: 10, 6: 10, 7: 10}[version]))
+        if version == 7:
+            count = reader.take("Q")[0]
+            result.opening_schedule_start = reader.take("d")[0]
+            result.opening_schedule = reader.take("d", 2 * count)
+            require(count > 0 and math.isfinite(result.opening_schedule_start)
+                    and result.opening_schedule_start > -1,
+                    "invalid checkpoint opening schedule start")
+            points = list(zip(result.opening_schedule[::2], result.opening_schedule[1::2]))
+            require(all(math.isfinite(z) and z > -1 and math.isfinite(theta) and 0 < theta <= 1
+                        for z, theta in points)
+                    and all(points[index - 1][0] < points[index][0] for index in range(1, count)),
+                    "invalid checkpoint opening schedule points")
     if flags & (1 << 22):
         result.particle_mesh = reader.take("Q", 12)
         require(result.particle_mesh[0] == 1 and result.particle_mesh[11] == 1,
@@ -284,10 +296,19 @@ def decode_checkpoint(data, ranks=1):
     rung_begins = reader.take(integer_code, rung_count)
     require(all(0 <= begin <= rung_begin for begin in rung_begins) and
             list(rung_begins) == sorted(rung_begins), "invalid nested checkpoint rung ranges")
+    result.rung_stack = (rung_begin, rung_begins)
     domain_count = reader.native(ctypes.c_size_t).value
-    reader.skip(domain_count * ctypes.sizeof(DomainEntry))
+    # Bound the whole block before iterating over a count from the file.
+    domains_offset = reader.skip(domain_count * ctypes.sizeof(DomainEntry))
+    domains = [DomainEntry.from_buffer_copy(data, domains_offset + index * ctypes.sizeof(DomainEntry))
+               for index in range(domain_count)]
+    result.domains = tuple(sorted((entry.key, tuple(entry.domain.box),
+                                   entry.domain.midpoint, entry.domain.rank) for entry in domains))
     require(ranks > 0, "checkpoint locality count must be positive")
-    reader.skip(ranks * ctypes.sizeof(local_domain_type(result.integer_bytes)))
+    domain_type = local_domain_type(result.integer_bytes)
+    local_domains = [reader.native(domain_type) for _ in range(ranks)]
+    result.local_domains = tuple((tuple(entry.box), tuple(entry.process_range),
+                                  tuple(entry.particle_range), entry.depth) for entry in local_domains)
     require(not result.header.flags & (1 << 7), "lightcone checkpoint decoding is unsupported")
     require(reader.offset == len(data), "trailing unparsed checkpoint data")
     require(all(math.isfinite(value) for value in result.velocities) and

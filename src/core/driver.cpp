@@ -50,6 +50,7 @@
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/kick_workspace.hpp>
+#include <cosmictiger/gravity/opening_schedule.hpp>
 #include <cosmictiger/gravity/pmmm_kick.hpp>
 #include <cosmictiger/gravity/solver.hpp>
 #endif
@@ -643,6 +644,28 @@ SphRunReturn sphCompleteSources(int minimumClosingRung, double time, double base
 #if COSMICTIGER_WITH_GRAVITY
 namespace detail {
 
+// Called only after the old-membership closing ladder, before migration and
+// the fresh far solve. Inner passes and terminal closing-only passes keep theta.
+void updateOpeningSchedule(double scale) {
+    if (getOptions().gravity.openingSchedule.empty() ||
+        getOptions().gravity.openingSchedule == "none") {
+        return;
+    }
+    auto opts = getOptions();
+    auto const schedule = gravity::parseOpeningSchedule(opts.gravity.openingSchedule);
+    double const theta = gravity::openingScheduleTheta(
+        schedule, opts.cosmology.startRedshift, 1.0 / scale - 1.0, opts.gravity.openingAngle);
+    if (theta != opts.gravity.openingAngle) {
+        terminal::detailPrint("Opening schedule at z=%.17g: theta %.17g -> %.17g\n",
+            1.0 / scale - 1.0, opts.gravity.openingAngle, theta);
+        // Green spectra and retained FFT plans encode the old near stencil.
+        // All old closing work is complete; rebuild them for the next far solve.
+        pmmmDestroy();
+        opts.gravity.openingAngle = theta;
+        setOptions(opts);
+    }
+}
+
 // PMMM outer interval (docs/pmmm.md): migrate every owned particle to its
 // domain at a boundary, rebalancing first when the load has drifted. Inside an
 // interval nothing migrates, so each frozen cell keeps its owner.
@@ -736,6 +759,9 @@ ForceStepResult pmmmIntervalStep(int minRung, double scale, double scaleDerivati
         parameters.closingBaseTimestep = schedule.closingBaseTimestep;
         profile::ScopedPhase phase("pmmmKick.closeOldMembership");
         closing = pmmmKick(parameters);
+    }
+    if (!closingOnly) {
+        updateOpeningSchedule(scale);
     }
     pmmmBoundaryMigrate(firstCall);
     PmBoundaryResult far;
@@ -1035,6 +1061,10 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
         // owner inside an interval; only the boundary top level migrates, after
         // the ascending levels have closed the old membership.
         bool const meshBoundary = meshInterval && top && schedule.pmmmBoundary != nullptr;
+        if (meshBoundary && !closingOnly) {
+            detail::updateOpeningSchedule(scale);
+            theta = getOptions().gravity.openingAngle;
+        }
         if (meshInterval) {
             migrateThisLevel = meshBoundary;
         }
@@ -1897,7 +1927,7 @@ void driver() {
             auto opts = getOptions();
             opts.gravity.smoothingLength =
                 hsoft0;    // Fixed comoving support for every particle type.
-            // PMMM retains its configured opening angle throughout evolution.
+            // Retain the active interval angle until the boundary closes its old ladder.
             double const theta = opts.gravity.openingAngle;
             bucketSize = opts.compute.bucketSize;
             ForceStepResult tmp;

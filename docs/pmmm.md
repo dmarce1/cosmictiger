@@ -651,3 +651,27 @@ the latter is the positioned multipole record padded to a 16-byte boundary.
 Remote deserialized moments use a separate managed-memory chunk pool and do
 not consume local node slots. The implementation checks the combined forest
 capacity against the signed `TreeId` index range before allocation.
+
+## Cosmological opening-angle schedule
+
+`gravity.openingSchedule` accepts comma-separated `redshift:theta` pairs, for
+example `49:0.41,20:0.51,2:0.61`. An empty value or `none` uses the constant
+`gravity.openingAngle`. Scheduled angles must lie in `(0, 1]`; redshifts must
+exceed `-1` and cannot repeat. Scheduling requires enabled gravity and the
+`cosmology` scenario. All scheduled stencils must contain the softening support.
+
+The initial angle comes from the entry nearest the original starting redshift
+(ties choose the higher redshift). Expansion applies crossed thresholds in
+order; contraction replays the same intervals backwards. A crossing inside a
+PMMM interval takes effect at the next synchronized outer boundary, after the
+old-membership closing ladder and before migration and the fresh far solve.
+Multiple crossings before a boundary resolve to the angle at that boundary.
+The domain decomposition is selected once to accommodate the whole schedule.
+A changed angle invalidates retained FFT plans and Green spectra; the boundary
+rebuilds them for the new near stencil.
+
+Scheduled checkpoints store the normalized schedule, original start redshift,
+and angle active in the frozen interval. Restart requires the same schedule
+and restores that active angle before any force pass, even when the current
+redshift has crossed a threshold since the interval opened. Constant-angle
+checkpoints retain their existing version-six layout.
