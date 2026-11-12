@@ -146,34 +146,34 @@ TEST(PmmmMeshSize, RecognizesAndRoundsToPowersOfTwo) {
 
 TEST(PmmmMeshSize, MinimumSidesKeepPeriodicNearCellsDistinct) {
     using pmmm::detail::minimumMeshSize;
-    EXPECT_EQ(minimumMeshSize(1), 4);
-    EXPECT_EQ(minimumMeshSize(2), 8);
-    EXPECT_EQ(minimumMeshSize(3), 8);
-    EXPECT_EQ(minimumMeshSize(4), 16);
-    EXPECT_THROW(minimumMeshSize(0), std::invalid_argument);
-    EXPECT_THROW(minimumMeshSize(5), std::invalid_argument);
+    EXPECT_EQ(minimumMeshSize(64, 1.0), 4);
+    EXPECT_EQ(minimumMeshSize(64, 0.6), 8);
+    EXPECT_EQ(minimumMeshSize(64, 0.4), 16);
+    EXPECT_EQ(minimumMeshSize(7, 1.e-30), 7);
+    EXPECT_THROW(minimumMeshSize(64, 0), std::invalid_argument);
+    EXPECT_THROW(minimumMeshSize(64, 1.1), std::invalid_argument);
 }
 
 TEST(PmmmMeshSize, ResolvesTheDefaultCoarseMesh) {
     using pmmm::detail::resolvedCoarseMeshSize;
     // The default is eight times coarser per axis, floored at the near minimum.
-    EXPECT_EQ(resolvedCoarseMeshSize(64, 0, 2), 8);
-    EXPECT_EQ(resolvedCoarseMeshSize(128, 0, 2), 16);
-    EXPECT_EQ(resolvedCoarseMeshSize(8, 0, 2), 8);
-    EXPECT_EQ(resolvedCoarseMeshSize(16, 0, 1), 4);
-    EXPECT_EQ(resolvedCoarseMeshSize(32, 0, 1), 4);
-    EXPECT_EQ(resolvedCoarseMeshSize(64, 0, 1), 8);
-    EXPECT_EQ(resolvedCoarseMeshSize(16, 0, 4), 16);
+    EXPECT_EQ(resolvedCoarseMeshSize(64, 0, 0.6), 8);
+    EXPECT_EQ(resolvedCoarseMeshSize(128, 0, 0.6), 16);
+    EXPECT_EQ(resolvedCoarseMeshSize(8, 0, 0.6), 8);
+    EXPECT_EQ(resolvedCoarseMeshSize(16, 0, 1.0), 4);
+    EXPECT_EQ(resolvedCoarseMeshSize(32, 0, 1.0), 4);
+    EXPECT_EQ(resolvedCoarseMeshSize(64, 0, 1.0), 8);
+    EXPECT_EQ(resolvedCoarseMeshSize(16, 0, 0.4), 16);
     // Explicit values pass through; the option layer validates them.
-    EXPECT_EQ(resolvedCoarseMeshSize(64, 16, 2), 16);
-    EXPECT_EQ(resolvedCoarseMeshSize(64, 3, 2), 3);
+    EXPECT_EQ(resolvedCoarseMeshSize(64, 16, 0.6), 16);
+    EXPECT_EQ(resolvedCoarseMeshSize(64, 3, 0.6), 3);
     // An unset or invalid full mesh has no coarse mesh.
-    EXPECT_EQ(resolvedCoarseMeshSize(0, 0, 2), 0);
-    EXPECT_EQ(resolvedCoarseMeshSize(12, 0, 2), 12);
-    EXPECT_EQ(resolvedCoarseMeshSize(1, 0, 2), 1);
-    EXPECT_EQ(resolvedCoarseMeshSize(7, 0, 2), 7);
-    EXPECT_EQ(resolvedCoarseMeshSize(30, 0, 2), 10);
-    EXPECT_EQ(resolvedCoarseMeshSize(120, 0, 2), 15);
+    EXPECT_EQ(resolvedCoarseMeshSize(0, 0, 0.6), 0);
+    EXPECT_EQ(resolvedCoarseMeshSize(12, 0, 0.6), 12);
+    EXPECT_EQ(resolvedCoarseMeshSize(1, 0, 0.6), 1);
+    EXPECT_EQ(resolvedCoarseMeshSize(7, 0, 0.6), 7);
+    EXPECT_EQ(resolvedCoarseMeshSize(30, 0, 0.6), 10);
+    EXPECT_EQ(resolvedCoarseMeshSize(120, 0, 0.6), 15);
 }
 
 TEST(PmmmMeshSize, LocalityCountsNeedEnoughCoarseCellsPerAxis) {
@@ -248,6 +248,69 @@ TEST(PmmmMeshSize, ArbitrarySidesKeepStageBoundariesAligned) {
                     }
                 }
             }
+        }
+    }
+}
+
+TEST(PmmmMeshSize, OpeningStencilMatchesFilledCellSpheres) {
+    using pmmm::detail::nearCellOffset;
+    // Exact boundary: theta=1/2 gives radius squared 12.
+    EXPECT_TRUE(nearCellOffset(2, 2, 2, 0.5));
+    EXPECT_TRUE(nearCellOffset(2, 2, 2, std::nextafter(0.5, 0.0)));
+    EXPECT_FALSE(nearCellOffset(2, 2, 2, std::nextafter(0.5, 1.0)));
+    EXPECT_FALSE(nearCellOffset(3, 2, 0, 0.5));
+    EXPECT_TRUE(nearCellOffset(3, 0, 0, 0.5));
+    EXPECT_FALSE(nearCellOffset(3, 3, 3, 0.5));
+    EXPECT_TRUE(nearCellOffset(1, 1, 1, 1.0));
+    EXPECT_FALSE(nearCellOffset(2, 0, 0, 1.0));
+    int defaultCount = 0;
+    for (int x = -3; x <= 3; ++x) {
+        for (int y = -3; y <= 3; ++y) {
+            for (int z = -3; z <= 3; ++z) {
+                defaultCount += int(nearCellOffset(x, y, z, 0.5773502691896257));
+            }
+        }
+    }
+    EXPECT_EQ(defaultCount, 123);
+    for (int side : {1, 2, 3, 4, 5, 8, 12}) {
+        for (double theta : {1.0, 0.7, 0.5, 0.3, 1.e-30}) {
+            int const width = pmmm::detail::nearStencilWidth(side, theta);
+            std::vector<int> visits(side * side * side, 0);
+            for (int x = pmmm::detail::nearOffsetBegin(side, width);
+                x <= pmmm::detail::nearOffsetEnd(side, width); ++x) {
+                for (int y = pmmm::detail::nearOffsetBegin(side, width);
+                    y <= pmmm::detail::nearOffsetEnd(side, width); ++y) {
+                    for (int z = pmmm::detail::nearOffsetBegin(side, width);
+                        z <= pmmm::detail::nearOffsetEnd(side, width); ++z) {
+                        if (nearCellOffset(x, y, z, theta)) {
+                            ++visits[(((x + side) % side) * side + (y + side) % side) * side +
+                                (z + side) % side];
+                        }
+                    }
+                }
+            }
+            double minimumSquared = std::numeric_limits<double>::infinity();
+            for (int x = 0; x < side; ++x) {
+                for (int y = 0; y < side; ++y) {
+                    for (int z = 0; z < side; ++z) {
+                        double const dx = std::min(x, side - x);
+                        double const dy = std::min(y, side - y);
+                        double const dz = std::min(z, side - z);
+                        // Independent enclosing-sphere separation oracle.
+                        bool const near =
+                            std::sqrt(dx * dx + dy * dy + dz * dz) * theta <= std::sqrt(3.0);
+                        EXPECT_EQ(visits[(x * side + y) * side + z], int(near));
+                        if (!near) {
+                            double const bx = std::max(dx - 1, 0.0);
+                            double const by = std::max(dy - 1, 0.0);
+                            double const bz = std::max(dz - 1, 0.0);
+                            minimumSquared = std::min(minimumSquared, bx * bx + by * by + bz * bz);
+                        }
+                    }
+                }
+            }
+            EXPECT_DOUBLE_EQ(
+                pmmm::detail::nearStencilSupport(side, theta), std::sqrt(minimumSquared) / side);
         }
     }
 }

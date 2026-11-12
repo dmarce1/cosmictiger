@@ -42,12 +42,15 @@ def read_rank(path, expected_iteration, ranks, time_integrator):
         theta = struct.unpack("=d", struct.pack("=Q", extension[9]))[0]
         require(3 <= extension[8] <= 9 and extension[2] == extension[8],
                 f"{path}: PMMM and near FMM orders differ or are invalid")
-        width = extension[3]
-        require(1 <= width <= 4 and extension[1] > 0,
-                f"{path}: invalid PMMM near width or mesh size")
-        require(math.isfinite(theta) and math.isclose(
-                    theta, math.sqrt(3.0) / (width + 1), rel_tol=1.0e-15, abs_tol=0.0),
-                f"{path}: PMMM opening angle differs from the near-width geometry")
+        require(extension[1] > 0 and math.isfinite(theta) and 0 < theta <= 1,
+                f"{path}: invalid PMMM opening angle or mesh size")
+        if extension[0] >= 6:
+            require(extension[3] == 0, f"{path}: nonzero reserved PMMM stencil word")
+        else:
+            width = extension[3]
+            require(1 <= width <= 4 and math.isclose(
+                        theta, math.sqrt(3.0) / (width + 1), rel_tol=1.0e-15, abs_tol=0.0),
+                    f"{path}: invalid historical PMMM cube geometry")
     if extension[0] == 4:
         require(extension[10] == 0 or 2 <= extension[10] <= 2 ** 31 - 1,
                 f"{path}: invalid retired PMMM maximum FFT prime factor")

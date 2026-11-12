@@ -27,7 +27,8 @@ Restart recovers an omitted expansion degree from the checkpoint.
 `COSMICTIGER_EXPANSION_DEGREE` fixes the degree at build time (default 6);
 `gravity.expansionDegree` is no longer a CLI/INI option.
 The implementation's historical order is one greater than potential degree.
-The near-field opening angle is derived as `sqrt(3)/(gravity.pmmmNearWidth+1)`.
+`gravity.openingAngle` sets both FMM acceptance and the filled-cell PMMM near
+stencil (default `0.5773502691896257`); `gravity.pmmmNearWidth` is retired.
 PMMM requires an explicit positive integer `gravity.meshSize`; arbitrary
 cubic sizes are supported. Override the supplied zero with, for example,
 `--gravity.meshSize=32`.

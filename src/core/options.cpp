@@ -34,9 +34,9 @@
 #include <cosmictiger/core/safe_io.hpp>
 #include <cosmictiger/core/startup.hpp>
 #include <cosmictiger/core/terminal.hpp>
+#include <cosmictiger/gravity/mesh_size.hpp>
 #if COSMICTIGER_WITH_GRAVITY
 #include <cosmictiger/gravity/fmm_order.hpp>
-#include <cosmictiger/gravity/mesh_size.hpp>
 #include <cosmictiger/gravity/tree.hpp>
 #endif
 #include <cosmictiger/io/checkpoint.hpp>
@@ -537,7 +537,6 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"gravity.errorSampleSize", options.gravity.errorSampleSize},
         {"gravity.meshSize", options.gravity.meshSize},
         {"gravity.pmmmCoarseMeshSize", options.gravity.pmmmCoarseMeshSize},
-        {"gravity.pmmmNearWidth", options.gravity.pmmmNearWidth},
         {"gravity.pmmmBatchParticles", options.gravity.pmmmBatchParticles},
         {"gravity.pmmmOuterInterval", options.gravity.pmmmOuterInterval},
         {"gravity.kernelFamily", options.gravity.kernelFamily},
@@ -904,11 +903,13 @@ bool processOptions(int argc, char* argv[]) {
         "0 selects a compatible divisor near meshSize/8")("gravity.pmmmBatchParticles",
         po::value<int>(&opts.gravity.pmmmBatchParticles)->default_value(4096),
         "target sink particles per ready PMMM batch; oversized cells run alone")(
-        "gravity.pmmmNearWidth", po::value<int>(&opts.gravity.pmmmNearWidth)->default_value(2),
-        "PMMM neighbor cube radius in mesh cells: 1 through 4")("gravity.pmmmOuterInterval",
+        "gravity.openingAngle",
+        po::value<double>(&opts.gravity.openingAngle)->default_value(opts.gravity.openingAngle),
+        "FMM opening angle in (0, 1]; also sets the filled-cell PMMM near stencil")(
+        "gravity.pmmmOuterInterval",
         po::value<bool>(&opts.gravity.pmmmOuterInterval)->default_value(true),
         "required true with gravity: solve the FFT far field only at outer interval boundaries and "
-        "keep the near-cube "
+        "keep the near-stencil "
         "membership frozen inside; the near field advances on the inner rungs")(
         "gravity.openLargerCell",
         po::value<bool>(&opts.gravity.openLargerCell)->default_value(true),
@@ -1170,8 +1171,9 @@ bool processOptions(int argc, char* argv[]) {
     if (opts.gravity.pmmmBatchParticles <= 0) {
         detail::throwOptionError("gravity.pmmmBatchParticles must be positive\n");
     }
-    if (opts.gravity.pmmmNearWidth < 1 || opts.gravity.pmmmNearWidth > 4) {
-        detail::throwOptionError("gravity.pmmmNearWidth must be between 1 and 4\n");
+    if (!detail::isPositiveFloatOption(opts.gravity.openingAngle) ||
+        opts.gravity.openingAngle > 1.0) {
+        detail::throwOptionError("gravity.openingAngle must be in (0, 1]\n");
     }
     detail::validateRockstar(opts);
 #if !COSMICTIGER_WITH_GRAVITY
@@ -1223,13 +1225,11 @@ bool processOptions(int argc, char* argv[]) {
     }
 #if COSMICTIGER_WITH_GRAVITY
     if (opts.gravity.enabled) {
-        // The near-field FMM angle follows from the neighbor cube geometry.
-        opts.gravity.openingAngle = std::sqrt(3.0) / (opts.gravity.pmmmNearWidth + 1);
         if (opts.gravity.meshSize < 1) {
             detail::throwOptionError("gravity.meshSize must be positive for PMMM\n");
         }
         opts.gravity.pmmmCoarseMeshSize = pmmm::detail::resolvedCoarseMeshSize(
-            opts.gravity.meshSize, opts.gravity.pmmmCoarseMeshSize, opts.gravity.pmmmNearWidth);
+            opts.gravity.meshSize, opts.gravity.pmmmCoarseMeshSize, opts.gravity.openingAngle);
         if (opts.gravity.pmmmCoarseMeshSize < 1 ||
             opts.gravity.pmmmCoarseMeshSize > opts.gravity.meshSize ||
             opts.gravity.meshSize % opts.gravity.pmmmCoarseMeshSize != 0) {
@@ -1900,10 +1900,11 @@ bool processOptions(int argc, char* argv[]) {
             "Periodic gravity requires normalized gravity.smoothingLength below 0.5\n");
     }
     if (opts.gravity.enabled && opts.gravity.meshSize > 0 &&
-        opts.gravity.smoothingLength > double(opts.gravity.pmmmNearWidth) / opts.gravity.meshSize) {
+        opts.gravity.smoothingLength >
+            pmmm::detail::nearStencilSupport(opts.gravity.meshSize, opts.gravity.openingAngle)) {
         detail::throwOptionError(
             "PMMM requires the normalized gravity.smoothingLength to be no larger than "
-            "gravity.pmmmNearWidth/gravity.meshSize\n");
+            "the minimum separation of cells outside the opening-angle near stencil\n");
     }
     detail::displayOptions = true;
     if (hpxRank() == 0 && opts.run.test.empty()) {
@@ -1919,17 +1920,6 @@ bool processOptions(int argc, char* argv[]) {
 #ifdef CHECK_MUTUAL_SORT
     opts.analysis.groups = true;
 #endif
-
-#if COSMICTIGER_WITH_GRAVITY
-    // The near-field angle is the PMMM geometry-derived value for every scenario.
-    opts.gravity.openingAngle = std::sqrt(3.0) / (opts.gravity.pmmmNearWidth + 1);
-#endif
-
-    if (gravity::kBuildHasGravity &&
-        (!detail::isPositiveFloatOption(opts.gravity.openingAngle) ||
-            opts.gravity.openingAngle > 1.0)) {
-        detail::throwOptionError("The derived gravity.openingAngle must be in (0, 1]\n");
-    }
 
     detail::showResolvedOptions(opts, commandOpts);
     setOptions(opts);

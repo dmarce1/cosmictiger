@@ -36,7 +36,7 @@ threads so waiting for the shared planner lock cannot block HPX workers.
 
 ```sh
 ./build_pmmm/cosmictiger \
-  --gravity.meshSize=32 --gravity.pmmmNearWidth=2 \
+  --gravity.meshSize=32 --gravity.openingAngle=0.5773502691896257 \
   --run.darkMatterParticleCount=32768 --run.gasParticleCount=32768 --hydro.enabled=false \
   --gravity.cuda=false --hpx:threads=12
 ```
@@ -49,7 +49,7 @@ numberOfOutputs = 99 # includes both endpoint states
 
 [gravity]
 meshSize = 32
-pmmmNearWidth = 2
+openingAngle = 0.5773502691896257
 
 [hydro]
 enabled = false
@@ -70,9 +70,9 @@ same length, and no rounding or prime-factor restriction is applied.
 use and the granularity of particle-domain cuts. An explicit value must be a
 positive divisor of `n`. The default zero chooses the smallest divisor of `n`
 at least `max(n/8, preferredMinimum)`, capped at `n`. The preferred minimum is
-the smallest power of two at least `2*w+1`. This preserves the previous
+the smallest power of two covering the near stencil diameter, capped at `n`. This preserves the previous
 power-of-two defaults: a `256^3` full mesh uses a `32^3` coarse mesh. A `120^3`
-mesh uses `15^3` at width two; a prime side uses the full mesh at every stage.
+mesh uses `15^3` at the default angle; a prime side uses the full mesh at every stage.
 The same keys work in the `[gravity]` INI section. Resolved output reports
 `gravity.meshSize` and the resolved `gravity.pmmmCoarseMeshSize`.
 
@@ -80,15 +80,25 @@ PMMM also requires a power-of-two locality count, and the coarse mesh must
 have at least `2^ceil(log2(localities)/3)` cells per axis so every locality
 receives whole coarse cells.
 
-`gravity.pmmmNearWidth=w` sets the ghost
-width and accepts integers from one through four, defaulting to two. The near
-region contains `(2*w+1)^3` cells (27, 125, 343, or 729, respectively),
-including the sink cell when `n >= 2*w+1`. Smaller meshes visit each periodic
-cell once, so the near region contains `min(n, 2*w+1)^3` distinct cells.
-The positive half-box offset resolves even-mesh image ties consistently in
-the Green function and the near tree walk. Very coarse meshes can have large
-finite-expansion truncation errors; accepting their size is not an accuracy
-guarantee.
+`gravity.openingAngle=theta` sets both the near FMM acceptance angle and the
+PMMM near-free stencil; its default is `0.5773502691896257`, approximately
+`sqrt(3)/3`, and its range is `(0,1]`. `gravity.pmmmNearWidth` is retired.
+Assume mass fills each mesh cell of side `ell`, with enclosing radius
+`r = sqrt(3)*ell/2`. The FMM cell-cell criterion accepts a far interaction only
+when `d > (r_source+r_target)/theta`. Thus an integer cell offset `(i,j,k)` is
+near exactly when
+
+```
+i*i + j*j + k*k <= 3/(theta*theta).
+```
+
+Equality stays near. This is a lattice sphere, approaching a spherical boundary
+as theta decreases before periodic mesh saturation. Both Green subtraction and
+near-cell enumeration use this same criterion. Smaller meshes visit each periodic
+cell once, including the sink cell; even meshes use the positive half-box image
+tie. Very small angles can include the entire mesh and do not require an integer
+radius that could overflow. Small meshes can still have substantial periodic
+finite-expansion error; accepting their size is not an accuracy guarantee.
 
 The Cartesian FMM operators and adaptive tree acceptance evaluate the near-cell
 region. Complete remote source-cell records feed local ghost trees; owned sink
@@ -105,31 +115,30 @@ Production has no direct spherical particle-to-mesh P2M or mesh-to-particle L2P
 path. Their former wrappers survive only as independent test references.
 
 `COSMICTIGER_EXPANSION_DEGREE` fixes the shared PMMM and near FMM potential degree.
-PMMM derives the near-field opening angle `gravity.openingAngle` as
-`sqrt(3)/(w+1)`; it is not a configurable option. At the
-default ghost width of two, theta is approximately 0.577350269. This theta stays
-fixed during cosmological evolution. `compute.bucketSize` controls the near FMM tree bucket
+The configured `gravity.openingAngle` stays fixed during cosmological evolution.
+`compute.bucketSize` controls the near FMM tree bucket
 size. Near FMM can reduce pair work in dense cells, but its additional
 approximation and actual performance must be checked on the intended
 distribution. With the near FMM capability enabled:
 
 ```sh
 ./build_pmmm/cosmictiger \
-  --gravity.meshSize=32 --gravity.pmmmNearWidth=2 \
+  --gravity.meshSize=32 --gravity.openingAngle=0.5773502691896257 \
   --compute.bucketSize=32 \
   --hydro.enabled=false --gravity.cuda=false
 ```
 
 The compact gravity softening support must fit inside that near region:
-the normalized support radius must be no larger than `w/N`, where `N` is the
-rounded full-particle side length. The existing
-`gravity.smoothingLength` and `gravity.effectiveRadius` input conventions still
-apply; the parser checks this bound after converting the configured radius
-to box units. The FMM tree walk retains the selected compact gravity kernel for
+the normalized support radius must not exceed the minimum box-to-box distance
+among cells excluded from the stencil. For an excluded offset `(i,j,k)`, that
+distance is `sqrt(max(abs(i)-1,0)^2 + max(abs(j)-1,0)^2 + max(abs(k)-1,0)^2)/N`.
+The existing `gravity.smoothingLength` and `gravity.effectiveRadius` input
+conventions still apply. The parser checks the exact finite-mesh minimum after
+normalizing to box units; if every cell is near, only the existing half-box
+support limit applies. The FMM tree walk retains the selected compact gravity kernel for
 direct pairs, including distinct coincident particles, and exclude primary self.
-PMMM accuracy is controlled by mesh size, expansion degree, and near width.
-The derived opening angle controls only the optional near FMM; the near width
-also changes which interactions are included in the far-field convolution.
+PMMM accuracy is controlled by mesh size, expansion degree, and opening angle.
+The opening angle controls both the near FMM and the mesh near/far split.
 
 ## Source organization
 
@@ -185,8 +194,8 @@ need no density or cell-volume multiplier.
 ## Periodic Green function and near field
 
 The Green filters use the generated spherical Ewald correction for the
-periodic unit cube. Outside the direct neighbor cube, the primary free-space
-Green function is added. Inside the cube, only that primary interaction is
+periodic unit cube. Outside the near stencil, the primary free-space
+Green function is added. Inside the stencil, only that primary interaction is
 omitted: periodic images remain in the convolution, including the finite
 regular limit at the origin. Direct pair evaluation excludes the identical
 particle's primary self interaction and retains distinct coincident
@@ -228,8 +237,7 @@ transforms belong to initialization. This describes work, not measured speed.
 
 Each mesh cache lasts until eviction, explicit PMMM destruction, or application
 shutdown. Changing the requested base mesh size, coarse mesh size, degree,
-or near width requires explicit PMMM destruction.
-The near opening angle is fixed by the near width.
+or opening angle requires explicit PMMM destruction.
 The expansion degree remains fixed during an evolution.
 Changing them between runs requires a new build only if the requested capability
 or degree was not compiled.
@@ -380,7 +388,7 @@ fields are not checkpoint state. Calls to `pmmmSolve` alone collect full fields
 and do not advance particles.
 
 PMMM and adaptive FMM have different error and work controls even at the same
-potential degree. Mesh refinement, near width, and degree convergence should be
+potential degree. Mesh refinement, opening angle, and degree convergence should be
 checked on the intended particle distribution. Clustered cells can make the
 direct near field expensive. No relative performance claim follows from the
 coefficient counts or the FFT decomposition alone.
@@ -395,7 +403,7 @@ reference for both the finite expansion and the computed field.
 
 The off-center fixtures have the following potential and force truncation
 budgets. These cover the unit-mass collisionless and mixed-mass SPH fixtures,
-mesh sizes 5, 8, and 10, and near widths 1 through 4. They are regression limits
+mesh sizes 5, 8, and 10, and several opening angles. They are regression limits
 for these fixtures, not accuracy guarantees for arbitrary particle distributions.
 Potential error is scaled by `max(1, abs(referencePotential))`; each force-component
 error uses `max(1, norm(referenceAcceleration))`.
@@ -434,7 +442,7 @@ deposits, transforms or evaluates a far expansion.
 ### The split
 
 PMMM's far/near split is geometric: a pair interacts directly when the two
-particles' cells lie within the `(2w+1)^3` neighbor cube, and through the mesh
+particles' cell offset satisfies `i*i+j*j+k*k <= 3/(theta*theta)`, and through the mesh
 otherwise. The outer interval freezes that assignment. When an interval opens,
 every owned particle is sorted by position and its cell key is stored
 (`particlesFrozenCell`); inside the interval the near passes group particles by
@@ -583,30 +591,19 @@ and momentum against a split PMMM run with shorter outer intervals over the same
 
 Checkpoints identify PMMM separately from FMM and record its requested mesh size,
 coarse mesh size, expansion degree (in the historical internal order
-convention), near width, fixed FMM solver identity, and timestep compatibility parameters.
+convention), opening angle, fixed FMM solver identity, and timestep compatibility parameters.
 The executable must match the saved expansion degree and fixed integration
 scheme; incompatible restarts are rejected. The saved near-field identity must
 be FMM; PP checkpoints are retired.
 Historical ordinary PM checkpoints are unsupported. Checkpoints do not store
 FFTW plans or Green spectra: the first solve after restart reconstructs the
 cache, then reuses it for later steps.
-PMMM extension version five stores the resolved coarse mesh size; it is
-checkpoint identity even when two coarse meshes give the same current
-full-particle mesh, because their hierarchical stage meshes differ. Version
-four stored the retired maximum FFT prime factor and versions one through three
-used unrestricted lengths; those checkpoints restart under the requested coarse
-mesh when it divides their saved base mesh. Arbitrary positive saved base
-mesh sizes are accepted under the same indexing and allocation checks.
-PMMM extension version three appends the PMMM order and resolved opening angle
-to the version-two metadata, which added the near-method selection. Historical
-version-one and version-two extensions retain their legacy shared order
-convention; their saved FMM order must match the selected PMMM order. Version-one
-extensions identify the retired PP near method and are rejected. Version-three restarts also require the resolved opening angle
-to match. The checkpoint hierarchy flag must match: historical synchronous PMMM
-evolution checkpoints cannot resume under the hierarchical driver. Retired
-traditional/global selections are rejected. Opening angle
-is derived from the recorded near width; bucket size remains a mutable control
-rather than checkpoint identity.
+PMMM extension version six identifies the opening-angle stencil and stores its
+angle and resolved coarse mesh. The old near-width slot is reserved and zero.
+Versions one through five remain decodable but are rejected for restart: their
+cube split can leave frozen far fields inconsistent with the new stencil.
+The saved angle, mesh sizes, expansion degree, FMM identity, and integration
+scheme must match. Bucket size remains mutable rather than checkpoint identity.
 
 The standalone `pmmm_kernels` tests check the numerical adapters and total
 degree rule. Application tests compare complete fields against an independent

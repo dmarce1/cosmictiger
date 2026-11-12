@@ -22,8 +22,7 @@ import subprocess
 
 from application_selection import application_arguments, cpu_backend_options
 
-MERGE_PATTERN = re.compile(r"Merging rung (\d+) into rung (\d+): (\d+) of (\d+) particles on finer "
-                           r"rungs meet run\.rungMergeFraction = (\S+)")
+from checkpoint_format import read_prefix
 
 
 def require(condition, message):
@@ -62,12 +61,28 @@ def run_case(executable, base, name, fraction):
                             stderr=subprocess.STDOUT, env=environment, timeout=300)
     (directory / "run.log").write_text(result.stdout)
     require(result.returncode == 0, f"{name} exited {result.returncode}; see {directory / 'run.log'}")
-    merges = [(int(lower), int(upper), int(fine), int(active))
-              for lower, upper, fine, active, _ in MERGE_PATTERN.findall(result.stdout)]
-    for lower, upper, fine, active in merges:
-        require(upper == lower + 1, f"{name} merged rung {lower} into {upper}")
-        require(fine >= float(fraction) * active,
-                f"{name} merged rung {lower} with {fine} of {active} finer particles")
+    require("Merging rung" not in result.stdout, "rung merges should be silent")
+    coarse_steps = result.stdout.count("  Coarse step:")
+    headers = len(re.findall(r"^\s*Step\s+z\s+a\s+tau\s+dt\s+MinRung", result.stdout, re.MULTILINE))
+    require(coarse_steps > 0 and headers == coarse_steps,
+            f"{name}: every coarse step should have exactly one progress header")
+    require(re.search(r"Coarse step: Δt = [0-9.e+-]+ code units \([0-9.e+-]+ s\)", result.stdout),
+            "physical coarse-step duration is missing")
+    # Observe the actual saved lowest rung, rather than a user-facing notice.
+    checkpoints = sorted(directory.glob("checkpoint.*/checkpoint.0.dat"),
+                         key=lambda path: int(path.parent.name.split(".")[1]))
+    drivers = [read_prefix(path.read_bytes()).driver for path in checkpoints]
+    require(drivers, "rung merge fixture produced no checkpoints")
+    starts = 1 + sum(driver.iteration > 0 and driver.integer_time == 0
+                     for driver in drivers[:-1])
+    require(coarse_steps == starts,
+            f"{name}: {coarse_steps} headers for {starts} coarse-step starts")
+    floor = 0
+    merges = []
+    for driver in drivers:
+        if driver.min_rung > floor:
+            merges.extend(range(floor, driver.min_rung))
+        floor = driver.min_rung
     return merges
 
 
@@ -80,20 +95,15 @@ def main():
     base = args.workdir.resolve()
 
     default = run_case(executable, base, "gadget4_third", "0.3333333333333333")
-    require([merge[0] for merge in default] == [0, 1, 2],
+    require(default == [0, 1, 2],
             f"default fraction merged rungs {default}, expected 0, 1 and 2")
     require(run_case(executable, base, "always", "0") == default,
             "fraction 0 did not reproduce the default merges")
     three_quarters = run_case(executable, base, "three_quarters", "0.75")
     require(three_quarters == default[:2],
             f"fraction 0.75 merged {three_quarters}, expected {default[:2]}")
-    _, _, fine, active = default[2]
-    require(fine < 0.75 * active,
-            f"rung 2 held {fine} of {active} finer particles, above the 0.75 threshold")
     require(run_case(executable, base, "no_empty_floor", "1") == [],
             "fraction 1 merged a rung with particles on its lowest level")
-    for lower, upper, fine, active in default:
-        print(f"rung {lower} -> {upper}: {fine}/{active} = {fine / active:.3f} on finer rungs")
     print("hierarchical rung merging follows run.rungMergeFraction")
 
 

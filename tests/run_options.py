@@ -146,7 +146,7 @@ def main():
                 "hydro.viscosityEpsilon", "hydro.conductionCoefficient",
                 "hydro.neighborNumber", "gravity.enabled",
                 "gravity.kernelFamily", "gravity.kernelDegree",
-                "gravity.meshSize", "gravity.pmmmNearWidth", "gravity.pmmmCoarseMeshSize",
+                "gravity.meshSize", "gravity.openingAngle", "gravity.pmmmCoarseMeshSize",
                 "gravity.errorInterval", "gravity.errorSampleSize",
                 "hydro.kernelFamily", "hydro.kernelDegree",
                 "gravity.effectiveRadius", "gravity.smoothingLength",
@@ -255,7 +255,7 @@ def main():
                        "initial.usePowerFile", "initial.particlesPerDimension",
                        "initial.darkMatterParticleCount", "initial.gasParticleCount", "gravity.method",
                        "gravity.method.far", "gravity.cloud", "gravity.p3mSplitCells",
-                       "gravity.p3mCutoff", "gravity.openingAngle", "gravity.openingSchedule",
+                       "gravity.p3mCutoff", "gravity.pmmmNearWidth", "gravity.openingSchedule",
                        "gravity.pmmmNearMethod", "gravity.pmmmOrder", "gravity.fmmOrder", "gravity.expansionDegree",
                        "run.hierarchicalGravity", "initial.createGlass", "initial.plummer",
                        "hydro.pressureOperator", "hydro.balsaraSwitch", "chemistry.network", "chemistry.initialization",
@@ -602,29 +602,28 @@ mapSize = 8
         assertCompiledSettings(output)
     run("gravity_negative_mesh", metadata_options + ["--gravity.meshSize=-1"], success=False)
     if gravity_compiled:
-        # All positive mesh sizes are accepted, including smaller near cubes.
+        # All positive mesh sizes are accepted, including meshes wholly inside the near stencil.
         minimum_mesh = {1: 1, 2: 2, 3: 3, 4: 4}
         for near_width, mesh_size in minimum_mesh.items():
             pmmm_output = run(f"pmmm_metadata_{near_width}", metadata_options + [
-                f"--gravity.meshSize={mesh_size}", f"--gravity.pmmmNearWidth={near_width}"])
+                f"--gravity.meshSize={mesh_size}", f"--gravity.openingAngle={1.0 / near_width}"])
             assertCompiledSettings(pmmm_output)
             for key, expected in (("gravity.meshSize", mesh_size),
-                                  ("gravity.pmmmNearWidth", near_width),
+                                  ("gravity.openingAngle", 1.0 / near_width),
                                   ("gravity.pmmmCoarseMeshSize", mesh_size)):
                 assertNumericSetting(pmmm_output, key, expected)
-            assertNumericSetting(pmmm_output, "gravity.openingAngle", math.sqrt(3) / (near_width + 1))
+            assertNumericSetting(pmmm_output, "gravity.openingAngle", 1.0 / near_width)
         # balsara_default runs SPH without gravity, which leaves the coarse mesh
         # unresolved; read the PMMM defaults from the gravity-only fixture.
-        assertNumericSetting(error_defaults, "gravity.pmmmNearWidth", 2)
         assertNumericSetting(error_defaults, "gravity.pmmmBatchParticles", 4096)
         assertNumericSetting(error_defaults, "gravity.pmmmCoarseMeshSize", 8)
         assertNumericSetting(error_defaults, "gravity.openingAngle", math.sqrt(3) / 3)
-        # Zero resolves to meshSize/8, never below the near-width minimum and
+        # Zero resolves to meshSize/8, never below the stencil minimum and
         # never above the mesh itself.
         for mesh_size, near_width, expected in ((64, None, 8), (8, None, 8),
                                                 (16, 4, 16), (32, 1, 4), (7, 2, 7),
                                                 (12, 2, 12), (30, 2, 10), (120, 2, 15)):
-            width_options = [] if near_width is None else [f"--gravity.pmmmNearWidth={near_width}"]
+            width_options = [] if near_width is None else [f"--gravity.openingAngle={1.0 / near_width}"]
             output = run(f"pmmm_coarse_default_{mesh_size}_{near_width}", metadata_options + [
                 f"--gravity.meshSize={mesh_size}"] + width_options)
             assertNumericSetting(output, "gravity.meshSize", mesh_size)
@@ -671,25 +670,29 @@ mapSize = 8
                            success=False)
             if diagnostic not in rejected:
                 raise RuntimeError(f"{label}: missing PMMM mesh diagnostic: {diagnostic}")
-        # The support radius is normalized by the 8**3 fixture; width/mesh = 0.25.
+        # The support is normalized by the 8**3 fixture; the first excluded
+        # cell boxes are sqrt(3)/8 apart at the default angle.
         radius_options = metadata_options + ["--gravity.meshSize=8"]
-        run("pmmm_support_within_width", radius_options + ["--gravity.smoothingLength=1.9"])
-        rejected = run("pmmm_support_beyond_width", radius_options + [
-            "--gravity.smoothingLength=2.1"], success=False)
+        run("pmmm_support_within_stencil", radius_options + ["--gravity.smoothingLength=1.7"])
+        rejected = run("pmmm_support_beyond_stencil", radius_options + [
+            "--gravity.smoothingLength=1.8"], success=False)
         if ("PMMM requires the normalized gravity.smoothingLength to be no larger than "
-                "gravity.pmmmNearWidth/gravity.meshSize") not in rejected:
-            raise RuntimeError("PMMM support validation lacked its near-width diagnostic")
+                "the minimum separation of cells outside the opening-angle near stencil") not in rejected:
+            raise RuntimeError("PMMM support validation lacked its stencil diagnostic")
         for scenario in ("cosmology", "plummer"):
-            # The near-field angle is derived from the neighbor cube for every scenario.
-            pmmm_output = run(f"pmmm_derived_angle_{scenario}", metadata_options + [
+            # The same configured angle is used for every scenario.
+            pmmm_output = run(f"pmmm_default_angle_{scenario}", metadata_options + [
                 f"--run.scenario={scenario}"])
             assertCompiledSettings(pmmm_output)
             assertNumericSetting(pmmm_output, "gravity.openingAngle", math.sqrt(3) / 3)
     if gravity_compiled:
         for index, invalid in enumerate((
                 [],
-                ["--gravity.meshSize=8", "--gravity.pmmmNearWidth=0"],
-                ["--gravity.meshSize=16", "--gravity.pmmmNearWidth=5"],
+                ["--gravity.meshSize=8", "--gravity.openingAngle=0"],
+                ["--gravity.meshSize=8", "--gravity.openingAngle=nan"],
+                ["--gravity.meshSize=8", "--gravity.openingAngle=inf"],
+                ["--gravity.meshSize=8", "--gravity.openingAngle=-0.5"],
+                ["--gravity.meshSize=16", "--gravity.openingAngle=1.01"],
                 ["--gravity.meshSize=8", "--gravity.smoothingLength=8"],
                 ["--gravity.meshSize=8", "--gravity.pmmmBatchParticles=0"],
                 ["--gravity.meshSize=8", "--gravity.pmmmBatchParticles=-1"],
@@ -698,16 +701,15 @@ mapSize = 8
             run(f"pmmm_invalid_{index}", metadata_options + invalid,
                 success=False, pmmm_mesh=None)
         pmmm_config = args.workdir / "pmmm.ini"
-        pmmm_config.write_text("[gravity]\nmeshSize = 16\npmmmNearWidth = 2\n")
+        pmmm_config.write_text("[gravity]\nmeshSize = 16\nopeningAngle = 0.5\n")
         pmmm_output = run("pmmm_ini_cli", metadata_options + [
-            f"--configuration={pmmm_config.resolve()}", "--gravity.pmmmNearWidth=1"],
+            f"--configuration={pmmm_config.resolve()}", "--gravity.openingAngle=1"],
             pmmm_mesh=None)
         assertCompiledSettings(pmmm_output)
         assertNumericSetting(pmmm_output, "gravity.meshSize", 16)
-        # Width one lowers the minimum coarse mesh to four, above meshSize/8.
+        # Theta one lowers the minimum coarse mesh to four, above meshSize/8.
         assertNumericSetting(pmmm_output, "gravity.pmmmCoarseMeshSize", 4)
-        assertNumericSetting(pmmm_output, "gravity.pmmmNearWidth", 1)
-        assertNumericSetting(pmmm_output, "gravity.openingAngle", math.sqrt(3) / 2)
+        assertNumericSetting(pmmm_output, "gravity.openingAngle", 1)
 
     sph_options = [option for option in metadata_options
                    if not option.startswith("--hydro.enabled=")]

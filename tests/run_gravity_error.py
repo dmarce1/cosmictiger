@@ -134,7 +134,7 @@ def main():
         # cell a 5**3 neighbor cube; 512 particles and a 4096-particle batch
         # keep the candidate pairs on the GPU rather than falling back to CPU.
         common.update({"run.darkMatterParticleCount": 512, "run.gasParticleCount": 512, "gravity.meshSize": 8,
-                       "gravity.pmmmNearWidth": 2, "gravity.pmmmBatchParticles": 4096})
+                       "gravity.openingAngle": 0.5773502691896257, "gravity.pmmmBatchParticles": 4096})
     if ranks > 1:
         common["hpx:localities"] = ranks
 

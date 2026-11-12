@@ -76,7 +76,7 @@ int domainCoarseMeshSize() {
     auto const& options = getOptions().gravity;
     return options.enabled && options.meshSize > 0 ?
         pmmm::detail::resolvedCoarseMeshSize(
-            options.meshSize, options.pmmmCoarseMeshSize, options.pmmmNearWidth) :
+            options.meshSize, options.pmmmCoarseMeshSize, options.openingAngle) :
         0;
 }
 
@@ -485,7 +485,7 @@ void domainsRebound() {
     auto const& gravityOptions = getOptions().gravity;
     int const coarseMeshSize = gravityOptions.enabled && gravityOptions.meshSize > 0 ?
         pmmm::detail::resolvedCoarseMeshSize(gravityOptions.meshSize,
-            gravityOptions.pmmmCoarseMeshSize, gravityOptions.pmmmNearWidth) :
+            gravityOptions.pmmmCoarseMeshSize, gravityOptions.openingAngle) :
         0;
     domains[0].totalCount = 0;
     auto const loads = []() {

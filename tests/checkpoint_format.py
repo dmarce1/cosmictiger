@@ -121,8 +121,8 @@ def read_prefix(data):
                 "checkpoint algorithm and integrator flags disagree")
     if flags & (1 << 17):
         version = reader.take("Q")[0]
-        require(version in (1, 2, 3, 4, 5), "unsupported PMMM checkpoint version")
-        result.pmmm = (version, *reader.take("Q", {1: 6, 2: 7, 3: 9, 4: 10, 5: 10}[version]))
+        require(version in (1, 2, 3, 4, 5, 6), "unsupported PMMM checkpoint version")
+        result.pmmm = (version, *reader.take("Q", {1: 6, 2: 7, 3: 9, 4: 10, 5: 10, 6: 10}[version]))
     if flags & (1 << 22):
         result.particle_mesh = reader.take("Q", 12)
         require(result.particle_mesh[0] == 1 and result.particle_mesh[11] == 1,

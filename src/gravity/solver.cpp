@@ -241,7 +241,7 @@ void solve(SolveRequest request) {
     request.meshSize = request.applyKick && request.parameters.htime && !frozen ?
         hierarchicalMeshSize(options.meshSize,
             resolvedCoarseMeshSize(
-                options.meshSize, options.pmmmCoarseMeshSize, options.pmmmNearWidth),
+                options.meshSize, options.pmmmCoarseMeshSize, options.openingAngle),
             request.activeParticles, request.totalParticles) :
         options.meshSize;
     bool const farField = !frozen;

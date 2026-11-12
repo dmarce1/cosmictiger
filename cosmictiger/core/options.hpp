@@ -173,21 +173,19 @@ struct Gravity {
     // Coarsest hierarchical stage mesh and the granularity of particle-domain
     // cuts; a divisor of meshSize. Zero chooses a compatible divisor near meshSize/8.
     int pmmmCoarseMeshSize{};
-    int pmmmNearWidth{2};    // Direct neighbor cube radius for periodic PMMM, one to four cells.
     // Near field of the PMMM solver: fmm, or its direct particle-pair fallback pp.
     // The field keeps its historical serialized name.
     int pmmmBatchParticles{4096};    // Target owned sink count per ready near-field batch.
     // PMMM outer interval: the FFT far field is solved only at synchronized
-    // outer boundaries, each particle's near-cube membership is frozen for the
+    // outer boundaries, each particle's near-stencil membership is frozen for the
     // interval, and the near field advances on the inner rungs (see docs/pmmm.md).
     bool pmmmOuterInterval{true};
     // Potential expansion degree + 1 of the far and near fields; template/storage
     // convention.
     std::string kernelFamily{"ferrers"};
     int kernelDegree{4};
-    // Near-field FMM opening angle, derived from the neighbor cube geometry as
-    // sqrt(3)/(pmmmNearWidth+1); not a configured option.
-    double openingAngle{};
+    // Shared FMM opening angle and filled-cell PMMM near-stencil criterion.
+    double openingAngle{0.5773502691896257};
     // Open only the larger of two rejected cells instead of both.
     bool openLargerCell{};
     // Fixed comoving compact support in box units; effectiveRadius is 2 sigma.
@@ -472,7 +470,6 @@ struct Options {
         arc & scenario.rayleighTaylor.zPlaneAcceleration;
         arc & hydro.method;
         arc & gravity.meshSize;
-        arc & gravity.pmmmNearWidth;
         arc & analysis.saveAcceleration;
         arc & analysis.savePotential;
         arc & gravity.pmmmBatchParticles;

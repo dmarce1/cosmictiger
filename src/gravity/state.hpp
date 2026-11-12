@@ -112,7 +112,8 @@ struct SourceCell {
 // Persistent FFT allocation and immutable configuration.
 struct MeshCache {
     int meshSize = 0;
-    int nearWidth = 0;
+    double openingAngle = 0;
+    std::vector<std::array<int, 3>> nearOffsets;
     int sourceCount = 0;
     int localCount = 0;
     MPI_Comm communicator = MPI_COMM_NULL;

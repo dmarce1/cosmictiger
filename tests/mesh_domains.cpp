@@ -30,7 +30,7 @@ namespace detail {
 // Full PMMM mesh of the fixtures. Seam particles straddle its cell planes; the
 // coarse meshes below cut the particle domains on a subset of those planes.
 constexpr int kMeshDomainMeshSize = 30;
-constexpr int kMeshDomainNearWidth = 1;
+constexpr double kMeshDomainOpeningAngle = 0.8660254037844386;
 constexpr int kMeshDomainCoarseMeshSizes[] = {5, 10};
 constexpr int kMeshDomainFixtures = 4;
 constexpr int kMeshDomainDenseFixture = 2;
@@ -449,7 +449,7 @@ void meshDomainsTest() {
     // setOptions skips command-line validation, so every PMMM mesh parameter the
     // domain cuts read is set explicitly here.
     options.gravity.meshSize = detail::kMeshDomainMeshSize;
-    options.gravity.pmmmNearWidth = detail::kMeshDomainNearWidth;
+    options.gravity.openingAngle = detail::kMeshDomainOpeningAngle;
     options.gravity.errorInterval = 1;
     options.analysis.groups = COSMICTIGER_ENABLE_ROCKSTAR != 0;
     options.analysis.tracers = true;

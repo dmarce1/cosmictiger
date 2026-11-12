@@ -2,6 +2,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <limits>
 #include <stdexcept>
@@ -29,26 +30,90 @@ inline constexpr int nextPowerOfTwo(int value) {
     return result;
 }
 
-// Preferred coarse side. Smaller full meshes use each periodic neighbor once.
-inline constexpr int minimumMeshSize(int nearWidth) {
-    if (nearWidth < 1 || nearWidth > 4) {
-        throw std::invalid_argument("PMMM near width must be between 1 and 4");
+// Derived from the cell-cell criterion in computeFmmAcceptance
+// (cosmictiger/gravity/fmm_acceptance.hpp), using filled cubic cells:
+// rₛ = rₜ = √3 ℓ/2, d > (rₛ+rₜ)/θ; near iff i²+j²+k² ≤ 3/θ².
+// Symbol directory: rₛ, rₜ → enclosing radii; ℓ → cell side;
+// d → center separation; θ → opening angle; i, j, k → integer cell offsets.
+// Code names: d2 → d²/ℓ², squared separation in cell units.
+// Cell-side factors cancel. Equality remains near, as in the strict FMM test.
+inline bool nearCellOffset(int i, int j, int k, double θ) {
+    double const d2 = double(i) * i + double(j) * j + double(k) * k;
+    return d2 * (θ * θ) <= 3.0;
+}
+
+// Bound the enumeration by the periodic mesh before converting to int, so
+// arbitrarily small positive angles never overflow or duplicate source cells.
+inline int nearStencilWidth(int meshSize, double openingAngle) {
+    if (!(openingAngle > 0 && openingAngle <= 1)) {
+        throw std::invalid_argument("PMMM opening angle must be in (0, 1]");
     }
-    return nextPowerOfTwo(2 * nearWidth + 1);
+    int width = int(std::min(double(meshSize / 2), std::ceil(std::sqrt(3.0) / openingAngle)));
+    while (width > 0 && !nearCellOffset(width, 0, 0, openingAngle)) {
+        --width;
+    }
+    return width;
+}
+
+// Preferred coarse side, capped by the full mesh before rounding/overflow.
+inline int minimumMeshSize(int meshSize, double openingAngle) {
+    int const width = nearStencilWidth(meshSize, openingAngle);
+    if (width >= meshSize / 2) {
+        return meshSize;
+    }
+    int const diameter = 2 * width + 1;
+    return diameter > (1 << 30) ? meshSize : std::min(meshSize, nextPowerOfTwo(diameter));
+}
+
+// Minimum possible particle separation in any primary cell pair left to the
+// unsoftened mesh field. Search only the first octant and the first excluded z
+// at each (x,y); more distant offsets cannot reduce the box-to-box distance.
+// Infinity means every periodic source cell is near. This also handles tiny
+// meshes and half-box ties without an artificial lower bound on theta.
+inline double nearStencilSupport(int meshSize, double openingAngle) {
+    int const half = meshSize / 2;
+    if (nearCellOffset(half, half, half, openingAngle)) {
+        return std::numeric_limits<double>::infinity();
+    }
+    int const end = std::min(half, nearStencilWidth(meshSize, openingAngle) + 1);
+    double minimumSquared = std::numeric_limits<double>::infinity();
+    for (int x = 0; x <= end; ++x) {
+        for (int y = 0; y <= end; ++y) {
+            if (nearCellOffset(x, y, end, openingAngle)) {
+                continue;
+            }
+            int lower = 0;
+            int upper = end;
+            while (lower < upper) {
+                int const middle = lower + (upper - lower) / 2;
+                if (nearCellOffset(x, y, middle, openingAngle)) {
+                    lower = middle + 1;
+                } else {
+                    upper = middle;
+                }
+            }
+            double const dx = std::max(x - 1, 0);
+            double const dy = std::max(y - 1, 0);
+            double const dz = std::max(lower - 1, 0);
+            minimumSquared = std::min(minimumSquared, dx * dx + dy * dy + dz * dz);
+        }
+    }
+    return std::sqrt(minimumSquared) / meshSize;
 }
 
 // The coarsest mesh any hierarchical stage may use, and the granularity of
 // particle-domain cuts. Zero requests the default: eight times coarser per
 // axis than the full mesh, raised to the preferred near-field side and then
 // to a divisor of the full mesh. Divisibility keeps domain cuts on stage planes.
-inline int resolvedCoarseMeshSize(int meshSize, int coarseMeshSize, int nearWidth) {
+inline int resolvedCoarseMeshSize(int meshSize, int coarseMeshSize, double openingAngle) {
     if (coarseMeshSize > 0) {
         return coarseMeshSize;
     }
     if (meshSize <= 0) {
         return 0;
     }
-    int const minimum = std::min(meshSize, std::max(meshSize / 8, minimumMeshSize(nearWidth)));
+    int const minimum =
+        std::min(meshSize, std::max(meshSize / 8, minimumMeshSize(meshSize, openingAngle)));
     int result = meshSize;
     for (int factor = 1; factor <= meshSize / factor; ++factor) {
         if (meshSize % factor == 0) {

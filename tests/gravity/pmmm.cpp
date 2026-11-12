@@ -352,16 +352,16 @@ std::shared_ptr<PmmmOverlapGate> pmmmOverlapGate;
 
 bool pmmmCellsNeighbor(uint64_t first, uint64_t second) {
     int const side = getOptions().gravity.meshSize;
-    int const width = getOptions().gravity.pmmmNearWidth;
+    double distanceSquared = 0;
     for (int dim = 0; dim < kDimensions; ++dim) {
         int const difference = std::abs(int(first % side) - int(second % side));
-        if (std::min(difference, side - difference) > width) {
-            return false;
-        }
+        double const separation = std::min(difference, side - difference);
+        distanceSquared += separation * separation;
         first /= side;
         second /= side;
     }
-    return true;
+    double const theta = getOptions().gravity.openingAngle;
+    return distanceSquared * theta * theta <= 3.0;
 }
 
 void installPmmmOverlapGate(bool enable, uint64_t heldKey) {
@@ -841,7 +841,7 @@ std::array<double, 4> directPmmmExpansionReferenceOrder(
     for (size_t source = 0; source < samples.size(); ++source) {
         auto const sourceCell = coordinates(samples[source]);
         Vector3<double> sourceOffset{}, displacement{}, pair{};
-        int cellDistance = 0;
+        double cellDistanceSquared = 0;
         double sourceTrace = 0.0;
         for (int dim = 0; dim < kDimensions; ++dim) {
             sourceOffset[dim] = samples[source].position[dim] - (sourceCell[dim] + 0.5) / n;
@@ -849,15 +849,17 @@ std::array<double, 4> directPmmmExpansionReferenceOrder(
             if (delta > n / 2) {
                 delta -= n;
             }
-            cellDistance = std::max(cellDistance, std::abs(delta));
+            cellDistanceSquared += double(delta) * delta;
             displacement[dim] = double(delta) / n;
             pair[dim] = displacement[dim] + sinkOffset[dim] - sourceOffset[dim];
             sourceTrace += samples[source].mass * sourceOffset[dim] * sourceOffset[dim];
         }
-        bool const near = cellDistance <= options.gravity.pmmmNearWidth;
+        bool const near =
+            cellDistanceSquared * (options.gravity.openingAngle * options.gravity.openingAngle) <=
+            3.0;
         std::array<double, (kSourceDegree + 1) * (kSourceDegree + 1)> moments{};
-        spherical::detail::P2M(
-            double(samples[source].mass), sourceOffset[0], sourceOffset[1], sourceOffset[2], moments);
+        spherical::detail::P2M(double(samples[source].mass), sourceOffset[0], sourceOffset[1],
+            sourceOffset[2], moments);
         std::array<double, (kLocalDegree + 1) * (kLocalDegree + 1)> green{};
         double greenTrace = 0.0;
         spherical::evaluateEwaldGreen(
@@ -899,7 +901,7 @@ double verifyPmmmReference(Vector<PmmmSample> const& samples) {
     auto const& options = getOptions();
     std::string const context = " mesh=" + std::to_string(options.gravity.meshSize) +
         " order=" + std::to_string(gravity::kBuildFmmOrder) +
-        " width=" + std::to_string(options.gravity.pmmmNearWidth);
+        " theta=" + std::to_string(options.gravity.openingAngle);
     // Potential/force truncation budgets for these off-center fixtures, measured
     // against the independent Ewald sum with a direct double expansion for both
     // unit and mixed masses. They are not universal PMMM accuracy guarantees.
@@ -980,7 +982,6 @@ void comparePmmmSamples(
     auto const& options = getOptions();
     std::string const context = " near=fmm mesh=" + std::to_string(options.gravity.meshSize) +
         " fmmOrder=" + std::to_string(gravity::kBuildFmmOrder) +
-        " width=" + std::to_string(options.gravity.pmmmNearWidth) +
         " theta=" + std::to_string(options.gravity.openingAngle) +
         " cuda=" + std::to_string(options.gravity.cuda);
     requirePmmm(first.size() == second.size(), "solve changed the particle count");
@@ -1250,7 +1251,7 @@ void checkPmmmEndpointReuse() {
     options.gravity.pmmmOuterInterval = true;
     options.gravity.meshSize = 8;
     options.gravity.pmmmCoarseMeshSize = 0;
-    options.gravity.pmmmNearWidth = 1;
+    options.gravity.openingAngle = 0.8660254037844386;
     options.compute.bucketSize = 8;
     pmmmDestroy();
     setOptions(options);
@@ -1326,7 +1327,6 @@ void checkPmmmFrozenFmm() {
 
     options.gravity.meshSize = 8;
     options.gravity.pmmmCoarseMeshSize = 0;
-    options.gravity.pmmmNearWidth = 1;
     options.gravity.openingAngle = .4;
     options.compute.bucketSize = 8;
     options.analysis.saveForce = true;
@@ -1349,6 +1349,13 @@ void checkPmmmFrozenFmm() {
     particlesSortByRung(0);
     pmmmKick(parameters);
     auto const transforms = pmmmDiagnostics().transformCount;
+    std::map<int, std::array<int, 3>> frozenCells;
+    for (auto const& sample : gatherPmmmKickSamples()) {
+        auto& cell = frozenCells[int(sample.velocity[0])];
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            cell[dim] = int(sample.position[dim] * options.gravity.meshSize);
+        }
+    }
     parameters.refreshMembership = false;
     for (int step = 0; step < 3; ++step) {
         std::vector<hpx::future<void>> moves;
@@ -1361,8 +1368,6 @@ void checkPmmmFrozenFmm() {
         }
         parameters.minRung = step == 1 ? 2 : 0;
         particlesSortByRung(parameters.minRung);
-        options.gravity.openingAngle = 0.35;
-        setOptions(options);
         pmmmKick(parameters);
         auto const actual = gatherPmmmKickSamples();
         auto const diagnostics = pmmmDiagnostics();
@@ -1373,13 +1378,67 @@ void checkPmmmFrozenFmm() {
         requirePmmm(diagnostics.activeParticles == (step == 1 ? 240U : 320U) &&
                 diagnostics.evaluatedParticles == diagnostics.activeParticles,
             "frozen FMM did not select the rung's sources and sinks");
-        options.gravity.openingAngle = 1.e-5;
-        setOptions(options);
-        particlesSortByRung(parameters.minRung);
-        pmmmKick(parameters);
-        double const error = pmmmFieldDifference(gatherPmmmKickSamples(), actual);
+        // Direct softened primary pairs with the original cell-selected images.
+        // This oracle keeps theta and frozen membership fixed throughout the interval.
+        auto direct = actual;
+        double const support = options.gravity.smoothingLength;
+        int const side = options.gravity.meshSize;
+        for (size_t sink = 0; sink < direct.size(); ++sink) {
+            if (direct[sink].rung < parameters.minRung) {
+                continue;
+            }
+            auto const& sinkCell = frozenCells.at(int(actual[sink].velocity[0]));
+            std::array<double, 4> field{};
+            for (size_t source = 0; source < actual.size(); ++source) {
+                if (source == sink || actual[source].rung < parameters.minRung) {
+                    continue;
+                }
+                auto const& sourceCell = frozenCells.at(int(actual[source].velocity[0]));
+                std::array<double, 3> displacement{};
+                double cellDistanceSquared = 0;
+                double distanceSquared = 0;
+                for (int dim = 0; dim < kDimensions; ++dim) {
+                    int delta = (sinkCell[dim] - sourceCell[dim] + side) % side;
+                    if (delta > side / 2) {
+                        delta -= side;
+                    }
+                    cellDistanceSquared += double(delta) * delta;
+                    double sinkOffset = actual[sink].position[dim] - (sinkCell[dim] + .5) / side;
+                    double sourceOffset =
+                        actual[source].position[dim] - (sourceCell[dim] + .5) / side;
+                    sinkOffset -= std::nearbyint(sinkOffset);
+                    sourceOffset -= std::nearbyint(sourceOffset);
+                    displacement[dim] = double(delta) / side + sinkOffset - sourceOffset;
+                    distanceSquared += displacement[dim] * displacement[dim];
+                }
+                if (cellDistanceSquared *
+                        (options.gravity.openingAngle * options.gravity.openingAngle) >
+                    3) {
+                    continue;
+                }
+                double const radius = std::sqrt(distanceSquared);
+                double const mass = options.gravity.gm * actual[source].mass;
+                double const radial = radius >= support ?
+                    mass / (distanceSquared * radius) :
+                    mass * radial_kernel::forceFactor(selectedGravityKernel(), radius / support) /
+                        (support * support * support);
+                field[0] -= radius >= support ?
+                    mass / radius :
+                    mass * radial_kernel::potential(selectedGravityKernel(), radius / support) /
+                        support;
+                for (int dim = 0; dim < kDimensions; ++dim) {
+                    field[dim + 1] -= radial * displacement[dim];
+                }
+            }
+            direct[sink].potential = field[0];
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                direct[sink].acceleration[dim] = field[dim + 1];
+            }
+        }
+        double const error = pmmmFieldDifference(direct, actual);
         requirePmmm(error < 2.e-3,
-            "expanded frozen FMM differs from direct near forces: " + std::to_string(error));
+            "frozen FMM differs from direct active near pairs at step " + std::to_string(step) +
+                ": " + std::to_string(error));
     }
     particlesSortByRung(0);
     pmmmDestroy();
@@ -1394,7 +1453,6 @@ void checkPmmmTraditionalKicks() {
     // independent Ewald kick check is free of finite-order truncation at q=3..9.
     options.gravity.meshSize = 16;
     options.gravity.pmmmCoarseMeshSize = 0;
-    options.gravity.pmmmNearWidth = 2;
     options.gravity.openingAngle = 0.02;
     options.analysis.saveForce = true;
     pmmmDestroy();
@@ -1540,7 +1598,6 @@ void checkPmmmStreamedStages() {
     // the stage selects the full side 16 rather than the coarse side 8.
     options.gravity.meshSize = 16;
     options.gravity.pmmmCoarseMeshSize = 8;
-    options.gravity.pmmmNearWidth = 2;
     options.gravity.openingAngle = 0.02;
     options.analysis.saveForce = false;
     options.analysis.saveAcceleration = false;
@@ -1697,7 +1754,6 @@ void checkPmmmStageMeshes() {
     // fixture reaches only with no active particles.
     options.gravity.meshSize = 16;
     options.gravity.pmmmCoarseMeshSize = 8;
-    options.gravity.pmmmNearWidth = 2;
     options.gravity.openingAngle = 0.02;
     options.analysis.saveForce = false;
     options.analysis.saveAcceleration = false;
@@ -1850,7 +1906,6 @@ void checkPmmmCoarseMeshes() {
     // the coarse side equal to the base, every stage uses the one base mesh.
     options.gravity.meshSize = 16;
     options.gravity.pmmmCoarseMeshSize = 8;
-    options.gravity.pmmmNearWidth = 2;
     options.gravity.openingAngle = 0.02;
     options.analysis.saveForce = false;
     options.analysis.saveAcceleration = false;
@@ -1945,15 +2000,15 @@ void checkPmmmCoarseMeshes() {
         "ordinary force solve with a base-sized coarse mesh rebuilt its cache");
     pmmmDestroy();
 
-    // The default coarse mesh (zero) resolves to one eighth of the base side,
-    // never below the smallest side for the near width: 8 for base 16, width 2.
+    // This tight angle covers every periodic cell, so the default coarse
+    // mesh is capped at the full side even for an empty stage.
     options.gravity.pmmmCoarseMeshSize = 0;
     setOptions(options);
-    auto const defaultEmpty = stage(5, 0, 8);
+    auto const defaultEmpty = stage(5, 0, 16);
     auto const defaultFull = stage(0, 7, 16);
-    requirePmmm(defaultFull.planBuilds == defaultEmpty.planBuilds + 1 &&
-            defaultFull.greenBuilds == defaultEmpty.greenBuilds + 1,
-        "default coarse mesh did not resolve to one eighth of the base side");
+    requirePmmm(defaultFull.planBuilds == defaultEmpty.planBuilds &&
+            defaultFull.greenBuilds == defaultEmpty.greenBuilds,
+        "default coarse mesh did not respect the opening-angle stencil");
     pmmmSolve(true);
     comparePmmmSamples(fullReference, gatherPmmmSamples());
     particlesSortByRung(0);
@@ -1972,9 +2027,8 @@ void checkPmmmCellOverlap() {
     auto const saved = getOptions();
     auto options = saved;
     options.gravity.meshSize = 8;
-    options.gravity.pmmmNearWidth = 1;
+    options.gravity.openingAngle = 0.8660254037844386;
     options.gravity.pmmmBatchParticles = 1;
-    options.gravity.openingAngle = 0.02;
     pmmmDestroy();
     setOptions(options);
     preparePmmmFixture(6);
@@ -2036,7 +2090,7 @@ void checkRootDepositionRecovery() {
     auto const saved = getOptions();
     auto options = saved;
     options.gravity.meshSize = 8;
-    options.gravity.pmmmNearWidth = 1;
+    options.gravity.openingAngle = 0.8660254037844386;
     options.gravity.pmmmBatchParticles = 1;
     pmmmDestroy();
     setOptions(options);
@@ -2095,7 +2149,7 @@ void checkPmmmFarOverlap() {
     auto const saved = getOptions();
     auto options = saved;
     options.gravity.meshSize = 8;
-    options.gravity.pmmmNearWidth = 1;
+    options.gravity.openingAngle = 0.8660254037844386;
     options.gravity.pmmmBatchParticles = 1;
     pmmmDestroy();
     setOptions(options);
@@ -2140,7 +2194,7 @@ void checkPmmmFmmNear() {
     // and near-field algebra are covered independently above.
     options.hydro.enabled = false;
     options.compute.bucketSize = 8;
-    options.gravity.pmmmNearWidth = 1;
+    options.gravity.openingAngle = 0.8660254037844386;
     options.gravity.smoothingLength = 0.001;
     if (saved.gravity.cuda) {
         setOptions(options);
@@ -2191,6 +2245,7 @@ void checkPmmmFmmNear() {
         // a useful multipole approximation and convergence toward direct PP.
         // Dipole-only sources need a tighter acceptance angle to meet the
         // same approximation budget; the q>=4 fixture retains its original angle.
+        pmmmDestroy();
         options.gravity.openingAngle = kFmmOrder == 3 ? 0.2 : 0.4;
         setOptions(options);
         pmmmSolve(true);
@@ -2203,6 +2258,7 @@ void checkPmmmFmmNear() {
             requirePmmm(looseCounts.ghostParticles > 0,
                 "distributed dense fixture did not exchange ghost source particles");
         }
+        pmmmDestroy();
         options.gravity.openingAngle = 0.02;
         setOptions(options);
         pmmmSolve(true);
@@ -2221,9 +2277,9 @@ void checkPmmmFmmNear() {
         for (auto const& sample : forceOnly) {
             requirePmmm(sample.potential == 0.0f, "force-only FMM near solve computed a potential");
         }
-        requirePmmm(strictCounts.planBuilds == cache.planBuilds &&
-                strictCounts.greenBuilds == cache.greenBuilds,
-            "changing the near angle rebuilt FFT plans/Green spectra");
+        requirePmmm(strictCounts.planBuilds == cache.planBuilds + 2 &&
+                strictCounts.greenBuilds == cache.greenBuilds + 2,
+            "each reinitialized stencil should build one set of plans/Green spectra");
         pmmmSolve(true);
         comparePmmmSamples(strict, gatherPmmmSamples());
         requirePmmm(pmmmDiagnostics().ghostParticles == strictCounts.ghostParticles,
@@ -2268,7 +2324,7 @@ void checkPmmmArbitraryMeshes() {
     auto const saved = getOptions();
     auto options = saved;
     options.gravity.pmmmCoarseMeshSize = 0;
-    options.gravity.pmmmNearWidth = 2;
+    options.gravity.openingAngle = 0.5773502691896257;
     for (int side : {1, 2, 3, 5, 6, 7, 11, 12}) {
         if (side < pmmm::detail::minimumCoarseMeshSizeForLocalities(hpxSize())) {
             continue;
@@ -2342,7 +2398,7 @@ void pmmmTest() {
         for (int side : {4, 8, 16}) {
             pmmmDestroy();
             options.gravity.meshSize = side;
-            options.gravity.pmmmNearWidth = 1;
+            options.gravity.openingAngle = 0.8660254037844386;
             setOptions(options);
             for (int fixture : {0, 1, 2, 3, 4, 7}) {
                 detail::preparePmmmFixture(fixture);
@@ -2363,14 +2419,13 @@ void pmmmTest() {
         return;
     }
     detail::checkPmmmArbitraryMeshes();
-    // Each base side is at least the smallest side for its near width:
-    // 4 for width 1, 8 for widths 2 and 3, 16 for width 4.
+    // Exercise several mesh sizes and angles, including lattice boundaries.
     std::array<std::array<int, 2>, 5> const configurations{
         {{8, 2}, {8, 1}, {16, 2}, {8, 3}, {16, 4}}};
     for (auto const configuration : configurations) {
         pmmmDestroy();
         options.gravity.meshSize = configuration[0];
-        options.gravity.pmmmNearWidth = configuration[1];
+        options.gravity.openingAngle = std::sqrt(3.0) / (configuration[1] + 1);
         setOptions(options);
         for (int fixture : {0, 1, 2, 3, 4, 7}) {
             detail::preparePmmmFixture(fixture);
@@ -2451,8 +2506,8 @@ void pmmmTest() {
             }
             std::cout
                 << std::format(
-                       "PMMM Ewald oracle n={:d} order={:d} near={:d} fixture={:d} error={:e}\n",
-                       configuration[0], kFmmOrder, configuration[1], fixture, error)
+                       "PMMM Ewald oracle n={:d} order={:d} theta={:e} fixture={:d} error={:e}\n",
+                       configuration[0], kFmmOrder, options.gravity.openingAngle, fixture, error)
                 << std::flush;
         }
     }

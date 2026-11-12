@@ -171,7 +171,7 @@ def main():
     ranks = args.ranks if args.mpi_exec else 1
     mesh_size = 16
     common = {"hpx:threads": 2, "hpx:bind": "none",
-              "gravity.meshSize": mesh_size, "gravity.pmmmNearWidth": 2,
+              "gravity.meshSize": mesh_size, "gravity.openingAngle": 0.5773502691896257,
               "gravity.pmmmOuterInterval": "true",
 
               "gravity.enabled": "true",

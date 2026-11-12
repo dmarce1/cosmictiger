@@ -1086,12 +1086,6 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
             auto const merge = rungMergeDecision(counts, minrung0, fraction);
             if (merge.merge) {
                 clipTop = true;
-                std::cout << std::format(
-                                 "  Merging rung {:d} into rung {:d}: {:d} of {:d} particles on "
-                                 "finer rungs meet run.rungMergeFraction = {:g}\n",
-                                 minrung0, minrung0 + 1, merge.fineCount, merge.activeCount,
-                                 fraction)
-                          << std::flush;
             }
         }
 
@@ -1639,10 +1633,16 @@ void driver() {
     double pot;
     int thisIter = 0;
     size_t progressRows = 0;
-    std::string progressRungHeader;
     terminal::section(getOptions().run.scenario.c_str());
     std::cout << "  tau is conformal time / coarse interval; dt is in code units.\n"
                  "  Wall durations use hh:mm:ss.ss; initialization is excluded.\n"
+              << std::flush;
+    std::cout << "  GFLOP/s uses counted gravity and SPH operations divided by force "
+                 "advancement wall time.\n"
+                 "  FP32/FP64 separate arithmetic precision.\n"
+                 "  Columns after GFLOP/s give particle populations by rung.\n"
+                 "  Chemistry and star formation operations are excluded; their wall time "
+                 "is included.\n"
               << std::flush;
     Timer reset;
     reset.start();
@@ -1897,7 +1897,7 @@ void driver() {
             auto opts = getOptions();
             opts.gravity.smoothingLength =
                 hsoft0;    // Fixed comoving support for every particle type.
-            // PMMM retains its angle derived from the ghost width throughout evolution.
+            // PMMM retains its configured opening angle throughout evolution.
             double const theta = opts.gravity.openingAngle;
             bucketSize = opts.compute.bucketSize;
             ForceStepResult tmp;
@@ -2023,6 +2023,30 @@ void driver() {
             dt = global ? std::min(kr.minimumTimestep, tauMax - tau) : std::ldexp(t0, -maxRung);
             if (!(dt > 0.0) || !std::isfinite(dt) || tau + dt == tau) {
                 throw std::underflow_error("Selected timestep cannot advance the evolution clock");
+            }
+            if (global || itime == 0 || progressRows == 0) {
+                double const interval = global ? dt : std::min(t0, tauMax - tau);
+                if (getOptions().run.scenario == "cosmology") {
+                    double endScale = a;
+                    double endDerivative = adot;
+                    auto const advance = cosmosAdvance(endDerivative, endScale, interval);
+                    double const physicalYears =
+                        advance.physicalTime * getOptions().units.timeSeconds / constants::kSpyr;
+                    std::cout << std::format("\n  Coarse step: Δτ = {:.6e} code units, Δt = {:.6e} "
+                                             "yr, a = {:.6e} → {:.6e}\n",
+                        interval, physicalYears, a, endScale);
+                } else {
+                    std::cout << std::format("\n  Coarse step: Δt = {:.6e} code units ({:.6e} s)\n",
+                        interval, interval * getOptions().units.timeSeconds);
+                }
+                auto const counts = particlesRungCounts();
+                std::span<size_t const> const populations{counts.data(), counts.size()};
+                std::cout << std::format("{:>8s} {:>10s} {:>10s} {:>10s} {:>10s} {:>7s} {:>7s} "
+                                         "{:>13s} {:>13s} {:>10s} {:>10s} {:>10s}",
+                                 "Step", "z", "a", "tau", "dt", "MinRung", "MaxRung", "Wall",
+                                 "Step time", "FP32 GF/s", "FP64 GF/s", "GFLOP/s")
+                          << terminal::formatRungPopulations(populations, true) << '\n'
+                          << std::flush;
             }
             TimeType const nextIntegerTime = global ? 0 : inc(itime, maxRung);
             double const integerPhase =
@@ -2154,27 +2178,8 @@ void driver() {
                 runtime, iter - 1, outputRedshift, a, adot, nextTau / coarseInterval, nextYears,
                 displayedMinimumRung, maxRung, bucketSize, flops * 1e-9, stepTm.read(), close,
                 direct, flopRates.singlePrecision * 1e-9, flopRates.doublePrecision * 1e-9);
-            if (progressRows == 0) {
-                std::cout
-                    << "  GFLOP/s uses counted gravity and SPH operations divided by force "
-                       "advancement wall time.\n"
-                       "  FP32/FP64 separate arithmetic precision.\n"
-                       "  Columns after GFLOP/s give particle populations by rung.\n"
-                       "  Chemistry and star formation operations are excluded; their wall time "
-                       "is included.\n"
-                    << std::flush;
-            }
             auto const rungCounts = particlesRungCounts();
             std::span<size_t const> const rungPopulations{rungCounts.data(), rungCounts.size()};
-            auto const rungHeader = terminal::formatRungPopulations(rungPopulations, true);
-            if (progressRows % 25 == 0 || progressRungHeader != rungHeader) {
-                std::cout << std::format("\n{:>8s} {:>10s} {:>10s} {:>10s} {:>10s} {:>7s} {:>7s} "
-                                         "{:>13s} {:>13s} {:>10s} {:>10s} {:>10s}",
-                                 "Step", "z", "a", "tau", "dt", "MinRung", "MaxRung", "Wall",
-                                 "Step time", "FP32 GF/s", "FP64 GF/s", "GFLOP/s")
-                          << rungHeader << '\n'
-                          << std::flush;
-            }
             std::cout << std::format("{:8d} {:10.3e} {:10.3e} {:10.3e} {:10.3e} {:7d} {:7d} "
                                      "{:>13s} {:>13s} {:10.3e} {:10.3e} {:10.3e}",
                              iter, outputRedshift, a, nextTau / coarseInterval, dt,
@@ -2185,7 +2190,6 @@ void driver() {
                              flops * 1e-9)
                       << terminal::formatRungPopulations(rungPopulations) << '\n'
                       << std::flush;
-            progressRungHeader = rungHeader;
             progressRows++;
             fclose(textfp);
             totalTime.reset();

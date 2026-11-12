@@ -321,7 +321,7 @@ void checkMeshGlobalTimestepFlops() {
 void particleMeshTimestepTest() {
     auto options = getOptions();
     options.gravity.meshSize = 8;
-    options.gravity.pmmmNearWidth = 2;
+    options.gravity.openingAngle = 0.5773502691896257;
 
     options.gravity.gm = 1.0;
     options.gravity.cuda = false;

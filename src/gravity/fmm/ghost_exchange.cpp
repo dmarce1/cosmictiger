@@ -39,16 +39,12 @@ std::vector<uint64_t> neighbors(uint64_t key) {
     std::vector<uint64_t> result;
     auto const center = coordinates(key);
     int const n = cache.meshSize;
-    int const width = cache.nearWidth;
-    for (int x = nearOffsetBegin(n, width); x <= nearOffsetEnd(n, width); ++x) {
-        for (int y = nearOffsetBegin(n, width); y <= nearOffsetEnd(n, width); ++y) {
-            for (int z = nearOffsetBegin(n, width); z <= nearOffsetEnd(n, width); ++z) {
-                uint64_t const sx = periodicIndex(center[0] + x);
-                uint64_t const sy = periodicIndex(center[1] + y);
-                uint64_t const sz = periodicIndex(center[2] + z);
-                result.push_back((sx * n + sy) * n + sz);
-            }
-        }
+    result.reserve(cache.nearOffsets.size());
+    for (auto const& offset : cache.nearOffsets) {
+        uint64_t const sx = periodicIndex(center[0] + offset[0]);
+        uint64_t const sy = periodicIndex(center[1] + offset[1]);
+        uint64_t const sz = periodicIndex(center[2] + offset[2]);
+        result.push_back((sx * n + sy) * n + sz);
     }
     return result;
 }

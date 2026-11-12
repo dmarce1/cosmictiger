@@ -52,8 +52,8 @@ def checkpoint_fixture(*, hydro=True, cooling=False, stars=False, viscosity=Fals
         2 if global_step else 0)
     if pmmm:
         values = [pmmm, 8, 5, 1, 0, 0, 1, 0, 5, 0, 8 if pmmm >= 5 else 0]
-        put(f'{ {1:7, 2:8, 3:10, 4:11, 5:11}[pmmm]}Q',
-            *values[:{1:7, 2:8, 3:10, 4:11, 5:11}[pmmm]])
+        put(f'{ {1:7, 2:8, 3:10, 4:11, 5:11, 6:11}[pmmm]}Q',
+            *values[:{1:7, 2:8, 3:10, 4:11, 5:11, 6:11}[pmmm]])
     if hydro:
         put('12d', *([1.] * 12))
         if viscosity:
@@ -185,7 +185,7 @@ class CheckpointTests(unittest.TestCase):
                 checkpoint.decode_checkpoint(altered)
 
     def test_pmmm_dark_matter_and_multiple_domains(self):
-        for version, integer_bytes in itertools.product((1, 2, 3, 4, 5), (4, 8)):
+        for version, integer_bytes in itertools.product((1, 2, 3, 4, 5, 6), (4, 8)):
             data, _ = checkpoint_fixture(hydro=False, pmmm=version,
                                           integer_bytes=integer_bytes, ranks=2)
             result = checkpoint.decode_checkpoint(data, ranks=2)

@@ -682,22 +682,14 @@ std::array<uint64_t, 11> pmmmCheckpointParameters(Options const& opts) {
     std::memcpy(&timestepEtaBits, &opts.gravity.timestepEta, sizeof(timestepEtaBits));
     uint64_t openingAngleBits;
     std::memcpy(&openingAngleBits, &opts.gravity.openingAngle, sizeof(openingAngleBits));
-    // Force convention 1: periodic spherical far field including its isotropic
-    // trace, plus compact-softened primary interactions in the neighbor cube.
-    // Runtime FFT plans and decompositions are reconstructed after restart.
-    // Version two appends the near solver. Version one always used direct PP.
-    // Version three records the near order (now the single expansion order,
-    // repeated) and the geometry-derived opening angle so a restart preserves
-    // the shared near/far order and accuracy settings.
-    // Version four appended the retired maximum FFT prime factor. Version five
-    // stores the coarse mesh in that slot: with the base mesh it determines every
-    // hierarchical stage mesh and the particle-domain cut granularity.
-    return {5, static_cast<uint64_t>(opts.gravity.meshSize),
-        static_cast<uint64_t>(gravity::kBuildFmmOrder),
-        static_cast<uint64_t>(opts.gravity.pmmmNearWidth), static_cast<uint64_t>(opts.run.minRung),
+    // Version six changes the primary near/far split from a cube to the
+    // filled-cell opening-angle stencil. Slot three is reserved (zero).
+    // Earlier versions remain decodable but cannot resume frozen old fields.
+    return {6, static_cast<uint64_t>(opts.gravity.meshSize),
+        static_cast<uint64_t>(gravity::kBuildFmmOrder), 0, static_cast<uint64_t>(opts.run.minRung),
         timestepEtaBits, 1, 1U, static_cast<uint64_t>(gravity::kBuildFmmOrder), openingAngleBits,
         static_cast<uint64_t>(pmmm::detail::resolvedCoarseMeshSize(
-            opts.gravity.meshSize, opts.gravity.pmmmCoarseMeshSize, opts.gravity.pmmmNearWidth))};
+            opts.gravity.meshSize, opts.gravity.pmmmCoarseMeshSize, opts.gravity.openingAngle))};
 }
 
 /// Read the version-dependent mesh parameter extension and reject unsupported versions.
@@ -708,7 +700,7 @@ std::array<uint64_t, 11> readPmmmCheckpointParameters(FILE* fp) {
         FREAD(&parameters[7], sizeof(uint64_t), 1, fp);
     } else if (parameters[0] == 3) {
         FREAD(&parameters[7], sizeof(uint64_t), 3, fp);
-    } else if (parameters[0] == 4 || parameters[0] == 5) {
+    } else if (parameters[0] == 4 || parameters[0] == 5 || parameters[0] == 6) {
         FREAD(&parameters[7], sizeof(uint64_t), 4, fp);
     } else if (parameters[0] != 1) {
         throw std::runtime_error("Unsupported PMMM checkpoint parameter version");
@@ -716,28 +708,9 @@ std::array<uint64_t, 11> readPmmmCheckpointParameters(FILE* fp) {
     return parameters;
 }
 
-/// Normalize supported historical mesh metadata and compare it with current restart
-/// requirements.
-bool pmmmCheckpointCompatible(std::array<uint64_t, 11> parameters, Options const& opts) {
-    auto const expected = pmmmCheckpointParameters(opts);
-    if (parameters[0] == 1 || parameters[0] == 2) {
-        if (parameters[0] == 1) {
-            parameters[7] = 0;
-        }
-        // Historical checkpoints used one order for both solvers and did not
-        // record theta. Their original order must still match both new orders.
-        parameters[8] = parameters[2];
-        parameters[9] = expected[9];
-        parameters[0] = 3;
-    }
-    if (parameters[0] == 3 || parameters[0] == 4) {
-        // Versions three and four predate the coarse mesh; version four's prime
-        // factor limit is retired. Saved base meshes restart under the requested
-        // compatible coarse mesh, including non-power-of-two base sizes.
-        parameters[10] = expected[10];
-        parameters[0] = 5;
-    }
-    return parameters == expected;
+/// Require the same stencil convention and settings when restoring frozen fields.
+bool pmmmCheckpointCompatible(std::array<uint64_t, 11> const& parameters, Options const& opts) {
+    return parameters == pmmmCheckpointParameters(opts);
 }
 
 // Retired particle-mesh (pm, p3m) parameter block; read only to reject it.
@@ -940,7 +913,7 @@ DriverParameters readDriverState(FILE* fp) {
             if (requireMeshMatch && !pmmmCheckpointCompatible(meshParameters, getOptions())) {
                 throw std::runtime_error(
                     "PMMM checkpoint version, mesh size, near/far expansion orders, opening angle, "
-                    "neighbor width/method, gravity.pmmmCoarseMeshSize, timestep parameters or "
+                    "near stencil/method, gravity.pmmmCoarseMeshSize, timestep parameters or "
                     "force convention differs from the requested run");
             }
         }
@@ -1192,10 +1165,10 @@ void checkpointStateTest() {
     }
     changed = getOptions();
     auto const pmmmParameters = detail::pmmmCheckpointParameters(changed);
-    ALWAYS_ASSERT(pmmmParameters[0] == 5 &&
+    ALWAYS_ASSERT(pmmmParameters[0] == 6 &&
         pmmmParameters[10] ==
             uint64_t(pmmm::detail::resolvedCoarseMeshSize(changed.gravity.meshSize,
-                changed.gravity.pmmmCoarseMeshSize, changed.gravity.pmmmNearWidth)));
+                changed.gravity.pmmmCoarseMeshSize, changed.gravity.openingAngle)));
     changed.gravity.meshSize += 1;
     ALWAYS_ASSERT(pmmmParameters != detail::pmmmCheckpointParameters(changed));
     changed = getOptions();
@@ -1206,9 +1179,6 @@ void checkpointStateTest() {
     changed.gravity.openingAngle *= 0.5;
     ALWAYS_ASSERT(!detail::pmmmCheckpointCompatible(pmmmParameters, changed));
     changed = getOptions();
-    changed.gravity.pmmmNearWidth = changed.gravity.pmmmNearWidth == 1 ? 2 : 1;
-    ALWAYS_ASSERT(pmmmParameters != detail::pmmmCheckpointParameters(changed));
-    changed = getOptions();
     auto retiredPpParameters = pmmmParameters;
     retiredPpParameters[7] = 0;
     ALWAYS_ASSERT(!detail::pmmmCheckpointCompatible(retiredPpParameters, changed));
@@ -1217,7 +1187,7 @@ void checkpointStateTest() {
     // default resolves to one eighth of the full mesh per axis.
     changed = getOptions();
     changed.gravity.meshSize = 64;
-    changed.gravity.pmmmNearWidth = 2;
+    changed.gravity.openingAngle = 0.5773502691896257;
     changed.gravity.pmmmCoarseMeshSize = 8;
     auto const coarsePmmmParameters = detail::pmmmCheckpointParameters(changed);
     ALWAYS_ASSERT(coarsePmmmParameters[10] == 8);
@@ -1226,39 +1196,16 @@ void checkpointStateTest() {
     changed.gravity.pmmmCoarseMeshSize = 0;
     ALWAYS_ASSERT(detail::pmmmCheckpointCompatible(coarsePmmmParameters, changed));
     changed = getOptions();
-    auto legacyPmmmParameters = detail::pmmmCheckpointParameters(changed);
-    legacyPmmmParameters[0] = 1;
-    legacyPmmmParameters[7] = 0;
-    legacyPmmmParameters[8] = legacyPmmmParameters[9] = legacyPmmmParameters[10] = 0;
-    ALWAYS_ASSERT(!detail::pmmmCheckpointCompatible(legacyPmmmParameters, changed));
-    legacyPmmmParameters[0] = 2;
-    legacyPmmmParameters[7] = 1;
-    ALWAYS_ASSERT(detail::pmmmCheckpointCompatible(legacyPmmmParameters, changed));
-    changed.gravity.openingAngle *= 0.5;
-    ALWAYS_ASSERT(detail::pmmmCheckpointCompatible(legacyPmmmParameters, changed));
-    ++legacyPmmmParameters[2];
-    ALWAYS_ASSERT(!detail::pmmmCheckpointCompatible(legacyPmmmParameters, changed));
-    // Versions three and four predate the coarse mesh and restart under any
-    // requested coarse mesh; version four's retired prime-factor slot is ignored.
-    for (uint64_t version : {uint64_t(3), uint64_t(4)}) {
-        changed = getOptions();
-        changed.gravity.meshSize = 64;
-        changed.gravity.pmmmNearWidth = 2;
-        changed.gravity.pmmmCoarseMeshSize = 8;
-        legacyPmmmParameters = detail::pmmmCheckpointParameters(changed);
+    for (uint64_t version = 1; version <= 5; ++version) {
+        auto legacyPmmmParameters = detail::pmmmCheckpointParameters(changed);
         legacyPmmmParameters[0] = version;
-        legacyPmmmParameters[10] = version == 4 ? 5 : 0;
-        ALWAYS_ASSERT(detail::pmmmCheckpointCompatible(legacyPmmmParameters, changed));
-        changed.gravity.pmmmCoarseMeshSize = 16;
-        ALWAYS_ASSERT(detail::pmmmCheckpointCompatible(legacyPmmmParameters, changed));
-        changed.gravity.meshSize = 32;
         ALWAYS_ASSERT(!detail::pmmmCheckpointCompatible(legacyPmmmParameters, changed));
     }
     // Decode each historical extension without consuming any following driver
     // bytes.
-    constexpr std::array<size_t, 5> kPmmmParameterWords{7, 8, 10, 11, 11};
+    constexpr std::array<size_t, 6> kPmmmParameterWords{7, 8, 10, 11, 11, 11};
     constexpr uint64_t kFollowingPayload = 0x0123456789abcdefULL;
-    for (uint64_t version = 1; version <= 5; ++version) {
+    for (uint64_t version = 1; version <= 6; ++version) {
         changed = getOptions();
         auto serialized = detail::pmmmCheckpointParameters(changed);
         serialized[0] = version;
@@ -1272,11 +1219,11 @@ void checkpointStateTest() {
         ALWAYS_ASSERT(fwrite(&kFollowingPayload, sizeof(uint64_t), 1, stream.get()) == 1);
         rewind(stream.get());
         auto const decoded = detail::readPmmmCheckpointParameters(stream.get());
-        ALWAYS_ASSERT(detail::pmmmCheckpointCompatible(decoded, changed) == (version >= 2));
+        ALWAYS_ASSERT(detail::pmmmCheckpointCompatible(decoded, changed) == (version == 6));
         uint64_t followingPayload = 0;
         ALWAYS_ASSERT(fread(&followingPayload, sizeof(uint64_t), 1, stream.get()) == 1 &&
             followingPayload == kFollowingPayload);
-        ALWAYS_ASSERT(decoded[10] == (version == 5 ? serialized[10] : (version == 4 ? 5 : 0)));
+        ALWAYS_ASSERT(decoded[10] == (version >= 5 ? serialized[10] : (version == 4 ? 5 : 0)));
     }
     changed = getOptions();
     changed.run.minRung += 1;

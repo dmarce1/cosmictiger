@@ -34,7 +34,7 @@ struct MeshCachePool {
     int requestedMeshSize = 0;
     int baseMeshSize = 0;
     int coarseMeshSize = 0;
-    int nearWidth = 0;
+    double openingAngle = 0;
     double byteBudget = 0;
     uint64_t nextUse = 0;
 };
@@ -100,27 +100,27 @@ void initialize(int meshSize) {
     auto const& options = getOptions().gravity;
     int const baseMeshSize = options.meshSize;
     int const coarseMeshSize =
-        resolvedCoarseMeshSize(options.meshSize, options.pmmmCoarseMeshSize, options.pmmmNearWidth);
-    if (baseMeshSize < 1 || options.pmmmNearWidth < 1 || options.pmmmNearWidth > 4 ||
+        resolvedCoarseMeshSize(options.meshSize, options.pmmmCoarseMeshSize, options.openingAngle);
+    if (baseMeshSize < 1 || !(options.openingAngle > 0 && options.openingAngle <= 1) ||
         coarseMeshSize < 1 || coarseMeshSize > baseMeshSize || baseMeshSize % coarseMeshSize != 0 ||
         !(options.smoothingLength > 0) ||
-        options.smoothingLength > double(options.pmmmNearWidth) / baseMeshSize ||
+        options.smoothingLength > nearStencilSupport(baseMeshSize, options.openingAngle) ||
         meshSize < coarseMeshSize || meshSize > baseMeshSize || baseMeshSize % meshSize != 0 ||
         meshSize % coarseMeshSize != 0) {
-        throw std::runtime_error("Invalid PMMM mesh, order, near width or softening support");
+        throw std::runtime_error("Invalid PMMM mesh, order, opening angle or softening support");
     }
     if (meshCachePool.baseMeshSize != 0) {
         if (meshCachePool.requestedMeshSize != options.meshSize ||
             meshCachePool.baseMeshSize != baseMeshSize ||
             meshCachePool.coarseMeshSize != coarseMeshSize ||
-            meshCachePool.nearWidth != options.pmmmNearWidth) {
+            meshCachePool.openingAngle != options.openingAngle) {
             throw std::runtime_error("PMMM configuration changed without destroying its plans");
         }
     } else {
         meshCachePool.requestedMeshSize = options.meshSize;
         meshCachePool.baseMeshSize = baseMeshSize;
         meshCachePool.coarseMeshSize = coarseMeshSize;
-        meshCachePool.nearWidth = options.pmmmNearWidth;
+        meshCachePool.openingAngle = options.openingAngle;
     }
     if (cache.communicator != MPI_COMM_NULL && !cache.initialized) {
         throw std::runtime_error("PMMM initialization failed; destroy its plans before retrying");
@@ -151,7 +151,7 @@ void initialize(int meshSize) {
     }
     cache.meshSize = meshSize;
     cache.lastUsed = ++meshCachePool.nextUse;
-    cache.nearWidth = options.pmmmNearWidth;
+    cache.openingAngle = options.openingAngle;
     cache.sourceCount = fmmMultipoleCoefficientCount(kFmmOrder);
     cache.localCount = fmmLocalHarmonicCoefficientCount(kFmmOrder);
     int const n = cache.meshSize;
@@ -361,6 +361,18 @@ void initialize(int meshSize) {
             cache.slabOwner.end()) {
             throw std::runtime_error("PMMM FFTW slabs do not cover the mesh");
         }
+        int const width = nearStencilWidth(meshSize, cache.openingAngle);
+        for (int x = nearOffsetBegin(meshSize, width); x <= nearOffsetEnd(meshSize, width); ++x) {
+            for (int y = nearOffsetBegin(meshSize, width); y <= nearOffsetEnd(meshSize, width);
+                ++y) {
+                for (int z = nearOffsetBegin(meshSize, width); z <= nearOffsetEnd(meshSize, width);
+                    ++z) {
+                    if (nearCellOffset(x, y, z, cache.openingAngle)) {
+                        cache.nearOffsets.push_back({x, y, z});
+                    }
+                }
+            }
+        }
         cache.terms = contractionTerms(kFmmOrder);
     });
     cache.initialized = true;
@@ -384,10 +396,9 @@ void initializeGreen() {
             std::vector<double> coefficients(cache.localCount);
             for (int z = 0; z < n; ++z) {
                 int const dz = signedIndex(z);
-                bool const near =
-                    std::max({std::abs(x), std::abs(y), std::abs(dz)}) <= cache.nearWidth;
+                bool const near = nearCellOffset(x, y, dz, cache.openingAngle);
                 flops +=
-                    3 + green(kFmmOrder, coefficients.data(), {x * h, y * h, dz * h}, h, near);
+                    10 + green(kFmmOrder, coefficients.data(), {x * h, y * h, dz * h}, h, near);
                 size_t const begin = (row * (2 * (n / 2 + 1)) + z) * cache.localCount;
                 for (int component = 0; component < cache.localCount; ++component) {
                     if (!std::isfinite(coefficients[component]) ||

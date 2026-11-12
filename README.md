@@ -159,8 +159,9 @@ selected degrees keep separate CPU/CUDA instantiation units.
 the configured capabilities. See [CMake options](CMAKE_OPTIONS.md) for the full
 reference, defaults, and migration from the retired named physics targets.
 
-PMMM needs `gravity.meshSize`; `gravity.pmmmNearWidth` accepts 1-4 and defaults
-to 2. The near-FMM opening angle is derived as `sqrt(3)/(pmmmNearWidth+1)`.
+PMMM needs `gravity.meshSize`. `gravity.openingAngle` controls both the near FMM
+and the filled-cell near stencil, with default `0.5773502691896257`.
+`gravity.pmmmNearWidth` is retired.
 See [PMMM](docs/pmmm.md) for particle/FFT ownership and solver details.
 
 Use `--gravity.errorInterval=10 --gravity.errorSampleSize=100` to compare the
