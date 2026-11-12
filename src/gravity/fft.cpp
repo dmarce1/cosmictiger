@@ -33,7 +33,6 @@ struct MeshCachePool {
     std::array<MeshCache, kMaxMeshCaches - 1> inactive;
     int requestedMeshSize = 0;
     int baseMeshSize = 0;
-    int coarseMeshSize = 0;
     double openingAngle = 0;
     double byteBudget = 0;
     uint64_t nextUse = 0;
@@ -99,27 +98,21 @@ static double fftWorkspaceBytes(ptrdiff_t sourceAllocation, ptrdiff_t localAlloc
 void initialize(int meshSize) {
     auto const& options = getOptions().gravity;
     int const baseMeshSize = options.meshSize;
-    int const coarseMeshSize =
-        resolvedCoarseMeshSize(options.meshSize, options.pmmmCoarseMeshSize, options.openingAngle);
     if (baseMeshSize < 1 || !(options.openingAngle > 0 && options.openingAngle <= 1) ||
-        coarseMeshSize < 1 || coarseMeshSize > baseMeshSize || baseMeshSize % coarseMeshSize != 0 ||
         !(options.smoothingLength > 0) ||
         options.smoothingLength > nearStencilSupport(baseMeshSize, options.openingAngle) ||
-        meshSize < coarseMeshSize || meshSize > baseMeshSize || baseMeshSize % meshSize != 0 ||
-        meshSize % coarseMeshSize != 0) {
+        meshSize != baseMeshSize) {
         throw std::runtime_error("Invalid PMMM mesh, order, opening angle or softening support");
     }
     if (meshCachePool.baseMeshSize != 0) {
         if (meshCachePool.requestedMeshSize != options.meshSize ||
             meshCachePool.baseMeshSize != baseMeshSize ||
-            meshCachePool.coarseMeshSize != coarseMeshSize ||
             meshCachePool.openingAngle != options.openingAngle) {
             throw std::runtime_error("PMMM configuration changed without destroying its plans");
         }
     } else {
         meshCachePool.requestedMeshSize = options.meshSize;
         meshCachePool.baseMeshSize = baseMeshSize;
-        meshCachePool.coarseMeshSize = coarseMeshSize;
         meshCachePool.openingAngle = options.openingAngle;
     }
     if (cache.communicator != MPI_COMM_NULL && !cache.initialized) {
@@ -154,10 +147,12 @@ void initialize(int meshSize) {
     cache.openingAngle = options.openingAngle;
     cache.sourceCount = fmmMultipoleCoefficientCount(kFmmOrder);
     cache.localCount = fmmLocalHarmonicCoefficientCount(kFmmOrder);
+    cache.sourceStride = cache.sourceCount + 1;
+    cache.localStride = cache.localCount + 1;
     int const n = cache.meshSize;
     uint64_t const limit = std::min(uint64_t(std::numeric_limits<ptrdiff_t>::max()),
                                uint64_t(std::numeric_limits<size_t>::max() / sizeof(double))) /
-        cache.localCount / 2;
+        cache.localStride / 2;
     if (uint64_t(baseMeshSize) > limit / baseMeshSize / baseMeshSize) {
         throw std::runtime_error("PMMM coefficient mesh exceeds indexing/allocation limits");
     }
@@ -197,11 +192,11 @@ void initialize(int meshSize) {
                     std::lock_guard<std::mutex> lock(fftwPlannerMutex());
                     fftwf_mpi_init();
                     cache.sourceAllocation = fftwf_mpi_local_size_many_transposed(3, dimensions,
-                        cache.sourceCount, FFTW_MPI_DEFAULT_BLOCK, FFTW_MPI_DEFAULT_BLOCK,
+                        cache.sourceStride, FFTW_MPI_DEFAULT_BLOCK, FFTW_MPI_DEFAULT_BLOCK,
                         cache.communicator, &cache.localSize, &cache.localBegin,
                         &cache.spectralSize, &cache.spectralBegin);
                     cache.localAllocation =
-                        fftwf_mpi_local_size_many_transposed(3, dimensions, cache.localCount,
+                        fftwf_mpi_local_size_many_transposed(3, dimensions, cache.localStride,
                             FFTW_MPI_DEFAULT_BLOCK, FFTW_MPI_DEFAULT_BLOCK, cache.communicator,
                             &otherSize, &otherBegin, &otherSpectralSize, &otherSpectralBegin);
                     if (meshCachePool.byteBudget == 0) {
@@ -214,11 +209,11 @@ void initialize(int meshSize) {
                             ptrdiff_t ignoredSize = 0, ignoredBegin = 0, ignoredSpectralSize = 0,
                                       ignoredSpectralBegin = 0;
                             baseSourceAllocation = fftwf_mpi_local_size_many_transposed(3,
-                                baseDimensions, cache.sourceCount, FFTW_MPI_DEFAULT_BLOCK,
+                                baseDimensions, cache.sourceStride, FFTW_MPI_DEFAULT_BLOCK,
                                 FFTW_MPI_DEFAULT_BLOCK, cache.communicator, &ignoredSize,
                                 &ignoredBegin, &ignoredSpectralSize, &ignoredSpectralBegin);
                             baseLocalAllocation = fftwf_mpi_local_size_many_transposed(3,
-                                baseDimensions, cache.localCount, FFTW_MPI_DEFAULT_BLOCK,
+                                baseDimensions, cache.localStride, FFTW_MPI_DEFAULT_BLOCK,
                                 FFTW_MPI_DEFAULT_BLOCK, cache.communicator, &ignoredSize,
                                 &ignoredBegin, &ignoredSpectralSize, &ignoredSpectralBegin);
                         }
@@ -240,7 +235,7 @@ void initialize(int meshSize) {
                 double const localBytes[3] = {
                     fftWorkspaceBytes(cache.sourceAllocation, cache.localAllocation),
                     fftWorkspaceBytes(baseSourceAllocation, baseLocalAllocation),
-                    sizeof(double) * double(cache.cellCount()) * cache.sourceCount};
+                    sizeof(double) * double(cache.cellCount()) * cache.sourceStride};
                 double totalBytes[3]{};
                 mpiCheck(MPI_Allreduce(
                              localBytes, totalBytes, 3, MPI_DOUBLE, MPI_SUM, cache.communicator),
@@ -289,26 +284,26 @@ void initialize(int meshSize) {
                         // mode uses serial interleaved batch plans (the identity),
                         // with the same coefficient layout and execution path.
                         int const dimensions[3] = {1, 1, 1};
-                        cache.forward = fftwf_plan_many_dft_r2c(3, dimensions, cache.sourceCount,
-                            cache.sourceReal, nullptr, cache.sourceCount, 1, cache.sourceSpectrum,
-                            nullptr, cache.sourceCount, 1, FFTW_ESTIMATE);
+                        cache.forward = fftwf_plan_many_dft_r2c(3, dimensions, cache.sourceStride,
+                            cache.sourceReal, nullptr, cache.sourceStride, 1, cache.sourceSpectrum,
+                            nullptr, cache.sourceStride, 1, FFTW_ESTIMATE);
                         cache.greenForward = fftwf_plan_many_dft_r2c(3, dimensions,
-                            cache.localCount, cache.localReal, nullptr, cache.localCount, 1,
-                            cache.greenSpectrum, nullptr, cache.localCount, 1, FFTW_ESTIMATE);
-                        cache.inverse = fftwf_plan_many_dft_c2r(3, dimensions, cache.localCount,
-                            cache.localSpectrum, nullptr, cache.localCount, 1, cache.localReal,
-                            nullptr, cache.localCount, 1, FFTW_ESTIMATE);
+                            cache.localStride, cache.localReal, nullptr, cache.localStride, 1,
+                            cache.greenSpectrum, nullptr, cache.localStride, 1, FFTW_ESTIMATE);
+                        cache.inverse = fftwf_plan_many_dft_c2r(3, dimensions, cache.localStride,
+                            cache.localSpectrum, nullptr, cache.localStride, 1, cache.localReal,
+                            nullptr, cache.localStride, 1, FFTW_ESTIMATE);
                     } else {
                         cache.forward = fftwf_mpi_plan_many_dft_r2c(3, realDimensions,
-                            cache.sourceCount, FFTW_MPI_DEFAULT_BLOCK, FFTW_MPI_DEFAULT_BLOCK,
+                            cache.sourceStride, FFTW_MPI_DEFAULT_BLOCK, FFTW_MPI_DEFAULT_BLOCK,
                             cache.sourceReal, cache.sourceSpectrum, cache.communicator,
                             FFTW_ESTIMATE | FFTW_MPI_TRANSPOSED_OUT);
                         cache.greenForward = fftwf_mpi_plan_many_dft_r2c(3, realDimensions,
-                            cache.localCount, FFTW_MPI_DEFAULT_BLOCK, FFTW_MPI_DEFAULT_BLOCK,
+                            cache.localStride, FFTW_MPI_DEFAULT_BLOCK, FFTW_MPI_DEFAULT_BLOCK,
                             cache.localReal, cache.greenSpectrum, cache.communicator,
                             FFTW_ESTIMATE | FFTW_MPI_TRANSPOSED_OUT);
                         cache.inverse = fftwf_mpi_plan_many_dft_c2r(3, realDimensions,
-                            cache.localCount, FFTW_MPI_DEFAULT_BLOCK, FFTW_MPI_DEFAULT_BLOCK,
+                            cache.localStride, FFTW_MPI_DEFAULT_BLOCK, FFTW_MPI_DEFAULT_BLOCK,
                             cache.localSpectrum, cache.localReal, cache.communicator,
                             FFTW_ESTIMATE | FFTW_MPI_TRANSPOSED_IN);
                     }
@@ -393,14 +388,15 @@ void initializeGreen() {
             FlopCount flops = 0;
             int const x = signedIndex(int(row / n + cache.localBegin));
             int const y = signedIndex(int(row % n));
-            std::vector<double> coefficients(cache.localCount);
+            std::vector<double> coefficients(cache.localStride);
             for (int z = 0; z < n; ++z) {
                 int const dz = signedIndex(z);
                 bool const near = nearCellOffset(x, y, dz, cache.openingAngle);
                 flops +=
                     10 + green(kFmmOrder, coefficients.data(), {x * h, y * h, dz * h}, h, near);
-                size_t const begin = (row * (2 * (n / 2 + 1)) + z) * cache.localCount;
-                for (int component = 0; component < cache.localCount; ++component) {
+                coefficients[cache.localCount] = near ? 0.0 : (4 * std::numbers::pi / 3) * h * h;
+                size_t const begin = (row * (2 * (n / 2 + 1)) + z) * cache.localStride;
+                for (int component = 0; component < cache.localStride; ++component) {
                     if (!std::isfinite(coefficients[component]) ||
                         std::abs(coefficients[component]) > std::numeric_limits<float>::max()) {
                         throw std::runtime_error("PMMM Green coefficient is not representable");
@@ -433,7 +429,7 @@ void transform() {
             background[1] += moments[3];
             background[2] += moments[1];
             background[3] += moments[2];
-            size_t const padded = ((cell / n) * (2 * (n / 2 + 1)) + cell % n) * cache.sourceCount;
+            size_t const padded = ((cell / n) * (2 * (n / 2 + 1)) + cell % n) * cache.sourceStride;
             for (int component = 0; component < cache.sourceCount; ++component) {
                 if (!std::isfinite(moments[component]) ||
                     std::abs(moments[component]) > std::numeric_limits<float>::max()) {
@@ -441,11 +437,12 @@ void transform() {
                 }
                 cache.sourceReal[padded + component] = moments[component];
             }
+            cache.sourceReal[padded + cache.sourceCount] = state.radialTraces[cell];
         }
         background[4] = state.radialTrace;
         state.diagnostics.depositedMass = background[0];
         // Four background sums and one double-to-float conversion per source coefficient.
-        addCpuFlops(FlopCount(cache.cellCount()) * (4 + cache.sourceCount), FlopPrecision::Double);
+        addCpuFlops(FlopCount(cache.cellCount()) * (5 + cache.sourceCount), FlopPrecision::Double);
     });
     hpx::run_as_os_thread(hpx::annotated_function(
                               [&]() {
@@ -466,29 +463,49 @@ void transform() {
         size_t const modes = size_t(cache.spectralSize) * n * (n / 2 + 1);
         parallelFor(modes, "gravity.pmmm.contractFourier", [&](size_t mode) {
             // Complexify the real spherical bilinear map. No Fourier conjugation.
-            std::array<double, kFmmLocalCoefficients> real{};
-            std::array<double, kFmmLocalCoefficients> imaginary{};
+            std::array<double, kFmmLocalCoefficients + 1> real{};
+            std::array<double, kFmmLocalCoefficients + 1> imaginary{};
             for (auto const& term : cache.terms) {
-                auto const& source = cache.sourceSpectrum[mode * cache.sourceCount + term.source];
-                auto const& kernel = cache.greenSpectrum[mode * cache.localCount + term.green];
+                auto const& source = cache.sourceSpectrum[mode * cache.sourceStride + term.source];
+                auto const& kernel = cache.greenSpectrum[mode * cache.localStride + term.green];
                 pm::detail::accumulateFourierTerm(real[term.local], imaginary[term.local],
                     term.weight, double(source[0]), double(source[1]), double(kernel[0]),
                     double(kernel[1]));
             }
-            for (int component = 0; component < cache.localCount; ++component) {
+            // The background uses the same far mask as every harmonic coefficient.
+            // beta*M supplies local curvature; beta*dipoles and beta*Tr(Q)
+            // restore the non-harmonic source contractions (derived).
+            auto const& backgroundKernel =
+                cache.greenSpectrum[mode * cache.localStride + cache.localCount];
+            auto backgroundTerm = [&](int local, int source, double weight) {
+                auto const& value = cache.sourceSpectrum[mode * cache.sourceStride + source];
+                pm::detail::accumulateFourierTerm(real[local], imaginary[local], weight,
+                    double(value[0]), double(value[1]), double(backgroundKernel[0]),
+                    double(backgroundKernel[1]));
+            };
+            backgroundTerm(cache.localCount, 0, 1.0);
+            backgroundTerm(3, 3, -2.0);
+            backgroundTerm(1, 1, -2.0);
+            backgroundTerm(2, 2, -1.0);
+            if (kFmmOrder >= 4) {
+                backgroundTerm(0, cache.sourceCount, -0.5);
+            }
+            for (int component = 0; component < cache.localStride; ++component) {
                 if (!std::isfinite(real[component]) || !std::isfinite(imaginary[component]) ||
                     std::max(std::abs(real[component]), std::abs(imaginary[component])) >
                         std::numeric_limits<float>::max()) {
                     throw std::runtime_error("PMMM Fourier contraction is not representable");
                 }
-                auto& value = cache.localSpectrum[mode * cache.localCount + component];
+                auto& value = cache.localSpectrum[mode * cache.localStride + component];
                 value[0] = real[component];
                 value[1] = imaginary[component];
             }
         });
         // Each contraction promotes four FFT coefficients; each result stores two floats.
         addCpuFlops(FlopCount(modes) *
-                ((pm::detail::kFourierTermFlops + 4) * cache.terms.size() + 2 * cache.localCount),
+                ((pm::detail::kFourierTermFlops + 4) *
+                        (cache.terms.size() + 4 + int(kFmmOrder >= 4)) +
+                    2 * cache.localStride),
             FlopPrecision::Double);
     });
     hpx::run_as_os_thread(hpx::annotated_function([]() { fftwf_execute(cache.inverse); },
@@ -523,6 +540,7 @@ void destroy() {
     meshCachePool = MeshCachePool{};
     state.cells.clear();
     state.moments.clear();
+    state.radialTraces.clear();
     state.ownedCells.clear();
     state.sourceCells.clear();
     state.sourceCellsByKey.clear();

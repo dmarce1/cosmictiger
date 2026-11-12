@@ -121,9 +121,9 @@ def read_prefix(data):
                 "checkpoint algorithm and integrator flags disagree")
     if flags & (1 << 17):
         version = reader.take("Q")[0]
-        require(version in (1, 2, 3, 4, 5, 6, 7), "unsupported PMMM checkpoint version")
-        result.pmmm = (version, *reader.take("Q", {1: 6, 2: 7, 3: 9, 4: 10, 5: 10, 6: 10, 7: 10}[version]))
-        if version == 7:
+        require(version in (1, 2, 3, 4, 5, 6, 7, 8, 9), "unsupported PMMM checkpoint version")
+        result.pmmm = (version, *reader.take("Q", {1: 6, 2: 7, 3: 9, 4: 10, 5: 10, 6: 10, 7: 10, 8: 10, 9: 10}[version]))
+        if version in (7, 9):
             count = reader.take("Q")[0]
             result.opening_schedule_start = reader.take("d")[0]
             result.opening_schedule = reader.take("d", 2 * count)

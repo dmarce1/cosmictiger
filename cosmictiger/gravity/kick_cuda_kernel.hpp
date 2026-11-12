@@ -26,6 +26,7 @@
 #include <cosmictiger/gravity/kernels/cartesian_tracefree_operators.hpp>
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/kick_cuda.hpp>
+#include <cosmictiger/gravity/periodic_fmm_cuda.hpp>
 #include <cosmictiger/gravity/softening.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
@@ -51,7 +52,7 @@ template <int order>
 __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKickData const& data,
     cosmictiger::gravity::cartesian::Expansion<float> const& lValue2, TreeNode const& self,
     CudaKickForceTile const& force, int sinkBegin, int sinkCount, ParticleInteger outputOffset,
-    FmmGeometry const& geometry) {
+    FmmGeometry const& geometry, float curvature) {
     int const& tid = threadIdx.x;
     auto& allPhi = data.pot;
     auto& allGx = data.gx;
@@ -112,6 +113,12 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
             unwrappedDistance(sinkZ[i], self.pos[kZi]);
         doubleFlops += geometry.frozenMembership ? 3 : 0;
         cosmictiger::gravity::cartesian::L2P(lValue2, fmmScaleDisplacement(dx), params.doPhi, l2);
+        float const z = kScaleFactor * dx[kZi];
+        l2.accelerationZ() -= curvature * z;
+        if (params.doPhi) {
+            l2.potential() += .5f * curvature * z * z;
+        }
+        flops += params.doPhi ? 7 : 3;
         float gx = force.gx[i];
         float gy = force.gy[i];
         float gz = force.gz[i];
@@ -440,6 +447,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
     auto& sparams = control.params;
     auto& ancestors = control.ancestors;
     auto& dchecks = control.dchecks;
+    auto& echecks = control.echecks;
     auto& nextlist = control.nextlist;
     auto& bothlist = control.bothlist;
     auto& cclist = control.cclist;
@@ -478,10 +486,16 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
         FmmGeometry const geometry = params[index].geometry;
         ancestors.resize(0);
         dchecks.resize(0);
+        echecks.resize(0);
+        float curvature = params[index].curvature;
         sparams.resize(0);
         detail::cudaCopyExpansion<order>(&expansion[0], &params[index].lValue[0]);
         if (tid < kDimensions) {
             expansionPos[tid] = params[index].lpos[tid];
+        }
+        echecks.resize(params[index].ecount);
+        for (int i = tid; i < params[index].ecount; i += kWarpSize) {
+            echecks[i] = params[index].echecks[i];
         }
         dchecks.resize(params[index].dcount);
         for (int i = tid; i < params[index].dcount; i += kWarpSize) {
@@ -519,6 +533,16 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                     auto* Lo = scratch;
                     cosmictiger::gravity::cartesian::L2LWarpInto(
                         Li, fmmScaleDisplacement(dx), globalParams.doPhi, Lo);
+                    if (tid == 0) {
+                        float const z = kScaleFactor * dx[kZi];
+                        scratch[cosmictiger::gravity::cartesian::Expansion<float>::index(
+                            0, 0, 1)] += curvature * z;
+                        if (globalParams.doPhi) {
+                            scratch[0] += .5f * curvature * z * z;
+                        }
+                        flops += globalParams.doPhi ? 7 : 3;
+                    }
+                    __syncwarp();
                     detail::cudaCopyExpansion<order>(&expansion[0], scratch);
                     if (tid < kDimensions) {
                         expansionPos[tid] = self.pos[tid];
@@ -531,6 +555,8 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                                 fmmLocalDegree(order)>;
                     }
                 }
+                flops += detail::cudaPeriodicFmm(data, self, control, globalParams.theta,
+                    smoothingLength, globalParams.doPhi, expansion, curvature);
                 ParticleInteger const numberOfSinks =
                     self.particleRange.second - self.particleRange.first;
                 if (numberOfSinks) {
@@ -595,6 +621,13 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                                         flops += 2 + int(acceptance.particleCell) +
                                             int(acceptance.cellParticle);
                                     }
+                                    bool allowPairCost = true;
+                                    if (geometry.periodicNear && self.leaf && other.leaf &&
+                                        acceptance.cellCell) {
+                                        allowPairCost = detail::periodicFmmSingleImage(
+                                            dx, self.radius, other.radius);
+                                        flops += 7;
+                                    }
                                     auto const interaction = selectFmmInteraction(
                                         bool(acceptance.cellCell), bool(acceptance.particleCell),
                                         bool(acceptance.cellParticle), self.leaf, other.leaf,
@@ -602,8 +635,9 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                                         int(other.numberOfParticles()),
                                         FmmHybridCost<order>::kHybridPerParticle_,
                                         FmmHybridCost<order>::kParticlePair_,
-                                        geometry.meshSize > 0 ? FmmHybridCost<order>::kCellCell_ :
-                                                                0.0f);
+                                        geometry.meshSize > 0 && allowPairCost ?
+                                            FmmHybridCost<order>::kCellCell_ :
+                                            0.0f);
                                     sw[kCc] = interaction == FmmInteraction::CellCell;
                                     sw[kPc] = interaction == FmmInteraction::ParticleCell;
                                     sw[kCp] = interaction == FmmInteraction::CellParticle;
@@ -701,9 +735,11 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                             }
                             __syncwarp();
                             work.next(profile::DevicePhase::KickLeafKick);
-                            interactionFlops +=
-                                doKick<order>(kr, globalParams, data, expansion, self, force,
-                                    sinkBegin, sinkCount, params[index].outputOffset, geometry);
+                            flops += detail::cudaPeriodicPoints(data, self, control, force,
+                                sinkBegin, sinkCount, globalParams.doPhi);
+                            interactionFlops += doKick<order>(kr, globalParams, data, expansion,
+                                self, force, sinkBegin, sinkCount, params[index].outputOffset,
+                                geometry, curvature);
                             // The next tile reinitializes the force planes.
                             __syncwarp();
                         }
@@ -755,6 +791,11 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                         ancestors[top].pos[tid] = expansionPos[tid];
                     }
                     __syncwarp();
+                    if (tid == 0) {
+                        ancestors[top].curvature = curvature;
+                    }
+                    __syncwarp();
+                    echecks.pushTop();
                     dchecks.pushTop();
                     if (tid == 0) {
                         sparams.back().phase += 1;
@@ -778,7 +819,9 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                     expansionPos[tid] = ancestors[top].pos[tid];
                 }
                 __syncwarp();
+                curvature = ancestors[top].curvature;
                 ancestors.popBack();
+                echecks.popTop();
                 dchecks.popTop();
                 if (tid == 0) {
                     sparams.back().phase += 1;

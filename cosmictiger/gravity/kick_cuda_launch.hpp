@@ -415,7 +415,7 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
     static size_t listSlabSize = 0;
     int dcount = 0;
     for (int i = 0; i < workitems.size(); i++) {
-        dcount += workitems[i].dchecklist.size();
+        dcount += workitems[i].dchecklist.size() + workitems[i].echecklist.size();
     }
     size_t const packetSize = sizeof(int) + sizeof(Parameters) * workitems.size() +
         sizeof(KickReturn) + sizeof(int) * dcount;
@@ -488,12 +488,17 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
     *currentIndex = 0;
     *result = KickReturn();
     Vector<int> dindices(workitems.size() + 1);
+    Vector<int> eindices(workitems.size());
     dcount = 0;
     for (int i = 0; i < workitems.size(); i++) {
         dindices[i] = dcount;
         for (int j = 0; j < workitems[i].dchecklist.size(); j++) {
             dchecks[dcount] = workitems[i].dchecklist[j].index;
             dcount++;
+        }
+        eindices[i] = dcount;
+        for (auto const id : workitems[i].echecklist) {
+            dchecks[dcount++] = id.index;
         }
     }
 
@@ -551,7 +556,10 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
         params.lValue = workitems[i].l.expansion();
         params.self = workitems[i].self.index;
         params.dchecks = devDchecks + dindices[i];
-        params.dcount = dindices[i + 1] - dindices[i];
+        params.dcount = eindices[i] - dindices[i];
+        params.echecks = devDchecks + eindices[i];
+        params.ecount = dindices[i + 1] - eindices[i];
+        params.curvature = workitems[i].l.curvature;
         ikickParams[i] = std::move(params);
     }
     cudaSetDevice();

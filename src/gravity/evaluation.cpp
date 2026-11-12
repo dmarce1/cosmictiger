@@ -50,7 +50,6 @@ void consumeField(ParticleInteger index, std::array<double, 4> const& field, Kic
 void evaluateFar() {
     int const n = cache.meshSize;
     double const h = 1.0 / n;
-    double const localTrace = (4 * std::numbers::pi / 3) * h * h * state.background[0];
     double const gm = getOptions().gravity.gm;
     double const scale = state.request.scale;
     double const eta = state.request.eta;
@@ -62,6 +61,7 @@ void evaluateFar() {
         auto const& cell = state.cells[cellIndex];
         auto const center = coordinates(cell.key);
         auto const coefficients = localExpansion(cell.key);
+        double const localTrace = coefficients.back();
         KickReturn result;
         FlopCount flops = 0;
         {

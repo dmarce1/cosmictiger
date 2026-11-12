@@ -115,14 +115,15 @@ KickReturn localBatchGpu(KickParameters params, Vector<KickWorkitem> workitems,
 /// Dispatch a local tree walk with bounded asynchronous branching and a synchronous
 /// fallback.
 hpx::future<KickReturn> localBatchFork(KickParameters params, ExpansionBuffer const& l,
-    Vector3<Position> pos, TreeId self, Vector<TreeId> direct,
+    Vector3<Position> pos, TreeId self, Vector<TreeId> direct, Vector<TreeId> periodic,
     std::shared_ptr<KickWorkspace> workspace, bool threadme) {
     ALWAYS_ASSERT(self.proc == hpxRank());
-    auto run = [params, l, pos, self, workspace](Vector<TreeId> direct) {
+    auto run = [params, l, pos, self, workspace](Vector<TreeId> direct, Vector<TreeId> periodic) {
         KickContext context;
         context.fork = localBatchFork;
         context.gpuExecutor = localBatchGpu;
-        return kickTreeWalk(params, l, pos, self, std::move(direct), workspace, context);
+        return kickTreeWalk(
+            params, l, pos, self, std::move(direct), std::move(periodic), workspace, context);
     };
     static std::atomic<int> threads{1};
     bool const eligible = threadme && treeGetNode(self)->numberOfParticles() > kMinKickThreadParts;
@@ -132,7 +133,8 @@ hpx::future<KickReturn> localBatchFork(KickParameters params, ExpansionBuffer co
         if (threads.fetch_add(1) < maximumThreads) {
             try {
                 return hpx::async(hpx::annotated_function(
-                                      [run = std::move(run)](Vector<TreeId> direct) mutable {
+                                      [run = std::move(run)](
+                                          Vector<TreeId> direct, Vector<TreeId> periodic) mutable {
                                           struct ThreadCountGuard {
                                               /// Release
                                               /// the
@@ -144,10 +146,10 @@ hpx::future<KickReturn> localBatchFork(KickParameters params, ExpansionBuffer co
                                                   --threads;
                                               }
                                           } guard;
-                                          return run(std::move(direct));
+                                          return run(std::move(direct), std::move(periodic));
                                       },
                                       "gravity.pmmm.kickBatchWalk"),
-                    std::move(direct));
+                    std::move(direct), std::move(periodic));
             } catch (...) {
                 --threads;
                 throw;
@@ -156,7 +158,7 @@ hpx::future<KickReturn> localBatchFork(KickParameters params, ExpansionBuffer co
         --threads;
     }
     hpxYield();
-    return hpx::make_ready_future(run(std::move(direct)));
+    return hpx::make_ready_future(run(std::move(direct), std::move(periodic)));
 }
 }    // namespace detail
 /// Validate and execute a batch of cell-tree sinks and return fields, kick results, and
@@ -227,8 +229,9 @@ FmmForceResult kickCellBatch(Vector<KickWorkitem> workitems, bool doPotential, i
         for (auto& item : workitems) {
             params.geometry = item.geometry;
             params.outputOffset = item.outputOffset;
-            futures.push_back(detail::localBatchFork(
-                params, item.l, item.pos, item.self, std::move(item.dchecklist), workspace, true));
+            auto periodic = item.geometry.periodicNear ? item.dchecklist : Vector<TreeId>{};
+            futures.push_back(detail::localBatchFork(params, item.l, item.pos, item.self,
+                std::move(item.dchecklist), std::move(periodic), workspace, true));
         }
         hpx::wait_all(futures.begin(), futures.end());
         for (auto& future : futures) {

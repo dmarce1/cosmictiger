@@ -24,6 +24,10 @@ public:
     using value_type = double;
 
     CountingReal() = default;
+    // Exercise the generated coefficient storage for nontrivial scalar types.
+    CountingReal(CountingReal const& other)
+      : value_(other.value_) {}
+    CountingReal& operator=(CountingReal const&) = default;
     template <class Value, std::enable_if_t<std::is_arithmetic_v<Value>, int> = 0>
     CountingReal(Value value)
       : value_(value) {}

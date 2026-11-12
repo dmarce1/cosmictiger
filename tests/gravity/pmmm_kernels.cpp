@@ -19,7 +19,9 @@
 #include <gtest/gtest.h>
 
 #include <cosmictiger/gravity/fmm_order.hpp>
+#include <cosmictiger/gravity/kernels/cartesian_tracefree_operators.hpp>
 #include <cosmictiger/gravity/mesh_size.hpp>
+#include <cosmictiger/gravity/periodic_fmm.hpp>
 #include <cosmictiger/gravity/pmmm_kernels.hpp>
 #include <cosmictiger/math/vector3.hpp>
 
@@ -32,6 +34,7 @@ void cosmictigerAssert(char const* condition, bool satisfied, char const* file, 
     }
 }
 
+#include "periodic_reference.hpp"
 #include "pmmm_reference.hpp"
 
 namespace pmmm_test {
@@ -144,112 +147,20 @@ TEST(PmmmMeshSize, RecognizesAndRoundsToPowersOfTwo) {
     EXPECT_THROW(nextPowerOfTwo((1 << 30) + 1), std::overflow_error);
 }
 
-TEST(PmmmMeshSize, MinimumSidesKeepPeriodicNearCellsDistinct) {
-    using pmmm::detail::minimumMeshSize;
-    EXPECT_EQ(minimumMeshSize(64, 1.0), 4);
-    EXPECT_EQ(minimumMeshSize(64, 0.6), 8);
-    EXPECT_EQ(minimumMeshSize(64, 0.4), 16);
-    EXPECT_EQ(minimumMeshSize(7, 1.e-30), 7);
-    EXPECT_THROW(minimumMeshSize(64, 0), std::invalid_argument);
-    EXPECT_THROW(minimumMeshSize(64, 1.1), std::invalid_argument);
-}
-
-TEST(PmmmMeshSize, ResolvesTheDefaultCoarseMesh) {
-    using pmmm::detail::resolvedCoarseMeshSize;
-    // The default is eight times coarser per axis, floored at the near minimum.
-    EXPECT_EQ(resolvedCoarseMeshSize(64, 0, 0.6), 8);
-    EXPECT_EQ(resolvedCoarseMeshSize(128, 0, 0.6), 16);
-    EXPECT_EQ(resolvedCoarseMeshSize(8, 0, 0.6), 8);
-    EXPECT_EQ(resolvedCoarseMeshSize(16, 0, 1.0), 4);
-    EXPECT_EQ(resolvedCoarseMeshSize(32, 0, 1.0), 4);
-    EXPECT_EQ(resolvedCoarseMeshSize(64, 0, 1.0), 8);
-    EXPECT_EQ(resolvedCoarseMeshSize(16, 0, 0.4), 16);
-    // Explicit values pass through; the option layer validates them.
-    EXPECT_EQ(resolvedCoarseMeshSize(64, 16, 0.6), 16);
-    EXPECT_EQ(resolvedCoarseMeshSize(64, 3, 0.6), 3);
-    // An unset or invalid full mesh has no coarse mesh.
-    EXPECT_EQ(resolvedCoarseMeshSize(0, 0, 0.6), 0);
-    EXPECT_EQ(resolvedCoarseMeshSize(12, 0, 0.6), 12);
-    EXPECT_EQ(resolvedCoarseMeshSize(1, 0, 0.6), 1);
-    EXPECT_EQ(resolvedCoarseMeshSize(7, 0, 0.6), 7);
-    EXPECT_EQ(resolvedCoarseMeshSize(30, 0, 0.6), 10);
-    EXPECT_EQ(resolvedCoarseMeshSize(120, 0, 0.6), 15);
-}
-
-TEST(PmmmMeshSize, LocalityCountsNeedEnoughCoarseCellsPerAxis) {
-    using pmmm::detail::minimumCoarseMeshSizeForLocalities;
-    EXPECT_EQ(minimumCoarseMeshSizeForLocalities(1), 1);
-    EXPECT_EQ(minimumCoarseMeshSizeForLocalities(2), 2);
-    EXPECT_EQ(minimumCoarseMeshSizeForLocalities(4), 2);
-    EXPECT_EQ(minimumCoarseMeshSizeForLocalities(8), 2);
-    EXPECT_EQ(minimumCoarseMeshSizeForLocalities(16), 4);
-    EXPECT_EQ(minimumCoarseMeshSizeForLocalities(64), 4);
-    EXPECT_EQ(minimumCoarseMeshSizeForLocalities(128), 8);
-    EXPECT_EQ(minimumCoarseMeshSizeForLocalities(512), 8);
-    EXPECT_EQ(minimumCoarseMeshSizeForLocalities(4096), 16);
-    EXPECT_THROW(minimumCoarseMeshSizeForLocalities(0), std::invalid_argument);
-    EXPECT_THROW(minimumCoarseMeshSizeForLocalities(3), std::invalid_argument);
-    EXPECT_THROW(minimumCoarseMeshSizeForLocalities(6), std::invalid_argument);
-}
-
-TEST(PmmmMeshSize, ScalesCellVolumeWithTheActiveFraction) {
-    auto const meshSize = pmmm::detail::hierarchicalMeshSize;
-    EXPECT_EQ(meshSize(32, 4, 1, 1), 32);
-    EXPECT_EQ(meshSize(32, 4, 1, 8), 16);
-    EXPECT_EQ(meshSize(32, 4, 1, 64), 8);
-    EXPECT_EQ(meshSize(32, 4, 1, 512), 4);
-    EXPECT_EQ(meshSize(32, 4, 1, 4096), 4);
-    EXPECT_EQ(meshSize(32, 4, 0, 100), 4);
-    EXPECT_EQ(meshSize(32, 4, 0, 0), 4);
-    EXPECT_EQ(meshSize(32, 32, 1, 4096), 32);
-    EXPECT_EQ(meshSize(32, 8, 1, 4096), 8);
-    // An exact one-eighth fraction fits the half-side mesh; one more particle does not.
-    EXPECT_EQ(meshSize(16, 8, 1, 8), 8);
-    EXPECT_EQ(meshSize(16, 8, 1, 7), 16);
-    EXPECT_EQ(meshSize(16, 8, 2, 16), 8);
-    EXPECT_EQ(meshSize(16, 8, 3, 16), 16);
-    EXPECT_EQ(meshSize(8, 8, 3, 7), 8);
-    for (int base : {8, 16, 32, 64, 128}) {
-        for (int coarse = 4; coarse <= base; coarse *= 2) {
-            for (uint64_t active = 1; active <= 64; ++active) {
-                int const side = meshSize(base, coarse, active, 64);
-                ASSERT_TRUE(pmmm::detail::isPowerOfTwo(side));
-                ASSERT_GE(side, coarse);
-                ASSERT_LE(side, base);
-                auto const cube = [](uint64_t value) { return value * value * value; };
-                ASSERT_GE(cube(side) * 64, cube(base) * active);
-                ASSERT_TRUE(side == coarse || cube(side / 2) * 64 < cube(base) * active)
-                    << "base=" << base << " coarse=" << coarse << " active=" << active;
-            }
-        }
-    }
-}
-
-TEST(PmmmMeshSize, ArbitrarySidesKeepStageBoundariesAligned) {
-    auto const select = pmmm::detail::hierarchicalMeshSize;
-    EXPECT_EQ(select(1, 1, 1, 1), 1);
-    EXPECT_EQ(select(11, 11, 1, 1000), 11);
-    EXPECT_EQ(select(30, 5, 1, 8), 15);
-    EXPECT_EQ(select(30, 5, 1, 27), 10);
-    for (int base : {1, 2, 3, 5, 6, 7, 11, 12, 30, 60}) {
-        for (int coarse = 1; coarse <= base; ++coarse) {
-            if (base % coarse != 0) {
-                continue;
-            }
-            for (uint64_t active = 0; active <= 64; ++active) {
-                int const side = select(base, coarse, active, 64);
-                EXPECT_EQ(base % side, 0);
-                EXPECT_EQ(side % coarse, 0);
-                EXPECT_GE(uint64_t(side) * side * side * 64, uint64_t(base) * base * base * active);
-                for (int smaller = coarse; smaller < side; smaller += coarse) {
-                    if (base % smaller == 0) {
-                        EXPECT_LT(uint64_t(smaller) * smaller * smaller * 64,
-                            uint64_t(base) * base * base * active);
-                    }
-                }
-            }
-        }
-    }
+TEST(PmmmMeshSize, LocalityCountsNeedEnoughCellsPerAxis) {
+    using pmmm::detail::minimumMeshSizeForLocalities;
+    EXPECT_EQ(minimumMeshSizeForLocalities(1), 1);
+    EXPECT_EQ(minimumMeshSizeForLocalities(2), 2);
+    EXPECT_EQ(minimumMeshSizeForLocalities(4), 2);
+    EXPECT_EQ(minimumMeshSizeForLocalities(8), 2);
+    EXPECT_EQ(minimumMeshSizeForLocalities(16), 4);
+    EXPECT_EQ(minimumMeshSizeForLocalities(64), 4);
+    EXPECT_EQ(minimumMeshSizeForLocalities(128), 8);
+    EXPECT_EQ(minimumMeshSizeForLocalities(512), 8);
+    EXPECT_EQ(minimumMeshSizeForLocalities(4096), 16);
+    EXPECT_THROW(minimumMeshSizeForLocalities(0), std::invalid_argument);
+    EXPECT_THROW(minimumMeshSizeForLocalities(3), std::invalid_argument);
+    EXPECT_THROW(minimumMeshSizeForLocalities(6), std::invalid_argument);
 }
 
 TEST(PmmmMeshSize, OpeningStencilMatchesFilledCellSpheres) {
@@ -332,30 +243,6 @@ TEST(PmmmMeshSize, NearOffsetsVisitEachPeriodicCellOnce) {
             EXPECT_EQ(count, std::min(side, 2 * width + 1));
         }
     }
-}
-
-TEST(PmmmMeshSize, ResolvesCubeBoundariesWithLargeParticleCounts) {
-    constexpr uint64_t kTotal = uint64_t(1) << 63;
-    constexpr uint64_t kEighth = kTotal / 8;
-    constexpr uint64_t kMaximum = std::numeric_limits<uint64_t>::max();
-    auto const meshSize = pmmm::detail::hierarchicalMeshSize;
-    EXPECT_EQ(meshSize(32, 4, kEighth - 1, kTotal), 16);
-    EXPECT_EQ(meshSize(32, 4, kEighth, kTotal), 16);
-    EXPECT_EQ(meshSize(32, 4, kEighth + 1, kTotal), 32);
-    EXPECT_EQ(meshSize(32, 4, kMaximum, kMaximum), 32);
-    EXPECT_EQ(meshSize(32, 4, kMaximum / 8, kMaximum), 16);
-    EXPECT_EQ(meshSize(32, 4, kMaximum / 512, kMaximum), 4);
-}
-
-TEST(PmmmMeshSize, RejectsInvalidGeometryAndCounts) {
-    auto const meshSize = pmmm::detail::hierarchicalMeshSize;
-    EXPECT_EQ(meshSize(12, 4, 1, 1), 12);
-    EXPECT_THROW(meshSize(16, 3, 1, 1), std::invalid_argument);
-    EXPECT_THROW(meshSize(16, 32, 1, 1), std::invalid_argument);
-    EXPECT_THROW(meshSize(16, 0, 1, 1), std::invalid_argument);
-    EXPECT_THROW(meshSize(0, 0, 0, 0), std::invalid_argument);
-    EXPECT_THROW(meshSize(16, 8, 2, 1), std::invalid_argument);
-    EXPECT_THROW(meshSize(1 << 22, 4, 1, 1), std::invalid_argument);
 }
 
 TEST(PmmmKernels, MomentsUseNegativeCellOffsetAndAccumulate) {
@@ -479,46 +366,87 @@ TEST(PmmmKernels, FourierProductsMatchDirectPeriodicCellConvolution) {
     }
 }
 
-TEST(PmmmKernels, GreenNearExclusionParityOriginAndCellScaling) {
-    detail::Point const point{0.25, -0.125, 0.375};
-    detail::Point const negative{-point[0], -point[1], -point[2]};
+TEST(PmmmKernels, GreenNearExcludesEntirePeriodicKernel) {
     constexpr double kCellWidth = 0.125;
-    double const radius = std::hypot(point[0], point[1], point[2]);
-    for (int order = kFmmOrder; order <= kFmmOrder; ++order) {
-        int const degree = order - 1;
-        std::vector<double> full(order * order), near(order * order), opposite(order * order),
-            scaled(order * order), origin(order * order);
-        pmmm::green(order, full.data(), point, kCellWidth, false);
-        pmmm::green(order, near.data(), point, kCellWidth, true);
-        pmmm::green(order, opposite.data(), negative, kCellWidth, true);
-        pmmm::green(order, scaled.data(), point, 2 * kCellWidth, true);
-        pmmm::green(order, origin.data(), {0, 0, 0}, kCellWidth, true);
-        auto const regular = detail::regular(degree, point);
-        EXPECT_NEAR(origin[0], 2.8372974794806195, 2e-13);
-        EXPECT_GT(std::abs(near[0]), 0.01);
-        for (int rank = 0; rank <= degree; ++rank) {
-            for (int mode = 0; mode <= rank; ++mode) {
-                double const factor = (rank % 2 == 0 ? -1.0 : 1.0) *
-                    detail::factorial(rank - mode) * detail::factorial(rank + mode) *
-                    std::pow(kCellWidth, rank) / std::pow(radius, 2 * rank + 1);
-                auto const primary = factor * regular[detail::index(rank, mode)];
-                int const slot = detail::index(rank, mode);
-                EXPECT_NEAR(full[slot] - near[slot], primary.real(),
-                    2e-12 * std::max(1.0, std::abs(primary.real())));
-                if (mode != 0) {
-                    int const imaginarySlot = detail::index(rank, -mode);
-                    EXPECT_NEAR(full[imaginarySlot] - near[imaginarySlot], primary.imag(),
-                        2e-12 * std::max(1.0, std::abs(primary.imag())));
-                }
+    for (detail::Point const point : {detail::Point{0, 0, 0}, detail::Point{.25, -.125, .375}}) {
+        std::vector<double> masked(kFmmOrder * kFmmOrder, 99);
+        pmmm::green(kFmmOrder, masked.data(), point, kCellWidth, true);
+        for (double coefficient : masked) {
+            EXPECT_DOUBLE_EQ(coefficient, 0.0);
+        }
+    }
+    detail::Point const point{.25, -.125, .375};
+    detail::Point const negative{-.25, .125, -.375};
+    std::vector<double> full(kFmmOrder * kFmmOrder), opposite(full.size()), scaled(full.size());
+    pmmm::green(kFmmOrder, full.data(), point, kCellWidth, false);
+    pmmm::green(kFmmOrder, opposite.data(), negative, kCellWidth, false);
+    pmmm::green(kFmmOrder, scaled.data(), point, 2 * kCellWidth, false);
+    for (int rank = 0; rank < kFmmOrder; ++rank) {
+        for (int slot = rank * rank; slot < (rank + 1) * (rank + 1); ++slot) {
+            EXPECT_NEAR(opposite[slot], (rank % 2 ? -1.0 : 1.0) * full[slot], 2e-12);
+            EXPECT_DOUBLE_EQ(scaled[slot], std::ldexp(full[slot], rank));
+        }
+    }
+}
+
+TEST(CartesianEwald, AcceptanceUsesSecondImageAndProtectsImagePlanes) {
+    EXPECT_TRUE(::detail::periodicFmmAccepted({0, 0, 0}, .1f, .1f, 2, .01f));
+    EXPECT_FALSE(::detail::periodicFmmAccepted({0, 0, 0}, .3f, .3f, 2, .01f));
+    EXPECT_TRUE(::detail::periodicFmmAccepted({.49f, 0, 0}, .01f, .01f, 2, .01f));
+    EXPECT_FALSE(::detail::periodicFmmAccepted({.49f, 0, 0}, .15f, .15f, 2, .01f));
+    EXPECT_FALSE(::detail::periodicFmmAccepted({.4f, 0, 0}, .1f, .1f, 1, .3f));
+}
+
+TEST(CartesianEwald, FloatPointMatchesIndependentLattice) {
+    for (detail::Point const point : {detail::Point{0, 0, 0}, detail::Point{1e-6, 0, 0},
+             detail::Point{.1, -.2, .3}, detail::Point{.499, -.499, .499}}) {
+        Vector3<float> const position{float(point[0]), float(point[1]), float(point[2])};
+        auto const reference = periodicCorrectionReference(point);
+        std::array<float, 4> actual{};
+        ::detail::periodicFmmPoint(position, 1, true, actual[0], actual[1], actual[2], actual[3]);
+        for (int component = 0; component < 4; ++component) {
+            EXPECT_NEAR(actual[component], reference[component], 6e-6) << component;
+        }
+    }
+}
+
+TEST(CartesianEwald, FloatMultipoleAndCurvatureMatchDisplacedSources) {
+    if constexpr (kFmmOrder < 5) {
+        GTEST_SKIP() << "This accuracy fixture requires potential degree at least four";
+    }
+    namespace cartesian = cosmictiger::gravity::cartesian;
+    Vector3<float> const sources[] = {{.01f, -.015f, .02f}, {-.02f, .005f, -.01f}};
+    float const masses[] = {1.25f, .75f};
+    cartesian::Multipole<float> moments{};
+    float trace = 0;
+    for (int i = 0; i < 2; ++i) {
+        Vector3<float> const scaled = kScaleFactor * sources[i];
+        cartesian::P2M(masses[i], scaled, moments);
+        trace += masses[i] * scaled.dot(scaled);
+    }
+    for (Vector3<float> const center : {Vector3<float>{0, 0, 0}, Vector3<float>{.3f, -.2f, .1f}}) {
+        cartesian::Expansion<float> local{};
+        float curvature = 0;
+        ::detail::periodicFmmM2L(moments, trace, center, true, local, curvature);
+        Vector3<float> const offset{.007f, -.011f, .013f};
+        Vector3<float> const scaled = kScaleFactor * offset;
+        cosmictiger::gravity::Field<float> field{};
+        cartesian::L2P(local, scaled, field);
+        field[0] += .5f * curvature * scaled[2] * scaled[2];
+        field[3] -= curvature * scaled[2];
+        std::array<double, 4> reference{};
+        for (int i = 0; i < 2; ++i) {
+            detail::Point const separation{double(center[0]) + offset[0] - sources[i][0],
+                double(center[1]) + offset[1] - sources[i][1],
+                double(center[2]) + offset[2] - sources[i][2]};
+            auto const correction = periodicCorrectionReference(separation);
+            for (int component = 0; component < 4; ++component) {
+                reference[component] += masses[i] * correction[component];
             }
-            for (int slot = rank * rank; slot < (rank + 1) * (rank + 1); ++slot) {
-                EXPECT_NEAR(opposite[slot], (rank % 2 == 0 ? 1.0 : -1.0) * near[slot], 2e-12);
-                EXPECT_DOUBLE_EQ(scaled[slot], std::ldexp(near[slot], rank));
-                EXPECT_TRUE(std::isfinite(origin[slot]));
-                if (rank % 2 != 0) {
-                    EXPECT_NEAR(origin[slot], 0.0, 2e-13);
-                }
-            }
+        }
+        for (int component = 0; component < 4; ++component) {
+            float const scale = component == 0 ? kScaleFactor : kScaleFactor2;
+            EXPECT_NEAR(scale * field[component], reference[component], 2e-5) << component;
         }
     }
 }

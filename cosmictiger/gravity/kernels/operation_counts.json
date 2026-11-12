@@ -310,6 +310,35 @@
         }
       ]
     },
+    "cartesianEwald": {
+      "local_degree": 6,
+      "real_pairs": 125,
+      "fourier_pairs": 128,
+      "m2l": {
+        "arithmetic": {
+          "*": 499,
+          "+": 61,
+          "-": 19,
+          "fma": 625
+        },
+        "accumulations": 36,
+        "fused_accumulations": 13,
+        "weighted_flops": 1240,
+        "conventional_flops": 1865
+      },
+      "radial": {
+        "arithmetic": {
+          "*": 82,
+          "+": 14,
+          "fma": 74
+        },
+        "accumulations": 42,
+        "fused_accumulations": 7,
+        "weighted_flops": 212,
+        "conventional_flops": 286
+      },
+      "green_conventional_flops": 102519
+    },
     "cartesianTracefree": {
       "description": "Static emitted arithmetic counts. Conventional FMA=2; weighted FMA=1. Distance geometry is evaluated inside direct kernels and excluded from DAG counts.",
       "kernels": [

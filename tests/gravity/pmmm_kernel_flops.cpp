@@ -22,6 +22,9 @@
 #include <tests/gravity/kernels/instrumentation/spherical_green.cpp>
 #include <tests/gravity/kernels/instrumentation/spherical_p2m.cpp>
 
+#include <tests/gravity/kernels/instrumentation/cartesian_tracefree_ewald_green.cpp>
+#include <tests/gravity/kernels/instrumentation/cartesian_tracefree_ewald_m2l.cpp>
+
 #include "pmmm_reference.hpp"
 
 // The generated scalar/SIMD adapters use std math internally. Specialize only
@@ -74,7 +77,7 @@ namespace detail {
         EXPECT_EQ(momentCount, Real::count());
 
         // The regular central-image series has the same source operation count
-        // at zero as elsewhere; near controls only addition of the primary Green.
+        // at zero as elsewhere; near cells now bypass the entire Green calculation.
         for (auto const& sample : std::array<Vector3<double>, 2>{{{0.0, 0.0, 0.0}, point}}) {
             for (bool near : {true, false}) {
                 if (!near && sample[0] == 0.0 && sample[1] == 0.0 && sample[2] == 0.0) {
@@ -84,6 +87,10 @@ namespace detail {
                 std::array<double, order * order> coefficients{};
                 FlopCount const greenCount =
                     pmmm::green(order, coefficients.data(), sample, kCellWidth, near);
+                if (near) {
+                    EXPECT_EQ(greenCount, 0);
+                    continue;
+                }
                 std::array<Real, order * order> countedCoefficients{};
                 Real trace{};
                 Real::reset();
@@ -123,3 +130,45 @@ TEST_P(PmmmKernelFlops, SourceOperationsMatchExecutedArithmetic) {
 
 INSTANTIATE_TEST_SUITE_P(AllOrders, PmmmKernelFlops, ::testing::Range(kFmmOrder, kFmmOrder + 1),
     [](::testing::TestParamInfo<int> const& info) { return "Order" + std::to_string(info.param); });
+
+namespace cosmictiger::gravity::cartesian::detail {
+template <>
+inline ::detail::CountingReal ewaldExp(::detail::CountingReal value) {
+    ::detail::CountingReal::add(1);
+    return std::exp(value.value());
+}
+template <>
+inline ::detail::CountingReal ewaldErfc(::detail::CountingReal value) {
+    ::detail::CountingReal::add(1);
+    return std::erfc(value.value());
+}
+template <>
+inline ::detail::CountingReal ewaldSin(::detail::CountingReal value) {
+    ::detail::CountingReal::add(1);
+    return std::sin(value.value());
+}
+template <>
+inline ::detail::CountingReal ewaldCos(::detail::CountingReal value) {
+    ::detail::CountingReal::add(1);
+    return std::cos(value.value());
+}
+}    // namespace cosmictiger::gravity::cartesian::detail
+
+TEST(CartesianEwaldFlops, GeneratedKernelsMatchExecutedArithmetic) {
+    using Real = ::detail::CountingReal;
+    namespace cartesian = cosmictiger::gravity::cartesian;
+    Vector3<Real> const position{.13, -.21, .38};
+    cartesian::Green<Real> green{};
+    Real::reset();
+    cartesian::evaluateEwaldGreen(position, green);
+    // Three scalar float sign/image products are outside the counted Real.
+    constexpr size_t kImagePairs =
+        sizeof(cartesian::detail::kEwaldImages) / sizeof(cartesian::detail::kEwaldImages[0]);
+    EXPECT_EQ(cartesian::kEwaldGreenFlops, Real::count() + 6 * kImagePairs);
+    cartesian::Multipole<Real> source{};
+    cartesian::Expansion<Real> local{};
+    source[0] = 1;
+    Real::reset();
+    cartesian::M2L(source, green, local);
+    EXPECT_EQ(cartesian::kEwaldM2LFlops, Real::count());
+}

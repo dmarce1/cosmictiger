@@ -31,8 +31,8 @@ std::vector<ContractionTerm> contractionTerms(int order);
 
 // Overwrite the harmonic Green coefficients. boxOffset is target minus source
 // center in the unit periodic box, on the minimum-image branch [-0.5,0.5]^3.
-// Degree-d coefficients are multiplied by cellWidth^d. Near entries exclude
-// only the primary free-space interaction; the origin is valid when near=true.
+// Degree-d coefficients are multiplied by cellWidth^d. Near entries are zero;
+// the origin is valid when near=true. The near FMM supplies the full periodic force.
 // The uniform-background trace is supplied separately by the caller.
 FlopCount green(
     int order, double* coefficients, Vector3<double> const& boxOffset, double cellWidth, bool near);

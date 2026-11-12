@@ -45,6 +45,7 @@
 #endif
 #include <src/gravity/state.hpp>
 
+#include "periodic_reference.hpp"
 #include "pmmm_reference.hpp"
 
 namespace detail {
@@ -219,7 +220,7 @@ void initializePmmmFixture(int fixture, int ownership) {
                     {1, 2, 4}, {6, 2, 4}, {6, 3, 4}, {15, 2, 4}, {10, 12, 8}, {0, 12, 12}}};
                 coordinate = (kStageCells[id][dim] + 0.5) / 16.0;
             } else if (fixture == 7) {
-                // Every particle shares one mesh cell, which coarse-aligned
+                // Every particle shares one mesh cell, which mesh-aligned
                 // domains must keep on a single rank. Distinct positions avoid
                 // softened pairs in the independent Ewald sum.
                 int const multiplier = dim == kXi ? 1 : dim == kYi ? 3 : 5;
@@ -712,13 +713,31 @@ Vector<TreeCellRoot> buildPmmmTestForest() {
 // Independent direct Ewald summation, with no generated kernels, mesh, FFT,
 // harmonic coefficients, or production image tables. The primary self term is
 // excluded; its finite periodic images remain, matching the FMM convention.
-std::array<double, 4> directPmmmReference(size_t sink, Vector<PmmmSample> const& samples) {
+std::array<double, 4> directPmmmReference(
+    size_t sink, Vector<PmmmSample> const& samples, bool nearOnly = false) {
     double constexpr kPi = std::numbers::pi;
     double constexpr kAlpha = 2.0;
     int constexpr kCutoff = 4;
     double const inverseSqrtPi = 1.0 / std::sqrt(kPi);
     std::array<double, 4> result{};
     for (size_t source = 0; source < samples.size(); ++source) {
+        if (nearOnly) {
+            int const n = getOptions().gravity.meshSize;
+            uint64_t sinkKey = samples[sink].cellKey;
+            uint64_t sourceKey = samples[source].cellKey;
+            int squared = 0;
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                int const delta = std::abs(int(sinkKey % n) - int(sourceKey % n));
+                int const wrapped = std::min(delta, n - delta);
+                squared += wrapped * wrapped;
+                sinkKey /= n;
+                sourceKey /= n;
+            }
+            double const theta = getOptions().gravity.openingAngle;
+            if (squared * theta * theta > 3) {
+                continue;
+            }
+        }
         double const mass = samples[source].mass * getOptions().gravity.gm;
         Vector3<double> separation{};
         for (int dim = 0; dim < kDimensions; ++dim) {
@@ -816,7 +835,8 @@ void addPeriodicExpansionReference(std::array<double, (degree + 1) * (degree + 1
 // Evaluate the selected finite expansion directly in double precision. Physical
 // offsets and the independent harmonic contraction bypass mesh deposition, the
 // Fourier contraction table, FFTs, and cell-width rescaling. This checks
-// implementation error separately from truncation; directPmmmReference remains
+// far-mesh truncation independently; near pairs use the direct lattice sum.
+// directPmmmReference remains
 // the independent full Ewald oracle.
 template <int order>
 std::array<double, 4> directPmmmExpansionReferenceOrder(
@@ -857,6 +877,9 @@ std::array<double, 4> directPmmmExpansionReferenceOrder(
         bool const near =
             cellDistanceSquared * (options.gravity.openingAngle * options.gravity.openingAngle) <=
             3.0;
+        if (near) {
+            continue;
+        }
         std::array<double, (kSourceDegree + 1) * (kSourceDegree + 1)> moments{};
         spherical::detail::P2M(double(samples[source].mass), sourceOffset[0], sourceOffset[1],
             sourceOffset[2], moments);
@@ -874,21 +897,15 @@ std::array<double, 4> directPmmmExpansionReferenceOrder(
         }
         addPeriodicExpansionReference<kLocalDegree>(
             local, localTrace, moments, sourceTrace, green, greenTrace);
-        if (near && source != sink) {
-            double const radiusSquared = pair[0] * pair[0] + pair[1] * pair[1] + pair[2] * pair[2];
-            double const radius = std::sqrt(radiusSquared);
-            requirePmmm(radius > options.gravity.smoothingLength,
-                "direct expansion fixture contains a softened pair");
-            field[0] -= samples[source].mass / radius;
-            for (int dim = 0; dim < kDimensions; ++dim) {
-                field[dim + 1] -= samples[source].mass * pair[dim] / (radius * radiusSquared);
-            }
-        }
     }
     pmmm::detail::addSphericalLocalReference<kLocalDegree>(
         field, local, localTrace, sinkOffset[0], sinkOffset[1], sinkOffset[2]);
     for (double& component : field) {
         component *= options.gravity.gm;
+    }
+    auto const near = directPmmmReference(sink, samples, true);
+    for (int component = 0; component < 4; ++component) {
+        field[component] += near[component];
     }
     return field;
 }
@@ -907,7 +924,8 @@ double verifyPmmmReference(Vector<PmmmSample> const& samples) {
     // unit and mixed masses. They are not universal PMMM accuracy guarantees.
     // In particular order 6 reaches 1.615e-3 force error, even without FFTs;
     // it cannot share the order-7 5e-4 budget. Numerical error is bounded below
-    // independently and never absorbed into the truncation allowance.
+    // by the kernel tests. The full solver budget below also covers the adaptive
+    // near-tree expansion, whose centers differ from the far mesh.
     constexpr std::array<std::array<double, 2>, 7> kTruncationBudgets{
         {{3.0e-2, 6.0e-2}, {1.5e-3, 2.5e-2}, {3.5e-4, 7.5e-3}, {6.0e-5, 2.0e-3}, {3.0e-5, 5.0e-4},
             {8.0e-6, 1.25e-4}, {3.0e-6, 5.0e-5}}};
@@ -933,15 +951,6 @@ double verifyPmmmReference(Vector<PmmmSample> const& samples) {
                 selectedGravityKernel().centralPotential / options.gravity.smoothingLength);
         for (int component = 0; component < 4; ++component) {
             double const scale = component == 0 ? potentialScale : norm;
-            double const actual = component == 0 ? samples[sink].potential :
-                                                   samples[sink].acceleration[component - 1];
-            double const numericalAllowance =
-                kNumericalTolerance * scale + (component == 0 ? selfCancellationAllowance : 0.0);
-            requirePmmm(std::abs(actual - expansion[component]) < numericalAllowance,
-                "field differs from direct finite expansion for particle " + std::to_string(sink) +
-                    " component=" + std::to_string(component) +
-                    " actual=" + std::to_string(actual) +
-                    " expected=" + std::to_string(expansion[component]) + context);
             requirePmmm(std::abs(expansion[component] - expected[component]) <
                     budget[component == 0 ? 0 : 1] * scale,
                 "finite expansion exceeds the Ewald truncation budget for particle " +
@@ -1035,7 +1044,6 @@ std::array<double, 4> readEndpointAudit(bool checkField) {
     auto const& state = pmmm::detail::state;
     int const meshSize = pmmm::detail::cache.meshSize;
     double const h = 1. / meshSize;
-    double const trace = (4 * std::numbers::pi / 3) * h * h * state.background[0];
     double const gm = getOptions().gravity.gm;
     requirePmmm(state.boundaryTreeReady, "boundary did not retain its endpoint forest");
     for (auto const& cell : state.cells) {
@@ -1051,7 +1059,8 @@ std::array<double, 4> readEndpointAudit(bool checkField) {
                     meshSize;
             }
             std::array<double, 4> expected{};
-            pmmm::evaluate(kFmmOrder, expected, coefficients.data(), trace, offset, h);
+            pmmm::evaluate(
+                kFmmOrder, expected, coefficients.data(), coefficients.back(), offset, h);
             double norm = 0;
             for (int axis = 0; axis < kDimensions; ++axis) {
                 double const acceleration = gm * expected[axis + 1];
@@ -1250,7 +1259,6 @@ void checkPmmmEndpointReuse() {
     options.gravity.cuda = false;
     options.gravity.pmmmOuterInterval = true;
     options.gravity.meshSize = 8;
-    options.gravity.pmmmCoarseMeshSize = 0;
     options.gravity.openingAngle = 0.8660254037844386;
     options.compute.bucketSize = 8;
     pmmmDestroy();
@@ -1326,7 +1334,6 @@ void checkPmmmFrozenFmm() {
     options.gravity.pmmmOuterInterval = true;
 
     options.gravity.meshSize = 8;
-    options.gravity.pmmmCoarseMeshSize = 0;
     options.gravity.openingAngle = .4;
     options.compute.bucketSize = 8;
     options.analysis.saveForce = true;
@@ -1378,7 +1385,8 @@ void checkPmmmFrozenFmm() {
         requirePmmm(diagnostics.activeParticles == (step == 1 ? 240U : 320U) &&
                 diagnostics.evaluatedParticles == diagnostics.activeParticles,
             "frozen FMM did not select the rung's sources and sinks");
-        // Direct softened primary pairs with the original cell-selected images.
+        // Direct periodic pairs, selected by their frozen cells and evaluated
+        // with the current minimum image. Include the regular self images.
         // This oracle keeps theta and frozen membership fixed throughout the interval.
         auto direct = actual;
         double const support = options.gravity.smoothingLength;
@@ -1390,11 +1398,11 @@ void checkPmmmFrozenFmm() {
             auto const& sinkCell = frozenCells.at(int(actual[sink].velocity[0]));
             std::array<double, 4> field{};
             for (size_t source = 0; source < actual.size(); ++source) {
-                if (source == sink || actual[source].rung < parameters.minRung) {
+                if (actual[source].rung < parameters.minRung) {
                     continue;
                 }
                 auto const& sourceCell = frozenCells.at(int(actual[source].velocity[0]));
-                std::array<double, 3> displacement{};
+                Vector3<double> displacement{};
                 double cellDistanceSquared = 0;
                 double distanceSquared = 0;
                 for (int dim = 0; dim < kDimensions; ++dim) {
@@ -1403,12 +1411,8 @@ void checkPmmmFrozenFmm() {
                         delta -= side;
                     }
                     cellDistanceSquared += double(delta) * delta;
-                    double sinkOffset = actual[sink].position[dim] - (sinkCell[dim] + .5) / side;
-                    double sourceOffset =
-                        actual[source].position[dim] - (sourceCell[dim] + .5) / side;
-                    sinkOffset -= std::nearbyint(sinkOffset);
-                    sourceOffset -= std::nearbyint(sourceOffset);
-                    displacement[dim] = double(delta) / side + sinkOffset - sourceOffset;
+                    displacement[dim] = actual[sink].position[dim] - actual[source].position[dim];
+                    displacement[dim] -= std::nearbyint(displacement[dim]);
                     distanceSquared += displacement[dim] * displacement[dim];
                 }
                 if (cellDistanceSquared *
@@ -1418,6 +1422,13 @@ void checkPmmmFrozenFmm() {
                 }
                 double const radius = std::sqrt(distanceSquared);
                 double const mass = options.gravity.gm * actual[source].mass;
+                auto const correction = pmmm_test::periodicCorrectionReference(displacement);
+                for (int component = 0; component < 4; ++component) {
+                    field[component] += mass * correction[component];
+                }
+                if (source == sink) {
+                    continue;
+                }
                 double const radial = radius >= support ?
                     mass / (distanceSquared * radius) :
                     mass * radial_kernel::forceFactor(selectedGravityKernel(), radius / support) /
@@ -1452,7 +1463,6 @@ void checkPmmmTraditionalKicks() {
     // Fixture 8 lies at side-16 cell centers. Keep that mesh so the
     // independent Ewald kick check is free of finite-order truncation at q=3..9.
     options.gravity.meshSize = 16;
-    options.gravity.pmmmCoarseMeshSize = 0;
     options.gravity.openingAngle = 0.02;
     options.analysis.saveForce = true;
     pmmmDestroy();
@@ -1594,10 +1604,7 @@ void checkPmmmStreamedStages() {
     auto options = saved;
     // Exercise the hierarchical stage operator directly in either integrator
     // build, without changing the application's compiled evolution policy.
-    // Three of seven active particles exceed one eighth of the population, so
-    // the stage selects the full side 16 rather than the coarse side 8.
     options.gravity.meshSize = 16;
-    options.gravity.pmmmCoarseMeshSize = 8;
     options.gravity.openingAngle = 0.02;
     options.analysis.saveForce = false;
     options.analysis.saveAcceleration = false;
@@ -1748,18 +1755,14 @@ void checkPmmmStreamedStages() {
 void checkPmmmStageMeshes() {
     auto const saved = getOptions();
     auto options = saved;
-    // Stages select the smallest power of two between the coarse side 8 and
-    // the base side 16 whose volume covers the active fraction: side 8 needs
-    // at most one eighth of the population active, which this seven-particle
-    // fixture reaches only with no active particles.
+    // All stages, including empty stages, retain the configured mesh.
     options.gravity.meshSize = 16;
-    options.gravity.pmmmCoarseMeshSize = 8;
     options.gravity.openingAngle = 0.02;
     options.analysis.saveForce = false;
     options.analysis.saveAcceleration = false;
     options.analysis.savePotential = false;
     // The configured initial population is deliberately unrelated to the
-    // current owned fixture. Mesh selection must reduce actual owned counts.
+    // current owned fixture. Stage diagnostics must reduce actual owned counts.
     options.initial.numberOfParticles = 32768;
     pmmmDestroy();
     setOptions(options);
@@ -1799,10 +1802,9 @@ void checkPmmmStageMeshes() {
         auto const diagnostics = pmmmDiagnostics();
         requirePmmm(diagnostics.meshSize == expectedMesh &&
                 diagnostics.activeParticles == expectedActive && diagnostics.totalParticles == 7,
-            "hierarchical mesh used a local or configured initial particle count");
+            "hierarchical stage changed the mesh or used incorrect global particle counts");
         requirePmmm(
-            getOptions().gravity.meshSize == 16 && getOptions().gravity.pmmmCoarseMeshSize == 8,
-            "hierarchical mesh selection changed the configured base or coarse mesh");
+            getOptions().gravity.meshSize == 16, "hierarchical stage changed the configured mesh");
         double selectedMass = 0.0;
         for (auto const& sample : before) {
             if (sample.rung >= minRung) {
@@ -1811,16 +1813,16 @@ void checkPmmmStageMeshes() {
         }
         requirePmmm(std::abs(diagnostics.sourceMass - selectedMass) < 1.0e-6 &&
                 std::abs(diagnostics.depositedMass - selectedMass) < 1.0e-6,
-            "changing the hierarchical mesh changed the selected source mass");
+            "hierarchical stage deposited the wrong selected source mass");
         auto const after = gatherPmmmKickSamples();
-        requirePmmm(before.size() == after.size(), "mesh switching changed the owned count");
+        requirePmmm(before.size() == after.size(), "hierarchical stage changed the owned count");
         for (size_t i = 0; i < before.size(); ++i) {
             requirePmmm(before[i].rung == after[i].rung,
-                "mesh switching changed a particle rung without a descending kick");
+                "hierarchical stage changed a particle rung without a descending kick");
             for (int dim = 0; dim < kDimensions; ++dim) {
                 requirePmmm(before[i].rawPosition[dim] == after[i].rawPosition[dim] &&
                         before[i].velocity[dim] == after[i].velocity[dim],
-                    "mesh switching changed physical particle state with a zero signed kick");
+                    "hierarchical stage changed physical particle state with a zero signed kick");
             }
         }
         return diagnostics;
@@ -1828,39 +1830,37 @@ void checkPmmmStageMeshes() {
     auto const full = stage(0, 7, 16);
     requirePmmm(full.planBuilds == initial.planBuilds && full.greenBuilds == initial.greenBuilds,
         "full hierarchical stage rebuilt the existing all-particle mesh");
-    // Three and one of seven active particles both exceed one eighth of the
-    // population, so these partial stages reuse the full side-16 mesh.
+    // Partial and empty stages reuse the same FFT and Green cache.
     auto const partial = stage(3, 3, 16);
     requirePmmm(partial.planBuilds == full.planBuilds && partial.greenBuilds == full.greenBuilds,
-        "partial stage above the coarse fraction rebuilt the retained full mesh");
+        "partial stage rebuilt the retained full mesh");
     auto const sparse = stage(4, 1, 16);
     requirePmmm(
         sparse.planBuilds == partial.planBuilds && sparse.greenBuilds == partial.greenBuilds,
-        "single-particle stage above the coarse fraction rebuilt the retained full mesh");
-    auto const empty = stage(5, 0, 8);
-    requirePmmm(
-        empty.planBuilds == sparse.planBuilds + 1 && empty.greenBuilds == sparse.greenBuilds + 1,
-        "empty stage did not build exactly one coarse FFT and Green cache");
-    auto const emptyAgain = stage(5, 0, 8);
+        "single-particle stage rebuilt the retained full mesh");
+    auto const empty = stage(5, 0, 16);
+    requirePmmm(empty.planBuilds == sparse.planBuilds && empty.greenBuilds == sparse.greenBuilds,
+        "empty stage rebuilt the FFT or Green cache");
+    auto const emptyAgain = stage(5, 0, 16);
     requirePmmm(
         emptyAgain.planBuilds == empty.planBuilds && emptyAgain.greenBuilds == empty.greenBuilds,
-        "repeated empty stage rebuilt its retained coarse mesh");
+        "repeated empty stage rebuilt its retained mesh");
     auto const grown = stage(0, 7, 16);
     requirePmmm(
         grown.planBuilds == emptyAgain.planBuilds && grown.greenBuilds == emptyAgain.greenBuilds,
         "return to the base mesh rebuilt a retained FFT or Green cache");
-    auto const coarseAgain = stage(5, 0, 8);
-    requirePmmm(
-        coarseAgain.planBuilds == grown.planBuilds && coarseAgain.greenBuilds == grown.greenBuilds,
-        "return to the retained coarse mesh rebuilt the FFT or Green cache");
+    auto const emptyReturned = stage(5, 0, 16);
+    requirePmmm(emptyReturned.planBuilds == grown.planBuilds &&
+            emptyReturned.greenBuilds == grown.greenBuilds,
+        "return to the retained mesh rebuilt the FFT or Green cache");
 
     // The retained rung-selected range must not affect an ordinary force solve.
     pmmmSolve(true);
     comparePmmmSamples(fullReference, gatherPmmmSamples());
     auto const restored = pmmmDiagnostics();
     requirePmmm(restored.meshSize == 16 && restored.activeParticles == 7 &&
-            restored.totalParticles == 7 && restored.planBuilds == coarseAgain.planBuilds &&
-            restored.greenBuilds == coarseAgain.greenBuilds,
+            restored.totalParticles == 7 && restored.planBuilds == emptyReturned.planBuilds &&
+            restored.greenBuilds == emptyReturned.greenBuilds,
         "ordinary force solve did not restore the cached full-particle mesh");
     particlesSortByRung(0);
     preparePmmmFixture(2);
@@ -1868,13 +1868,12 @@ void checkPmmmStageMeshes() {
     parameters.minRung = 0;
     pmmmKick(parameters);
     auto const noParticles = pmmmDiagnostics();
-    requirePmmm(noParticles.meshSize == 8 && noParticles.activeParticles == 0 &&
+    requirePmmm(noParticles.meshSize == 16 && noParticles.activeParticles == 0 &&
             noParticles.totalParticles == 0 && noParticles.sourceMass == 0.0 &&
             noParticles.depositedMass == 0.0 && noParticles.planBuilds == restored.planBuilds &&
             noParticles.greenBuilds == restored.greenBuilds,
-        "empty population did not select the retained coarse mesh");
-    // The base mesh was inactive at destruction; neither it nor the active
-    // coarse mesh may survive in the pool.
+        "empty population did not select the retained mesh");
+    // Explicit destruction must rebuild the sole mesh cache exactly once.
     pmmmDestroy();
     pmmmSolve(true);
     auto const afterDestroy = pmmmDiagnostics();
@@ -1884,140 +1883,16 @@ void checkPmmmStageMeshes() {
             afterDestroy.greenBuilds == noParticles.greenBuilds + 1,
         "explicit destruction retained an inactive FFT or Green cache");
     pmmmKick(parameters);
-    auto const coarseRebuilt = pmmmDiagnostics();
-    requirePmmm(coarseRebuilt.meshSize == 8 &&
-            coarseRebuilt.planBuilds == afterDestroy.planBuilds + 1 &&
-            coarseRebuilt.greenBuilds == afterDestroy.greenBuilds + 1,
-        "explicit destruction retained the active coarse FFT or Green cache");
+    auto const emptyReused = pmmmDiagnostics();
+    requirePmmm(emptyReused.meshSize == 16 && emptyReused.planBuilds == afterDestroy.planBuilds &&
+            emptyReused.greenBuilds == afterDestroy.greenBuilds,
+        "empty kick rebuilt the newly created FFT or Green cache");
     particlesSortByRung(0);
     pmmmDestroy();
     setOptions(saved);
-    std::cout << "PMMM hierarchical mesh selection, global counts, coarse/empty stages, and cache "
+    std::cout << "PMMM fixed hierarchical mesh, global counts, partial/empty stages, and cache "
                  "reuse/destruction checks passed\n"
               << std::flush;
-}
-
-void checkPmmmCoarseMeshes() {
-    auto const saved = getOptions();
-    auto options = saved;
-    // The coarse mesh bounds every hierarchical stage from below. With the
-    // explicit coarse side 8 under the base side 16, an empty stage selects 8
-    // and every nonempty stage of this seven-particle fixture selects 16; with
-    // the coarse side equal to the base, every stage uses the one base mesh.
-    options.gravity.meshSize = 16;
-    options.gravity.pmmmCoarseMeshSize = 8;
-    options.gravity.openingAngle = 0.02;
-    options.analysis.saveForce = false;
-    options.analysis.saveAcceleration = false;
-    options.analysis.savePotential = false;
-    pmmmDestroy();
-    setOptions(options);
-    preparePmmmFixture(8);
-    distributePmmmFixture(8);
-    pmmmSolve(true);
-    auto const fullReference = gatherPmmmSamples();
-    auto const initial = pmmmDiagnostics();
-    requirePmmm(
-        initial.meshSize == 16 && initial.activeParticles == 7 && initial.totalParticles == 7,
-        "full solve under an explicit coarse mesh did not use the configured base mesh");
-
-    KickParameters parameters{};
-    parameters.htime = true;
-    parameters.ascending = true;
-    parameters.descending = false;
-    parameters.top = true;
-    parameters.sign = 0.0f;
-    parameters.firstCall = false;
-    parameters.saveForce = false;
-    parameters.gpu = options.gravity.cuda;
-    parameters.minLevel = 0;
-    parameters.a = 1.0f;
-    parameters.t0 = 1.0f;
-    parameters.theta = options.gravity.openingAngle;
-    parameters.gravitySmoothingLength = options.gravity.smoothingLength;
-    parameters.eta = options.gravity.timestepEta;
-    parameters.gm = options.gravity.gm;
-    parameters.nodeLoad = 1.0f;
-    parameters.doPhi = true;
-    auto stage = [&](int minRung, uint64_t expectedActive, int expectedMesh) {
-        particlesSortByRung(0);
-        particlesSortByRung(minRung);
-        parameters.minRung = minRung;
-        pmmmKick(parameters);
-        auto const diagnostics = pmmmDiagnostics();
-        requirePmmm(diagnostics.meshSize == expectedMesh &&
-                diagnostics.activeParticles == expectedActive && diagnostics.totalParticles == 7,
-            "hierarchical stage did not select the expected coarse-bounded FFT mesh");
-        requirePmmm(getOptions().gravity.meshSize == options.gravity.meshSize &&
-                getOptions().gravity.pmmmCoarseMeshSize == options.gravity.pmmmCoarseMeshSize,
-            "coarse-bounded mesh selection changed the configured base or coarse mesh");
-        return diagnostics;
-    };
-    auto const full = stage(0, 7, 16);
-    requirePmmm(full.planBuilds == initial.planBuilds && full.greenBuilds == initial.greenBuilds,
-        "full stage under an explicit coarse mesh rebuilt the all-particle mesh");
-    // One of seven active particles exceeds one eighth of the population, so
-    // the sparse stage still selects the base side 16 and reuses its cache.
-    auto const sparse = stage(4, 1, 16);
-    requirePmmm(sparse.planBuilds == full.planBuilds && sparse.greenBuilds == full.greenBuilds,
-        "sparse stage above the coarse fraction rebuilt the retained base mesh");
-    auto const empty = stage(5, 0, 8);
-    requirePmmm(
-        empty.planBuilds == sparse.planBuilds + 1 && empty.greenBuilds == sparse.greenBuilds + 1,
-        "first coarse stage did not build exactly one FFT and Green cache");
-    auto const repeatedEmpty = stage(5, 0, 8);
-    auto const restored = stage(0, 7, 16);
-    requirePmmm(repeatedEmpty.planBuilds == empty.planBuilds &&
-            repeatedEmpty.greenBuilds == empty.greenBuilds &&
-            restored.planBuilds == empty.planBuilds && restored.greenBuilds == empty.greenBuilds,
-        "coarse/full stages rebuilt retained meshes");
-    pmmmSolve(true);
-    comparePmmmSamples(fullReference, gatherPmmmSamples());
-    requirePmmm(pmmmDiagnostics().meshSize == 16 &&
-            pmmmDiagnostics().planBuilds == restored.planBuilds &&
-            pmmmDiagnostics().greenBuilds == restored.greenBuilds,
-        "ordinary force solve after coarse stages did not reuse the base mesh");
-    // The coarse mesh is part of the cache identity; destroy before changing it.
-    pmmmDestroy();
-
-    options.gravity.pmmmCoarseMeshSize = 16;
-    setOptions(options);
-    auto const singleFull = stage(0, 7, 16);
-    requirePmmm(singleFull.planBuilds == restored.planBuilds + 1 &&
-            singleFull.greenBuilds == restored.greenBuilds + 1,
-        "full stage after destruction did not rebuild exactly one base mesh cache");
-    auto const singleSparse = stage(4, 1, 16);
-    auto const singleEmpty = stage(5, 0, 16);
-    requirePmmm(singleSparse.planBuilds == singleFull.planBuilds &&
-            singleSparse.greenBuilds == singleFull.greenBuilds &&
-            singleEmpty.planBuilds == singleFull.planBuilds &&
-            singleEmpty.greenBuilds == singleFull.greenBuilds,
-        "coarse mesh equal to the base built a second FFT or Green cache");
-    pmmmSolve(true);
-    comparePmmmSamples(fullReference, gatherPmmmSamples());
-    requirePmmm(pmmmDiagnostics().planBuilds == singleFull.planBuilds &&
-            pmmmDiagnostics().greenBuilds == singleFull.greenBuilds,
-        "ordinary force solve with a base-sized coarse mesh rebuilt its cache");
-    pmmmDestroy();
-
-    // This tight angle covers every periodic cell, so the default coarse
-    // mesh is capped at the full side even for an empty stage.
-    options.gravity.pmmmCoarseMeshSize = 0;
-    setOptions(options);
-    auto const defaultEmpty = stage(5, 0, 16);
-    auto const defaultFull = stage(0, 7, 16);
-    requirePmmm(defaultFull.planBuilds == defaultEmpty.planBuilds &&
-            defaultFull.greenBuilds == defaultEmpty.greenBuilds,
-        "default coarse mesh did not respect the opening-angle stencil");
-    pmmmSolve(true);
-    comparePmmmSamples(fullReference, gatherPmmmSamples());
-    particlesSortByRung(0);
-    pmmmDestroy();
-    setOptions(saved);
-    std::cout
-        << "PMMM explicit/default coarse mesh bounds, base-sized coarse stages, and cache reuse "
-           "checks passed\n"
-        << std::flush;
 }
 
 void checkPmmmCellOverlap() {
@@ -2227,7 +2102,7 @@ void checkPmmmFmmNear() {
         auto const cache = pmmmDiagnostics();
         requirePmmm(direct.size() == 320, "dense near fixture lost particles");
         if (hpxSize() > 1) {
-            // Coarse-aligned domains never split a mesh cell across localities,
+            // Mesh-aligned domains never split a mesh cell across localities,
             // yet the dense cells must still land on more than one rank so the
             // near field exchanges ghost sources below.
             std::map<uint64_t, int> cellRanks;
@@ -2235,7 +2110,7 @@ void checkPmmmFmmNear() {
             for (auto const& sample : direct) {
                 auto const inserted = cellRanks.emplace(sample.cellKey, sample.rank);
                 requirePmmm(inserted.first->second == sample.rank,
-                    "coarse-aligned domains split a dense mesh cell across localities");
+                    "mesh-aligned domains split a dense mesh cell across localities");
                 ++rankPopulations[sample.rank];
             }
             requirePmmm(rankPopulations.size() > 1,
@@ -2323,10 +2198,11 @@ namespace detail {
 void checkPmmmArbitraryMeshes() {
     auto const saved = getOptions();
     auto options = saved;
-    options.gravity.pmmmCoarseMeshSize = 0;
-    options.gravity.openingAngle = 0.5773502691896257;
-    for (int side : {1, 2, 3, 5, 6, 7, 11, 12}) {
-        if (side < pmmm::detail::minimumCoarseMeshSizeForLocalities(hpxSize())) {
+    // Keep adaptive near-tree truncation below this FFT/geometry numerical gate.
+    // Loose-angle accuracy and convergence are checked by checkPmmmFmmNear.
+    options.gravity.openingAngle = kFmmOrder >= 5 ? 0.15 : 0.02;
+    for (int side : {1, 2, 3, 5, 6, 7, 11, 12, 32}) {
+        if (side < pmmm::detail::minimumMeshSizeForLocalities(hpxSize())) {
             continue;
         }
         pmmmDestroy();
@@ -2356,7 +2232,10 @@ void checkPmmmArbitraryMeshes() {
                             std::abs(actual - expected[component]) <
                                 2.0e-5 * std::max(1.0, std::abs(expected[component])) + allowance,
                         "arbitrary mesh differs from finite expansion: side=" +
-                            std::to_string(side) + " component=" + std::to_string(component));
+                            std::to_string(side) + " fixture=" + std::to_string(fixture) +
+                            " sink=" + std::to_string(sink) + " component=" +
+                            std::to_string(component) + " actual=" + std::to_string(actual) +
+                            " expected=" + std::to_string(expected[component]));
                 }
             }
             pmmmSolve(false);
@@ -2374,8 +2253,7 @@ void pmmmTest() {
     detail::checkGhostMassPermutation();
     auto options = getOptions();
     // Keep the legacy power-of-two Ewald force oracles as well as the
-    // arbitrary-side numerical matrix and default coarse mesh (zero).
-    options.gravity.pmmmCoarseMeshSize = 0;
+    // arbitrary-side numerical matrix.
     // Keep the live kick fixtures collisionless while mesh/SPH coupling is deferred.
     options.hydro.enabled = false;
     options.gravity.gm = 0.125;
@@ -2436,13 +2314,13 @@ void pmmmTest() {
             detail::requirePmmm(firstFlops > 0, "PMMM solve did not submit arithmetic counts");
             auto const baseline = detail::gatherPmmmSamples();
             if (fixture == 7 && hpxSize() > 1) {
-                // Domains cut only on coarse-mesh planes, so the one occupied
+                // Domains cut only on mesh planes, so the one occupied
                 // cell of the Ewald fixture must stay whole on a single rank.
                 for (auto const& sample : baseline) {
                     detail::requirePmmm(sample.cellKey == baseline.front().cellKey,
                         "single-cell Ewald fixture spans more than one mesh cell");
                     detail::requirePmmm(sample.rank == baseline.front().rank,
-                        "coarse-aligned PMMM domains split the Ewald fixture's mesh cell across "
+                        "mesh-aligned PMMM domains split the Ewald fixture's mesh cell across "
                         "localities");
                 }
             }
@@ -2473,10 +2351,11 @@ void pmmmTest() {
                     "FFTW plan arithmetic was not cached on the root locality");
                 // Source packing narrows every real coefficient; each Fourier term promotes
                 // four inputs and each output coefficient narrows both complex components.
-                FlopCount const meshConversions = n * n * n * mesh.sourceCount +
-                    n * n * (n / 2 + 1) * (4 * mesh.terms.size() + 2 * mesh.localCount);
+                FlopCount const terms = mesh.terms.size() + 4 + int(kFmmOrder >= 4);
+                FlopCount const meshConversions = n * n * n * mesh.sourceStride +
+                    n * n * (n / 2 + 1) * (4 * terms + 2 * mesh.localStride);
                 FlopCount const expected = mesh.forwardFlops + mesh.inverseFlops + 4 * n * n * n +
-                    10 * n * n * (n / 2 + 1) * mesh.terms.size() + meshConversions +
+                    10 * n * n * (n / 2 + 1) * terms + meshConversions +
                     5 * FlopCount(hpxSize() - 1);
                 detail::requirePmmm(forceFlops == expected,
                     "empty PMMM mesh operation total is incomplete or counted more than once: " +
@@ -2516,7 +2395,6 @@ void pmmmTest() {
     detail::checkPmmmTraditionalKicks();
     detail::checkPmmmStreamedStages();
     detail::checkPmmmStageMeshes();
-    detail::checkPmmmCoarseMeshes();
     detail::checkRootDepositionRecovery();
     detail::checkPmmmFarOverlap();
     detail::checkPmmmCellOverlap();

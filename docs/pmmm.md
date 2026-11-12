@@ -62,23 +62,22 @@ resolved option output reports the runtime selections.
 
 `gravity.meshSize=n` requests `n` full-particle cells on each axis of the
 normalized unit box, independently of the initial-condition particle count.
-The default value zero is unset and is rejected for PMMM. `n` may be any
-positive integer within indexing and memory limits; all three sides use that
-same length, and no rounding or prime-factor restriction is applied.
+The default zero selects the smallest integer side with at most 32 particles
+per cell on average, using the sum of the resolved dark-matter and gas counts,
+after lattice rounding or external initial-condition loading. The side is raised
+if needed to give every locality whole cells. Thus one million particles select
+`32^3` cells (about 30.5 particles per cell). An explicit positive `n` overrides
+this choice without rounding or prime-factor restriction; all three sides use
+that same length, within indexing and memory limits.
 
-`gravity.pmmmCoarseMeshSize=c` sets the coarsest mesh any hierarchical stage may
-use and the granularity of particle-domain cuts. An explicit value must be a
-positive divisor of `n`. The default zero chooses the smallest divisor of `n`
-at least `max(n/8, preferredMinimum)`, capped at `n`. The preferred minimum is
-the smallest power of two covering the near stencil diameter, capped at `n`. This preserves the previous
-power-of-two defaults: a `256^3` full mesh uses a `32^3` coarse mesh. A `120^3`
-mesh uses `15^3` at the default angle; a prime side uses the full mesh at every stage.
-The same keys work in the `[gravity]` INI section. Resolved output reports
-`gravity.meshSize` and the resolved `gravity.pmmmCoarseMeshSize`.
+`gravity.meshSize` also sets particle-domain cut granularity and is used by
+every hierarchical stage, including empty stages. There is no separate coarse
+mesh or active-fraction mesh scaling. The legacy `gravity.pmmmCoarseMeshSize`
+CLI/INI key is accepted but ignored, so an old value cannot constrain a new
+`gravity.meshSize` override. It is absent from resolved option output.
 
-PMMM also requires a power-of-two locality count, and the coarse mesh must
-have at least `2^ceil(log2(localities)/3)` cells per axis so every locality
-receives whole coarse cells.
+PMMM requires a power-of-two locality count, and the mesh must have at least
+`2^ceil(log2(localities)/3)` cells per axis so every locality receives whole cells.
 
 `gravity.openingAngle=theta` sets both the near FMM acceptance angle and the
 PMMM near-free stencil; its default is `0.5773502691896257`, approximately
@@ -193,27 +192,34 @@ need no density or cell-volume multiplier.
 
 ## Periodic Green function and near field
 
-The Green filters use the generated spherical Ewald correction for the
-periodic unit cube. Outside the near stencil, the primary free-space
-Green function is added. Inside the stencil, only that primary interaction is
-omitted: periodic images remain in the convolution, including the finite
-regular limit at the origin. Direct pair evaluation excludes the identical
-particle's primary self interaction and retains distinct coincident
-particles through the compact softened kernel.
+The FFT Green filter contains the full periodic interaction outside the near
+stencil and zero inside it, including the origin. The near FMM supplies both
+the softened primary interaction and the regular Ewald correction for exactly
+those source cells. Primary self interactions are excluded; finite periodic
+self images remain.
 
-The FMM tree walk uses the image selected by the two cell
-centers. It is not independently wrapped to a different nearest particle
-image; changing that image would no longer match the primary term omitted
-from the Green filter.
+The shared CPU/CUDA kick walk carries a second source checklist for the Ewald
+correction. Generated Cartesian kernels use the same derivative, moment,
+coordinate-scaling, and target-last conventions as the free-space kernels.
+Near Ewald evaluation, M2L, local translation, and particle evaluation use float.
+Particle pairs use ordinary minimum-image subtraction.
 
-The periodic uniform-background quadratic is kept separately from harmonic
-coefficients. One small global reduction supplies total mass, the three sums
-of cell-relative dipole components, and the radial second moment
-`sum(mass*|a/h|^2)`. These provide the local trace, dipole correction, and
-constant potential correction without additional FFTs. The radial second
-moment enters the constant potential when the source degree includes two
-(`q >= 4`), matching the generated FMM truncation. Cartesian tree-local evaluation includes
-the quadratic contribution to both potential and acceleration.
+For minimum-image center displacement `d` in a unit box, the next image is at
+`R2^2 = dot(d,d) + 1 - 2*max(abs(d))`. The regular correction's acceptance test
+uses this distance with the sum of the source and sink radii. Across an
+image-selection plane it also requires ordinary nearest-image separation,
+so the primary and correction expansions cancel the same selected singular
+image. Unresolved leaf pairs evaluate the regular correction directly.
+
+The periodic uniform-background quadratic uses the same near/far mask.
+An extra source FFT channel stores each cell's radial second moment, and an
+extra Green/local channel carries the masked background coefficient. Their
+convolutions supply the local curvature, dipole correction, and source-trace
+potential term. A global background applied to all cells would double-count
+the near contribution. Near Cartesian locals carry their constant Laplacian
+separately; translation and particle evaluation include its quadratic, while
+source nodes retain the radial second moment needed for the potential at
+source degree two and above (`q >= 4`).
 
 The potential follows the Ewald periodic gauge and retains finite periodic
 self images. The sampled, near-subtracted kernel's Fourier zero mode is
@@ -236,7 +242,7 @@ potential degree six, a normal solve performs 36 scalar-equivalent forward trans
 transforms belong to initialization. This describes work, not measured speed.
 
 Each mesh cache lasts until eviction, explicit PMMM destruction, or application
-shutdown. Changing the requested base mesh size, coarse mesh size, degree,
+shutdown. Changing the requested mesh size, degree,
 or opening angle requires explicit PMMM destruction.
 The expansion degree remains fixed during an evolution.
 Changing them between runs requires a new build only if the requested capability
@@ -250,18 +256,16 @@ startup guarantee. FFTW planner operations share the process-wide planner
 lock with other FFTW users.
 
 PMMM uses the common recursive bisection for its particle domains, but
-every cut lies on a coarse-mesh plane. Integer fixed-point comparisons preserve
+every cut lies on a mesh plane. Integer fixed-point comparisons preserve
 these half-open planes even for non-dyadic mesh boundaries. The locality count
 is a power of two; depth `d` of the bisection halves the locality range and cuts axis `d mod 3`.
-Among the coarse planes that leave each child enough whole coarse cells for the
+Among the mesh planes that leave each child enough whole cells for the
 cuts it still owes along that axis, the cut selects the plane whose particle
 count comes closest to the balanced target, not the plane nearest the exact
 balance coordinate. Ties prefer the plane nearest the middle of the parent.
-Because every stage side is an integer multiple of the coarse side,
-no cell of any PMMM mesh ever has particles on two localities: each cell is
-owned, with all its particles, by exactly one locality. Balance is therefore
-only as fine as the coarse cells allow; a smaller coarse mesh (larger cells)
-trades balance for a coarser minimum stage mesh. Gravity-free runs retain the
+Every stage uses the same mesh, so each cell is owned, with all its particles,
+by exactly one locality. Balance is only as fine as these cells allow.
+Gravity-free runs retain the
 unrestricted continuous cuts. Particle migration and checkpoint reload preserve
 the domains independently of the FFT slabs. Each solve sorts local particle
 arrays in place into cell ranges, using parallel CPU partitioning and preserving
@@ -373,7 +377,7 @@ acceleration.
 Every outer and inner pass uses the configured full mesh, so frozen cell keys
 have one meaning throughout an interval. Inner passes rebuild only the selected
 source-and-sink cells, without depositing or transforming a mesh field.
-`gravity.pmmmCoarseMeshSize` determines particle-domain cut granularity.
+`gravity.meshSize` determines particle-domain cut granularity.
 `PmmmDiagnostics` reports `meshSize`, `activeParticles`, `totalParticles`,
 and `evaluatedParticles`. Active particles are the selected sources and sinks;
 inactive particles retain their velocities and rungs during a finer stage.
@@ -393,13 +397,14 @@ checked on the intended particle distribution. Clustered cells can make the
 direct near field expensive. No relative performance claim follows from the
 coefficient counts or the FFT decomposition alone.
 
-The `pmmm` regression separates finite-expansion accuracy from implementation
-error. It compares the computed field with a direct double-precision expansion
-in physical coordinates, bypassing mesh deposition, the Fourier contraction
-table, FFTs, and cell-width rescaling. That comparison allows `2e-5` scaled
-numerical error, with a separate allowance for near FMM's subtraction of softened
-self potential in float. The independent direct Ewald sum remains the physical
-reference for both the finite expansion and the computed field.
+The `pmmm` regression compares the complete field against an independent
+double-precision direct Ewald sum. A direct finite far-mesh expansion plus exact
+near pairs separately checks the far truncation budget. The adaptive near FMM
+uses different expansion centers, so it is checked against the complete-field
+budget. Kernel tests independently check float point and M2L corrections,
+including the source trace and local curvature. A `2e-5` numerical allowance
+and a separate float self-potential cancellation allowance accompany the
+fixture truncation limits below.
 
 The off-center fixtures have the following potential and force truncation
 budgets. These cover the unit-mass collisionless and mixed-mass SPH fixtures,
@@ -418,16 +423,9 @@ error uses `max(1, norm(referenceAcceleration))`.
 | 7 | `8e-6` | `1.25e-4` |
 | 8 | `3e-6` | `5e-5` |
 
-A direct double expansion reaches about `1.614e-3` force error at potential
-degree five (historical order six) in these fixtures, so the former `5e-4`
-limit for every potential degree from five onward was
-too strict even before FFT roundoff. The numerical allowance is checked
-independently and added to the truncation budget for the computed-field Ewald
-comparison.
-
 PMMM counts moment deposition, spherical far-field operators, spectral
 contraction, FFTW plan execution, near interactions, and particle kicks.
-Reported TFLOP/s divides these source-operation counts by the force-advancement
+Reported GFLOP/s divides these source-operation counts by the force-advancement
 wall time, including communication, staging, and scheduling overhead. See
 `flop_accounting.md` for the counting convention.
 
@@ -590,7 +588,7 @@ from a boundary, rejection of a restart with the mode switched off, and energy
 and momentum against a split PMMM run with shorter outer intervals over the same time.
 
 Checkpoints identify PMMM separately from FMM and record its requested mesh size,
-coarse mesh size, expansion degree (in the historical internal order
+domain mesh size (identical to the requested mesh), expansion degree (in the historical internal order
 convention), opening angle, fixed FMM solver identity, and timestep compatibility parameters.
 The executable must match the saved expansion degree and fixed integration
 scheme; incompatible restarts are rejected. The saved near-field identity must
@@ -598,10 +596,11 @@ be FMM; PP checkpoints are retired.
 Historical ordinary PM checkpoints are unsupported. Checkpoints do not store
 FFTW plans or Green spectra: the first solve after restart reconstructs the
 cache, then reuses it for later steps.
-PMMM extension version six identifies the opening-angle stencil and stores its
-angle and resolved coarse mesh. The old near-width slot is reserved and zero.
-Versions one through five remain decodable but are rejected for restart: their
-cube split can leave frozen far fields inconsistent with the new stencil.
+PMMM extension versions eight (constant angle) and nine (scheduled angle)
+identify the complete periodic near/FMM split. The historical coarse-mesh slot
+stores `gravity.meshSize`; the old near-width slot is reserved and zero.
+Versions one through seven remain decodable but are rejected for restart:
+their retained far fields use a different near/far split.
 The saved angle, mesh sizes, expansion degree, FMM identity, and integration
 scheme must match. Bucket size remains mutable rather than checkpoint identity.
 
@@ -629,8 +628,7 @@ that the immediately following short pass builds no additional owned roots.
 The arbitrary-side force matrix checks `1, 2, 3, 5, 6, 7, 11, 12` against
 an independent finite-expansion reference with the near tree walk. Source
 translation checks cover orders 3–9 and both fixed-point widths; distributed
-domain fixtures use full side 30, coarse sides 5 and 10, and side 15 after
-reload. Evolution and checkpoint regressions use a `30^3` full mesh.
+domain fixtures cover sides 5, 10 and 30, with checkpoint domain reload. Evolution and checkpoint regressions use a `30^3` full mesh.
 
 A small CPU application regression can be selected explicitly:
 
@@ -674,4 +672,4 @@ Scheduled checkpoints store the normalized schedule, original start redshift,
 and angle active in the frozen interval. Restart requires the same schedule
 and restores that active angle before any force pass, even when the current
 redshift has crossed a threshold since the interval opened. Constant-angle
-checkpoints retain their existing version-six layout.
+checkpoints use version eight; scheduled checkpoints use version nine.

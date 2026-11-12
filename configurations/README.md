@@ -29,13 +29,14 @@ Restart recovers an omitted expansion degree from the checkpoint.
 The implementation's historical order is one greater than potential degree.
 `gravity.openingAngle` sets both FMM acceptance and the filled-cell PMMM near
 stencil (default `0.5773502691896257`); `gravity.pmmmNearWidth` is retired.
-PMMM requires an explicit positive integer `gravity.meshSize`; arbitrary
-cubic sizes are supported. Override the supplied zero with, for example,
-`--gravity.meshSize=32`.
-`gravity.pmmmCoarseMeshSize` (default: a compatible divisor near `meshSize/8`)
-is the coarsest hierarchical
-stage mesh and the granularity of PMMM particle-domain cuts; PMMM runs need a
-power-of-two locality count.
+PMMM defaults to at most 32 particles per mesh cell on average: `gravity.meshSize=0`
+(or omitting it) selects the smallest cubic mesh meeting that target from the
+resolved total particle count. One million particles select `32^3` cells.
+An explicit positive `gravity.meshSize` overrides automatic sizing; arbitrary
+integer sides are supported.
+The same mesh is used for every hierarchical stage and for particle-domain
+cuts. The legacy `gravity.pmmmCoarseMeshSize` key is accepted but ignored.
+PMMM runs need a power-of-two locality count.
 
 `hydro.method` accepts only `sph`. The sole midpoint SPH scheme supports
 PMMM self-gravity with hierarchical short and outer long kicks, or gravity-free

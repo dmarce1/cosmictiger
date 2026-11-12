@@ -239,6 +239,7 @@ struct KickWorkitem {
     Vector3<Position> pos;
     TreeId self;
     Vector<TreeId> dchecklist;
+    Vector<TreeId> echecklist;
 };
 
 struct KickWorkspace;

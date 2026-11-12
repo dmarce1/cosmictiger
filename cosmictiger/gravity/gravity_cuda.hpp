@@ -730,7 +730,7 @@ template <int order, bool equalMass>
 __device__ FlopCounts cudaGravityPpDirect(CudaKickData const& data, CudaKickControl<order>& control,
     TreeNode const& self, int sinkBegin, int sinkCount, DeviceVector<int> const& partlist, float h,
     bool doPhi, FmmGeometry const& geometry) {
-    if (geometry.meshSize == 0) {
+    if (geometry.meshSize == 0 || geometry.periodicNear) {
         return detail::cudaGravityPpDirectImpl<order, equalMass, false>(
             data, control, self, sinkBegin, sinkCount, partlist, h, doPhi, geometry);
     }

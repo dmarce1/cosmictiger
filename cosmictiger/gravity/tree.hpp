@@ -42,6 +42,7 @@ struct TreeNode {
     Vector3<Position> pos;
     MultipolePosition* mpos;
     float radius;
+    float radialTrace = 0;
     struct {
         unsigned short depth : 14;
         unsigned short localRoot : 1;
@@ -87,6 +88,7 @@ struct TreeNode {
         arc & sourceStore;
         arc & meshCellKey;
         arc & radius;
+        arc & radialTrace;
         int localRoot0;
         int leaf0;
         int depth0;
@@ -113,6 +115,7 @@ struct TreeNode {
         arc & sourceStore;
         arc & meshCellKey;
         arc & radius;
+        arc & radialTrace;
         int localRoot0;
         int leaf0;
         int depth0;
@@ -135,6 +138,7 @@ struct TreeCreateReturn {
     Vector3<Position> pos;
     TreeId id;
     float radius;
+    double radialTrace = 0;
     Range<double> box;
     /// Archive this record in the field order required by distributed transport.
     template <class A>
@@ -143,6 +147,7 @@ struct TreeCreateReturn {
         a & id;
         a & pos;
         a & radius;
+        a & radialTrace;
         a & box;
     }
 };

@@ -38,15 +38,15 @@ def rewriteCheckpoint(checkpoint, ranks, transform):
 
 def use_legacy_extension(checkpoint, ranks, version):
     """Give a copied checkpoint a historical PMMM extension."""
-    require(version in (1, 2, 3, 4, 5), "invalid historical PMMM version")
+    require(version in (1, 2, 3, 4, 5, 6), "invalid historical PMMM version")
     def transform(data, offset):
         extension_version = struct.unpack_from("=Q", data, offset)[0]
-        require(extension_version == 6, "legacy fixture requires PMMM extension version six")
+        require(extension_version == 8, "legacy fixture requires PMMM extension version eight")
         extension_size = 11
-        legacy_size = {1: 7, 2: 8, 3: 10, 4: 11, 5: 11}[version]
+        legacy_size = {1: 7, 2: 8, 3: 10, 4: 11, 5: 11, 6: 11}[version]
         legacy = bytearray(data[offset:offset + 8 * legacy_size])
         struct.pack_into("=Q", legacy, 0, version)
-        struct.pack_into("=Q", legacy, 24, 2)  # Historical cube width.
+        struct.pack_into("=Q", legacy, 24, 0 if version == 6 else 2)  # Historical cube width.
         if version == 4:
             # Version four stored the retired maximum FFT prime factor (default
             # five) where version five records the coarse mesh.
@@ -60,8 +60,8 @@ def changeCompiledIdentity(checkpoint, ranks, *, order=None, near_method=None, f
     """Present the executable with a validly checksummed incompatible variant."""
     def transform(data, offset):
         payload = bytearray(data)
-        require(struct.unpack_from("=Q", payload, offset)[0] == 6,
-                "identity fixture requires PMMM extension version six")
+        require(struct.unpack_from("=Q", payload, offset)[0] == 8,
+                "identity fixture requires PMMM extension version eight")
         if order is not None:
             for word in (2, 8):
                 struct.pack_into("=Q", payload, offset + 8 * word, order)
@@ -199,7 +199,7 @@ def main():
                   "gas state, particle mappings, gravity handoff, and restart state passed")
             continue
         # Old cube splits can carry frozen far fields inconsistent with the new stencil.
-        for version in range(1, 6):
+        for version in range(1, 7):
             legacy = prepareCase(root, f"{label}_legacy_v{version}", source)
             use_legacy_extension(legacy / source.name, ranks, version)
             read_checkpoint(legacy / source.name, ranks, args.time_integrator)
@@ -208,8 +208,7 @@ def main():
             require("PMMM checkpoint version, mesh size, near/far expansion orders" in log,
                     f"legacy cube-split v{version} checkpoint was accepted")
         changes = (("mesh", {"gravity.meshSize": 2 * mesh_size}),
-                   ("opening_angle", {"gravity.openingAngle": 0.8660254037844386}),
-                   ("coarse_mesh", {"gravity.pmmmCoarseMeshSize": mesh_size}))
+                   ("opening_angle", {"gravity.openingAngle": 0.8660254037844386}))
         for name, change in changes:
             rejected = prepareCase(root, label + "_reject_" + name, source)
             log = run(rejected, dict(options, **change,

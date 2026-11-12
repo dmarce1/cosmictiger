@@ -693,13 +693,14 @@ std::array<uint64_t, 11> pmmmCheckpointParameters(Options const& opts) {
     // Earlier versions remain decodable but cannot resume frozen old fields.
     // Version seven appends normalized schedule points and the original start
     // redshift. Slot nine remains the angle active in the saved frozen interval.
+    // Versions eight/nine move the near-cell periodic correction into FMM.
+    // Frozen far fields from the previous split must not be resumed.
     uint64_t const version =
-        gravity::parseOpeningSchedule(opts.gravity.openingSchedule).empty() ? 6 : 7;
+        gravity::parseOpeningSchedule(opts.gravity.openingSchedule).empty() ? 8 : 9;
     return {version, static_cast<uint64_t>(opts.gravity.meshSize),
         static_cast<uint64_t>(gravity::kBuildFmmOrder), 0, static_cast<uint64_t>(opts.run.minRung),
         timestepEtaBits, 1, 1U, static_cast<uint64_t>(gravity::kBuildFmmOrder), openingAngleBits,
-        static_cast<uint64_t>(pmmm::detail::resolvedCoarseMeshSize(
-            opts.gravity.meshSize, opts.gravity.pmmmCoarseMeshSize, opts.gravity.openingAngle))};
+        static_cast<uint64_t>(opts.gravity.meshSize)};
 }
 
 /// Read the version-dependent mesh parameter extension and reject unsupported versions.
@@ -711,7 +712,7 @@ std::array<uint64_t, 11> readPmmmCheckpointParameters(FILE* fp) {
     } else if (parameters[0] == 3) {
         FREAD(&parameters[7], sizeof(uint64_t), 3, fp);
     } else if (parameters[0] == 4 || parameters[0] == 5 || parameters[0] == 6 ||
-        parameters[0] == 7) {
+        parameters[0] == 7 || parameters[0] == 8 || parameters[0] == 9) {
         FREAD(&parameters[7], sizeof(uint64_t), 4, fp);
     } else if (parameters[0] != 1) {
         throw std::runtime_error("Unsupported PMMM checkpoint parameter version");
@@ -778,7 +779,7 @@ void writeDriverState(FILE* fp, DriverParameters const& params) {
             meshParameters.size()) {
             throw std::ios_base::failure("Unable to write PMMM checkpoint parameters");
         }
-        if (meshParameters[0] == 7) {
+        if (meshParameters[0] == 7 || meshParameters[0] == 9) {
             auto const points = gravity::parseOpeningSchedule(getOptions().gravity.openingSchedule);
             uint64_t const count = points.size();
             FWRITE(&count, sizeof(count), 1, fp);
@@ -932,7 +933,7 @@ DriverParameters readDriverState(FILE* fp) {
         if ((header.flags & kParticleMultipoleMesh) != 0U) {
             auto const meshParameters = readPmmmCheckpointParameters(fp);
             auto requested = getOptions();
-            if (meshParameters[0] == 7) {
+            if (meshParameters[0] == 7 || meshParameters[0] == 9) {
                 auto const points =
                     gravity::parseOpeningSchedule(requested.gravity.openingSchedule);
                 uint64_t count;
@@ -965,7 +966,7 @@ DriverParameters readDriverState(FILE* fp) {
             if (requireMeshMatch && !pmmmCheckpointCompatible(meshParameters, requested)) {
                 throw std::runtime_error(
                     "PMMM checkpoint version, mesh size, near/far expansion orders, opening angle, "
-                    "near stencil/method, gravity.pmmmCoarseMeshSize, timestep parameters or "
+                    "near stencil/method, domain mesh, timestep parameters or "
                     "force convention differs from the requested run");
             }
         }
@@ -1219,11 +1220,9 @@ void checkpointStateTest() {
     changed = getOptions();
     auto const pmmmParameters = detail::pmmmCheckpointParameters(changed);
     uint64_t const expectedPmmmVersion =
-        gravity::parseOpeningSchedule(changed.gravity.openingSchedule).empty() ? 6 : 7;
+        gravity::parseOpeningSchedule(changed.gravity.openingSchedule).empty() ? 8 : 9;
     ALWAYS_ASSERT(pmmmParameters[0] == expectedPmmmVersion &&
-        pmmmParameters[10] ==
-            uint64_t(pmmm::detail::resolvedCoarseMeshSize(changed.gravity.meshSize,
-                changed.gravity.pmmmCoarseMeshSize, changed.gravity.openingAngle)));
+        pmmmParameters[10] == uint64_t(changed.gravity.meshSize));
     changed.gravity.meshSize += 1;
     ALWAYS_ASSERT(pmmmParameters != detail::pmmmCheckpointParameters(changed));
     changed = getOptions();
@@ -1237,30 +1236,22 @@ void checkpointStateTest() {
     auto retiredPpParameters = pmmmParameters;
     retiredPpParameters[7] = 0;
     ALWAYS_ASSERT(!detail::pmmmCheckpointCompatible(retiredPpParameters, changed));
-    // The coarse mesh is checkpoint identity: two coarse meshes under one full
-    // mesh select different hierarchical stage meshes after the restart. The
-    // default resolves to one eighth of the full mesh per axis.
+    // Retain the domain-mesh slot and reject old independently sized domains.
     changed = getOptions();
-    changed.gravity.meshSize = 64;
-    changed.gravity.openingAngle = 0.5773502691896257;
-    changed.gravity.pmmmCoarseMeshSize = 8;
-    auto const coarsePmmmParameters = detail::pmmmCheckpointParameters(changed);
-    ALWAYS_ASSERT(coarsePmmmParameters[10] == 8);
-    changed.gravity.pmmmCoarseMeshSize = 16;
-    ALWAYS_ASSERT(!detail::pmmmCheckpointCompatible(coarsePmmmParameters, changed));
-    changed.gravity.pmmmCoarseMeshSize = 0;
-    ALWAYS_ASSERT(detail::pmmmCheckpointCompatible(coarsePmmmParameters, changed));
+    auto oldDomainParameters = detail::pmmmCheckpointParameters(changed);
+    ++oldDomainParameters[10];
+    ALWAYS_ASSERT(!detail::pmmmCheckpointCompatible(oldDomainParameters, changed));
     changed = getOptions();
-    for (uint64_t version = 1; version <= 5; ++version) {
+    for (uint64_t version = 1; version <= 7; ++version) {
         auto legacyPmmmParameters = detail::pmmmCheckpointParameters(changed);
         legacyPmmmParameters[0] = version;
         ALWAYS_ASSERT(!detail::pmmmCheckpointCompatible(legacyPmmmParameters, changed));
     }
     // Decode each historical extension without consuming any following driver
     // bytes.
-    constexpr std::array<size_t, 7> kPmmmParameterWords{7, 8, 10, 11, 11, 11, 11};
+    constexpr std::array<size_t, 9> kPmmmParameterWords{7, 8, 10, 11, 11, 11, 11, 11, 11};
     constexpr uint64_t kFollowingPayload = 0x0123456789abcdefULL;
-    for (uint64_t version = 1; version <= 7; ++version) {
+    for (uint64_t version = 1; version <= 9; ++version) {
         changed = getOptions();
         auto serialized = detail::pmmmCheckpointParameters(changed);
         serialized[0] = version;

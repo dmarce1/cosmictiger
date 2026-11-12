@@ -169,10 +169,7 @@ struct Gravity {
     int errorInterval{};
     // Evenly spaced global particle indices, capped at the particle count.
     int errorSampleSize{100};
-    int meshSize{};    // Full-particle PMMM side; any positive integer, scaled per stage.
-    // Coarsest hierarchical stage mesh and the granularity of particle-domain
-    // cuts; a divisor of meshSize. Zero chooses a compatible divisor near meshSize/8.
-    int pmmmCoarseMeshSize{};
+    int meshSize{};    // PMMM cells per axis for every stage and particle-domain cuts.
     // Near field of the PMMM solver: fmm, or its direct particle-pair fallback pp.
     // The field keeps its historical serialized name.
     int pmmmBatchParticles{4096};    // Target owned sink count per ready near-field batch.
@@ -475,7 +472,9 @@ struct Options {
         arc & analysis.saveAcceleration;
         arc & analysis.savePotential;
         arc & gravity.pmmmBatchParticles;
-        arc & gravity.pmmmCoarseMeshSize;
+        // Preserve the historical archive slot; the mesh now has one size.
+        int legacyCoarseMeshSize = gravity.meshSize;
+        arc & legacyCoarseMeshSize;
         arc & gravity.pmmmOuterInterval;
         arc & gravity.errorInterval;
         arc & gravity.errorSampleSize;

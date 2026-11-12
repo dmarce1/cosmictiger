@@ -27,10 +27,12 @@ def main():
     root = args.workdir.resolve()
     root.mkdir(parents=True, exist_ok=True)
     ranks = 2 if args.mpi_exec else 1
+    # A 4^3 lattice retains the occupied/empty-cell and near/far schedule cases
+    # without spending this control-flow regression on thousands of Ewald M2Ls.
     common = {
         "hpx:threads": 1 if ranks > 1 else 2, "hpx:bind": "none",
-        "run.scenario": "cosmology", "run.darkMatterParticleCount": 512,
-        "run.gasParticleCount": 512, "run.numberOfOutputs": 3, "run.minRung": 2,
+        "run.scenario": "cosmology", "run.darkMatterParticleCount": 64,
+        "run.gasParticleCount": 64, "run.numberOfOutputs": 3, "run.minRung": 2,
         "run.maxIterations": 400, "run.verbose": "true", "units.boxLength": 20,
         "cosmology.startRedshift": 1, "cosmology.endRedshift": 0.8,
         "cosmology.sigma8": 0, "scenario.cosmology.useGlass": "false",
@@ -120,7 +122,7 @@ def main():
             {"gravity.openingSchedule": "1:0.5,1:0.6"},
             {"gravity.openingSchedule": "1:nan"},
             {"run.scenario": "plummer"},
-            {"gravity.openingSchedule": "1:0.45,0.99:1", "gravity.smoothingLength": 1.5})):
+            {"gravity.openingSchedule": "1:0.45,0.99:1", "gravity.smoothingLength": 0.75})):
         directory = prepareCase(root, f"invalid_{index}")
         rejected = run(directory, extra, success=False)
         require("openingSchedule" in rejected, "invalid schedule lacked option diagnostic")

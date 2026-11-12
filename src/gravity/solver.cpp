@@ -102,8 +102,10 @@ void prepare(SolveRequest const& request) {
         if (frozen) {
             // No deposit or transform: the far field is not evaluated.
             std::vector<double>().swap(state.moments);
+            std::vector<double>().swap(state.radialTraces);
         } else {
             state.moments.assign(cache.cellCount() * cache.sourceCount, 0.0);
+            state.radialTraces.assign(cache.cellCount(), 0.0);
         }
         state.ownedCells.clear();
         for (size_t index = 0; index < state.cells.size(); ++index) {
@@ -236,14 +238,8 @@ void solve(SolveRequest request) {
     }
     auto const& options = getOptions().gravity;
     bool const frozen = frozenNearRequest(request);
-    // The outer interval keeps the full mesh: frozen keys and the boundary far
-    // solve both refer to it, whatever fraction of the particles is active.
-    request.meshSize = request.applyKick && request.parameters.htime && !frozen ?
-        hierarchicalMeshSize(options.meshSize,
-            resolvedCoarseMeshSize(
-                options.meshSize, options.pmmmCoarseMeshSize, options.openingAngle),
-            request.activeParticles, request.totalParticles) :
-        options.meshSize;
+    // Every stage shares the domain mesh, independent of the active fraction.
+    request.meshSize = options.meshSize;
     bool const farField = !frozen;
     bool const nearField = !request.farOnly;
     {

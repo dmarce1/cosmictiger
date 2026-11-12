@@ -48,11 +48,11 @@ void domainsInitRebounds();
 void domainsTransmitBoxes(std::unordered_map<size_t, DomainT> boxes);
 void domainsReboundSort(Vector<double> bounds, int depth);
 Vector<size_t> domainsCountBelow(Vector<double> bounds, int depth);
-std::vector<std::vector<size_t>> domainsCountCoarseSlabs(int depth, int coarseMeshSize);
+std::vector<std::vector<size_t>> domainsCountMeshSlabs(int depth, int meshSize);
 Vector<size_t> domainsGetLoads();
 
 HPX_PLAIN_ACTION(domainsCountBelow, DomainsCountBelowAction);
-HPX_PLAIN_ACTION(domainsCountCoarseSlabs, DomainsCountCoarseSlabsAction);
+HPX_PLAIN_ACTION(domainsCountMeshSlabs, DomainsCountMeshSlabsAction);
 HPX_PLAIN_ACTION(domainsGetLoads, DomainsGetLoadsAction);
 HPX_PLAIN_ACTION(domainsReboundSort, DomainsReboundSortAction);
 HPX_PLAIN_ACTION(domainsBegin, DomainsBeginAction);
@@ -71,18 +71,15 @@ static Vector<DomainLocal> localDomains;
 
 namespace detail {
 
-/// Return the resolved coarse mesh side used for particle domains, or zero without mesh gravity.
-int domainCoarseMeshSize() {
+/// Return the configured mesh side used for particle domains, or zero without mesh gravity.
+int domainMeshSize() {
     auto const& options = getOptions().gravity;
-    return options.enabled && options.meshSize > 0 ?
-        pmmm::detail::resolvedCoarseMeshSize(
-            options.meshSize, options.pmmmCoarseMeshSize, options.openingAngle) :
-        0;
+    return options.enabled && options.meshSize > 0 ? options.meshSize : 0;
 }
 
-/// Round a coarse-mesh domain boundary upward to its first representable fixed-point position.
+/// Round a mesh domain boundary upward to its first representable fixed-point position.
 Position domainSplitPosition(double boundary) {
-    int const meshSize = domainCoarseMeshSize();
+    int const meshSize = domainMeshSize();
     if (meshSize == 0) {
         return Position(boundary);
     }
@@ -93,10 +90,10 @@ Position domainSplitPosition(double boundary) {
     return result;
 }
 
-// Routing through a coarse cell's center preserves exact half-open ownership
+// Routing through a mesh cell's center preserves exact half-open ownership
 // even when a fixed64 position rounds across a non-dyadic double boundary.
 double particleDomainCoordinate(Position position) {
-    int const meshSize = domainCoarseMeshSize();
+    int const meshSize = domainMeshSize();
     return meshSize > 0 ?
         (double(particleMeshCoordinate(position.raw(), uint32_t(meshSize))) + 0.5) / meshSize :
         positionDomainCoordinate(position);
@@ -130,13 +127,12 @@ Vector<size_t> countDomainSplits(Vector<double> const& bounds, int depth) {
     return counts;
 }
 
-// Sum each locality's coarse-slab histograms for the domains at this depth.
-std::vector<std::vector<size_t>> countDomainCoarseSlabs(int depth, int coarseMeshSize) {
+// Sum each locality's mesh-slab histograms for the domains at this depth.
+std::vector<std::vector<size_t>> countDomainMeshSlabs(int depth, int meshSize) {
     profile::ScopedPhase profilePhase("domains.rebound.countSlabs");
     Vector<hpx::future<std::vector<std::vector<size_t>>>> pending;
     for (auto const& locality : hpxLocalities()) {
-        pending.push_back(
-            hpx::async<DomainsCountCoarseSlabsAction>(locality, depth, coarseMeshSize));
+        pending.push_back(hpx::async<DomainsCountMeshSlabsAction>(locality, depth, meshSize));
     }
     std::vector<std::vector<size_t>> counts;
     for (auto& future : pending) {
@@ -161,22 +157,19 @@ std::vector<std::vector<size_t>> countDomainCoarseSlabs(int depth, int coarseMes
     return counts;
 }
 
-// PMMM particle domains cut only on coarse-mesh planes, so no cell of the coarse
-// mesh or of any stage mesh whose side is a multiple ever spans two localities. The cut at
-// this depth bisects the locality range; each child must keep enough coarse
+// PMMM particle domains cut only on mesh planes, so no cell spans two localities.
+// The cut at this depth bisects the locality range; each child must keep enough
 // cells along this axis for the cuts it still owes on it. Among the admissible
 // planes, the one whose particle count comes closest to the balanced target
 // wins, not the plane nearest the exact-balance coordinate; ties prefer the
 // plane nearest the middle of the parent, then the lower plane.
-Vector<double> alignedDomainCuts(
-    Vector<DomainGlobal> const& domains, int depth, int coarseMeshSize) {
-    auto const histograms = countDomainCoarseSlabs(depth, coarseMeshSize);
+Vector<double> alignedDomainCuts(Vector<DomainGlobal> const& domains, int depth, int meshSize) {
+    auto const histograms = countDomainMeshSlabs(depth, meshSize);
     ALWAYS_ASSERT(histograms.size() == domains.size());
     int const axis = depth % kSpatialDimensions;
-    auto const coarseIndex = [coarseMeshSize](double coordinate) {
-        auto const index = std::llround(coordinate * coarseMeshSize);
-        ALWAYS_ASSERT(
-            index >= 0 && index <= coarseMeshSize && double(index) / coarseMeshSize == coordinate);
+    auto const meshIndex = [meshSize](double coordinate) {
+        auto const index = std::llround(coordinate * meshSize);
+        ALWAYS_ASSERT(index >= 0 && index <= meshSize && double(index) / meshSize == coordinate);
         return int(index);
     };
     Vector<double> bounds(domains.size());
@@ -201,14 +194,13 @@ Vector<double> alignedDomainCuts(
             }
         }
         int const need = 1 << remainingCuts;
-        int const lo = coarseIndex(domain.box.begin[axis]);
-        int const hi = coarseIndex(domain.box.end[axis]);
+        int const lo = meshIndex(domain.box.begin[axis]);
+        int const hi = meshIndex(domain.box.end[axis]);
         if (hi - lo < 2 * need) {
-            throw std::runtime_error(
-                "PMMM coarse mesh has too few cells per axis for the locality count");
+            throw std::runtime_error("PMMM mesh has too few cells per axis for the locality count");
         }
         auto const& histogram = histograms[i];
-        ALWAYS_ASSERT(histogram.size() == size_t(coarseMeshSize));
+        ALWAYS_ASSERT(histogram.size() == size_t(meshSize));
         size_t const targetCount = size_t(processes / 2) * domain.totalCount / processes;
         size_t below = 0;
         for (int slab = lo; slab < lo + need; ++slab) {
@@ -228,7 +220,7 @@ Vector<double> alignedDomainCuts(
             below += histogram[plane];
         }
         ALWAYS_ASSERT(best > lo && best < hi);
-        bounds[i] = double(best) / coarseMeshSize;
+        bounds[i] = double(best) / meshSize;
     }
     return bounds;
 }
@@ -374,9 +366,9 @@ Vector<size_t> domainsCountBelow(Vector<double> bounds, int depth) {
     return counts;
 }
 
-// Per-domain histogram of this locality's particles over the coarse-mesh slabs
+// Per-domain histogram of this locality's particles over the mesh slabs
 // along the cut axis. Domains at other depths return empty histograms.
-std::vector<std::vector<size_t>> domainsCountCoarseSlabs(int depth, int coarseMeshSize) {
+std::vector<std::vector<size_t>> domainsCountMeshSlabs(int depth, int meshSize) {
     std::vector<std::vector<size_t>> counts(localDomains.size());
     Vector<hpx::future<void>> futs;
     int const xdim = depth % kSpatialDimensions;
@@ -384,9 +376,9 @@ std::vector<std::vector<size_t>> domainsCountCoarseSlabs(int depth, int coarseMe
         if (localDomains[i].depth != depth) {
             continue;
         }
-        counts[i].assign(size_t(coarseMeshSize), 0);
+        counts[i].assign(size_t(meshSize), 0);
         futs.push_back(hpx::async(hpx::annotated_function(
-            [i, xdim, coarseMeshSize, &counts]() {
+            [i, xdim, meshSize, &counts]() {
                 auto const rng = localDomains[i].particleRange;
                 if (rng.first == rng.second) {
                     return;
@@ -395,8 +387,8 @@ std::vector<std::vector<size_t>> domainsCountCoarseSlabs(int depth, int coarseMe
                         hpxHardwareConcurrency() / (size_t) particlesSize(),
                     (size_t) 1);
                 std::vector<std::vector<size_t>> partial(
-                    numberOfThreads, std::vector<size_t>(size_t(coarseMeshSize), 0));
-                auto const func = [numberOfThreads, rng, xdim, coarseMeshSize, &partial](int proc) {
+                    numberOfThreads, std::vector<size_t>(size_t(meshSize), 0));
+                auto const func = [numberOfThreads, rng, xdim, meshSize, &partial](int proc) {
                     size_t const begin =
                         rng.first + (size_t) proc * (rng.second - rng.first) / numberOfThreads;
                     size_t const end = rng.first +
@@ -404,24 +396,24 @@ std::vector<std::vector<size_t>> domainsCountCoarseSlabs(int depth, int coarseMe
                     auto& slabs = partial[proc];
                     for (size_t j = begin; j < end; j++) {
                         slabs[detail::particleMeshCoordinate(
-                            particlesPositionValue(xdim, j).raw(), uint32_t(coarseMeshSize))]++;
+                            particlesPositionValue(xdim, j).raw(), uint32_t(meshSize))]++;
                     }
                 };
                 Vector<hpx::future<void>> chunks;
                 for (int proc = 1; proc < numberOfThreads; proc++) {
                     chunks.push_back(hpx::async(
-                        hpx::annotated_function(func, "particles.domainsCountCoarseSlabsChunk"),
+                        hpx::annotated_function(func, "particles.domainsCountMeshSlabsChunk"),
                         proc));
                 }
                 func(0);
                 hpx::wait_all(chunks.begin(), chunks.end());
                 for (auto const& slabs : partial) {
-                    for (int slab = 0; slab < coarseMeshSize; ++slab) {
+                    for (int slab = 0; slab < meshSize; ++slab) {
                         counts[i][slab] += slabs[slab];
                     }
                 }
             },
-            "particles.domainsCountCoarseSlabs")));
+            "particles.domainsCountMeshSlabs")));
     }
     hpx::wait_all(futs.begin(), futs.end());
     return counts;
@@ -466,7 +458,7 @@ void domainsReboundSort(Vector<double> bounds, int depth) {
     localDomains = std::move(newDomains);
 }
 
-/// Build a particle-balanced domain decomposition, respecting coarse mesh planes for PMMM
+/// Build a particle-balanced domain decomposition, respecting mesh planes for PMMM
 /// ownership.
 void domainsRebound() {
     {
@@ -480,13 +472,11 @@ void domainsRebound() {
     domains[0].processRange.first = 0;
     domains[0].processRange.second = hpxSize();
     // The decomposition balances the current particle population. PMMM cuts on
-    // coarse-mesh planes so no mesh cell spans two localities, choosing the
+    // mesh planes so no mesh cell spans two localities, choosing the
     // admissible plane with the best particle balance; gravity-free runs cut anywhere.
     auto const& gravityOptions = getOptions().gravity;
-    int const coarseMeshSize = gravityOptions.enabled && gravityOptions.meshSize > 0 ?
-        pmmm::detail::resolvedCoarseMeshSize(gravityOptions.meshSize,
-            gravityOptions.pmmmCoarseMeshSize, gravityOptions.openingAngle) :
-        0;
+    int const meshSize =
+        gravityOptions.enabled && gravityOptions.meshSize > 0 ? gravityOptions.meshSize : 0;
     domains[0].totalCount = 0;
     auto const loads = []() {
         profile::ScopedPhase profilePhase("domains.rebound.loads");
@@ -521,8 +511,8 @@ void domainsRebound() {
         domains = std::move(newDomains);
         Vector<size_t> counts(domains.size());
         Vector<double> bounds;
-        if (coarseMeshSize > 0) {
-            bounds = detail::alignedDomainCuts(domains, depth, coarseMeshSize);
+        if (meshSize > 0) {
+            bounds = detail::alignedDomainCuts(domains, depth, meshSize);
         } else {
             for (int iter = 0; iter < kDomainReboundIterations; ++iter) {
                 bounds.clear();
@@ -554,7 +544,7 @@ void domainsRebound() {
             // Preserve rational mesh planes; counting and partitioning recover
             // their exact fixed-point boundary. Unaligned cuts stay quantized.
             double const midx =
-                coarseMeshSize > 0 ? bounds[i] : positionDomainCoordinate(Position(bounds[i]));
+                meshSize > 0 ? bounds[i] : positionDomainCoordinate(Position(bounds[i]));
             boxesByKey[domains[i].key].midx = midx;
             bounds[i] = midx;
         }

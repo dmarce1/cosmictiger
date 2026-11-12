@@ -28,6 +28,7 @@
 template <int order>
 struct CudaExpansionType {
     Vector3<Position> pos;
+    float curvature;
     cosmictiger::gravity::cartesian::Expansion<float> expansion;
 };
 
@@ -49,6 +50,8 @@ struct CudaKickForceTile {
 // touches the pool allocator only when a list outgrows its region.
 template <int order>
 struct CudaKickListStorage {
+    int* echecks;
+    int* echeckBounds;
     int* dchecks;         // checklist stack entries
     int* dcheckBounds;    // stack level bounds, depth + 2 entries
     int* leaflist;
@@ -102,6 +105,8 @@ CUDA_EXPORT inline int kickCarveListStorage(
     storage.depth = kCudaMaxDepth;
     storage.forceEntries = layout.forceBackingCapacity;
     storage.currentEntries = layout.expansionOffset >= 0 ? 0 : 1;
+    storage.echecks = carver.take<int>(storage.listEntries);
+    storage.echeckBounds = carver.take<int>(storage.depth + 2);
     storage.dchecks = carver.take<int>(storage.listEntries);
     storage.dcheckBounds = carver.take<int>(storage.depth + 2);
     storage.leaflist = carver.take<int>(storage.listEntries);
@@ -123,6 +128,7 @@ CUDA_EXPORT inline int kickCarveListStorage(
 // (or, without a reservation, in the cudaAllocate pool).
 template <int order>
 struct CudaKickControl {
+    StackVector<int> echecks;
     StackVector<int> dchecks;
     DeviceVector<int> leaflist;
     DeviceVector<int> cplist;
@@ -152,7 +158,8 @@ struct CudaKickControl {
     CudaKickControl() = default;
     // Collective: lists on the block's slab regions (every lane constructs).
     __device__ inline CudaKickControl(CudaKickListStorage<order> const& storage)
-      : dchecks(storage.dchecks, storage.listEntries, storage.dcheckBounds, storage.depth)
+      : echecks(storage.echecks, storage.listEntries, storage.echeckBounds, storage.depth)
+      , dchecks(storage.dchecks, storage.listEntries, storage.dcheckBounds, storage.depth)
       , leaflist(storage.leaflist, storage.listEntries)
       , cplist(storage.cplist, storage.listEntries)
       , cclist(storage.cclist, storage.listEntries)
@@ -169,6 +176,9 @@ template <int order>
 struct CudaKickParameters {
     FmmGeometry geometry;
     ParticleInteger outputOffset;
+    float curvature;
+    int* echecks;
+    int ecount;
     Vector3<Position> lpos;
     cosmictiger::gravity::cartesian::Expansion<float> lValue;
     int self;

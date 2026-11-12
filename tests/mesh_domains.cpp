@@ -27,11 +27,11 @@
 
 namespace detail {
 
-// Full PMMM mesh of the fixtures. Seam particles straddle its cell planes; the
-// coarse meshes below cut the particle domains on a subset of those planes.
+// Fixture positions include non-dyadic mesh seams. Test domain cuts at each
+// configured mesh size.
 constexpr int kMeshDomainMeshSize = 30;
 constexpr double kMeshDomainOpeningAngle = 0.8660254037844386;
-constexpr int kMeshDomainCoarseMeshSizes[] = {5, 10};
+constexpr int kMeshDomainSides[] = {5, 10, 30};
 constexpr int kMeshDomainFixtures = 4;
 constexpr int kMeshDomainDenseFixture = 2;
 
@@ -62,7 +62,7 @@ PositionInteger meshDomainPosition(int identity, int dim, int fixture, int phase
     if (fixture == 0) {
         // Seam particles sit one unit below, exactly on, and one unit above the
         // full-mesh planes, so the half-open cell classification is exercised
-        // on both sides of every coarse plane. Every 21st particle straddles
+        // on both sides of every mesh plane. Every 21st particle straddles
         // the periodic seam at 0 / 1.
         int const plane = 1 + ((identity / 3 + 2 * dim) % (kMeshDomainMeshSize - 1));
         raw = (period * plane + kMeshDomainMeshSize - 1) / kMeshDomainMeshSize;
@@ -73,7 +73,7 @@ PositionInteger meshDomainPosition(int identity, int dim, int fixture, int phase
         }
     } else if (fixture == kMeshDomainDenseFixture) {
         // Distinct coordinates inside one full-mesh cell, hence inside one cell
-        // of every coarse mesh. Aligned cuts can never separate them.
+        // of every configured mesh. Aligned cuts can never separate them.
         int const count = meshDomainFixtureCount(fixture);
         int const multiplier = dim == kXi ? 1 : dim == kYi ? 13 : 23;
         int const offset = 1 + identity * multiplier % count;
@@ -87,7 +87,7 @@ PositionInteger meshDomainPosition(int identity, int dim, int fixture, int phase
         raw = cellWidth * (2 * cell + 1) / 2 + identity % 3;
     }
     // Translate through existing rank boundaries. The even full side keeps
-    // the full-mesh planes aligned; the odd coarse side also exercises cuts
+    // the full-mesh planes aligned; the odd test side also exercises cuts
     // that do not share the translation's half-period symmetry.
     raw += period / 2 * phase;
     return static_cast<PositionInteger>(raw);
@@ -196,11 +196,11 @@ void checkGravitySampleCheckpointReset() {
 
 bool meshDomainContains(Range<double> const& box, MeshDomainRecord const& record) {
     for (int dim = 0; dim < kDimensions; ++dim) {
-        int const coarse = getOptions().gravity.pmmmCoarseMeshSize;
-        auto const scaled = static_cast<unsigned __int128>(record.raw[dim]) * coarse;
+        int const meshSide = getOptions().gravity.meshSize;
+        auto const scaled = static_cast<unsigned __int128>(record.raw[dim]) * meshSide;
         unsigned __int128 const period = static_cast<unsigned __int128>(1) << kPositionBits;
-        auto const begin = uint32_t(std::llround(box.begin[dim] * coarse));
-        auto const end = uint32_t(std::llround(box.end[dim] * coarse));
+        auto const begin = uint32_t(std::llround(box.begin[dim] * meshSide));
+        auto const end = uint32_t(std::llround(box.end[dim] * meshSide));
         if (scaled < begin * period || scaled >= end * period) {
             return false;
         }
@@ -240,11 +240,11 @@ int meshDomainLevels(int ranks) {
 }
 
 // Independent transcription of the aligned-cut rule. Admissible planes leave
-// both children enough coarse cells for the cuts they still owe on this axis.
+// both children enough mesh cells for the cuts they still owe on this axis.
 // Among them the plane whose below-count is closest to the balanced target
 // wins; ties go to the plane nearest the parent's middle, then the lower one.
 int meshDomainExpectedPlane(
-    std::vector<int> const& coarseIndices, int lo, int hi, int depth, int ranks) {
+    std::vector<int> const& meshIndices, int lo, int hi, int depth, int ranks) {
     int const axis = depth % kDimensions;
     int const levels = meshDomainLevels(ranks);
     int remainingCuts = 0;
@@ -255,13 +255,13 @@ int meshDomainExpectedPlane(
     }
     int const need = 1 << remainingCuts;
     requireMeshDomain(
-        hi - lo >= 2 * need, "parent domain has too few coarse cells for its remaining cuts");
-    size_t const target = size_t(ranks / 2) * coarseIndices.size() / size_t(ranks);
+        hi - lo >= 2 * need, "parent domain has too few mesh cells for its remaining cuts");
+    size_t const target = size_t(ranks / 2) * meshIndices.size() / size_t(ranks);
     int best = -1;
     size_t bestError = std::numeric_limits<size_t>::max();
     int bestCenterDistance = std::numeric_limits<int>::max();
     for (int plane = lo + need; plane <= hi - need; ++plane) {
-        size_t const below = size_t(std::count_if(coarseIndices.begin(), coarseIndices.end(),
+        size_t const below = size_t(std::count_if(meshIndices.begin(), meshIndices.end(),
             [plane](int const index) { return index < plane; }));
         size_t const error = below > target ? below - target : target - below;
         int const centerDistance = std::abs(2 * plane - (lo + hi));
@@ -275,16 +275,16 @@ int meshDomainExpectedPlane(
 }
 
 void verifyMeshDomainSplits(Vector<MeshDomainRecord> const& records, size_t key, int ranks,
-    int depth, bool rebound, int coarseMeshSize) {
+    int depth, bool rebound, int meshSide) {
     auto const parent = domainsRange(key);
     for (int dim = 0; dim < kDimensions; ++dim) {
         requireMeshDomain(parent.begin[dim] >= 0.0 && parent.end[dim] <= 1.0 &&
                 parent.begin[dim] <= parent.end[dim],
             "domain bounds do not form a valid spatial interval");
-        // Every boundary, trivial or not, is an exact coarse-mesh plane.
-        requireMeshDomain(meshDomainPlane(parent.begin[dim], coarseMeshSize) >= 0 &&
-                meshDomainPlane(parent.end[dim], coarseMeshSize) >= 0,
-            "domain boundary is not an exact coarse-mesh plane");
+        // Every boundary, trivial or not, is an exact mesh plane.
+        requireMeshDomain(meshDomainPlane(parent.begin[dim], meshSide) >= 0 &&
+                meshDomainPlane(parent.end[dim], meshSide) >= 0,
+            "domain boundary is not an exact mesh plane");
     }
     if (ranks == 1) {
         return;
@@ -302,26 +302,25 @@ void verifyMeshDomainSplits(Vector<MeshDomainRecord> const& records, size_t key,
     }
     int const leftRanks = ranks / 2;
     if (rebound) {
-        int const lo = meshDomainPlane(parent.begin[axis], coarseMeshSize);
-        int const hi = meshDomainPlane(parent.end[axis], coarseMeshSize);
-        std::vector<int> coarseIndices;
+        int const lo = meshDomainPlane(parent.begin[axis], meshSide);
+        int const hi = meshDomainPlane(parent.end[axis], meshSide);
+        std::vector<int> meshIndices;
         for (auto const& record : records) {
             if (meshDomainContains(parent, record)) {
-                int const index = meshDomainCellIndex(record, axis, coarseMeshSize);
+                int const index = meshDomainCellIndex(record, axis, meshSide);
                 // The integer classifier must agree with the exact coordinate test.
                 requireMeshDomain(index >= lo && index < hi,
                     "mesh cell classification disagrees with domain containment");
-                coarseIndices.push_back(index);
+                meshIndices.push_back(index);
             }
         }
-        int const expected = meshDomainExpectedPlane(coarseIndices, lo, hi, depth, ranks);
-        requireMeshDomain(expected > lo && expected < hi, "no admissible coarse plane was found");
-        requireMeshDomain(left.end[axis] == double(expected) / coarseMeshSize,
-            "domain cut is not the count-balanced coarse-mesh plane");
+        int const expected = meshDomainExpectedPlane(meshIndices, lo, hi, depth, ranks);
+        requireMeshDomain(expected > lo && expected < hi, "no admissible mesh plane was found");
+        requireMeshDomain(left.end[axis] == double(expected) / meshSide,
+            "domain cut is not the count-balanced mesh plane");
     }
-    verifyMeshDomainSplits(records, key * 2, leftRanks, depth + 1, rebound, coarseMeshSize);
-    verifyMeshDomainSplits(
-        records, key * 2 + 1, ranks - leftRanks, depth + 1, rebound, coarseMeshSize);
+    verifyMeshDomainSplits(records, key * 2, leftRanks, depth + 1, rebound, meshSide);
+    verifyMeshDomainSplits(records, key * 2 + 1, ranks - leftRanks, depth + 1, rebound, meshSide);
 }
 
 void readMeshDomainLayout(Vector<Range<double>>& boxes, size_t key, int ranks) {
@@ -356,8 +355,7 @@ HPX_PLAIN_ACTION(
 
 namespace detail {
 
-// No cell of the coarse mesh, nor of any integer refinement of it, may hold
-// particles owned by two localities.
+// No cell of the configured mesh may hold particles owned by two localities.
 void verifyMeshDomainCellOwnership(
     Vector<MeshDomainRecord> const& records, Vector<int> const& owners, int meshSize) {
     std::vector<int> cellOwner(size_t(meshSize) * size_t(meshSize) * size_t(meshSize), -1);
@@ -372,7 +370,7 @@ void verifyMeshDomainCellOwnership(
     }
 }
 
-void verifyMeshDomains(int fixture, int phase, bool rebound, int coarseMeshSize) {
+void verifyMeshDomains(int fixture, int phase, bool rebound, int meshSide) {
     Vector<hpx::future<MeshDomainSnapshot>> pending;
     for (auto const& locality : hpxLocalities()) {
         pending.push_back(hpx::async<ReadMeshDomainsAction>(locality));
@@ -415,16 +413,13 @@ void verifyMeshDomains(int fixture, int phase, bool rebound, int coarseMeshSize)
         requireMeshDomain(root.begin[dim] == 0.0 && root.end[dim] == 1.0,
             "particle domains do not cover the periodic volume");
     }
-    verifyMeshDomainSplits(allRecords, 1, hpxSize(), 0, rebound, coarseMeshSize);
-    int const meshSizes[] = {coarseMeshSize, 2 * coarseMeshSize, getOptions().gravity.meshSize};
-    for (int const meshSize : meshSizes) {
-        verifyMeshDomainCellOwnership(allRecords, owners, meshSize);
-    }
+    verifyMeshDomainSplits(allRecords, 1, hpxSize(), 0, rebound, meshSide);
+    verifyMeshDomainCellOwnership(allRecords, owners, meshSide);
     if (fixture == kMeshDomainDenseFixture) {
-        // One coarse cell cannot be split, so the dense population shares one
+        // One mesh cell cannot be split, so the dense population shares one
         // locality whatever the rank count; the other localities stay empty.
         requireMeshDomain(
-            populatedRanks == 1, "particles of one coarse cell were spread over localities");
+            populatedRanks == 1, "particles of one mesh cell were spread over localities");
     }
 }
 
@@ -454,8 +449,8 @@ void meshDomainsTest() {
     options.analysis.groups = COSMICTIGER_ENABLE_ROCKSTAR != 0;
     options.analysis.tracers = true;
     options.analysis.saveForce = false;
-    for (int const coarseMeshSize : detail::kMeshDomainCoarseMeshSizes) {
-        options.gravity.pmmmCoarseMeshSize = coarseMeshSize;
+    for (int const meshSide : detail::kMeshDomainSides) {
+        options.gravity.meshSize = meshSide;
         for (int fixture = 0; fixture < detail::kMeshDomainFixtures; ++fixture) {
             // The balancing target must use the current distributed population,
             // rather than an initial-condition count that can become stale.
@@ -464,7 +459,7 @@ void meshDomainsTest() {
             detail::initializeMeshDomainFixture(fixture);
             domainsRebound();
             detail::migrateMeshDomainFixture();
-            detail::verifyMeshDomains(fixture, 0, true, coarseMeshSize);
+            detail::verifyMeshDomains(fixture, 0, true, meshSide);
             Vector<hpx::future<void>> pending;
             for (auto const& locality : hpxLocalities()) {
                 pending.push_back(hpx::async<MoveMeshDomainsAction>(locality, fixture, 1));
@@ -475,26 +470,25 @@ void meshDomainsTest() {
             // Translated particles migrate across the stale layout without
             // rebalancing, then a fresh rebound realigns the cuts to them.
             detail::migrateMeshDomainFixture();
-            detail::verifyMeshDomains(fixture, 1, false, coarseMeshSize);
+            detail::verifyMeshDomains(fixture, 1, false, meshSide);
             domainsRebound();
             detail::migrateMeshDomainFixture();
-            detail::verifyMeshDomains(fixture, 1, true, coarseMeshSize);
+            detail::verifyMeshDomains(fixture, 1, true, meshSide);
         }
     }
 
-    // Aligned cuts survive checkpoint round trips and full-mesh changes that keep
-    // the coarse mesh. The crowded fixture places its x cut away from the middle,
+    // Aligned cuts survive checkpoint round trips. The crowded fixture places
+    // its x cut away from the middle,
     // so a layout silently rebuilt from defaults would be detected.
     constexpr int kFixture = 1;
-    int const coarseMeshSize = detail::kMeshDomainCoarseMeshSizes[0];
-    options.gravity.pmmmCoarseMeshSize = coarseMeshSize;
-    options.gravity.meshSize = detail::kMeshDomainMeshSize;
+    int const meshSide = detail::kMeshDomainSides[0];
+    options.gravity.meshSize = meshSide;
     options.initial.numberOfParticles = detail::meshDomainFixtureCount(kFixture) + 11;
     setOptions(options);
     detail::initializeMeshDomainFixture(kFixture);
     domainsRebound();
     detail::migrateMeshDomainFixture();
-    detail::verifyMeshDomains(kFixture, 0, true, coarseMeshSize);
+    detail::verifyMeshDomains(kFixture, 0, true, meshSide);
     Vector<Range<double>> originalLayout;
     detail::readMeshDomainLayout(originalLayout, 1, hpxSize());
     Vector<hpx::future<void>> pending;
@@ -505,18 +499,12 @@ void meshDomainsTest() {
         future.get();
     }
     detail::migrateMeshDomainFixture();
-    detail::verifyMeshDomains(kFixture, 0, true, coarseMeshSize);
-    detail::verifyMeshDomainLayout(originalLayout);
-    // Halving the full mesh keeps the coarse mesh, hence the layout and ownership.
-    options.gravity.meshSize = detail::kMeshDomainMeshSize / 2;
-    setOptions(options);
-    detail::migrateMeshDomainFixture();
-    detail::verifyMeshDomains(kFixture, 0, true, coarseMeshSize);
+    detail::verifyMeshDomains(kFixture, 0, true, meshSide);
     detail::verifyMeshDomainLayout(originalLayout);
     // Rebounding the same population reproduces the same aligned layout.
     domainsRebound();
     detail::migrateMeshDomainFixture();
-    detail::verifyMeshDomains(kFixture, 0, true, coarseMeshSize);
+    detail::verifyMeshDomains(kFixture, 0, true, meshSide);
     detail::verifyMeshDomainLayout(originalLayout);
     pending.clear();
     for (auto const& locality : hpxLocalities()) {

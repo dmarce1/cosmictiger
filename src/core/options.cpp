@@ -537,7 +537,6 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"gravity.errorInterval", options.gravity.errorInterval},
         {"gravity.errorSampleSize", options.gravity.errorSampleSize},
         {"gravity.meshSize", options.gravity.meshSize},
-        {"gravity.pmmmCoarseMeshSize", options.gravity.pmmmCoarseMeshSize},
         {"gravity.pmmmBatchParticles", options.gravity.pmmmBatchParticles},
         {"gravity.pmmmOuterInterval", options.gravity.pmmmOuterInterval},
         {"gravity.kernelFamily", options.gravity.kernelFamily},
@@ -898,11 +897,8 @@ bool processOptions(int argc, char* argv[]) {
         po::value<int>(&opts.gravity.errorSampleSize)->default_value(100),
         "number of evenly spaced particles for gravity error checks (capped at particle count)")(
         "gravity.meshSize", po::value<int>(&opts.gravity.meshSize)->default_value(0),
-        "PMMM mesh cells per axis, any positive integer; required "
-        "when gravity is enabled")("gravity.pmmmCoarseMeshSize",
-        po::value<int>(&opts.gravity.pmmmCoarseMeshSize)->default_value(0),
-        "coarsest PMMM stage mesh and particle-domain cut granularity, a divisor of meshSize; "
-        "0 selects a compatible divisor near meshSize/8")("gravity.pmmmBatchParticles",
+        "PMMM cells per axis; 0 selects at most 32 particles per cell on average")(
+        "gravity.pmmmBatchParticles",
         po::value<int>(&opts.gravity.pmmmBatchParticles)->default_value(4096),
         "target sink particles per ready PMMM batch; oversized cells run alone")(
         "gravity.openingAngle",
@@ -1077,8 +1073,9 @@ bool processOptions(int argc, char* argv[]) {
     // Deprecated aliases stay parseable but are hidden from help, the resolved
     // option listing and its metadata; resolveSmoothingLength warns when one is set.
     po::options_description deprecatedOpts("Deprecated aliases");
-    deprecatedOpts.add_options()(
-        "gravity.softening", po::value<double>(), "deprecated alias for gravity.effectiveRadius");
+    deprecatedOpts.add_options()("gravity.softening", po::value<double>(),
+        "deprecated alias for gravity.effectiveRadius")("gravity.pmmmCoarseMeshSize",
+        po::value<int>(), "ignored legacy input; gravity.meshSize sets the only PMMM mesh");
     po::options_description parserOpts("CosmicTiger options");
     parserOpts.add(commandOpts).add(deprecatedOpts);
     terminal::detailPrint("Processing options\n");
@@ -1170,9 +1167,6 @@ bool processOptions(int argc, char* argv[]) {
     if (opts.gravity.meshSize < 0) {
         detail::throwOptionError("gravity.meshSize must be nonnegative\n");
     }
-    if (opts.gravity.pmmmCoarseMeshSize < 0) {
-        detail::throwOptionError("gravity.pmmmCoarseMeshSize must be nonnegative\n");
-    }
     if (opts.gravity.pmmmBatchParticles <= 0) {
         detail::throwOptionError("gravity.pmmmBatchParticles must be positive\n");
     }
@@ -1235,45 +1229,6 @@ bool processOptions(int argc, char* argv[]) {
             opts.output.directory = "./output/" + opts.run.scenario;
         }
     }
-#if COSMICTIGER_WITH_GRAVITY
-    if (opts.gravity.enabled) {
-        if (opts.gravity.meshSize < 1) {
-            detail::throwOptionError("gravity.meshSize must be positive for PMMM\n");
-        }
-        // Keep one domain decomposition throughout the schedule, including restarts.
-        double minimumAngle = opts.gravity.openingAngle;
-        for (auto const& point : openingSchedule) {
-            minimumAngle = std::min(minimumAngle, point.theta);
-        }
-        opts.gravity.pmmmCoarseMeshSize = pmmm::detail::resolvedCoarseMeshSize(
-            opts.gravity.meshSize, opts.gravity.pmmmCoarseMeshSize, minimumAngle);
-        if (opts.gravity.pmmmCoarseMeshSize < 1 ||
-            opts.gravity.pmmmCoarseMeshSize > opts.gravity.meshSize ||
-            opts.gravity.meshSize % opts.gravity.pmmmCoarseMeshSize != 0) {
-            detail::throwOptionError(
-                "gravity.pmmmCoarseMeshSize must be a positive divisor of gravity.meshSize\n");
-        }
-        if (!pmmm::detail::isPowerOfTwo(uint64_t(hpxSize()))) {
-            detail::throwOptionError("PMMM gravity requires a power-of-two locality count; "
-                                     "%i localities were started\n",
-                hpxSize());
-        }
-        int const localityMinimum = pmmm::detail::minimumCoarseMeshSizeForLocalities(hpxSize());
-        if (opts.gravity.pmmmCoarseMeshSize < localityMinimum) {
-            detail::throwOptionError(
-                "gravity.pmmmCoarseMeshSize=%i cannot be cut among %i localities; the "
-                "coarse mesh needs at least %i cells per axis\n",
-                opts.gravity.pmmmCoarseMeshSize, hpxSize(), localityMinimum);
-        }
-        size_t const meshSize = static_cast<size_t>(opts.gravity.meshSize);
-        size_t const maximumCells = std::min(size_t(std::numeric_limits<ptrdiff_t>::max()),
-            std::numeric_limits<size_t>::max() / (8 * sizeof(float)));
-        if (meshSize > maximumCells / meshSize / meshSize) {
-            detail::throwOptionError(
-                "gravity.meshSize cubed exceeds mesh indexing/allocation limits\n");
-        }
-    }
-#endif
     if (opts.gravity.errorInterval > 0 && !opts.gravity.enabled) {
         detail::throwOptionError("gravity.errorInterval requires gravity.enabled=true\n");
     }
@@ -1746,6 +1701,49 @@ bool processOptions(int argc, char* argv[]) {
             int(std::ceil(std::cbrt(double(opts.initial.numberOfParticles))));
         opts.initial.fourierSize += opts.initial.fourierSize % 2;
     }
+#if COSMICTIGER_WITH_GRAVITY
+    if (opts.gravity.enabled) {
+        if (!pmmm::detail::isPowerOfTwo(uint64_t(hpxSize()))) {
+            detail::throwOptionError("PMMM gravity requires a power-of-two locality count; "
+                                     "%i localities were started\n",
+                hpxSize());
+        }
+        int const localityMinimum = pmmm::detail::minimumMeshSizeForLocalities(hpxSize());
+        if (opts.gravity.meshSize == 0) {
+            // Choose the smallest cubic mesh with mean occupancy <= 32,
+            // using the resolved population of both particle species.
+            // Integer comparisons keep exact cube boundaries and avoid overflow.
+            auto const population =
+                static_cast<unsigned __int128>(opts.run.darkMatterParticleCount) +
+                opts.run.gasParticleCount;
+            constexpr int kParticlesPerCell = 32;
+            int lower = 1;
+            int upper = 1 << 22;
+            while (lower < upper) {
+                int const middle = lower + (upper - lower) / 2;
+                auto const side = static_cast<unsigned __int128>(middle);
+                if (kParticlesPerCell * side * side * side >= population) {
+                    upper = middle;
+                } else {
+                    lower = middle + 1;
+                }
+            }
+            opts.gravity.meshSize = std::max(lower, localityMinimum);
+        }
+        if (opts.gravity.meshSize < localityMinimum) {
+            detail::throwOptionError("gravity.meshSize=%i cannot be cut among %i localities; the "
+                                     "mesh needs at least %i cells per axis\n",
+                opts.gravity.meshSize, hpxSize(), localityMinimum);
+        }
+        size_t const meshSize = static_cast<size_t>(opts.gravity.meshSize);
+        size_t const maximumCells = std::min(size_t(std::numeric_limits<ptrdiff_t>::max()),
+            std::numeric_limits<size_t>::max() / (8 * sizeof(float)));
+        if (meshSize > maximumCells / meshSize / meshSize) {
+            detail::throwOptionError(
+                "gravity.meshSize cubed exceeds mesh indexing/allocation limits\n");
+        }
+    }
+#endif
 #if COSMICTIGER_WITH_GRAVITY
     opts.compute.treeCacheLineSize = 65536 / sizeof(TreeNode);
 #else

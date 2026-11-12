@@ -468,6 +468,9 @@ set(COSMICTIGER_GENERATED_FMM_FILES
     ${COSMICTIGER_GENERATED_FMM_DIR}/basis_conversion.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree_config.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree_types.hpp
+    ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree/ewald_common.hpp
+    ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree/ewald_green.hpp
+    ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree/ewald_m2l.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree/geometry.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree/p2m.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree/p2l.hpp
@@ -487,6 +490,7 @@ set(COSMICTIGER_GENERATED_FMM_FILES
     ${COSMICTIGER_GENERATED_FMM_DIR}/operation_counts.json)
 set(cosmictiger_fmm_operator_stems
     basis_conversion cartesian_tracefree_geometry
+    cartesian_tracefree_ewald_green cartesian_tracefree_ewald_m2l
     cartesian_tracefree_p2m cartesian_tracefree_p2l cartesian_tracefree_m2m
     cartesian_tracefree_m2l cartesian_tracefree_m2p cartesian_tracefree_l2l
     cartesian_tracefree_l2p spherical_p2m spherical_l2p spherical_green

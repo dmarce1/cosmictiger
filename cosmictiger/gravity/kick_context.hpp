@@ -9,7 +9,7 @@
 // shared inlined operators; no interaction-level virtual dispatch is used.
 struct KickContext {
     hpx::future<KickReturn> (*fork)(KickParameters, ExpansionBuffer const&, Vector3<Position>,
-        TreeId, Vector<TreeId>, std::shared_ptr<KickWorkspace>, bool) = nullptr;
+        TreeId, Vector<TreeId>, Vector<TreeId>, std::shared_ptr<KickWorkspace>, bool) = nullptr;
     void (*beginReturn)(ParticleInteger) = nullptr;
     void (*coverParticles)(ParticleInteger) = nullptr;
     void (*accumulateReturn)(KickReturn const&, ParticleInteger, bool) = nullptr;
@@ -17,5 +17,5 @@ struct KickContext {
     void (*publishReturn)(KickReturn) = nullptr;
     KickGpuExecutor gpuExecutor = nullptr;
 };
-KickReturn kickTreeWalk(KickParameters, ExpansionBuffer, Vector3<Position>, TreeId,
+KickReturn kickTreeWalk(KickParameters, ExpansionBuffer, Vector3<Position>, TreeId, Vector<TreeId>,
     Vector<TreeId>, std::shared_ptr<KickWorkspace>, KickContext const&);

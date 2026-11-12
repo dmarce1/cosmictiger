@@ -52,6 +52,7 @@ void accumulate(std::vector<CellData> const& cells) {
             state.moments[begin + component] += cell.coefficients[component];
         }
         state.radialTrace += cell.radialTrace;
+        state.radialTraces[cache.cellIndex(cell.key)] += cell.radialTrace;
         observe(PmmmCellEvent::MomentsDeposited, cell.key);
     }
     addCpuFlops(FlopCount(cells.size()) * (cache.sourceCount + 1), FlopPrecision::Double);
@@ -84,20 +85,13 @@ std::vector<double> readExpansion(uint64_t key) {
     int const n = cache.meshSize;
     double const normalization = 1.0 / (double(n) * n * n);
     size_t const index = cache.cellIndex(key);
-    std::vector<double> coefficients(cache.localCount);
-    size_t const padded = ((index / n) * (2 * (n / 2 + 1)) + index % n) * cache.localCount;
-    for (int component = 0; component < cache.localCount; ++component) {
+    std::vector<double> coefficients(cache.localStride);
+    size_t const padded = ((index / n) * (2 * (n / 2 + 1)) + index % n) * cache.localStride;
+    for (int component = 0; component < cache.localStride; ++component) {
         // One float-to-double conversion and one double multiplication.
         coefficients[component] = normalization * cache.localReal[padded + component];
     }
-    double const traceFactor = (4 * std::numbers::pi / 3) / (double(n) * n);
-    if (kFmmOrder >= 4) {
-        coefficients[0] -= 0.5 * traceFactor * state.background[4];
-    }
-    coefficients[3] -= 2 * traceFactor * state.background[1];
-    coefficients[1] -= 2 * traceFactor * state.background[2];
-    coefficients[2] -= traceFactor * state.background[3];
-    addCpuFlops(3 + 2 * cache.localCount + 10 + (kFmmOrder >= 4 ? 3 : 0), FlopPrecision::Double);
+    addCpuFlops(3 + 2 * cache.localStride, FlopPrecision::Double);
     return coefficients;
 }
 
@@ -192,7 +186,7 @@ std::vector<double> localExpansion(uint64_t key) {
     auto coefficients = cache.owners[owner] == hpx::find_here() ?
         readExpansion(key) :
         hpx::async<PmmmReadExpansionAction>(cache.owners[owner], key).get();
-    if (coefficients.size() != size_t(cache.localCount)) {
+    if (coefficients.size() != size_t(cache.localStride)) {
         throw std::runtime_error("PMMM local expansion is missing");
     }
     return coefficients;

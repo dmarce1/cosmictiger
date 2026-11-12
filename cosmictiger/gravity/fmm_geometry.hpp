@@ -10,6 +10,7 @@
 // instead fixes the source image by mesh cell, consistently through its tree.
 struct FmmGeometry {
     int meshSize = 0;
+    bool periodicNear = false;
     Array<int, kDimensions> sinkCell{};
     bool frozenMembership = false;
     uint64_t sourceCellKey = 0;
@@ -17,7 +18,7 @@ struct FmmGeometry {
     /// Archive this record in the field order required by distributed transport.
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
-        archive & meshSize & sinkCell & frozenMembership & sourceCellKey;
+        archive & meshSize & periodicNear & sinkCell & frozenMembership & sourceCellKey;
     }
 };
 
@@ -146,11 +147,11 @@ CUDA_EXPORT inline void countPeriodicBoxDistance(Fixed32Range const& box, FlopCo
 
 }    // namespace detail
 
-/// Return sink-minus-source displacement using the mesh-selected image, or ordinary
-/// minimum-image wrapping without a mesh.
+/// Return sink-minus-source displacement. Periodic near FMM uses the ordinary
+/// minimum image; the legacy mesh adapter retains its selected-image convention.
 CUDA_EXPORT inline float fmmPositionDifference(Position sink, Position source, int dim,
     FmmGeometry const& geometry, FlopCounts* counts = nullptr, uint64_t sourceKey = ~uint64_t(0)) {
-    if (geometry.meshSize == 0) {
+    if (geometry.periodicNear || geometry.meshSize == 0) {
         detail::addFmmGeometryFlops(counts, 1, 0);
         return distance(sink, source);
     }
@@ -172,7 +173,7 @@ CUDA_EXPORT inline float fmmPositionDifference(Position sink, Position source, i
 CUDA_EXPORT inline float fmmSinkBoxDistanceSquared(Fixed32Range const& box,
     Vector3<Position> const& source, FmmGeometry const& geometry, FlopCounts* counts = nullptr,
     uint64_t sourceKey = ~uint64_t(0)) {
-    if (geometry.meshSize == 0) {
+    if (geometry.periodicNear || geometry.meshSize == 0) {
         detail::countPeriodicBoxDistance(box, counts);
         return boxDistanceSquared(box, source);
     }
@@ -194,7 +195,7 @@ CUDA_EXPORT inline float fmmSinkBoxDistanceSquared(Fixed32Range const& box,
 CUDA_EXPORT inline float fmmSourceBoxDistanceSquared(Fixed32Range const& box,
     Vector3<Position> const& sink, Vector3<Position> const& source, FmmGeometry const& geometry,
     FlopCounts* counts = nullptr, uint64_t sourceKey = ~uint64_t(0)) {
-    if (geometry.meshSize == 0) {
+    if (geometry.periodicNear || geometry.meshSize == 0) {
         detail::countPeriodicBoxDistance(box, counts);
         return boxDistanceSquared(box, sink);
     }
@@ -237,12 +238,12 @@ inline SimdFloat fmmPeriodicBoxDistanceSquared(
     }
 }
 
-/// Return sink-minus-source displacement using the mesh-selected image, or ordinary
-/// minimum-image wrapping without a mesh.
+/// Return sink-minus-source displacement. Periodic near FMM uses the ordinary
+/// minimum image; the legacy mesh adapter retains its selected-image convention.
 inline SimdFloat fmmPositionDifference(SimdPosition const& sink, SimdPosition const& source,
     int dim, FmmGeometry const& geometry, FlopCounts* counts = nullptr,
     Array<uint64_t, kSimdFloatSize> const* sourceKeys = nullptr) {
-    if (geometry.meshSize == 0) {
+    if (geometry.periodicNear || geometry.meshSize == 0) {
         detail::addFmmGeometryFlops(counts, kSimdFloatSize, 0);
         return simdCast<SimdFloat>(simdPositionDifference(sink, source)) *
             math::broadcast<SimdFloat>(kPositionToFloat);
@@ -261,7 +262,7 @@ inline SimdFloat fmmPositionDifference(SimdPosition const& sink, SimdPosition co
 inline SimdFloat fmmSinkBoxDistanceSquared(Range<SimdDouble8> const& box,
     Vector3<SimdPosition> const& source, FmmGeometry const& geometry, FlopCounts* counts = nullptr,
     Array<uint64_t, kSimdFloatSize> const* sourceKeys = nullptr) {
-    if (geometry.meshSize == 0) {
+    if (geometry.periodicNear || geometry.meshSize == 0) {
         return fmmPeriodicBoxDistanceSquared(box, source, counts);
     }
     return SimdFloat([&](auto lane) {
@@ -284,7 +285,7 @@ inline SimdFloat fmmSourceBoxDistanceSquared(Range<SimdDouble8> const& box,
     Vector3<SimdPosition> const& sink, Vector3<SimdPosition> const& source,
     FmmGeometry const& geometry, FlopCounts* counts = nullptr,
     Array<uint64_t, kSimdFloatSize> const* sourceKeys = nullptr) {
-    if (geometry.meshSize == 0) {
+    if (geometry.periodicNear || geometry.meshSize == 0) {
         return fmmPeriodicBoxDistanceSquared(box, sink, counts);
     }
     return SimdFloat([&](auto lane) {

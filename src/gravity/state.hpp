@@ -116,6 +116,8 @@ struct MeshCache {
     std::vector<std::array<int, 3>> nearOffsets;
     int sourceCount = 0;
     int localCount = 0;
+    int sourceStride = 0;
+    int localStride = 0;
     MPI_Comm communicator = MPI_COMM_NULL;
     ptrdiff_t localSize = 0;
     ptrdiff_t localBegin = 0;
@@ -191,6 +193,7 @@ struct SolveState {
     KickReturn kickResult;
     std::vector<double> moments;
     double radialTrace = 0;
+    std::vector<double> radialTraces;
     std::array<double, 5> background{};
     Vector<Vector3<float>> acceleration;
     Vector<float> potential;

@@ -124,6 +124,7 @@ CUDA_EXPORT inline FmmMultiPos const& fmmMultiPos(MultipolePosition const* recor
 // (kick work items, HPX actions, tree returns) pass these; the typed code
 // views the leading coefficients through expansion() / multipole().
 struct ExpansionBuffer {
+    float curvature = 0.0f;
     Array<float, kFmmLocalCoefficients> coefficients;
 
     /// Access a coefficient by its packed storage index.
@@ -136,6 +137,7 @@ struct ExpansionBuffer {
     }
     /// Clear the build-sized coefficient buffer.
     CUDA_EXPORT void zero() {
+        curvature = 0.0f;
         for (int i = 0; i < kFmmLocalCoefficients; i++) {
             coefficients[i] = 0.0f;
         }
@@ -159,13 +161,14 @@ struct ExpansionBuffer {
     /// Archive `coefficients` in transport order.
     template <class A>
     void serialize(A&& arc, unsigned) {
+        arc & curvature;
         for (int i = 0; i < kFmmLocalCoefficients; i++) {
             arc& coefficients[i];
         }
     }
 };
 
-static_assert(sizeof(ExpansionBuffer) == sizeof(float) * kFmmLocalCoefficients);
+static_assert(sizeof(ExpansionBuffer) == sizeof(float) * (kFmmLocalCoefficients + 1));
 
 struct MultipoleBuffer {
     Array<float, kFmmMultipoleCoefficients> coefficients;

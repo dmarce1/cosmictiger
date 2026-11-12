@@ -158,6 +158,7 @@ void computeReadyCells() {
                 item.pos = treeGetNode(root.id)->pos;
                 item.l.zero();
                 item.geometry.meshSize = cache.meshSize;
+                item.geometry.periodicNear = true;
                 item.geometry.frozenMembership = frozenNearRequest(state.request);
                 auto const center = coordinates(root.key);
                 for (int dim = 0; dim < kDimensions; ++dim) {
@@ -180,13 +181,7 @@ void computeReadyCells() {
             }
             state.farReady.get();
             double const h = 1.0 / cache.meshSize;
-            double const localTrace = (4 * std::numbers::pi / 3) * h * h * state.background[0];
-            double const curvature =
-                cosmictiger::gravity::tree_local::backgroundCurvature(localTrace, cache.meshSize);
-            float const treeCurvature = curvature;
-            // Width conversion/division (2), trace products (3), and curvature
-            // products/division plus two mesh-size conversions (6).
-            FlopCount flops = 12;    // Includes narrowing the solve's curvature once per batch.
+            FlopCount flops = 2;    // Mesh-width conversion and division.
             FlopCount singleFlops = 0;
             FlopCounts kickFlops;
             KickReturn result;
@@ -214,6 +209,11 @@ void computeReadyCells() {
                 }
                 auto const center = coordinates(cell.key);
                 auto const coefficients = localExpansion(cell.key);
+                double const localTrace = coefficients.back();
+                double const curvature = cosmictiger::gravity::tree_local::backgroundCurvature(
+                    localTrace, cache.meshSize);
+                float const treeCurvature = curvature;
+                flops += 7;    // Curvature products/division, mesh promotions, and narrowing.
                 hpx::scoped_annotation farWork("gravity.pmmm.cartesianFarDescent");
                 Vector3<Position> meshCenter;
                 Vector3<double> centerCorrection;

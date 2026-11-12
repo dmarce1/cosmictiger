@@ -37,7 +37,8 @@ template void cpuGravityPc<COSMICTIGER_FMM_INSTANCE_ORDER>(
 
 // CPU tree walk (kick_walk.hpp).
 template KickReturn kickWalk<COSMICTIGER_FMM_INSTANCE_ORDER>(KickParameters, ExpansionBuffer,
-    Vector3<Position>, TreeId, Vector<TreeId>, std::shared_ptr<KickWorkspace>, KickContext const&);
+    Vector3<Position>, TreeId, Vector<TreeId>, Vector<TreeId>, std::shared_ptr<KickWorkspace>,
+    KickContext const&);
 
 // Tree multipole construction (tree_multipole.hpp).
 template FlopCounts treeComputeMultipole<COSMICTIGER_FMM_INSTANCE_ORDER>(MultipoleBuffer&,

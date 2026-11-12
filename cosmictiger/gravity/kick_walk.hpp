@@ -50,8 +50,8 @@ bool kickSourcesAreSingleRank(Vector<TreeId> const& checklist);
 
 template <int order>
 KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> pos, TreeId self,
-    Vector<TreeId> dchecklist, std::shared_ptr<KickWorkspace> cudaWorkspace,
-    KickContext const& context);
+    Vector<TreeId> dchecklist, Vector<TreeId> echecklist,
+    std::shared_ptr<KickWorkspace> cudaWorkspace, KickContext const& context);
 
 #ifdef COSMICTIGER_FMM_INSTANCE_ORDER
 // The definition pulls in the generated kernels, so only the per-order instance
@@ -69,6 +69,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
 #include <cosmictiger/gravity/kernels/cartesian_tracefree_operators.hpp>
 #include <cosmictiger/gravity/kick_interaction_counts.hpp>
 #include <cosmictiger/gravity/kick_workspace.hpp>
+#include <cosmictiger/gravity/periodic_fmm.hpp>
 #include <cosmictiger/gravity/softening.hpp>
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/math/math.hpp>
@@ -132,8 +133,8 @@ inline void kickOpenOrDefer(bool openLargerCell, TreeNode const* sink, TreeNode 
 /// accumulate particle kicks or GPU batch work.
 template <int order>
 KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> pos, TreeId self,
-    Vector<TreeId> dchecklist, std::shared_ptr<KickWorkspace> cudaWorkspace,
-    KickContext const& context) {
+    Vector<TreeId> dchecklist, Vector<TreeId> echecklist,
+    std::shared_ptr<KickWorkspace> cudaWorkspace, KickContext const& context) {
     using Expansion = cosmictiger::gravity::cartesian::Expansion<float>;
     ALWAYS_ASSERT(!params.deferHydroOpening || (!params.forceOnly && gravityGasOpeningDeferred()));
     auto* deferredGasOpening = params.deferHydroOpening ? gravityDeferredGasOpeningData() : nullptr;
@@ -189,7 +190,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                     context.coverParticles(selfPtr->numberOfParticles());
                 }
                 cudaWorkspace->addWork(cudaWorkspace, l, pos, self, std::move(dchecklist),
-                    params.geometry, params.outputOffset);
+                    std::move(echecklist), params.geometry, params.outputOffset);
             }
             addCpuFlops(flops, FlopPrecision::Single);
             addCpuFlops(doubleFlops, FlopPrecision::Double);
@@ -256,8 +257,13 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
         Lo[0] = Li[0];
     }
     cosmictiger::gravity::cartesian::L2L(Li, fmmScaleDisplacement(ldx), params.doPhi, Lo);
+    float const shiftZ = kScaleFactor * ldx[kZi];
+    Lo(0, 0, 1) += l.curvature * shiftZ;
+    if (params.doPhi) {
+        Lo[0] += .5f * l.curvature * shiftZ * shiftZ;
+    }
     expansion = Lo;
-    flops += cosmictiger::gravity::cartesian::kL2LFlops<kLocalDegree> + 5;
+    flops += cosmictiger::gravity::cartesian::kL2LFlops<kLocalDegree> + 5 + (params.doPhi ? 7 : 3);
     // Box scaling stays double; each local displacement scales in double and
     // narrows before the float L2L coordinate scaling. Two reciprocals are float.
     doubleFlops += (params.geometry.frozenMembership ? 3 : 6) + 6 * kSimdFloatSize;
@@ -273,6 +279,9 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
             forces.phi[i] = particlesMass(particleIndex) * selfPhi() * inverseSmoothingLength;
         }
     }
+    work.next(profile::WorkPhase::KickCpuM2L);
+    flops += detail::cpuPeriodicFmm(
+        l, *selfPtr, echecklist, forces, params.theta, params.gravitySmoothingLength, params.doPhi);
     {
         work.next(profile::WorkPhase::KickCpuTraversal);
         nextlist.resize(0);
@@ -342,13 +351,22 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                     doubleFlops += 6 * kSimdFloatSize;    // Source box scaling.
                 }
                 for (int i = 0; i < maxi; i++) {
+                    bool allowPairCost = true;
+                    if (params.geometry.periodicNear && selfPtr->leaf && otherPtrs[i]->leaf &&
+                        acceptance.cellCell[i]) {
+                        allowPairCost = detail::periodicFmmSingleImage(
+                            {dx[0][i], dx[1][i], dx[2][i]}, selfPtr->radius, otherPtrs[i]->radius);
+                        flops += 7;
+                    }
                     auto const interaction = selectFmmInteraction(bool(acceptance.cellCell[i]),
                         bool(acceptance.particleCell[i]), bool(acceptance.cellParticle[i]),
                         selfPtr->leaf, bool(otherLeaf[i]), selfPtr->radius, otherPtrs[i]->radius,
                         int(numberOfSelfParticles), int(otherPtrs[i]->numberOfParticles()),
                         FmmHybridCost<order>::kHybridPerParticle_,
                         FmmHybridCost<order>::kParticlePair_,
-                        params.geometry.meshSize > 0 ? FmmHybridCost<order>::kCellCell_ : 0.0f);
+                        params.geometry.meshSize > 0 && allowPairCost ?
+                            FmmHybridCost<order>::kCellCell_ :
+                            0.0f);
                     if (acceptance.cellCell[i] && selfPtr->leaf && otherLeaf[i] &&
                         params.geometry.meshSize > 0) {
                         flops += 2;
@@ -432,6 +450,12 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                 cosmictiger::gravity::Field<float> l2{};
                 cosmictiger::gravity::cartesian::L2P(
                     expansion, fmmScaleDisplacement(dx), params.doPhi, l2);
+                float const z = kScaleFactor * dx[kZi];
+                l2.accelerationZ() -= l.curvature * z;
+                if (params.doPhi) {
+                    l2.potential() += .5f * l.curvature * z * z;
+                }
+                flops += params.doPhi ? 7 : 3;
                 float const gravityEffectiveRadius =
                     gravitySofteningEffectiveRadius(params.gravitySmoothingLength);
                 forces.phi[j] += kScaleFactor1 * l2.potential();
@@ -655,10 +679,10 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
         work.stop();
         std::array<hpx::future<KickReturn>, kChildCount> futs;
         futs[kRightChild] = context.fork(params, l, selfPtr->pos, selfPtr->children[kRightChild],
-            dchecklist, cudaWorkspace, threadLeft);
+            dchecklist, echecklist, cudaWorkspace, threadLeft);
         try {
             futs[kLeftChild] = context.fork(params, l, selfPtr->pos, selfPtr->children[kLeftChild],
-                std::move(dchecklist), cudaWorkspace, false);
+                std::move(dchecklist), std::move(echecklist), cudaWorkspace, false);
         } catch (...) {
             // Keep shared tree data alive until the asynchronous sibling exits.
             profile::ScopedWork wait(profile::WorkPhase::KickChildJoin, profileWork);

@@ -80,7 +80,7 @@ def main():
                 selected["gravity.enabled"] = "false"
             options = options + [f"--{key}={value}" for key, value in selected.items()
                                  if not any(option.startswith(f"--{key}=") for option in options)]
-        # Most cases inspect unrelated options; supply the required mesh size.
+        # Most cases inspect unrelated options; keep their fixture mesh fixed.
         # Mesh/INI-specific cases can disable this fixture default explicitly.
         if (gravity_compiled and pmmm_mesh is not None and
                 not any(option.startswith("--gravity.meshSize=") for option in options)):
@@ -146,7 +146,7 @@ def main():
                 "hydro.viscosityEpsilon", "hydro.conductionCoefficient",
                 "hydro.neighborNumber", "gravity.enabled",
                 "gravity.kernelFamily", "gravity.kernelDegree",
-                "gravity.meshSize", "gravity.openingAngle", "gravity.openingSchedule", "gravity.pmmmCoarseMeshSize",
+                "gravity.meshSize", "gravity.openingAngle", "gravity.openingSchedule",
                 "gravity.errorInterval", "gravity.errorSampleSize",
                 "hydro.kernelFamily", "hydro.kernelDegree",
                 "gravity.effectiveRadius", "gravity.smoothingLength",
@@ -175,6 +175,8 @@ def main():
     # Deprecated aliases remain parseable but are not public keys: help, the
     # resolved listing and complete presets omit them.
     deprecated_aliases = {"gravity.softening": "gravity.effectiveRadius"}
+    if "gravity.pmmmCoarseMeshSize" in option_names:
+        raise RuntimeError("ignored legacy coarse mesh remains in help")
     if set(deprecated_aliases) & option_names:
         raise RuntimeError(f"deprecated aliases remain in help: {sorted(set(deprecated_aliases) & option_names)}")
 
@@ -255,7 +257,7 @@ def main():
                        "initial.usePowerFile", "initial.particlesPerDimension",
                        "initial.darkMatterParticleCount", "initial.gasParticleCount", "gravity.method",
                        "gravity.method.far", "gravity.cloud", "gravity.p3mSplitCells",
-                       "gravity.p3mCutoff", "gravity.pmmmNearWidth", "gravity.openingSchedule",
+                       "gravity.p3mCutoff", "gravity.pmmmNearWidth",
                        "gravity.pmmmNearMethod", "gravity.pmmmOrder", "gravity.fmmOrder", "gravity.expansionDegree",
                        "run.hierarchicalGravity", "initial.createGlass", "initial.plummer",
                        "hydro.pressureOperator", "hydro.balsaraSwitch", "chemistry.network", "chemistry.initialization",
@@ -609,67 +611,57 @@ mapSize = 8
                 f"--gravity.meshSize={mesh_size}", f"--gravity.openingAngle={1.0 / near_width}"])
             assertCompiledSettings(pmmm_output)
             for key, expected in (("gravity.meshSize", mesh_size),
-                                  ("gravity.openingAngle", 1.0 / near_width),
-                                  ("gravity.pmmmCoarseMeshSize", mesh_size)):
+                                  ("gravity.openingAngle", 1.0 / near_width)):
                 assertNumericSetting(pmmm_output, key, expected)
             assertNumericSetting(pmmm_output, "gravity.openingAngle", 1.0 / near_width)
-        # balsara_default runs SPH without gravity, which leaves the coarse mesh
-        # unresolved; read the PMMM defaults from the gravity-only fixture.
         assertNumericSetting(error_defaults, "gravity.pmmmBatchParticles", 4096)
-        assertNumericSetting(error_defaults, "gravity.pmmmCoarseMeshSize", 8)
         assertNumericSetting(error_defaults, "gravity.openingAngle", math.sqrt(3) / 3)
-        # Zero resolves to meshSize/8, never below the stencil minimum and
-        # never above the mesh itself.
-        for mesh_size, near_width, expected in ((64, None, 8), (8, None, 8),
-                                                (16, 4, 16), (32, 1, 4), (7, 2, 7),
-                                                (12, 2, 12), (30, 2, 10), (120, 2, 15)):
-            width_options = [] if near_width is None else [f"--gravity.openingAngle={1.0 / near_width}"]
-            output = run(f"pmmm_coarse_default_{mesh_size}_{near_width}", metadata_options + [
-                f"--gravity.meshSize={mesh_size}"] + width_options)
-            assertNumericSetting(output, "gravity.meshSize", mesh_size)
-            assertNumericSetting(output, "gravity.pmmmCoarseMeshSize", expected)
-        for coarse in (1, 4, 8, 16, 64):
-            output = run(f"pmmm_coarse_cli_{coarse}", metadata_options + [
-                "--gravity.meshSize=64", f"--gravity.pmmmCoarseMeshSize={coarse}"])
-            assertNumericSetting(output, "gravity.pmmmCoarseMeshSize", coarse)
-        coarse_config = args.workdir / "pmmm_coarse_mesh.ini"
-        coarse_config.write_text("[gravity]\nmeshSize = 64\npmmmCoarseMeshSize = 16\n")
-        output = run("pmmm_coarse_ini", metadata_options + [
-            f"--configuration={coarse_config.resolve()}"], pmmm_mesh=None)
-        assertNumericSetting(output, "gravity.meshSize", 64)
-        assertNumericSetting(output, "gravity.pmmmCoarseMeshSize", 16)
-        output = run("pmmm_coarse_cli_override", metadata_options + [
-            f"--configuration={coarse_config.resolve()}", "--gravity.pmmmCoarseMeshSize=32"],
-            pmmm_mesh=None)
-        assertNumericSetting(output, "gravity.pmmmCoarseMeshSize", 32)
-        # Ignore an invalid INI value when the same option is replaced on CLI.
+        # Automatic sizing uses resolved species counts, rounds up to a cubic
+        # mesh, and treats zero exactly like an omitted setting.
+        auto_cases = [(1, 0, 1), (32, 0, 1), (33, 0, 2),
+                      (256, 0, 2), (257, 0, 3), (1000000, 0, 32)]
+        if not args.without_sph:
+            auto_cases.append((512, 512, 4))
+        for dark, gas, expected in auto_cases:
+            population_options = [f"--run.darkMatterParticleCount={dark}",
+                                  f"--run.gasParticleCount={gas}", f"--hydro.enabled={bool(gas)}",
+                                  "--initial.closePack=false"]
+            # Plummer retains exact counts; cosmology rounds both species to lattices.
+            scenario = "cosmology" if gas else "plummer"
+            options = ["--run.test=checkpointState"] + population_options + [f"--run.scenario={scenario}"]
+            for explicit_zero in (False, True):
+                output = run(f"pmmm_auto_{dark}_{gas}_{explicit_zero}", options +
+                             (["--gravity.meshSize=0"] if explicit_zero else []), pmmm_mesh=None)
+                assertNumericSetting(output, "gravity.meshSize", expected)
+        output = run("pmmm_auto_rounded", ["--run.test=checkpointState", "--run.scenario=cosmology",
+                     "--run.darkMatterParticleCount=250", "--run.gasParticleCount=0",
+                     "--hydro.enabled=false", "--initial.closePack=false"], pmmm_mesh=None)
+        assertNumericSetting(output, "run.darkMatterParticleCount", 343)
+        assertNumericSetting(output, "gravity.meshSize", 3)
+        output = run("pmmm_auto_override", ["--run.test=checkpointState", "--run.scenario=plummer",
+                     "--hydro.enabled=false",
+                     "--run.darkMatterParticleCount=1000000", "--run.gasParticleCount=0",
+                     "--gravity.meshSize=16"], pmmm_mesh=None)
+        assertNumericSetting(output, "gravity.meshSize", 16)
+        # Legacy coarse values cannot constrain the authoritative mesh, including
+        # an old INI value that does not divide a new CLI mesh override.
+        for mesh_size in (1, 7, 12, 30, 64, 120):
+            for coarse in (0, 3, 16, 128, -1):
+                output = run(f"pmmm_single_mesh_{mesh_size}_{coarse}", metadata_options + [
+                    f"--gravity.meshSize={mesh_size}", f"--gravity.pmmmCoarseMeshSize={coarse}"])
+                assertNumericSetting(output, "gravity.meshSize", mesh_size)
+                if re.search(r"^gravity\.pmmmCoarseMeshSize\s*:", output, re.MULTILINE):
+                    raise RuntimeError("legacy coarse key remains a resolved mesh setting")
+        coarse_config = args.workdir / "pmmm_legacy_coarse_mesh.ini"
         coarse_config.write_text("[gravity]\nmeshSize = 64\npmmmCoarseMeshSize = 12\n")
-        output = run("pmmm_coarse_invalid_ini_cli_override", metadata_options + [
-            f"--configuration={coarse_config.resolve()}", "--gravity.pmmmCoarseMeshSize=16"],
-            pmmm_mesh=None)
-        assertNumericSetting(output, "gravity.pmmmCoarseMeshSize", 16)
-        rejected = run("pmmm_coarse_invalid_ini", metadata_options + [
-            f"--configuration={coarse_config.resolve()}"], success=False, pmmm_mesh=None)
-        if "gravity.pmmmCoarseMeshSize must be a positive divisor" not in rejected:
-            raise RuntimeError("INI coarse mesh rejection lacked its option diagnostic")
-        coarse_range = "gravity.pmmmCoarseMeshSize must be a positive divisor of gravity.meshSize"
-        for label, options, diagnostic in (
-                ("mesh_overflow", ["--gravity.meshSize=2147483647"],
-                 "gravity.meshSize cubed exceeds mesh indexing/allocation limits"),
-                ("mesh_allocation", ["--gravity.meshSize=1073741824"],
-                 "gravity.meshSize cubed exceeds mesh indexing/allocation limits"),
-                ("coarse_3", ["--gravity.meshSize=64", "--gravity.pmmmCoarseMeshSize=3"],
-                 coarse_range),
-                ("coarse_12", ["--gravity.meshSize=64", "--gravity.pmmmCoarseMeshSize=12"],
-                 coarse_range),
-                ("coarse_above_mesh", ["--gravity.meshSize=16", "--gravity.pmmmCoarseMeshSize=32"],
-                 coarse_range),
-                ("coarse_negative", ["--gravity.meshSize=64", "--gravity.pmmmCoarseMeshSize=-1"],
-                 "gravity.pmmmCoarseMeshSize must be nonnegative")):
-            rejected = run(f"pmmm_coarse_reject_{label}", metadata_options + options,
-                           success=False)
-            if diagnostic not in rejected:
-                raise RuntimeError(f"{label}: missing PMMM mesh diagnostic: {diagnostic}")
+        output = run("pmmm_single_mesh_ini_cli", metadata_options + [
+            f"--configuration={coarse_config.resolve()}", "--gravity.meshSize=7"], pmmm_mesh=None)
+        assertNumericSetting(output, "gravity.meshSize", 7)
+        for mesh_size in (2147483647, 1073741824):
+            rejected = run(f"pmmm_mesh_overflow_{mesh_size}", metadata_options + [
+                f"--gravity.meshSize={mesh_size}"], success=False)
+            if "gravity.meshSize cubed exceeds mesh indexing/allocation limits" not in rejected:
+                raise RuntimeError("missing PMMM mesh overflow diagnostic")
         # The support is normalized by the 8**3 fixture; the first excluded
         # cell boxes are sqrt(3)/8 apart at the default angle.
         radius_options = metadata_options + ["--gravity.meshSize=8"]
@@ -687,7 +679,6 @@ mapSize = 8
             assertNumericSetting(pmmm_output, "gravity.openingAngle", math.sqrt(3) / 3)
     if gravity_compiled:
         for index, invalid in enumerate((
-                [],
                 ["--gravity.meshSize=8", "--gravity.openingAngle=0"],
                 ["--gravity.meshSize=8", "--gravity.openingAngle=nan"],
                 ["--gravity.meshSize=8", "--gravity.openingAngle=inf"],
@@ -707,8 +698,6 @@ mapSize = 8
             pmmm_mesh=None)
         assertCompiledSettings(pmmm_output)
         assertNumericSetting(pmmm_output, "gravity.meshSize", 16)
-        # Theta one lowers the minimum coarse mesh to four, above meshSize/8.
-        assertNumericSetting(pmmm_output, "gravity.pmmmCoarseMeshSize", 4)
         assertNumericSetting(pmmm_output, "gravity.openingAngle", 1)
 
     sph_options = [option for option in metadata_options

@@ -101,8 +101,7 @@ std::vector<ContractionTerm> contractionTerms(int order) {
     return terms;
 }
 
-/// Evaluate and rescale periodic Green coefficients, selecting the near correction or full
-/// far interaction.
+/// Evaluate and rescale the full periodic far kernel; mask near entries to zero.
 FlopCount green(int order, double* coefficients, Vector3<double> const& boxOffset, double cellWidth,
     bool near) {
     detail::checkOrder(order);
@@ -116,6 +115,10 @@ FlopCount green(int order, double* coefficients, Vector3<double> const& boxOffse
     }
     if (!near && boxOffset[0] == 0.0 && boxOffset[1] == 0.0 && boxOffset[2] == 0.0) {
         throw std::invalid_argument("PMMM primary origin must be excluded by the near-field mask");
+    }
+    if (near) {
+        std::fill_n(coefficients, kFmmOrder * kFmmOrder, 0.0);
+        return 0;
     }
     FlopCount count = 0;
     {
