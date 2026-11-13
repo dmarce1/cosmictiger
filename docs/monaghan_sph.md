@@ -101,8 +101,8 @@ timestep); force-rate scratch is released before migration and checkpoints.
 See [the complete time-integration contract](sph_rk2_time_integration.md) for the
 equations and current validation limits. Enabled cooling
 and star formation run at each gas particle's completed interval endpoint.
-SPH couples to PMMM self-gravity on the hierarchical integrator only
-([PMMM](pmmm.md#sph-with-pmmm-self-gravity)).
+SPH couples to global FMM self-gravity through the
+[hierarchical gravity ladder](hierarchical_gravity.md).
 
 The standalone `sph_cpu_test` target can be built with
 `COSMICTIGER_WITH_CUDA=OFF` and does not call a CUDA device. The installed HPX

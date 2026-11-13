@@ -66,14 +66,11 @@ Nondefault fractions use the same inclusive comparison. The floor relaxes by
 one rung every eighth coarse step of a full evaluation, and no merge is considered at that step. That lets the particles
 regain the longer step once the finer rungs empty.
 
-The sole integration scheme couples PMMM gravity to midpoint SPH. Its long
-kicks occur at outer-interval boundaries; short gravity uses the ladder above.
-Each short solve rebuilds the selected frozen cells with bounds containing
-their current particles. Hydro advances positive physical intervals once per
-event; signed ladder corrections update gravity alone, with closing gravity
-before hydro and opening gravity afterward. See the
-[SPH midpoint contract](sph_rk2_time_integration.md) and
-[frozen PMMM membership](pmmm.md#outer-interval-with-frozen-near-membership).
+The integration scheme couples global periodic FMM gravity to midpoint SPH.
+Each ladder solve rebuilds the distributed tree for its selected particle set.
+Hydro advances positive physical intervals once per event; signed ladder
+corrections update gravity alone, with closing gravity before hydro and opening
+gravity afterward. See the [SPH midpoint contract](sph_rk2_time_integration.md).
 Merging is disabled for the
 terminal closing ladder and in the fixed-time scenario driver (`src/core/scenario_driver.cpp`). Those
 callers pass `nocrop`.

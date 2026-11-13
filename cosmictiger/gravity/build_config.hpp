@@ -18,12 +18,11 @@
 
 namespace gravity {
 
-// The gravity solver is PMMM: a periodic FFT far field with an FMM near field.
+// The gravity solver is the global periodic FMM.
 // Close leaf interactions use the FMM tree walk's particle-pair kernels.
 inline constexpr bool kBuildHasGravity = COSMICTIGER_WITH_GRAVITY != 0;
 static_assert(kBuildHasGravity ? ORDER >= 3 && ORDER <= 9 : ORDER == 0,
     "Gravity builds require potential degree 2 through 8; SPH-only builds use order zero");
 inline constexpr int kBuildFmmOrder = ORDER;
-inline constexpr char const* kBuildPmmmNearMethod = kBuildHasGravity ? "fmm" : "none";
 
 }    // namespace gravity

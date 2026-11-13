@@ -13,7 +13,7 @@
 namespace scenarios {
 
 // A linear adiabatic standing wave in uniform self-gravitating gas: SPH coupled to
-// PMMM gravity must oscillate at the Jeans frequency, ω² = c²k² − 4πGρ₀.
+// global FMM gravity must oscillate at the Jeans frequency, ω² = c²k² − 4πGρ₀.
 ScenarioPlan initializeJeansWave();
 
 }    // namespace scenarios

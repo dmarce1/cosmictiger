@@ -1,12 +1,17 @@
 # Spherical FMM kernels and Cartesian tree integration plan
 
+> Historical record of the retired PMMM implementation. Its spherical kernels,
+> basis conversions, and mesh/tree adapters have been removed. The descriptions
+> and measurements below apply to the source version recorded here; see the
+> [Cartesian global FMM documentation](generated_fmm.md) for the active solver.
+
 Planning baseline: main at `61c1e0ea3057c6652923ecdddc9a05a757c1b729`,
 November 9, 2026. This is an implementation instruction package. Parts 1-5 were
 implemented in this checkout on November 9. Step 5 completed the integration
 matrix and profiling and selected float L2L/L2P inside the local trees, with
 double mesh/root boundaries.
 Part 2's derivation, conventions, operation counts and validation are in
-[fmm_basis_conversion.md](fmm_basis_conversion.md).
+[historical basis-conversion derivation](https://github.com/dmarce1/cosmictiger/blob/38f59a72ab08e2355017728e60b338b352f1cd05/docs/fmm_basis_conversion.md).
 Part 3's dataflow, precision/memory contracts and validation are in
 [fmm_root_deposition.md](fmm_root_deposition.md).
 Part 4's numerical boundary, selected schedule, memory bound and measurements

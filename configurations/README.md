@@ -18,28 +18,18 @@ the cosmology scenario below enable GADGET-4 equilibrium cooling explicitly.
 The parser defaults leave hydro, cooling and star formation disabled.
 
 CMake `COSMICTIGER_ENABLE_*` options select which capabilities are compiled.
-PMMM-FMM is the sole gravity solver. Close leaf particle pairs are part of its
-tree walk. Hierarchical short gravity, outer long kicks and midpoint SPH are
+Global FMM is the sole gravity solver. Close particle pairs are part of its
+tree walk. Hierarchical gravity and midpoint SPH are
 selected automatically; `gravity.method.near` and `run.timeIntegrator` are retired.
-Restart recovers an omitted expansion degree from the checkpoint.
 
-`COSMICTIGER_EXPANSION_DEGREE=4-6` compiles potential degrees 4, 5, and 6 by default.
 `COSMICTIGER_EXPANSION_DEGREE` fixes the degree at build time (default 6);
 `gravity.expansionDegree` is no longer a CLI/INI option.
 The implementation's historical order is one greater than potential degree.
-`gravity.openingAngle` sets both FMM acceptance and the filled-cell PMMM near
-stencil (default `0.5773502691896257`); `gravity.pmmmNearWidth` is retired.
-PMMM defaults to at most 32 particles per mesh cell on average: `gravity.meshSize=0`
-(or omitting it) selects the smallest cubic mesh meeting that target from the
-resolved total particle count. One million particles select `32^3` cells.
-An explicit positive `gravity.meshSize` overrides automatic sizing; arbitrary
-integer sides are supported.
-The same mesh is used for every hierarchical stage and for particle-domain
-cuts. The legacy `gravity.pmmmCoarseMeshSize` key is accepted but ignored.
-PMMM runs need a power-of-two locality count.
+`gravity.openingAngle` sets global FMM acceptance (default `0.5773502691896257`).
+Mesh sizing, batching, and outer-interval options have been removed.
 
 `hydro.method` accepts only `sph`. The sole midpoint SPH scheme supports
-PMMM self-gravity with hierarchical short and outer long kicks, or gravity-free
+global FMM self-gravity with hierarchical kicks, or gravity-free
 hydrodynamics.
 To run a collisionless cosmology, set
 `--hydro.enabled=false --chemistry.enabled=false --starFormation.enabled=false`.
@@ -315,3 +305,7 @@ densities 0.5 and 1.0. The previous unequal-grid packing is removed. The random
 perturbation retains positive modes strictly below both lattices' y-sampling
 Nyquist limit. Uniform pressure still uses the solved SPH density. Interface
 kernel overlap and kernel normalization can differ from the exact bulk means.
+
+Scenario stage transitions align with the output clock. Multi-stage scenarios
+require at least one output interval per stage (for example, at least three
+outputs for the two-stage polytropic star).

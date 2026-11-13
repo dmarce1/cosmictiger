@@ -38,10 +38,9 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/core/terminal.hpp>
-#include <cosmictiger/gravity/mesh_size.hpp>
 #include <cosmictiger/gravity/opening_schedule.hpp>
 #if COSMICTIGER_WITH_GRAVITY
-#include <cosmictiger/gravity/solver.hpp>
+#include <cosmictiger/gravity/tree.hpp>
 #endif
 #include <cosmictiger/io/checkpoint.hpp>
 #include <cosmictiger/io/output.hpp>
@@ -184,8 +183,7 @@ constexpr uint32_t kWideParticleIndices = 1U << 21;
 // Retired scalar particle-mesh solvers (pm, p3m) with their outer PM interval;
 // recognized only to reject such checkpoints.
 constexpr uint32_t kParticleMeshInterval = 1U << 22;
-// PMMM outer interval: frozen near-membership keys per particle and the
-// outer-interval extension of the driver state.
+// Retired multipole-mesh interval bit, recognized only to reject old checkpoints.
 constexpr uint32_t kMeshGravityInterval = 1U << 23;
 constexpr uint64_t kFnvOffsetBasis = 14695981039346656037ULL;
 constexpr uint64_t kFnvPrime = 1099511628211ULL;
@@ -536,8 +534,6 @@ uint32_t checkpointFlags(Options const& opts) {
                                                                         0U) |
         (opts.hydro.enabled ? kVariableViscosity : 0U) |
         (opts.compute.positionType == "fixed64" ? kFixed64Positions : 0U) |
-        (opts.gravity.enabled ? kParticleMultipoleMesh : 0U) |
-        (opts.gravity.enabled && usesOuterInterval(opts.gravity) ? kMeshGravityInterval : 0U) |
         (opts.starFormation.enabled ? kStarFormation : 0U);
 }
 
@@ -633,13 +629,16 @@ CheckpointHeader checkpointHeader(Options const& opts) {
 /// Check supported header versions and required physical/layout values against the current
 /// options.
 bool checkpointCompatible(CheckpointHeader const& header, Options const& opts) {
+    if ((header.flags &
+            (kParticleMultipoleMesh | kMeshGravityInterval | kRetiredParticleMesh |
+                kParticleMeshInterval)) != 0U) {
+        return false;
+    }
+
     bool const supportedVersion = header.version == kCheckpointVersion ||
         (!opts.hydro.enabled && opts.compute.positionType == "fixed32" &&
             header.version == kLegacyDarkMatterCheckpointVersion);
-    // Older hydro-only checkpoints retained unused PMMM metadata. The SPH
-    // parameter block independently verifies that self-gravity was disabled.
-    uint32_t const ignoredFlags = kRuntimeAlgorithms |
-        (opts.hydro.enabled && !opts.gravity.enabled ? kParticleMultipoleMesh : 0U);
+    uint32_t const ignoredFlags = kRuntimeAlgorithms;
     return supportedVersion && (header.flags & kRetiredParticleMesh) == 0U &&
         (header.flags & kParticleMeshInterval) == 0U &&
         (header.flags & ~ignoredFlags) == (checkpointFlags(opts) & ~ignoredFlags) &&
@@ -681,66 +680,12 @@ bool zPlaneCheckpointCompatible(double acceleration, Options const& opts) {
         acceleration == opts.scenario.rayleighTaylor.zPlaneAcceleration;
 }
 
-/// Encode mesh force conventions, solver orders, timestep controls, and coarse-mesh
-/// selection.
-std::array<uint64_t, 11> pmmmCheckpointParameters(Options const& opts) {
-    uint64_t timestepEtaBits;
-    std::memcpy(&timestepEtaBits, &opts.gravity.timestepEta, sizeof(timestepEtaBits));
-    uint64_t openingAngleBits;
-    std::memcpy(&openingAngleBits, &opts.gravity.openingAngle, sizeof(openingAngleBits));
-    // Version six changes the primary near/far split from a cube to the
-    // filled-cell opening-angle stencil. Slot three is reserved (zero).
-    // Earlier versions remain decodable but cannot resume frozen old fields.
-    // Version seven appends normalized schedule points and the original start
-    // redshift. Slot nine remains the angle active in the saved frozen interval.
-    // Versions eight/nine move the near-cell periodic correction into FMM.
-    // Frozen far fields from the previous split must not be resumed.
-    uint64_t const version =
-        gravity::parseOpeningSchedule(opts.gravity.openingSchedule).empty() ? 8 : 9;
-    return {version, static_cast<uint64_t>(opts.gravity.meshSize),
-        static_cast<uint64_t>(gravity::kBuildFmmOrder), 0, static_cast<uint64_t>(opts.run.minRung),
-        timestepEtaBits, 1, 1U, static_cast<uint64_t>(gravity::kBuildFmmOrder), openingAngleBits,
-        static_cast<uint64_t>(opts.gravity.meshSize)};
-}
-
-/// Read the version-dependent mesh parameter extension and reject unsupported versions.
-std::array<uint64_t, 11> readPmmmCheckpointParameters(FILE* fp) {
-    std::array<uint64_t, 11> parameters{};
-    FREAD(parameters.data(), sizeof(uint64_t), 7, fp);
-    if (parameters[0] == 2) {
-        FREAD(&parameters[7], sizeof(uint64_t), 1, fp);
-    } else if (parameters[0] == 3) {
-        FREAD(&parameters[7], sizeof(uint64_t), 3, fp);
-    } else if (parameters[0] == 4 || parameters[0] == 5 || parameters[0] == 6 ||
-        parameters[0] == 7 || parameters[0] == 8 || parameters[0] == 9) {
-        FREAD(&parameters[7], sizeof(uint64_t), 4, fp);
-    } else if (parameters[0] != 1) {
-        throw std::runtime_error("Unsupported PMMM checkpoint parameter version");
-    }
-    return parameters;
-}
-
-/// Require the same stencil convention and settings when restoring frozen fields.
-bool pmmmCheckpointCompatible(std::array<uint64_t, 11> const& parameters, Options const& opts) {
-    return parameters == pmmmCheckpointParameters(opts);
-}
-
-// Retired particle-mesh (pm, p3m) parameter block; read only to reject it.
-std::array<uint64_t, 12> readParticleMeshCheckpointParameters(FILE* fp) {
-    std::array<uint64_t, 12> parameters{};
-    FREAD(parameters.data(), sizeof(uint64_t), parameters.size(), fp);
-    if (parameters[0] != 1) {
-        throw std::runtime_error("Unsupported particle-mesh checkpoint parameter version");
-    }
-    return parameters;
-}
-
 // Active gravity retains its selected order; hydro-only files carry no solver.
-// Far codes: 1 fmm (retired), 2 pmmm, 3 pm (retired), 4 p3m (retired).
-// Near codes: 1 pp, 2 fmm.
+// Far code 1 is global FMM; historical mesh solver codes are rejected.
+// Global FMM has no separate near-field solver.
 std::array<uint64_t, 5> checkpointAlgorithms(Options const& opts) {
     bool const gravityEnabled = opts.gravity.enabled;
-    return {1, gravityEnabled ? 2U : 0U, gravityEnabled ? 2U : 0U,
+    return {1, gravityEnabled ? 1U : 0U, 0U,
         static_cast<uint64_t>(gravityEnabled ? gravity::kBuildFmmOrder : 0),
         usesGlobalIntegration(opts.run) ? 2U : (usesHierarchicalIntegration(opts.run) ? 1U : 0U)};
 }
@@ -773,24 +718,7 @@ void writeDriverState(FILE* fp, DriverParameters const& params) {
     if (fwrite(algorithms.data(), sizeof(uint64_t), algorithms.size(), fp) != algorithms.size()) {
         throw std::ios_base::failure("Unable to write checkpoint algorithm selection");
     }
-    if ((header.flags & kParticleMultipoleMesh) != 0U) {
-        auto const meshParameters = pmmmCheckpointParameters(getOptions());
-        if (fwrite(meshParameters.data(), sizeof(uint64_t), meshParameters.size(), fp) !=
-            meshParameters.size()) {
-            throw std::ios_base::failure("Unable to write PMMM checkpoint parameters");
-        }
-        if (meshParameters[0] == 7 || meshParameters[0] == 9) {
-            auto const points = gravity::parseOpeningSchedule(getOptions().gravity.openingSchedule);
-            uint64_t const count = points.size();
-            FWRITE(&count, sizeof(count), 1, fp);
-            double const start = getOptions().cosmology.startRedshift;
-            FWRITE(&start, sizeof(start), 1, fp);
-            for (auto const& point : points) {
-                FWRITE(&point.redshift, sizeof(double), 1, fp);
-                FWRITE(&point.theta, sizeof(double), 1, fp);
-            }
-        }
-    }
+
     if ((header.flags & kIndependentParticleCounts) != 0U) {
         std::array<uint64_t, 2> const counts{
             getOptions().run.darkMatterParticleCount, getOptions().run.gasParticleCount};
@@ -851,25 +779,12 @@ void writeDriverState(FILE* fp, DriverParameters const& params) {
             throw std::ios_base::failure("Unable to write global timestep checkpoint extension");
         }
     }
-    if ((header.flags & (kParticleMeshInterval | kMeshGravityInterval)) != 0U) {
-        // The outer interval whose opening long half-kick is applied, its start
-        // time and index; itime above is the interval-local phase.
-        uint64_t const version = 1;
-        if (fwrite(&version, sizeof(version), 1, fp) != 1 ||
-            fwrite(&params.outerInterval, sizeof(params.outerInterval), 1, fp) != 1 ||
-            fwrite(&params.outerStart, sizeof(params.outerStart), 1, fp) != 1 ||
-            fwrite(&params.outerIndex, sizeof(params.outerIndex), 1, fp) != 1) {
-            throw std::ios_base::failure(
-                "Unable to write the particle-mesh interval checkpoint extension");
-        }
-    }
 }
 
 /// Validate and restore current or supported legacy driver state and its enabled
 /// extensions.
 DriverParameters readDriverState(FILE* fp) {
     DriverParameters params{};
-    double checkpointOpeningAngle = 0.0;
     CheckpointHeader header{};
     uint64_t magic = 0;
     FREAD(&magic, sizeof(magic), 1, fp);
@@ -889,9 +804,11 @@ DriverParameters readDriverState(FILE* fp) {
             throw std::runtime_error("Checkpoint particle storage differs: lower-dimensional "
                                      "builds require compact D-component particle records");
         }
-        if ((header.flags & (kRetiredParticleMesh | kParticleMeshInterval)) != 0U) {
-            throw std::runtime_error(
-                "Scalar particle-mesh (pm, p3m) checkpoints are no longer supported");
+        if ((header.flags &
+                (kRetiredParticleMesh | kParticleMeshInterval | kParticleMultipoleMesh |
+                    kMeshGravityInterval)) != 0U) {
+            throw std::runtime_error("Mesh-gravity checkpoints are no longer supported; restart "
+                                     "requires a global FMM checkpoint");
         }
 #if !COSMICTIGER_WITH_SPH || !COSMICTIGER_ENABLE_CHEMISTRY
         if ((header.flags & kChemistry) != 0U) {
@@ -930,46 +847,7 @@ DriverParameters readDriverState(FILE* fp) {
                                          "integrator differs from the requested run");
             }
         }
-        if ((header.flags & kParticleMultipoleMesh) != 0U) {
-            auto const meshParameters = readPmmmCheckpointParameters(fp);
-            auto requested = getOptions();
-            if (meshParameters[0] == 7 || meshParameters[0] == 9) {
-                auto const points =
-                    gravity::parseOpeningSchedule(requested.gravity.openingSchedule);
-                uint64_t count;
-                double start;
-                FREAD(&count, sizeof(count), 1, fp);
-                FREAD(&start, sizeof(start), 1, fp);
-                if (count != points.size() || count == 0 ||
-                    start != requested.cosmology.startRedshift) {
-                    throw std::runtime_error("PMMM checkpoint opening schedule or start redshift "
-                                             "differs from the requested run");
-                }
-                for (auto const& point : points) {
-                    double redshift, theta;
-                    FREAD(&redshift, sizeof(double), 1, fp);
-                    FREAD(&theta, sizeof(double), 1, fp);
-                    if (redshift != point.redshift || theta != point.theta) {
-                        throw std::runtime_error(
-                            "PMMM checkpoint opening schedule differs from the requested run");
-                    }
-                }
-                std::memcpy(&checkpointOpeningAngle, &meshParameters[9], sizeof(double));
-                if (std::none_of(points.begin(), points.end(), [&](auto const& point) {
-                        return std::bit_cast<uint64_t>(point.theta) == meshParameters[9];
-                    })) {
-                    throw std::runtime_error("PMMM checkpoint has an invalid active opening angle");
-                }
-                requested.gravity.openingAngle = checkpointOpeningAngle;
-            }
-            bool const requireMeshMatch = requested.gravity.enabled || !requested.hydro.enabled;
-            if (requireMeshMatch && !pmmmCheckpointCompatible(meshParameters, requested)) {
-                throw std::runtime_error(
-                    "PMMM checkpoint version, mesh size, near/far expansion orders, opening angle, "
-                    "near stencil/method, domain mesh, timestep parameters or "
-                    "force convention differs from the requested run");
-            }
-        }
+
         if ((header.flags & kIndependentParticleCounts) != 0U) {
             std::array<uint64_t, 2> counts{};
             FREAD(counts.data(), sizeof(uint64_t), counts.size(), fp);
@@ -1072,24 +950,7 @@ DriverParameters readDriverState(FILE* fp) {
             }
 #endif
         }
-        if ((header.flags & (kParticleMeshInterval | kMeshGravityInterval)) != 0U) {
-            uint64_t version;
-            FREAD(&version, sizeof(version), 1, fp);
-            FREAD(&params.outerInterval, sizeof(params.outerInterval), 1, fp);
-            FREAD(&params.outerStart, sizeof(params.outerStart), 1, fp);
-            FREAD(&params.outerIndex, sizeof(params.outerIndex), 1, fp);
-            auto finite = [](double value) {
-                uint64_t bits;
-                std::memcpy(&bits, &value, sizeof(bits));
-                return (bits & 0x7ff0000000000000ULL) != 0x7ff0000000000000ULL;
-            };
-            if (version != 1 || !finite(params.outerInterval) || !finite(params.outerStart) ||
-                params.outerInterval < 0.0 || params.outerStart < 0.0 ||
-                (params.iter > 0 && params.outerInterval == 0.0) ||
-                (params.itime != 0 && params.outerInterval == 0.0)) {
-                throw std::runtime_error("Invalid particle-mesh interval checkpoint extension");
-            }
-        }
+
     } else {
         if (!legacyCheckpointCompatible(getOptions())) {
             throw std::runtime_error(
@@ -1123,7 +984,6 @@ DriverParameters readDriverState(FILE* fp) {
         params.years = old.years;
         params.itime = old.itime;
     }
-    params.checkpointOpeningAngle = checkpointOpeningAngle;
     return params;
 }
 
@@ -1152,13 +1012,7 @@ void checkpointStateTest() {
     input.energies.heating = kHeating;
     input.globalTimestep = usesGlobalIntegration(getOptions().run) ? 0.03125 : 0.0;
     input.globalHydroTimestep = usesGlobalIntegration(getOptions().run) ? 0.0625 : 0.0;
-    bool const particleMesh =
-        getOptions().gravity.enabled && usesOuterInterval(getOptions().gravity);
-    if (particleMesh) {
-        input.outerInterval = 0.0078125;
-        input.outerStart = 0.1171875;
-        input.outerIndex = 15;
-    }
+
     detail::writeDriverState(fp, input);
     rewind(fp);
     auto const restored = detail::readDriverState(fp);
@@ -1168,9 +1022,7 @@ void checkpointStateTest() {
     ALWAYS_ASSERT(restored.energies.therm == kThermal && restored.energies.heating == kHeating);
     ALWAYS_ASSERT(restored.globalTimestep == input.globalTimestep);
     ALWAYS_ASSERT(restored.globalHydroTimestep == input.globalHydroTimestep);
-    ALWAYS_ASSERT(restored.outerInterval == input.outerInterval &&
-        restored.outerStart == input.outerStart && restored.outerIndex == input.outerIndex);
-    if (!usesGlobalIntegration(getOptions().run) && !particleMesh) {
+    if (!usesGlobalIntegration(getOptions().run)) {
         // Strip only the new selection extension to reconstruct the exact old
         // version-three driver payload and exercise its unchanged decoder.
         long const length = ftell(fp);
@@ -1193,9 +1045,10 @@ void checkpointStateTest() {
     }
     auto changed = getOptions();
     auto const header = detail::checkpointHeader(changed);
-    // Toggling self-gravity changes the solver flags, so the file no longer matches.
+    // The algorithm extension distinguishes global gravity from no gravity.
     changed.gravity.enabled = !changed.gravity.enabled;
-    ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
+    ALWAYS_ASSERT(
+        detail::checkpointAlgorithms(getOptions()) != detail::checkpointAlgorithms(changed));
     auto hydroOnlyOptions = getOptions();
     hydroOnlyOptions.gravity.enabled = false;
     hydroOnlyOptions.hydro.enabled = true;
@@ -1205,83 +1058,18 @@ void checkpointStateTest() {
         auto oldHydroOnlyHeader = detail::checkpointHeader(hydroOnlyOptions);
         ALWAYS_ASSERT((oldHydroOnlyHeader.flags & detail::kParticleMultipoleMesh) == 0U);
         oldHydroOnlyHeader.flags |= detail::kParticleMultipoleMesh;
-        ALWAYS_ASSERT(detail::checkpointCompatible(oldHydroOnlyHeader, hydroOnlyOptions));
+        ALWAYS_ASSERT(!detail::checkpointCompatible(oldHydroOnlyHeader, hydroOnlyOptions));
     }
     changed = getOptions();
     // Reject the retired scalar particle-mesh bits rather than treating their
     // extension bytes as driver state.
-    for (uint32_t const retiredFlag :
-        {detail::kRetiredParticleMesh, detail::kParticleMeshInterval}) {
+    for (uint32_t const retiredFlag : {detail::kRetiredParticleMesh, detail::kParticleMeshInterval,
+             detail::kParticleMultipoleMesh, detail::kMeshGravityInterval}) {
         auto retiredPmHeader = detail::checkpointHeader(changed);
         retiredPmHeader.flags &= ~detail::kParticleMultipoleMesh;
         retiredPmHeader.flags |= retiredFlag;
         ALWAYS_ASSERT(!detail::checkpointCompatible(retiredPmHeader, changed));
     }
-    changed = getOptions();
-    auto const pmmmParameters = detail::pmmmCheckpointParameters(changed);
-    uint64_t const expectedPmmmVersion =
-        gravity::parseOpeningSchedule(changed.gravity.openingSchedule).empty() ? 8 : 9;
-    ALWAYS_ASSERT(pmmmParameters[0] == expectedPmmmVersion &&
-        pmmmParameters[10] == uint64_t(changed.gravity.meshSize));
-    changed.gravity.meshSize += 1;
-    ALWAYS_ASSERT(pmmmParameters != detail::pmmmCheckpointParameters(changed));
-    changed = getOptions();
-    auto wrongOrderParameters = pmmmParameters;
-    ++wrongOrderParameters[2];
-    ALWAYS_ASSERT(!detail::pmmmCheckpointCompatible(wrongOrderParameters, changed));
-    changed = getOptions();
-    changed.gravity.openingAngle *= 0.5;
-    ALWAYS_ASSERT(!detail::pmmmCheckpointCompatible(pmmmParameters, changed));
-    changed = getOptions();
-    auto retiredPpParameters = pmmmParameters;
-    retiredPpParameters[7] = 0;
-    ALWAYS_ASSERT(!detail::pmmmCheckpointCompatible(retiredPpParameters, changed));
-    // Retain the domain-mesh slot and reject old independently sized domains.
-    changed = getOptions();
-    auto oldDomainParameters = detail::pmmmCheckpointParameters(changed);
-    ++oldDomainParameters[10];
-    ALWAYS_ASSERT(!detail::pmmmCheckpointCompatible(oldDomainParameters, changed));
-    changed = getOptions();
-    for (uint64_t version = 1; version <= 7; ++version) {
-        auto legacyPmmmParameters = detail::pmmmCheckpointParameters(changed);
-        legacyPmmmParameters[0] = version;
-        ALWAYS_ASSERT(!detail::pmmmCheckpointCompatible(legacyPmmmParameters, changed));
-    }
-    // Decode each historical extension without consuming any following driver
-    // bytes.
-    constexpr std::array<size_t, 9> kPmmmParameterWords{7, 8, 10, 11, 11, 11, 11, 11, 11};
-    constexpr uint64_t kFollowingPayload = 0x0123456789abcdefULL;
-    for (uint64_t version = 1; version <= 9; ++version) {
-        changed = getOptions();
-        auto serialized = detail::pmmmCheckpointParameters(changed);
-        serialized[0] = version;
-        if (version < 5) {
-            serialized[10] = version == 4 ? 5 : 0;
-        }
-        detail::CheckpointFile stream(tmpfile());
-        ALWAYS_ASSERT(stream != nullptr);
-        size_t const words = kPmmmParameterWords[version - 1];
-        ALWAYS_ASSERT(fwrite(serialized.data(), sizeof(uint64_t), words, stream.get()) == words);
-        ALWAYS_ASSERT(fwrite(&kFollowingPayload, sizeof(uint64_t), 1, stream.get()) == 1);
-        rewind(stream.get());
-        auto const decoded = detail::readPmmmCheckpointParameters(stream.get());
-        ALWAYS_ASSERT(
-            detail::pmmmCheckpointCompatible(decoded, changed) == (version == expectedPmmmVersion));
-        uint64_t followingPayload = 0;
-        ALWAYS_ASSERT(fread(&followingPayload, sizeof(uint64_t), 1, stream.get()) == 1 &&
-            followingPayload == kFollowingPayload);
-        ALWAYS_ASSERT(decoded[10] == (version >= 5 ? serialized[10] : (version == 4 ? 5 : 0)));
-    }
-    changed = getOptions();
-    changed.run.minRung += 1;
-    ALWAYS_ASSERT(pmmmParameters != detail::pmmmCheckpointParameters(changed));
-    changed = getOptions();
-    changed.gravity.timestepEta *= 0.5;
-    ALWAYS_ASSERT(pmmmParameters != detail::pmmmCheckpointParameters(changed));
-    changed = getOptions();
-    changed.compute.positionType =
-        changed.compute.positionType == "fixed32" ? "fixed64" : "fixed32";
-    ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
     changed = getOptions();
     changed.output.units = "both";
     changed.output.frame = "lab";
@@ -1693,23 +1481,9 @@ DriverParameters readCheckpoint() {
         profile::ScopedPhase profilePhase("readCheckpoint.wait", hpxRank() == 0);
         for (auto& future : futs) {
             auto const child = future.get();
-            if (child.checkpointOpeningAngle != params.checkpointOpeningAngle) {
-                throw std::runtime_error(
-                    "PMMM checkpoint active opening angle differs between ranks");
-            }
         }
     }
     if (hpxRank() == 0) {
-        if (params.checkpointOpeningAngle > 0.0) {
-            auto opts = getOptions();
-#if COSMICTIGER_WITH_GRAVITY
-            if (opts.gravity.openingAngle != params.checkpointOpeningAngle) {
-                pmmmDestroy();
-            }
-#endif
-            opts.gravity.openingAngle = params.checkpointOpeningAngle;
-            setOptions(opts);
-        }
         std::cout << "Done reading checkpoint\n" << std::flush;
     }
     return params;

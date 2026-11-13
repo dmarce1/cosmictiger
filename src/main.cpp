@@ -50,7 +50,6 @@
 #include <cosmictiger/gravity/fmm_types.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/kernels/cartesian_tracefree_operators.hpp>
-#include <cosmictiger/gravity/solver.hpp>
 #include <cosmictiger/gravity/tree.hpp>
 #endif
 #include <cosmictiger/io/checkpoint.hpp>
@@ -169,7 +168,7 @@ int hpx_main(int argc, char* argv[]) {
 #endif
         }
 #if COSMICTIGER_WITH_GRAVITY
-        pmmmDestroy();
+        treeDestroy(true);
 #endif
         particlesDestroy();
     } catch (profile::Interrupted const&) {
@@ -178,7 +177,7 @@ int hpx_main(int argc, char* argv[]) {
         detail::writeProfile();
         try {
 #if COSMICTIGER_WITH_GRAVITY
-            pmmmDestroy();
+            treeDestroy(true);
 #endif
             particlesDestroy();
         } catch (std::exception const& error) {
@@ -202,13 +201,13 @@ int hpx_main(int argc, char* argv[]) {
         std::cout << std::format("CosmicTiger failed: {:s}\n", error.what()) << std::flush;
         try {
 #if COSMICTIGER_WITH_GRAVITY
-            pmmmDestroy();
+            treeDestroy(true);
 #endif
         } catch (std::exception const& cleanupError) {
-            std::cout << std::format("PMMM cleanup failed: {:s}\n", cleanupError.what())
+            std::cout << std::format("Gravity cleanup failed: {:s}\n", cleanupError.what())
                       << std::flush;
         } catch (...) {
-            std::cout << "PMMM cleanup failed during exception handling\n" << std::flush;
+            std::cout << "Gravity cleanup failed during exception handling\n" << std::flush;
         }
         if (daemonStarted) {
             stopMemuseDaemon();
@@ -219,10 +218,10 @@ int hpx_main(int argc, char* argv[]) {
         std::cout << "CosmicTiger failed with an unknown exception\n" << std::flush;
         try {
 #if COSMICTIGER_WITH_GRAVITY
-            pmmmDestroy();
+            treeDestroy(true);
 #endif
         } catch (...) {
-            std::cout << "PMMM cleanup failed during exception handling\n" << std::flush;
+            std::cout << "Gravity cleanup failed during exception handling\n" << std::flush;
         }
         if (daemonStarted) {
             stopMemuseDaemon();
@@ -301,7 +300,7 @@ void initializeMpi(int& argc, char**& argv, bool& ownsMpi) {
 /// Initialize single-precision FFTW threading and require success on every MPI rank.
 void initializeFftw() {
     // Initialize before HPX starts: cosmology may create serial plans before
-    // PMMM initializes FFTW MPI. Thread support must precede both kinds of use.
+    // Fourier analysis initializes FFTW MPI. Thread support must precede both kinds of use.
     int const initialized = fftwf_init_threads() ? 1 : 0;
     int allInitialized = 0;
     if (MPI_Allreduce(&initialized, &allInitialized, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD) !=

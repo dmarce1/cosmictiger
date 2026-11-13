@@ -47,8 +47,7 @@ def main():
     root = args.workdir.resolve()
     root.mkdir(parents=True, exist_ok=True)
     preset = Path(__file__).resolve().parents[1] / "configurations" / "jeans_wave.ini"
-    options = {"configuration": preset, "run.gasParticleCount": 8000, "gravity.meshSize": 16,
-               "output.silo": "false", "output.directory": ".",
+    options = {"configuration": preset, "run.gasParticleCount": 8000, "output.silo": "false", "output.directory": ".",
                "checkpoint.intervalSeconds": 1000000, "analysis.views": "false",
                "analysis.power": "false", "hpx:bind": "none", **cpu_backend_options()}
 

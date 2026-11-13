@@ -27,12 +27,9 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/core/safe_io.hpp>
-#include <cosmictiger/gravity/mesh_size.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/domain.hpp>
-#include <cosmictiger/particles/mesh_domain.hpp>
-#include <cosmictiger/particles/particle_mesh_sort.hpp>
 #include <cosmictiger/particles/particle_partition.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_SPH
@@ -48,11 +45,10 @@ void domainsInitRebounds();
 void domainsTransmitBoxes(std::unordered_map<size_t, DomainT> boxes);
 void domainsReboundSort(Vector<double> bounds, int depth);
 Vector<size_t> domainsCountBelow(Vector<double> bounds, int depth);
-std::vector<std::vector<size_t>> domainsCountMeshSlabs(int depth, int meshSize);
 Vector<size_t> domainsGetLoads();
 
 HPX_PLAIN_ACTION(domainsCountBelow, DomainsCountBelowAction);
-HPX_PLAIN_ACTION(domainsCountMeshSlabs, DomainsCountMeshSlabsAction);
+
 HPX_PLAIN_ACTION(domainsGetLoads, DomainsGetLoadsAction);
 HPX_PLAIN_ACTION(domainsReboundSort, DomainsReboundSortAction);
 HPX_PLAIN_ACTION(domainsBegin, DomainsBeginAction);
@@ -71,32 +67,12 @@ static Vector<DomainLocal> localDomains;
 
 namespace detail {
 
-/// Return the configured mesh side used for particle domains, or zero without mesh gravity.
-int domainMeshSize() {
-    auto const& options = getOptions().gravity;
-    return options.enabled && options.meshSize > 0 ? options.meshSize : 0;
-}
-
-/// Round a mesh domain boundary upward to its first representable fixed-point position.
 Position domainSplitPosition(double boundary) {
-    int const meshSize = domainMeshSize();
-    if (meshSize == 0) {
-        return Position(boundary);
-    }
-    uint32_t const plane = mesh_domain::boundaryIndex(boundary, meshSize);
-    unsigned __int128 const period = static_cast<unsigned __int128>(1) << kPositionBits;
-    Position result;
-    result.raw() = static_cast<PositionInteger>((plane * period + meshSize - 1) / meshSize);
-    return result;
+    return Position(boundary);
 }
 
-// Routing through a mesh cell's center preserves exact half-open ownership
-// even when a fixed64 position rounds across a non-dyadic double boundary.
 double particleDomainCoordinate(Position position) {
-    int const meshSize = domainMeshSize();
-    return meshSize > 0 ?
-        (double(particleMeshCoordinate(position.raw(), uint32_t(meshSize))) + 0.5) / meshSize :
-        positionDomainCoordinate(position);
+    return positionDomainCoordinate(position);
 }
 
 /// Measure the actual serialized size of a vector containing the requested number of
@@ -125,104 +101,6 @@ Vector<size_t> countDomainSplits(Vector<double> const& bounds, int depth) {
         }
     }
     return counts;
-}
-
-// Sum each locality's mesh-slab histograms for the domains at this depth.
-std::vector<std::vector<size_t>> countDomainMeshSlabs(int depth, int meshSize) {
-    profile::ScopedPhase profilePhase("domains.rebound.countSlabs");
-    Vector<hpx::future<std::vector<std::vector<size_t>>>> pending;
-    for (auto const& locality : hpxLocalities()) {
-        pending.push_back(hpx::async<DomainsCountMeshSlabsAction>(locality, depth, meshSize));
-    }
-    std::vector<std::vector<size_t>> counts;
-    for (auto& future : pending) {
-        auto const localCounts = future.get();
-        if (counts.empty()) {
-            counts.resize(localCounts.size());
-        }
-        ALWAYS_ASSERT(localCounts.size() == counts.size());
-        for (size_t i = 0; i < localCounts.size(); ++i) {
-            if (localCounts[i].empty()) {
-                continue;
-            }
-            if (counts[i].empty()) {
-                counts[i].resize(localCounts[i].size(), 0);
-            }
-            ALWAYS_ASSERT(localCounts[i].size() == counts[i].size());
-            for (size_t slab = 0; slab < localCounts[i].size(); ++slab) {
-                counts[i][slab] += localCounts[i][slab];
-            }
-        }
-    }
-    return counts;
-}
-
-// PMMM particle domains cut only on mesh planes, so no cell spans two localities.
-// The cut at this depth bisects the locality range; each child must keep enough
-// cells along this axis for the cuts it still owes on it. Among the admissible
-// planes, the one whose particle count comes closest to the balanced target
-// wins, not the plane nearest the exact-balance coordinate; ties prefer the
-// plane nearest the middle of the parent, then the lower plane.
-Vector<double> alignedDomainCuts(Vector<DomainGlobal> const& domains, int depth, int meshSize) {
-    auto const histograms = countDomainMeshSlabs(depth, meshSize);
-    ALWAYS_ASSERT(histograms.size() == domains.size());
-    int const axis = depth % kSpatialDimensions;
-    auto const meshIndex = [meshSize](double coordinate) {
-        auto const index = std::llround(coordinate * meshSize);
-        ALWAYS_ASSERT(index >= 0 && index <= meshSize && double(index) / meshSize == coordinate);
-        return int(index);
-    };
-    Vector<double> bounds(domains.size());
-    for (size_t i = 0; i < domains.size(); ++i) {
-        auto const& domain = domains[i];
-        int const processes = domain.processRange.second - domain.processRange.first;
-        bounds[i] = domain.box.begin[axis];
-        if (processes <= 1) {
-            continue;
-        }
-        if (!pmmm::detail::isPowerOfTwo(uint64_t(processes))) {
-            throw std::runtime_error("PMMM particle domains require a power-of-two locality count");
-        }
-        int levels = 0;
-        while ((1 << levels) < processes) {
-            ++levels;
-        }
-        int remainingCuts = 0;
-        for (int level = 1; level < levels; ++level) {
-            if ((depth + level) % kSpatialDimensions == axis) {
-                ++remainingCuts;
-            }
-        }
-        int const need = 1 << remainingCuts;
-        int const lo = meshIndex(domain.box.begin[axis]);
-        int const hi = meshIndex(domain.box.end[axis]);
-        if (hi - lo < 2 * need) {
-            throw std::runtime_error("PMMM mesh has too few cells per axis for the locality count");
-        }
-        auto const& histogram = histograms[i];
-        ALWAYS_ASSERT(histogram.size() == size_t(meshSize));
-        size_t const targetCount = size_t(processes / 2) * domain.totalCount / processes;
-        size_t below = 0;
-        for (int slab = lo; slab < lo + need; ++slab) {
-            below += histogram[slab];
-        }
-        int best = -1;
-        size_t bestError = std::numeric_limits<size_t>::max();
-        int bestCenterDistance = std::numeric_limits<int>::max();
-        for (int plane = lo + need; plane <= hi - need; ++plane) {
-            size_t const error = below > targetCount ? below - targetCount : targetCount - below;
-            int const centerDistance = std::abs(2 * plane - (lo + hi));
-            if (error < bestError || (error == bestError && centerDistance < bestCenterDistance)) {
-                best = plane;
-                bestError = error;
-                bestCenterDistance = centerDistance;
-            }
-            below += histogram[plane];
-        }
-        ALWAYS_ASSERT(best > lo && best < hi);
-        bounds[i] = double(best) / meshSize;
-    }
-    return bounds;
 }
 
 }    // namespace detail
@@ -366,61 +244,6 @@ Vector<size_t> domainsCountBelow(Vector<double> bounds, int depth) {
     return counts;
 }
 
-// Per-domain histogram of this locality's particles over the mesh slabs
-// along the cut axis. Domains at other depths return empty histograms.
-std::vector<std::vector<size_t>> domainsCountMeshSlabs(int depth, int meshSize) {
-    std::vector<std::vector<size_t>> counts(localDomains.size());
-    Vector<hpx::future<void>> futs;
-    int const xdim = depth % kSpatialDimensions;
-    for (int i = 0; i < localDomains.size(); i++) {
-        if (localDomains[i].depth != depth) {
-            continue;
-        }
-        counts[i].assign(size_t(meshSize), 0);
-        futs.push_back(hpx::async(hpx::annotated_function(
-            [i, xdim, meshSize, &counts]() {
-                auto const rng = localDomains[i].particleRange;
-                if (rng.first == rng.second) {
-                    return;
-                }
-                int const numberOfThreads = std::max(2 * (size_t) (rng.second - rng.first) *
-                        hpxHardwareConcurrency() / (size_t) particlesSize(),
-                    (size_t) 1);
-                std::vector<std::vector<size_t>> partial(
-                    numberOfThreads, std::vector<size_t>(size_t(meshSize), 0));
-                auto const func = [numberOfThreads, rng, xdim, meshSize, &partial](int proc) {
-                    size_t const begin =
-                        rng.first + (size_t) proc * (rng.second - rng.first) / numberOfThreads;
-                    size_t const end = rng.first +
-                        (size_t) (proc + 1) * (rng.second - rng.first) / numberOfThreads;
-                    auto& slabs = partial[proc];
-                    for (size_t j = begin; j < end; j++) {
-                        slabs[detail::particleMeshCoordinate(
-                            particlesPositionValue(xdim, j).raw(), uint32_t(meshSize))]++;
-                    }
-                };
-                Vector<hpx::future<void>> chunks;
-                for (int proc = 1; proc < numberOfThreads; proc++) {
-                    chunks.push_back(hpx::async(
-                        hpx::annotated_function(func, "particles.domainsCountMeshSlabsChunk"),
-                        proc));
-                }
-                func(0);
-                hpx::wait_all(chunks.begin(), chunks.end());
-                for (auto const& slabs : partial) {
-                    for (int slab = 0; slab < meshSize; ++slab) {
-                        counts[i][slab] += slabs[slab];
-                    }
-                }
-            },
-            "particles.domainsCountMeshSlabs")));
-    }
-    hpx::wait_all(futs.begin(), futs.end());
-    return counts;
-}
-
-/// Partition local particle ranges at the accepted boundaries and replace domains with
-/// their children.
 void domainsReboundSort(Vector<double> bounds, int depth) {
     assert(bounds.size() == localDomains.size());
     Vector<size_t> mids(bounds.size());
@@ -458,8 +281,6 @@ void domainsReboundSort(Vector<double> bounds, int depth) {
     localDomains = std::move(newDomains);
 }
 
-/// Build a particle-balanced domain decomposition, respecting mesh planes for PMMM
-/// ownership.
 void domainsRebound() {
     {
         profile::ScopedPhase profilePhase("domains.rebound.initialize");
@@ -471,12 +292,7 @@ void domainsRebound() {
     domains[0].box = unitBox<double>();
     domains[0].processRange.first = 0;
     domains[0].processRange.second = hpxSize();
-    // The decomposition balances the current particle population. PMMM cuts on
-    // mesh planes so no mesh cell spans two localities, choosing the
-    // admissible plane with the best particle balance; gravity-free runs cut anywhere.
-    auto const& gravityOptions = getOptions().gravity;
-    int const meshSize =
-        gravityOptions.enabled && gravityOptions.meshSize > 0 ? gravityOptions.meshSize : 0;
+
     domains[0].totalCount = 0;
     auto const loads = []() {
         profile::ScopedPhase profilePhase("domains.rebound.loads");
@@ -511,40 +327,35 @@ void domainsRebound() {
         domains = std::move(newDomains);
         Vector<size_t> counts(domains.size());
         Vector<double> bounds;
-        if (meshSize > 0) {
-            bounds = detail::alignedDomainCuts(domains, depth, meshSize);
-        } else {
-            for (int iter = 0; iter < kDomainReboundIterations; ++iter) {
-                bounds.clear();
-                for (auto const& domain : domains) {
-                    bounds.push_back((domain.midhi + domain.midlo) * 0.5);
-                }
-                counts = detail::countDomainSplits(bounds, depth);
-                for (size_t i = 0; i < domains.size(); ++i) {
-                    int const firstProcess = domains[i].processRange.first;
-                    int const lastProcess = domains[i].processRange.second;
-                    int const middleProcess = (firstProcess + lastProcess) / 2;
-                    ALWAYS_ASSERT(lastProcess - firstProcess >= 1);
-                    size_t const targetCount = size_t(middleProcess - firstProcess) *
-                        domains[i].totalCount / (lastProcess - firstProcess);
-                    if (counts[i] < targetCount) {
-                        domains[i].midlo = bounds[i];
-                    } else {
-                        domains[i].midhi = bounds[i];
-                    }
-                }
-            }
+
+        for (int iter = 0; iter < kDomainReboundIterations; ++iter) {
             bounds.clear();
             for (auto const& domain : domains) {
-                bounds.push_back(
-                    std::min((domain.midhi + domain.midlo) * 0.5, std::nextafter(1.0, 0.0)));
+                bounds.push_back((domain.midhi + domain.midlo) * 0.5);
+            }
+            counts = detail::countDomainSplits(bounds, depth);
+            for (size_t i = 0; i < domains.size(); ++i) {
+                int const firstProcess = domains[i].processRange.first;
+                int const lastProcess = domains[i].processRange.second;
+                int const middleProcess = (firstProcess + lastProcess) / 2;
+                ALWAYS_ASSERT(lastProcess - firstProcess >= 1);
+                size_t const targetCount = size_t(middleProcess - firstProcess) *
+                    domains[i].totalCount / (lastProcess - firstProcess);
+                if (counts[i] < targetCount) {
+                    domains[i].midlo = bounds[i];
+                } else {
+                    domains[i].midhi = bounds[i];
+                }
             }
         }
+        bounds.clear();
+        for (auto const& domain : domains) {
+            bounds.push_back(
+                std::min((domain.midhi + domain.midlo) * 0.5, std::nextafter(1.0, 0.0)));
+        }
+
         for (size_t i = 0; i < domains.size(); ++i) {
-            // Preserve rational mesh planes; counting and partitioning recover
-            // their exact fixed-point boundary. Unaligned cuts stay quantized.
-            double const midx =
-                meshSize > 0 ? bounds[i] : positionDomainCoordinate(Position(bounds[i]));
+            double const midx = positionDomainCoordinate(Position(bounds[i]));
             boxesByKey[domains[i].key].midx = midx;
             bounds[i] = midx;
         }
@@ -717,7 +528,7 @@ static void beginSphMigration(int rung) {
     // Ordinary stepping migrates all out-of-domain particles. Hierarchical
     // stepping preserves the saved rung-prefix offsets: only this closing rung
     // in the current suffix may leave, just as in collisionless migration. A
-    // negative rung (PMMM outer-interval boundary) migrates every particle.
+
     for (ParticleInteger i = 0; i < particlesSize(); i++) {
         Vector3<double> position;
         for (int dim = 0; dim < kDimensions; dim++) {
@@ -862,8 +673,7 @@ void domainsBegin(int rung) {
                     for (ParticleInteger i = begin; i < end; i++) {
                         // Ordinary timesteps drift every rung together. Rebalance
                         // all particles before building their common gravity tree.
-                        // A negative rung (PMMM outer-interval boundary) migrates
-                        // every particle of the current range whatever its rung.
+
                         if (rung < 0 || !getOptions().run.hierarchicalGravity ||
                             !getOptions().gravity.enabled || particlesRung(i) == rung) {
                             Vector3<double> position;

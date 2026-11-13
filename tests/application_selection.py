@@ -19,14 +19,13 @@ def compiled_algorithms(executable):
         if match is None:
             raise RuntimeError(f"application help omitted compiled {label}")
         return match[1].split()
-    # The gravity solver is PMMM (or none in SPH-only builds); its near field is
-    # its FMM near field.
-    return {"far": choices("Gravity solvers"), "near": choices("PMMM near solvers"),
+    # The global FMM is the sole gravity solver.
+    return {"far": choices("Gravity solvers"), "near": ["fmm"] if "fmm" in choices("Gravity solvers") else [],
             "integrator": choices("Time integrators")}
 
 
 def has_gravity(executable):
-    return "pmmm" in compiled_algorithms(str(executable))["far"]
+    return "fmm" in compiled_algorithms(str(executable))["far"]
 
 
 def application_options(executable, *, near=None, integrator=None, hydro=False):
@@ -40,7 +39,7 @@ def application_options(executable, *, near=None, integrator=None, hydro=False):
             if choice in available:
                 return choice
         raise RuntimeError(f"no compiled {label} supports this regression")
-    gravity = "pmmm" in compiled["far"]
+    gravity = "fmm" in compiled["far"]
     # Midpoint SPH also runs without self-gravity under the sole scheme.
     integrator = select(integrator, compiled["integrator"], ("hierarchical",), "integrator")
     result = {}

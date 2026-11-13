@@ -108,8 +108,8 @@ def main():
                f"--analysis.groups.cuda={analysis_cuda}", f"--lightcone.cuda={analysis_cuda}"]
     hydro_mode = args.mode in ("sod", "sph", "sph_analysis", "sph_mpi")
     selector_arguments = application_arguments(args.executable.resolve(), hydro=hydro_mode)
-    # SPH has no self-gravity coupling in the PMMM solver; dark-matter runs need its mesh.
-    selector_arguments += (["--gravity.enabled=false"] if hydro_mode else ["--gravity.meshSize=8"])
+    # Keep basic hydro smoke cases gravity-free; coupled cases override this explicitly.
+    selector_arguments += (["--gravity.enabled=false"] if hydro_mode else [])
     command += [argument for argument in selector_arguments if not any(
         option.split("=", 1)[0] == argument.split("=", 1)[0] for option in args.extra_option)]
     if args.mode == "sod":

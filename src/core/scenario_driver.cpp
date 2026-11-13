@@ -22,7 +22,6 @@
 #if COSMICTIGER_WITH_GRAVITY
 #include <cosmictiger/gravity/kick.hpp>
 #if COSMICTIGER_WITH_GRAVITY
-#include <cosmictiger/gravity/solver.hpp>
 #endif
 #include <cosmictiger/gravity/kick_workspace.hpp>
 #endif
@@ -117,34 +116,26 @@ void runFixedScenario() {
         [](int sum, auto const& stage) { return sum + stage.numberOfSteps; });
     double const duration =
         baseOptions.run.endTime > 0.0 ? baseOptions.run.endTime : defaultDuration;
-    // Gravity stages have their own physical boundaries, independently of the
-    // requested output phases. The long-step selector lands on either boundary.
-    bool const physicalStageClock = gravity::kBuildHasGravity && baseOptions.gravity.enabled;
-    if (physicalStageClock) {
-        for (auto& stage : plan.stages) {
-            stage.duration *= duration / defaultDuration;
-        }
-    } else {
-        if (baseOptions.run.outputIntervalCount() < int(plan.stages.size())) {
-            throw std::invalid_argument(
-                "run.numberOfOutputs must allow at least one interval per scenario stage");
-        }
-        int assignedSteps = 0;
-        int cumulativeDefaultSteps = 0;
-        for (size_t i = 0; i < plan.stages.size(); i++) {
-            auto& stage = plan.stages[i];
-            cumulativeDefaultSteps += stage.numberOfSteps;
-            int const cumulativeSteps =
-                std::clamp(int(std::lround(double(cumulativeDefaultSteps) *
-                               baseOptions.run.outputIntervalCount() / defaultSteps)),
-                    assignedSteps + 1,
-                    baseOptions.run.outputIntervalCount() - int(plan.stages.size() - i - 1));
-            stage.numberOfSteps = cumulativeSteps - assignedSteps;
-            assignedSteps += stage.numberOfSteps;
-            // Stage transitions fall on the shared coarse clock. This keeps the
-            // pending SPH half-step valid when entering/leaving stellar relaxation.
-            stage.duration = duration * stage.numberOfSteps / baseOptions.run.outputIntervalCount();
-        }
+
+    if (baseOptions.run.outputIntervalCount() < int(plan.stages.size())) {
+        throw std::invalid_argument(
+            "run.numberOfOutputs must allow at least one interval per scenario stage");
+    }
+    int assignedSteps = 0;
+    int cumulativeDefaultSteps = 0;
+    for (size_t i = 0; i < plan.stages.size(); i++) {
+        auto& stage = plan.stages[i];
+        cumulativeDefaultSteps += stage.numberOfSteps;
+        int const cumulativeSteps =
+            std::clamp(int(std::lround(double(cumulativeDefaultSteps) *
+                           baseOptions.run.outputIntervalCount() / defaultSteps)),
+                assignedSteps + 1,
+                baseOptions.run.outputIntervalCount() - int(plan.stages.size() - i - 1));
+        stage.numberOfSteps = cumulativeSteps - assignedSteps;
+        assignedSteps += stage.numberOfSteps;
+        // Stage transitions fall on the shared coarse clock. This keeps the
+        // pending SPH half-step valid when entering/leaving stellar relaxation.
+        stage.duration = duration * stage.numberOfSteps / baseOptions.run.outputIntervalCount();
     }
     DriverParameters state{};
     state.a = 1.0;
@@ -172,30 +163,7 @@ void runFixedScenario() {
         std::max(state.minrung0, baseOptions.run.minRung);
     bool const hierarchical = baseOptions.run.hierarchicalGravity;
     bool const global = usesGlobalIntegration(baseOptions.run);
-    // PMMM outer interval (docs/pmmm.md), as in the cosmology driver: the integer rung clock
-    // subdivides the outer interval instead of the coarse interval, a boundary pass at each
-    // clock rollover closes the frozen membership and selects the next interval, and the
-    // interval clock is checkpointed in the driver state.
-#if COSMICTIGER_WITH_GRAVITY
-    bool const meshInterval = baseOptions.gravity.enabled && usesOuterInterval(baseOptions.gravity);
-#else
-    bool const meshInterval = false;
-#endif
-    if (meshInterval && restarting) {
-        double const coarse = duration / baseOptions.run.outputIntervalCount();
-        long double const phase = std::ldexp(static_cast<long double>(state.itime), -64);
-        long double const expected = static_cast<long double>(state.outerStart) +
-            static_cast<long double>(state.outerInterval) * (state.itime == 0 ? 1.0L : phase);
-        long double const tolerance =
-            1.0e-9L * std::max(static_cast<long double>(coarse), std::abs(expected));
-        if ((state.iter > 0 && !(state.outerInterval > 0.0)) ||
-            state.outerInterval > coarse * (1.0 + 1.0e-9) ||
-            (state.iter > 0 && std::abs(expected - state.tau) > tolerance)) {
-            throw std::runtime_error(
-                "Checkpoint outer PM interval, phase and conformal time are inconsistent; retain "
-                "the original mesh and timestep settings");
-        }
-    }
+
     // A restart keeps the decomposition read from the checkpoint: each rank's file holds
     // the particles of its saved domain, and recomputing the boxes here would change
     // which rank owns which particle, and with it the order of every distributed sum.
@@ -294,13 +262,10 @@ void runFixedScenario() {
             int const minimumRung = global ? 0 : minRung(state.itime);
             bool const fullEvaluation = minimumRung == 0;
             int const outputStep = driverOutputStep(state.tau, baseTimestep);
-            // Mesh intervals end on coarse boundaries, so an output is due only at the first
-            // interval of a coarse step.
-            bool const outputDue =
-                fullEvaluation && (!(global || meshInterval) || outputStep > lastOutputStep);
-            // The rung clock's base step: the outer interval, or the coarse interval. At a
-            // boundary it is the closing interval until the force step selects the next one.
-            double t0 = meshInterval ? state.outerInterval : baseTimestep;
+
+            bool const outputDue = fullEvaluation && outputStep > lastOutputStep;
+            // The rung clock uses the fixed output interval as its base step.
+            double t0 = baseTimestep;
 #if COSMICTIGER_WITH_SPH
             if (midpointHydro) {
                 if (state.iter == 0) {
@@ -340,19 +305,9 @@ void runFixedScenario() {
             deferHydroOpening = midpointHydro && baseOptions.gravity.enabled &&
                 coincidentHydroRung >= 0 && sphMidpointTargetCount(coincidentHydroRung) != 0;
 #endif
-            MeshKickSchedule schedule;
+            ForceStepSchedule schedule;
             schedule.endTime = stageEnd;
-            PmmmBoundaryRequest pmmmBoundary;
-            if (meshInterval && state.itime == 0) {
-                // PMMM outer boundary: the force step closes the frozen membership, migrates,
-                // solves the far field once and selects the next interval.
-                pmmmBoundary.time = state.tau;
-                pmmmBoundary.coarseInterval = coarseInterval;
-                pmmmBoundary.endTime = stageEnd;
-                schedule.pmmmBoundary = &pmmmBoundary;
-                schedule.closingBaseTimestep = state.outerInterval;
-                schedule.longCloseTimestep = state.outerInterval;
-            }
+
 #if COSMICTIGER_WITH_GRAVITY && COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
             if (hierarchical) {
                 int activeRung = std::max(minimumRung, state.minrung0);
@@ -385,15 +340,7 @@ void runFixedScenario() {
                 }
             }
 #endif
-            if (meshInterval && state.itime == 0) {
-                if (!(pmmmBoundary.nextInterval > 0.0)) {
-                    throw std::logic_error(
-                        "The PMMM outer interval must be positive before the end time");
-                }
-                state.outerInterval = pmmmBoundary.nextInterval;
-                state.outerStart = state.tau;
-                t0 = state.outerInterval;
-            }
+
             state.maxRung =
                 global ? 0 : std::max({int(result.maxRung), baseOptions.run.minRung, minimumRung});
             int const displayedMinimumRung = minimumRung;
@@ -446,18 +393,11 @@ void runFixedScenario() {
             auto const flopRates = flopRatesPerSecond();
             double const flops = flopRates.total();
             TimeType const nextIntegerTime = global ? 0 : inc(state.itime, state.maxRung);
-            if (meshInterval) {
-                // The exact interval clock, as the checkpoint reader verifies it.
-                double const integerPhase =
-                    nextIntegerTime == 0 ? 1.0 : std::ldexp(double(nextIntegerTime), -64);
-                state.tau = state.outerStart + t0 * integerPhase;
-            } else {
-                state.tau += timestep;
-            }
+
+            state.tau += timestep;
+
             state.itime = nextIntegerTime;
-            if (meshInterval && state.itime == 0) {
-                ++state.outerIndex;
-            }
+
             if (global) {
                 state.globalTimestep = timestep;
             }
@@ -555,22 +495,10 @@ void runFixedScenario() {
     if (completed && !interrupted && iterations > 0) {
         // Only terminal diagnostics consume the outstanding gravity closing
         // half-step. They reuse the density already refreshed for final views.
-        MeshKickSchedule terminalSchedule;
+        ForceStepSchedule terminalSchedule;
         terminalSchedule.endTime = duration;
-        PmmmBoundaryRequest terminalBoundary;
         double terminalBase = coarseInterval;
-        if (meshInterval) {
-            // The terminal boundary closes the frozen membership and the last interval's long
-            // half-kick on a fresh far solve; nothing opens.
-            terminalBoundary.time = state.tau;
-            terminalBoundary.coarseInterval = coarseInterval;
-            terminalBoundary.endTime = duration;
-            terminalSchedule.pmmmBoundary = &terminalBoundary;
-            terminalSchedule.closingBaseTimestep = state.outerInterval;
-            terminalSchedule.longCloseTimestep = state.outerInterval;
-            terminalSchedule.longOpenTimestep = 0.0;
-            terminalBase = state.outerInterval;
-        }
+
 #if COSMICTIGER_WITH_GRAVITY && COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
         if (hierarchical) {
             int minimumRung = state.minrung0;
@@ -590,16 +518,7 @@ void runFixedScenario() {
         }
     }
 #if COSMICTIGER_WITH_GRAVITY
-    if (meshInterval && hpxRank() == 0) {
-        // One mesh transform per outer boundary (plus the terminal pass); inner passes
-        // evaluate the near field on the frozen membership only.
-        std::cout << std::format("  PMMM outer intervals completed: {:d}; mesh transforms this "
-                                 "run: {:d}; force passes this run: {:d}\n",
-                         static_cast<unsigned long long>(state.outerIndex),
-                         static_cast<unsigned long long>(pmmmDiagnostics().transformCount),
-                         iterations)
-                  << std::flush;
-    }
+
 #endif
     setOptions(baseOptions);
     // Scenario diagnostics require the synchronized terminal closing pass.

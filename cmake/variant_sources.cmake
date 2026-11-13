@@ -33,6 +33,7 @@ function(cosmictiger_feature_sources output)
             src/gravity/error.cpp
             src/gravity/error_cuda.cu
             src/gravity/reference_table.cpp
+            src/scenarios/benchmark.cpp
             src/scenarios/cosmology.cpp
             src/scenarios/plummer.cpp
             src/scenarios/glass.cpp
@@ -58,8 +59,13 @@ function(cosmictiger_feature_sources output)
     endif()
 
     if(COSMICTIGER_WITH_GRAVITY)
-        # The tree walk serves the PMMM near-cell FMM.
+        # Global distributed FMM tree, walk, and execution.
         list(APPEND cosmictiger_source_files
+            src/gravity/global_fmm/distributed_tree.cpp
+            src/gravity/global_fmm/execution.cpp
+            src/gravity/global_fmm/gpu_staging.cpp
+            src/gravity/global_fmm/particle_exchange.cpp
+            src/gravity/global_fmm/remote_cache.cpp
             src/gravity/gravity.cpp
             src/gravity/kick.cpp
             src/gravity/kick.cu
@@ -69,30 +75,6 @@ function(cosmictiger_feature_sources output)
             src/gravity/source_access.cpp
             src/gravity/sources.cpp
             src/gravity/tree_arena.cpp
-        )
-    endif()
-
-    # PMMM: collective dispatch, the owned-particle mesh sort, the streamed
-    # field consumer that applies rung kicks, the FMM near field and its PP
-    # fallback.
-    if(COSMICTIGER_WITH_GRAVITY)
-        list(APPEND cosmictiger_source_files
-            src/gravity/collective_dispatch.cpp
-            src/gravity/pm_kick.cpp
-            src/gravity/outer_interval.cpp
-            src/particles/particle_mesh_sort.cpp
-            src/gravity/pmmm_kick.cpp
-            src/gravity/interval.cpp
-            src/gravity/solver.cpp
-            src/gravity/pmmm_kernels.cpp
-            src/gravity/evaluation.cpp
-            src/gravity/fft.cpp
-            src/gravity/mesh_exchange.cpp
-            src/gravity/fmm/cell_schedule.cpp
-            src/gravity/fmm/cell_tree.cpp
-            src/gravity/fmm/fmm_batch.cpp
-            src/gravity/fmm/ghost_exchange.cpp
-            src/gravity/fmm/ghost_storage.cpp
         )
     endif()
 
@@ -152,13 +134,10 @@ function(cosmictiger_feature_sources output)
                 tests/analysis_backends.cpp tests/bh.cpp tests/groups_catalogue.cpp tests/rockstar.cpp)
         endif()
         if(COSMICTIGER_WITH_GRAVITY)
-            list(APPEND cosmictiger_source_files
-                tests/mesh_domains.cpp
-                tests/gravity/particle_mesh_dispatch.cpp
-                tests/particle_mesh_sort.cpp
-                tests/gravity/particle_mesh_timestep.cpp
-                tests/gravity/pmmm.cpp)
-        else()
+            list(APPEND cosmictiger_source_files tests/gravity/global_fmm/fmm_tree.cpp
+                tests/gravity/global_fmm/fmm_walk.cpp)
+        endif()
+        if(NOT COSMICTIGER_WITH_GRAVITY)
             list(APPEND cosmictiger_source_files tests/sph/no_gravity.cpp)
         endif()
         if(COSMICTIGER_WITH_SPH)

@@ -521,6 +521,11 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
     data.midpointHydro = !kparams.forceOnly && sphMidpointEnabled();
 #endif
     data.deferredGasOpening = kparams.deferHydroOpening ? gravityDeferredGasOpeningData() : nullptr;
+    for (int dim = 0; dim < kDimensions; ++dim) {
+        data.globalAcceleration[dim] = (kparams.globalTimestep || kparams.deferGasOpening) ?
+            gravityGlobalAcceleration(dim) :
+            nullptr;
+    }
     data.x = devX;
     data.y = devY;
     data.z = devZ;

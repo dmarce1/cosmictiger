@@ -7,7 +7,6 @@ The optional arithmetic instrumentation sources contain generic definitions for
 counting-scalar tests. Production targets compile only the concrete sources.
 """
 import re
-from math import isqrt
 from .constants import hoistConstants
 
 CPU_TYPES = ('float', 'double', 'SimdVector<float, 8>', 'SimdVector<double, 2>',
@@ -31,8 +30,7 @@ def functions(cpp):
 # These operators accumulate into their final argument. Geometry and scheduling
 # helpers retain their own signatures; they do not implement an X-to-Y operator.
 OPERATORS = ('P2M', 'P2L', 'M2M', 'M2L', 'M2P', 'L2L', 'L2P',
-             'L2LWarp', 'L2LWarpInto', 'evaluateGreen', 'evaluateEwaldGreen',
-             'evaluateEwaldWorking', 'ewaldRegular')
+             'L2LWarp', 'L2LWarpInto', 'evaluateEwaldGreen')
 
 
 def splitArguments(text):
@@ -84,7 +82,7 @@ def singleOrderApi(outputs, degree):
                 signature = match[0]
                 if 'int degree' in match[1]:
                     signature = signature.replace('int degree, ', '')
-                    body = re.sub(r'\bdegree\b', str(degree - 1 if path == 'spherical/p2m.hpp' else degree), body)
+                    body = re.sub(r'\bdegree\b', str(degree), body)
                 if 'int order' in match[1]:
                     signature = signature.replace(', int order', '')
                     body = re.sub(r'\border\b', str(degree + 1), body)
@@ -98,47 +96,8 @@ def singleOrderApi(outputs, degree):
     return result
 
 
-def sphericalAccesses(path, name, body):
-    """Spell harmonic storage accesses as (l, m), preserving raw-array APIs.
-
-    The four L2P field components are not harmonic coefficients. Array-wide
-    copies retain linear indexing; only harmonic arithmetic uses the views.
-    """
-    if not path.startswith('spherical/'):
-        return body
-    arrays = {
-        'P2M': {'output': ('M', 'Real')},
-        'L2P': {'source': ('L', 'Real const')},
-        'evaluateGreen': {'output': ('G', 'Real')},
-        'ewaldRegular': {'output': ('U', 'Real')},
-        'evaluateEwaldWorking': {
-            'output': ('G', 'Real'), 'harmonics': ('U', 'Real'),
-            'compensation': ('C', 'Real'), 'imagePair': ('I', 'Real'),
-        },
-    }.get(name, {})
-    prefix = []
-    for array, (view, real) in arrays.items():
-        def access(match):
-            slot = int(match[1])
-            l = isqrt(slot)
-            m = slot - l * l - l
-            return f'{view}({l}, {m})'
-        body, count = re.subn(r'(?<!Real )\b' + array + r'\[(\d+)\]', access, body)
-        if not count:
-            continue
-        declaration = f'    detail::CoefficientView<{real}> const {view}{{{array}}};\n'
-        # Local scratch arrays must be declared before constructing their views.
-        local = re.search(r'\bReal\s+' + array + r'\[\d+\];', body)
-        if local:
-            body = body[:local.end()] + '\n' + declaration + body[local.end():]
-        else:
-            prefix.append(declaration)
-    return '\n' + ''.join(prefix) + body if prefix else body
-
-
 def splitSources(outputs, degree):
     result = dict(outputs)
-    order = degree + 1
     for path, original in outputs.items():
         if not path.endswith('.hpp') or path.endswith(('types.hpp', 'ewald_common.hpp')):
             continue
@@ -146,27 +105,6 @@ def splitSources(outputs, degree):
             continue
         warp = path.endswith('l2l_warp.hpp')
         cpp = original
-        adapters = []
-        # Public containers share contiguous coefficient storage. Keep these
-        # tiny forwarding templates in the header; compile the arithmetic once.
-        for match, end, body in list(functions(original)):
-            if 'typename Output' not in match[1]:
-                continue
-            signature = match[0][:-1].strip()
-            name = re.search(r'void (\w+)\(', signature)[1]
-            raw = signature.replace(', typename Output', '').replace(', typename Source', '')
-            raw = re.sub(r'Output\s*&\s*output', 'Real* output', raw)
-            raw = re.sub(r'Source\s+const\s*&\s*source', 'Real const* source', raw)
-            parameters = signature[signature.index(name + '(') + len(name) + 1:signature.rfind(')')]
-            # requires precedes CUDA_EXPORT for spherical operators.
-            args = [re.search(r'(\w+)\s*$', p)[1] for p in splitArguments(parameters)]
-            args = ['&output[0]' if a == 'output' else '&source[0]' if a == 'source' else a for a in args]
-            adapter = signature + ' {\n    ' + name + '(' + ', '.join(args) + ');\n}'
-            adapters.append((name, adapter))
-            cpp = cpp.replace(signature + ' {', raw + ' {')
-        # Generator emitters may put the opening brace on the signature itself.
-        if adapters and 'typename Output' in cpp:
-            raise RuntimeError('Unconverted spherical storage parameter in ' + path)
         header = []
         sources = {key: [] for key in ('scalar', 'simd')}
         audit = []
@@ -175,11 +113,9 @@ def splitSources(outputs, degree):
             prefix = cpp[position:match.start()]
             signature = match[0][:-1].strip()
             namespace = list(re.finditer(r'namespace ([\w:]+)\s*\{', cpp[:match.start()]))[-1][1]
-            conversion = '::operator ' in signature
-            name = None if conversion else re.search(r'(\w+)\(', signature.split('CUDA_EXPORT')[-1].split('__device__')[-1])[1]
-            body = sphericalAccesses(path, name, body)
-            header.append(prefix + ('' if conversion else
-                '#if defined(COSMICTIGER_FMM_COUNTING_ONLY) || defined(COSMICTIGER_FMM_INSTRUMENTATION)\n' + signature + ';\n#endif\n'))
+            name = re.search(r'(\w+)\(', signature.split('CUDA_EXPORT')[-1].split('__device__')[-1])[1]
+            header.append(prefix +
+                '#if defined(COSMICTIGER_FMM_COUNTING_ONLY) || defined(COSMICTIGER_FMM_INSTRUMENTATION)\n' + signature + ';\n#endif\n')
             audit.append(f'namespace {namespace} {{\n{signature} {{{body}}}\n}}\n')
             types = CPU_TYPES[:2] if warp else CPU_TYPES
             for real in types:
@@ -187,10 +123,9 @@ def splitSources(outputs, degree):
                 scalar = 'float' if 'float' in real else 'double'
                 variants = (True, False) if name == 'executeL2LWarp' else (None,)
                 for replicate in variants:
-                    concrete = re.sub(r'^template\s*<[^>]+>\s*', 'template <>\n' if conversion else '', signature)
+                    concrete = re.sub(r'^template\s*<[^>]+>\s*', '', signature)
                     concrete = re.sub(r'requires\s*\([^)]*\)\s*', '', concrete)
                     concrete = re.sub(r'\bReal\b', real, concrete)
-                    concrete = re.sub(r'\border\b', str(order), concrete)
                     target = f'Expansion<{real}>' if replicate else f'{real}*'
                     concrete = re.sub(r'\bTarget\b', target, concrete)
                     text = hoistConstants(signature + ' {' + body + '}', scalar)
@@ -204,20 +139,14 @@ def splitSources(outputs, degree):
                             lambda m: m[1] if re.fullmatch(r'k\d+', m[1])
                             else f'static_cast<{scalar}>({m[1]})', concreteBody)
                     aliases = ''
-                    if conversion:
-                        concreteBody = re.sub(r'\border\b', str(order), concreteBody)
                     if replicate is not None:
                         aliases += f'    constexpr bool kReplicate = {str(replicate).lower()};\n'
                     if 'int degree' in match[1]:
-                        concreteBody = re.sub(r'\bdegree\b', str(degree - 1 if path.endswith("spherical/p2m.hpp") else degree), concreteBody)
+                        concreteBody = re.sub(r'\bdegree\b', str(degree), concreteBody)
                     definition = concrete + ' {' + aliases + concreteBody + '}\n'
                     sources[category].append(f'namespace {namespace} {{\n{definition}}}\n')
                     declaration = concrete + ';\n'
                     header.append('#ifndef COSMICTIGER_FMM_COUNTING_ONLY\n' + ('#ifndef __CUDACC__\n' if category == 'simd' else '') + declaration + ('#endif\n' if category == 'simd' else '') + '#endif\n')
-            # Place container adapters after the pointer overloads.
-            for adapterName, adapter in adapters:
-                if adapterName == name:
-                    header.append(adapter + '\n')
             position = end
         header.append(cpp[position:])
         header = ''.join(header)
@@ -266,7 +195,7 @@ def executionSpace(cpp, path):
     if path.endswith('.cpp'):
         return cpp.replace('CUDA_EXPORT ', '')
     qualifier = '\n#ifdef __CUDA_ARCH__\n__device__\n#endif\n'
-    if path.endswith(('cartesian_tracefree_types.hpp', 'spherical_types.hpp')):
+    if path.endswith('cartesian_tracefree_types.hpp'):
         # Storage accessors and constructors remain shared inline utilities.
-        return cpp.replace('CUDA_EXPORT explicit operator', qualifier + 'explicit operator')
+        return cpp
     return cpp.replace('CUDA_EXPORT', qualifier)

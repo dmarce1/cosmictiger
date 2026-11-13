@@ -14,7 +14,6 @@
 // Instantiate only the source construction definitions, independently of the
 // application's walk, particle arena, configured order and position width.
 #define COSMICTIGER_FMM_INSTANCE_ORDER ORDER
-#include <cosmictiger/gravity/kernels/spherical/p2m.hpp>
 #include <cosmictiger/gravity/tree_multipole.hpp>
 
 namespace detail {
@@ -90,23 +89,20 @@ void frozenCloud() {
     }
 }
 
+/// Compare a two-level source reduction with direct Cartesian moments at the root.
 template <int order>
-void cloud(int meshSize, bool subDoubleCenters) {
-    std::array<std::array<Position, 9>, 3> positions;
+void cloud(double extent, bool subDoubleCenters) {
+    namespace cartesian = cosmictiger::gravity::cartesian;
+    std::array<std::array<Position, 9>, kDimensions> positions;
     std::array<float, 9> masses{.125f, .75f, 1.25f, .375f, 2.5f, .25f, .625f, 1.75f, .875f};
-    Vector3<Position> center, leftCenter, rightCenter, meshCenter;
-    Vector3<double> centerCorrection;
-    for (int axis = 0; axis < 3; ++axis) {
-        double const coordinate = 1. - .5 / meshSize;
-        meshCenter[axis] = coordinate;
-        centerCorrection[axis] = meshCenter[axis].toDouble() - coordinate;
-        center[axis] = meshCenter[axis].toDouble() + .11 / meshSize;
-        leftCenter[axis] = center[axis].toDouble() - .07 / meshSize;
-        rightCenter[axis] = center[axis].toDouble() + .05 / meshSize;
+    Vector3<Position> center, leftCenter, rightCenter;
+    for (int axis = 0; axis < kDimensions; ++axis) {
+        double const coordinate = 1. - .5 * extent;
+        center[axis] = coordinate + .11 * extent;
+        leftCenter[axis] = center[axis].toDouble() - .07 * extent;
+        rightCenter[axis] = center[axis].toDouble() + .05 * extent;
         if (subDoubleCenters) {
             center[axis].raw() = Position::max().raw() - 64;
-            meshCenter[axis] = center[axis];
-            centerCorrection[axis] = 0;
             leftCenter[axis].raw() = center[axis].raw() - 4;
             rightCenter[axis].raw() = center[axis].raw() + 6;
         }
@@ -114,8 +110,7 @@ void cloud(int meshSize, bool subDoubleCenters) {
             if (subDoubleCenters) {
                 positions[axis][i].raw() = center[axis].raw() - 13 + (i * (axis + 3)) % 29;
             } else {
-                positions[axis][i] =
-                    meshCenter[axis].toDouble() + (.027 * ((i * (axis + 3)) % 17) - .21) / meshSize;
+                positions[axis][i] = coordinate + (.027 * ((i * (axis + 3)) % 17) - .21) * extent;
             }
         }
     }
@@ -123,7 +118,7 @@ void cloud(int meshSize, bool subDoubleCenters) {
     sources.store = FmmParticleStore::Ghost;
     sources.count = masses.size();
     sources.masses = masses.data();
-    for (int axis = 0; axis < 3; ++axis) {
+    for (int axis = 0; axis < kDimensions; ++axis) {
         sources.positions[axis] = positions[axis].data();
     }
     TreeBuildMoments left, right;
@@ -133,28 +128,26 @@ void cloud(int meshSize, bool subDoubleCenters) {
     treeComputeMultipole<order>(right.precise(), {4, 9}, rightCenter, sources);
     SourceMultipoleBuffer root;
     treeComputeMultipole<order>(root, left, right, leftCenter, rightCenter, center);
-    std::array<double, FmmOrder<order>::kMultipoleCoefficients_> mapped{}, expected{};
-    treeSourceToMesh<order>(mapped.data(), root, center, meshCenter, meshSize, centerCorrection);
+    cartesian::Multipole<double> expected{};
     double maximumOffset = 0;
     for (size_t i = 0; i < masses.size(); ++i) {
         Vector3<double> offset;
-        for (int axis = 0; axis < 3; ++axis) {
-            offset[axis] = subDoubleCenters ?
-                unwrappedDoubleDistance(positions[axis][i], meshCenter[axis]) * meshSize :
-                positions[axis][i].toDouble() * meshSize - (meshSize - .5);
-            maximumOffset = std::max(maximumOffset, std::abs(offset[axis]));
+        for (int axis = 0; axis < kDimensions; ++axis) {
+            offset[axis] = unwrappedDoubleDistance(positions[axis][i], center[axis]);
         }
-        cosmictiger::gravity::spherical::detail::P2M(
-            double(masses[i]), offset[0], offset[1], offset[2], expected);
+        auto const scaledOffset = fmmScaleDisplacement(offset);
+        for (int axis = 0; axis < kDimensions; ++axis) {
+            maximumOffset = std::max(maximumOffset, std::abs(scaledOffset[axis]));
+        }
+        cartesian::P2M(double(masses[i]), scaledOffset, expected);
     }
     double rankScale = expected[0];
     for (int n = 0; n <= order - 2; ++n) {
         if (n) {
-            rankScale *= maximumOffset / n;
+            rankScale *= maximumOffset;
         }
-        for (int m = -n; m <= n; ++m) {
-            int const i = n * (n + 1) + m;
-            check(mapped[i], expected[i], rankScale);
+        for (int i = n * n; i < (n + 1) * (n + 1); ++i) {
+            check(root[i], expected[i], rankScale);
         }
     }
 }
@@ -196,8 +189,8 @@ int main() {
     try {
         detail::transport();
         detail::frozenCloud<kFmmOrder>();
-        for (int meshSize : {1, 2, 3, 4, 5, 7, 8, 12, 30, 32, 1024}) {
-            detail::cloud<kFmmOrder>(meshSize, false);
+        for (int inverseExtent : {1, 2, 3, 4, 5, 7, 8, 12, 30, 32, 1024}) {
+            detail::cloud<kFmmOrder>(1. / inverseExtent, false);
         }
         detail::cloud<kFmmOrder>(1, true);
         std::printf(

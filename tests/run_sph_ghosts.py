@@ -160,8 +160,7 @@ def main():
     preset = Path(__file__).resolve().parents[1] / "configurations" / "jeans_wave.ini"
     gravity_scenarios = {
         "jeans": {"configuration": preset, "gravity.enabled": "true",
-                  "run.gasParticleCount": 4096, "gravity.meshSize": 16,
-                  "run.maxIterations": 6},
+                  "run.gasParticleCount": 4096, "run.maxIterations": 6},
     }
     # PMMM needs a power-of-two locality count, and its tree approximation depends on the
     # decomposition: velocities differ by about 5e-5 of their scale between any two counts.

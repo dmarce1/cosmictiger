@@ -55,6 +55,3 @@ template FlopCounts treeComputeMixedMultipole<COSMICTIGER_FMM_INSTANCE_ORDER>(
     SourceMultipoleBuffer&, Pair<ParticleInteger>, Vector3<double> const&, FmmSourceView const&);
 template FlopCounts treeComputeWideReductionMultipole<COSMICTIGER_FMM_INSTANCE_ORDER>(
     SourceMultipoleBuffer&, Pair<ParticleInteger>, Vector3<double> const&, FmmSourceView const&);
-template FlopCount treeSourceToMesh<COSMICTIGER_FMM_INSTANCE_ORDER>(double*,
-    SourceMultipoleBuffer const&, Vector3<Position> const&, Vector3<Position> const&, int,
-    Vector3<double> const&);

@@ -27,7 +27,7 @@ CUDA_EXPORT constexpr size_t gravityReferenceTableIndex(int i, int j, int k) {
 static_assert(gravityReferenceTableIndex(kGravityReferenceTableMaximumIndex + 1, 0, 0) ==
     kGravityReferenceTableSize);
 
-// Built only on first use, independently from production FMM/PMMM tables. The
+// Built only on first use, independently from production FMM tables. The
 // positive halo is evaluated analytically beyond 1/2; it is never wrapped.
 std::vector<Vector3<double>> const& gravityReferenceCorrectionTable();
 

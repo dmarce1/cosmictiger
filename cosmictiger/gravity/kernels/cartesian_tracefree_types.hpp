@@ -17,11 +17,6 @@
 
 #include <cosmictiger/core/containers.hpp>
 
-namespace cosmictiger::gravity::spherical {
-template <class Real>
-class Multipole;
-}
-
 namespace cosmictiger::gravity::cartesian {
 namespace detail {
     struct CoefficientArrayInit {};
@@ -224,12 +219,6 @@ namespace detail {
 template <class Real>
 struct Multipole : detail::Coefficients<Real, 5> {
     using detail::Coefficients<Real, 5>::operator=;
-    /// Convert basis at the same center and coordinate scale.
-
-#ifdef __CUDA_ARCH__
-    __device__
-#endif
-        explicit operator spherical::Multipole<Real>() const;
 };
 template <class Real>
 struct Expansion : detail::Coefficients<Real, 6> {
@@ -242,6 +231,3 @@ struct Green : detail::Coefficients<Real, 6> {
 template <class Real>
 using Derivatives = Green<Real>;
 }    // namespace cosmictiger::gravity::cartesian
-
-// Both coefficient types must be complete before defining their basis casts.
-#include <cosmictiger/gravity/kernels/basis_conversion.hpp>

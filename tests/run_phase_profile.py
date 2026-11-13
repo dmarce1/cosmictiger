@@ -195,31 +195,19 @@ def require_phases(rows, names, label):
 
 def check_sph(rows, integrator):
     require_phases(rows, (
-        "hydro.tree.create", "hydro.tree.destroy", "hydro.predictor", "hydro.corrector",
+        "hydro.tree.create", "hydro.force.midpoint", "hydro.sources.close", "hydro.sph",
         "hydro.density", "hydro.density.reset", "hydro.density.activeSolve",
         "hydro.density.neighborSolve", "hydro.neighbors.initial", "hydro.neighbors.boxes",
-        "hydro.neighbors.refresh", "hydro.force.close", "hydro.rungs.commit", "hydro.kick.open",
-        "hydro.caches.clear", "hydro.caches.clearHydro", "hydro.diagnostics.energies",
-        "hydro.diagnostics.timesteps"), integrator)
+        "hydro.neighbors.refresh", "hydro.rungs.balance"), integrator)
     calls = lambda name: rows[name]["calls"]
-    for name in ("hydro.tree.destroy", "hydro.predictor", "hydro.corrector", "hydro.density",
-                 "hydro.neighbors.initial", "hydro.force.close", "hydro.diagnostics.energies"):
-        require(calls(name) == calls("hydro.tree.create"),
-                f"{integrator}: {name} call count differs from SPH force events")
-    require(calls("hydro.rungs.commit") == calls("hydro.kick.open"),
-            f"{integrator}: rung commit/opening kick counts differ")
     require(calls("hydro.density.reset") == 2 * calls("hydro.density"),
             f"{integrator}: missing density-stage reset")
     for name in ("hydro.density.activeSolve", "hydro.density.neighborSolve"):
         require(calls(name) >= calls("hydro.density"), f"{integrator}: missing density solve")
-    density_passes = calls("hydro.density.activeSolve") + calls("hydro.density.neighborSolve")
-    require(calls("hydro.neighbors.boxes") == density_passes and
-            calls("hydro.neighbors.refresh") == density_passes,
+    passes = calls("hydro.density.activeSolve") + calls("hydro.density.neighborSolve")
+    require(calls("hydro.neighbors.boxes") == passes and
+            calls("hydro.neighbors.refresh") == passes,
             f"{integrator}: missing neighbor refresh for a density pass")
-    if integrator == "traditional":
-        require_phases(rows, ("hydro.rungs.limit",), integrator)
-    else:
-        require("hydro.rungs.limit" not in rows, "global integration unexpectedly limited rungs")
 
 
 def run_case(executable, directory, options, deadline):
@@ -263,7 +251,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("executable", type=Path)
     parser.add_argument("workdir", type=Path)
-    parser.add_argument("--gravity", action="store_true", help="also check available FMM/PMMM modes")
+    parser.add_argument("--gravity", action="store_true", help="also check global FMM")
     parser.add_argument("--cuda", action="store_true", help="also check one FMM CUDA fixture")
     parser.add_argument("--device-profile", action="store_true",
                         help="require per-block CUDA cycle profiling in the --cuda fixture")
@@ -273,12 +261,11 @@ def main():
     executable, base = args.executable.resolve(), args.workdir.resolve()
     deadline = time.monotonic() + (160.0 if args.cuda else 115.0)
     compiled = compiled_algorithms(str(executable))
-    integrators = [name for name in ("traditional", "global") if name in compiled["integrator"]]
+    integrators = [name for name in ("hierarchical",) if name in compiled["integrator"]]
     require(bool(integrators), "phase-profile regression requires a hydro-capable integrator")
     common = {"gravity.cuda": "false", "run.darkMatterParticleCount": 512, "run.gasParticleCount": 512,
               "scenario.cosmology.useGlass": "false", "initial.closePack": "false",
-              "gravity.enabled": "false", "gravity.meshSize": 8,
-              "hydro.enabled": "true", "hydro.method": "sph",
+              "gravity.enabled": "false", "hydro.enabled": "true", "hydro.method": "sph",
               "chemistry.enabled": "false", "starFormation.enabled": "false",
               "run.verbose": "false", "run.scenario": "hydroWave", "run.endTime": 1.e-5,
               "run.numberOfOutputs": 2, "run.maxIterations": 1, "run.minRung": 0,
@@ -295,34 +282,27 @@ def main():
         require(not detail_rows, f"{label}: gravity-disabled run reported gravity work")
         print(f"{label}: child phases, call counts, totals and terminal/file equality passed")
         count += 1
-    if args.gravity and "pmmm" in compiled["far"]:
+    if args.gravity and "fmm" in compiled["far"]:
         for near in compiled["near"]:
-            label = "pmmm_" + near
+            label = "global_fmm_" + near
             selections = application_options(executable, near=near, integrator=integrators[0])
             options = dict(common, **selections)
             options.update({"run.scenario": "plummer", "gravity.enabled": "true",
                             "hydro.enabled": "false", "run.darkMatterParticleCount": 64, "run.gasParticleCount": 64})
             rows, detail_rows = run_case(executable, base / label, options, deadline)
-            prefix = "pmmmSolve" if integrators[0] == "global" else "pmmmKick"
-            phases = ["particleCounts", "prepare", "deposit", "transform", "diagnostics"]
-            phases += (["evaluate"] if near == "pp" else
-                       ["planGhosts", "startNearPipeline", "finishNearPipeline", "cleanup"])
-            require_phases(rows, (f"{prefix}.{name}" for name in phases), label)
+            require_phases(rows, ("treeCreate.allocate", "treeCreate.build", "kick.walk"), label)
             print(f"{label}: gravity child phases and report accounting passed")
             count += 1
-    if args.cuda and "pmmm" in compiled["far"]:
-        # The near-field FMM batches run on the device; the far field stays on the host.
-        label = "pmmm_fmm_cuda"
+    if args.cuda and "fmm" in compiled["far"]:
+        # The global FMM walk hands local sink subtrees to the device.
+        label = "global_fmm_cuda"
         selections = application_options(executable, near="fmm", integrator=integrators[0])
         options = dict(common, **selections)
         options.update({"run.scenario": "plummer", "gravity.enabled": "true",
                         "hydro.enabled": "false", "run.darkMatterParticleCount": 512, "run.gasParticleCount": 512,
                         "gravity.cuda": "true"})
         rows, detail_rows = run_case(executable, base / label, options, deadline)
-        prefix = "pmmmSolve" if integrators[0] == "global" else "pmmmKick"
-        require_phases(rows, (f"{prefix}.{name}" for name in
-                              ("particleCounts", "prepare", "deposit", "transform",
-                               "planGhosts", "startNearPipeline", "finishNearPipeline", "cleanup")), label)
+        require_phases(rows, ("treeCreate.allocate", "treeCreate.build", "kick.walk"), label)
         require_phases(detail_rows, (
             "kick.gpu.hostToDevice", "kick.gpu.kernel", "kick.gpu.deviceToHost"), label)
         device_calls = [detail_rows[name]["calls"] for name in (

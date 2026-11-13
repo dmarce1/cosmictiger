@@ -47,6 +47,19 @@ class GravityConstants(unittest.TestCase):
             self.assertEqual(scientific(midpoint + delta, digits),
                              '1.' + '0' * (digits - 1) + '1E+00')
 
+    def test_distinct_constants_can_round_to_same_literal(self):
+        source = ('CUDA_EXPORT void kernel(Real x) {'
+                  ' x += math::broadcast<Real>(1);'
+                  ' x += math::broadcast<Real>(1.0000000000000000001); }')
+        for scalar in ('float', 'double'):
+            with self.subTest(scalar=scalar):
+                result = hoistConstants(source, scalar)
+                table = re.findall(r'constexpr (?:float|double) (k\d+) = ([^;]+);', result)
+                self.assertEqual([name for name, _ in table], ['k0', 'k1'])
+                self.assertEqual(table[0][1], table[1][1])
+                self.assertIn('broadcast<Real>(k0)', result)
+                self.assertIn('broadcast<Real>(k1)', result)
+
     def test_compiled_source_constants(self):
         root = Path(__file__).resolve().parents[1] / 'src/gravity/kernels'
         paths = list(root.glob('*.cpp')) + list(root.glob('*.cu'))
@@ -81,7 +94,9 @@ class GravityConstants(unittest.TestCase):
                     else:
                         self.assertGreater(len(re.findall(rf'\b{name}\b', table)), 1)
                     values.append(Decimal(literal.removesuffix('f')))
-                self.assertEqual(values, sorted(set(values)))
+                # Exact rational magnitudes are interned before scalar rounding;
+                # distinct constants may share the same emitted float or double.
+                self.assertEqual(values, sorted(values))
         self.assertTrue(all(counts.values()))
 
     def test_sorted_magnitudes_and_padding(self):

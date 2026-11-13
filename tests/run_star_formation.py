@@ -153,7 +153,7 @@ def main():
               "analysis.views": "false", "analysis.tracers": "false",
               "analysis.power": "false", "lightcone.enabled": "false",
               "output.directory": ".", "output.silo": "false",
-              "hpx:bind": "none", "gravity.meshSize": 8, "gravity.enabled": "false"}
+              "hpx:bind": "none", "gravity.enabled": "false"}
     selection = application_options(executable, integrator=integrators[0], hydro=True)
     evidence = {"fixtures": [], "cosmology": []}
 

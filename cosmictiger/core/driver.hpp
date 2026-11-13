@@ -62,16 +62,6 @@ struct DriverParameters {
     // Latest midpoint hydro bound; gravity selects the next global interval
     // at its boundary without retaining a per-gas gravitational acceleration.
     double globalHydroTimestep{};
-    // Particle-mesh solvers: the outer PM interval whose opening long half-kick
-    // has been applied (zero before the first), the conformal time at which it
-    // started, and the number of completed outer intervals. itime is the
-    // interval-local integer phase of the inner rung integration.
-    double outerInterval{};
-    double outerStart{};
-    uint64_t outerIndex{};
-    // Read from PMMM checkpoint metadata and transported to the coordinator;
-    // not part of the historical on-disk driver record.
-    double checkpointOpeningAngle{};
     /// Archive `bucketSize`, `maxRung`, `adot`, `minrung0`, `step`, `a` and the
     /// remaining fields in transport order.
     template <typename A>
@@ -94,42 +84,12 @@ struct DriverParameters {
         arc & years;
         arc & globalTimestep;
         arc & globalHydroTimestep;
-        arc & outerInterval;
-        arc & outerStart;
-        arc & outerIndex;
-        arc & checkpointOpeningAngle;
     }
 };
 
-// Particle-mesh solvers: how a force pass at an outer PM boundary closes the
-// previous interval and opens the next. closingBaseTimestep is the previous
-// interval (zero: the substep base timestep is unchanged); the long half-kicks
-// apply the per-particle mesh acceleration; longPotentialEnergy is the
-// gm-scaled mesh potential energy added to the synchronized diagnostics.
-// endTime is the run's end time for the hierarchical drift (zero: the
-// substep base timestep times (run.numberOfOutputs - 1), which a non-dyadic outer PM
-// interval does not reproduce).
-// PMMM outer interval (docs/pmmm.md): a force pass at a synchronized boundary
-// closes the old frozen membership, migrates, runs the far solve that selects
-// the next interval and opens the new membership. The force step reports the
-// selected interval and the far potential energy back through this record.
-struct PmmmBoundaryRequest {
-    double time = 0.0;
-    double coarseInterval = 0.0;
+// The explicit endpoint used by hierarchical rung drifts.
+struct ForceStepSchedule {
     double endTime = 0.0;
-    // Outputs of the force step.
-    double nextInterval = 0.0;
-    double potentialEnergy = 0.0;
-};
-
-struct MeshKickSchedule {
-    double closingBaseTimestep = 0.0;
-    double longCloseTimestep = 0.0;
-    double longOpenTimestep = 0.0;
-    double longPotentialEnergy = 0.0;
-    double endTime = 0.0;
-    // Set only for a PMMM outer-interval boundary pass.
-    PmmmBoundaryRequest* pmmmBoundary = nullptr;
 };
 
 #if COSMICTIGER_WITH_SPH
@@ -154,7 +114,7 @@ SphTreeCreateReturn sphStep1(int minrung, bool verbose = true);
 ForceStepResult kickStepHierarchical(int& minimumRung, int maximumRung, double scale,
     double scaleDerivative, double time, double baseTimestep, double theta, EnergiesT* energies,
     int minimumRungFloor, bool doPotential, hpx::future<void>* lightcone, bool keepTop, double drag,
-    int gravityErrorStep = -1, bool closingOnly = false, MeshKickSchedule const& schedule = {},
+    int gravityErrorStep = -1, bool closingOnly = false, ForceStepSchedule const& schedule = {},
     bool deferHydroOpening = false);
 #endif
 
@@ -163,7 +123,7 @@ ForceStepResult kickStepHierarchical(int& minimumRung, int maximumRung, double s
 ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative, double time,
     double baseTimestep, double theta, bool firstCall, bool fullEvaluation, EnergiesT& energies,
     int gravityErrorStep = -1, bool closingOnly = false, double previousTimestep = 0.0,
-    double maximumGlobalTimestep = 0.0, MeshKickSchedule const& schedule = {},
+    double maximumGlobalTimestep = 0.0, ForceStepSchedule const& schedule = {},
     bool deferHydroOpening = false);
 
 void runFixedScenario();

@@ -54,16 +54,11 @@ template <int order>
 FlopCounts treeComputeWideReductionMultipole(SourceMultipoleBuffer& multi,
     Pair<ParticleInteger> particleRange, Vector3<double> const& center,
     FmmSourceView const& sources);
-template <int order>
-FlopCount treeSourceToMesh(double* output, SourceMultipoleBuffer const& source,
-    Vector3<Position> const& sourceCenter, Vector3<Position> const& meshCenter, int meshSize,
-    Vector3<double> const& meshCenterCorrection = {});
 
 #ifdef COSMICTIGER_FMM_INSTANCE_ORDER
 // The definitions pull in the generated kernels, so only the per-order instance
 // translation units see them; tree.cpp compiles against the declarations above.
 
-#include <cosmictiger/gravity/kernels/basis_conversion.hpp>
 #include <cosmictiger/gravity/kernels/cartesian_tracefree_operators.hpp>
 #include <cosmictiger/math/simd_math.hpp>
 
@@ -294,46 +289,6 @@ FlopCounts treeComputeMultipole(SourceMultipoleBuffer& multi, Pair<ParticleInteg
         }
     }
     return counts;
-}
-
-/// Translate tree moments to a mesh-cell center, convert to spherical coefficients, and
-/// rescale each degree to mesh units.
-template <int order>
-FlopCount treeSourceToMesh(double* output, SourceMultipoleBuffer const& source,
-    Vector3<Position> const& sourceCenter, Vector3<Position> const& meshCenter, int meshSize,
-    Vector3<double> const& meshCenterCorrection) {
-    namespace cartesian = cosmictiger::gravity::cartesian;
-    namespace conversion = cosmictiger::gravity::basis_conversion;
-    cartesian::Multipole<double> Mi{}, Mo{};
-    for (int i = 0; i < Mi.size(); ++i) {
-        Mi[i] = source[i];
-    }
-    Vector3<double> displacement;
-    for (int dim = 0; dim < kDimensions; ++dim) {
-        // Recover the rational mesh center after its fixed-point quantization,
-        // while retaining native fixed64 subtraction for tiny displacements.
-        displacement[dim] =
-            unwrappedDoubleDistance(sourceCenter[dim], meshCenter[dim]) + meshCenterCorrection[dim];
-    }
-    cartesian::M2M(Mi, fmmScaleDisplacement(displacement), Mo);
-    auto const spherical = static_cast<cosmictiger::gravity::spherical::Multipole<double>>(Mo);
-    // Derived boundary conversion (docs/fmm_basis_conversion.md):
-    // Sₙ(mesh) = (κh)⁻ⁿ Aₙ Cₙ(tree), h=1/meshSize, κ=kScaleFactor.
-    // Symbol directory: S is a spherical moment; C is a Cartesian STF moment;
-    // A is the pure source basis map; h is mesh width; κ is tree coordinate scale.
-    double const ratio = double(meshSize) / kScaleFactor;
-    double factor = 1;
-    for (int n = 0; n <= order - 2; ++n) {
-        if (n) {
-            factor *= ratio;
-        }
-        for (int m = -n; m <= n; ++m) {
-            int const slot = n * (n + 1) + m;
-            output[slot] = n ? spherical[slot] * factor : spherical[slot];
-        }
-    }
-    return cartesian::kM2MFlops<order - 2> + conversion::kMultipoleCastConventionalFlops<order> +
-        12 + Mi.size() + order - 2;
 }
 
 #endif

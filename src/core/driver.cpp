@@ -47,12 +47,13 @@
 #include <cosmictiger/cosmology/fft.hpp>
 #include <cosmictiger/cosmology/initialize.hpp>
 #include <cosmictiger/gravity/error.hpp>
+#include <cosmictiger/gravity/global_fmm/distributed_tree.hpp>
+#include <cosmictiger/gravity/global_fmm/execution.hpp>
+#include <cosmictiger/gravity/global_fmm/particle_exchange.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/kick_workspace.hpp>
 #include <cosmictiger/gravity/opening_schedule.hpp>
-#include <cosmictiger/gravity/pmmm_kick.hpp>
-#include <cosmictiger/gravity/solver.hpp>
 #endif
 #include <cosmictiger/io/checkpoint.hpp>
 #include <cosmictiger/io/output.hpp>
@@ -64,6 +65,7 @@
 #include <cosmictiger/particles/drift.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_GRAVITY
+#include <cosmictiger/scenarios/benchmark.hpp>
 #include <cosmictiger/scenarios/cosmology.hpp>
 #include <cosmictiger/scenarios/glass.hpp>
 #include <cosmictiger/scenarios/plummer.hpp>
@@ -644,8 +646,8 @@ SphRunReturn sphCompleteSources(int minimumClosingRung, double time, double base
 #if COSMICTIGER_WITH_GRAVITY
 namespace detail {
 
-// Called only after the old-membership closing ladder, before migration and
-// the fresh far solve. Inner passes and terminal closing-only passes keep theta.
+// Global FMM chooses its opening angle from the current cosmological scale,
+// including when resuming a checkpoint, as the historical global solver did.
 void updateOpeningSchedule(double scale) {
     if (getOptions().gravity.openingSchedule.empty() ||
         getOptions().gravity.openingSchedule == "none") {
@@ -658,142 +660,171 @@ void updateOpeningSchedule(double scale) {
     if (theta != opts.gravity.openingAngle) {
         terminal::detailPrint("Opening schedule at z=%.17g: theta %.17g -> %.17g\n",
             1.0 / scale - 1.0, opts.gravity.openingAngle, theta);
-        // Green spectra and retained FFT plans encode the old near stencil.
-        // All old closing work is complete; rebuild them for the next far solve.
-        pmmmDestroy();
         opts.gravity.openingAngle = theta;
         setOptions(opts);
     }
 }
 
-// PMMM outer interval (docs/pmmm.md): migrate every owned particle to its
-// domain at a boundary, rebalancing first when the load has drifted. Inside an
-// interval nothing migrates, so each frozen cell keeps its owner.
-void pmmmBoundaryMigrate(bool initial) {
-    Timer timer;
-    timer.start();
+}    // namespace detail
+#endif
+
+#if COSMICTIGER_WITH_GRAVITY
+namespace detail {
+
+KickParameters prepareFmmKick(int minrung, double scale, double dadt, double t0, double theta,
+    bool firstCall, bool fullEval, double previousTimestep, double maximumGlobalTimestep) {
+    Timer tm;
+    tm.start();
+    terminal::detailPrint("domains_begin\n");
     profile::profileBegin("domains");
-    if (!initial && domainsGetLoadImbalance() > kMaxLoadImbalance) {
-        profile::ScopedPhase phase("domains.rebound");
-        terminal::detailPrint("Doing rebound\n");
-        domainsRebound();
+    bool migrate = true;
+#if COSMICTIGER_WITH_SPH
+    if (getOptions().hydro.enabled) {
+        migrate = prepareSphDomainEvent(minrung);
     }
-    {
+#endif
+    if (migrate) {
         profile::ScopedPhase phase("domains.migrate");
-        domainsBegin(0);
+        domainsBegin(minrung);
     }
-    {
+    terminal::detailPrint("domains_end \n");
+    if (migrate) {
         profile::ScopedPhase phase("domains.install");
         domainsEnd();
     }
     profile::profileEnd();
-    timer.stop();
-    domainTime += timer.read();
-}
+    tm.stop();
+    domainTime += tm.read();
+    tm.reset();
+    tm.start();
+    // ALWAYS_ASSERT(sph_particles_max_smooth_len() != INFINITY);
+    TreeCreateParameters tparams(minrung, theta);
+    terminal::detailPrint("Create tree %i %e\n", minrung, theta);
+    profile::profileBegin("treeCreate");
+    treeCreate(tparams);
+    profile::profileEnd();
+    terminal::detailPrint("Done with tree\n");
 
-/// Construct gravity kick parameters and timestep bounds for a frozen-near mesh interval.
-KickParameters pmmmIntervalParameters(
-    int minRung, double scale, double scaleDerivative, double baseTimestep, bool firstCall) {
-    double maximumTimestep = std::ldexp(baseTimestep, -getOptions().run.minRung);
+    tm.stop();
+    sortTime += tm.read();
+    tm.reset();
+    tm.start();
+
+    KickParameters kparams;
     if (getOptions().run.scenario == "cosmology") {
-        maximumTimestep = std::min(maximumTimestep,
-            cosmology::expansionTimestep(
-                scale, scaleDerivative / scale, cosmosD2adt2(scale), kScaleTimestep));
+        kparams.maxDt =
+            cosmology::expansionTimestep(scale, dadt / scale, cosmosD2adt2(scale), kScaleTimestep);
     }
-    KickParameters parameters;
-    parameters.htime = false;
-    parameters.ascending = parameters.descending = parameters.top = true;
-    parameters.minRung = minRung;
-    parameters.t0 = baseTimestep;
-    parameters.a = scale;
-    parameters.eta = getOptions().gravity.timestepEta;
-    parameters.gravitySmoothingLength = getOptions().gravity.smoothingLength;
-    parameters.gm = getOptions().gravity.gm;
-    parameters.sign = getOptions().run.scenario == "glass" ? -1.0 : 1.0;
-    parameters.firstCall = firstCall;
-    parameters.saveForce = getOptions().analysis.saveForce;
-    parameters.gpu = getOptions().gravity.cuda;
-    parameters.doPhi = false;
-    parameters.maxDt = maximumTimestep;
-    parameters.frozenNear = true;
-    return parameters;
+    // The ordinary path visits every starting particle, including rung zero,
+    // while the chosen step must still honor the configured starting-rung floor.
+    kparams.globalTimestep = maximumGlobalTimestep > 0.0;
+    kparams.previousTimestep = previousTimestep;
+    if (kparams.globalTimestep) {
+        profile::ScopedPhase phase("kick.prepareGlobal");
+        float kernelCap = static_cast<float>(maximumGlobalTimestep);
+        if (double(kernelCap) < maximumGlobalTimestep) {
+            kernelCap = std::nextafter(kernelCap, std::numeric_limits<float>::infinity());
+        }
+        kparams.maxDt = std::min(kparams.maxDt, kernelCap);
+        gravityBeginGlobalKick();
+    } else {
+        kparams.maxDt =
+            std::min(kparams.maxDt, std::ldexp(static_cast<float>(t0), -getOptions().run.minRung));
+    }
+    kparams.htime = false;
+    kparams.ascending = kparams.descending = kparams.top = true;
+    kparams.doPhi = fullEval;
+    kparams.sign = getOptions().run.scenario == "glass" ? -1.0 : 1.0;
+    kparams.nodeLoad = flopsPerNode / flopsPerParticle;
+    kparams.gpu = getOptions().gravity.cuda;
+    usedGpu = kparams.gpu;
+    kparams.minLevel = tparams.minLevel;
+    kparams.saveForce = getOptions().analysis.saveForce;
+    kparams.gm = getOptions().gravity.enabled ? getOptions().gravity.gm : 0.0;
+    kparams.eta = getOptions().gravity.timestepEta;
+    kparams.gravitySmoothingLength = getOptions().gravity.smoothingLength;
+    kparams.a = scale;
+    kparams.firstCall = firstCall;
+    kparams.minRung = minrung;
+    kparams.t0 = t0;
+    kparams.theta = theta;
+    return kparams;
 }
 
-// One traditional force pass of the PMMM outer interval. Inside the interval
-// it is a near-only pass on the frozen membership. At a boundary
-// (schedule.pmmmBoundary) it performs, with S the near field, L the far field,
-// T = L + S, H the outer durations and δ the particle's inner durations:
-//
-//   1. the old-membership closing pass, Δp = (δ_old/2 − H_old/2) S_old,
-//      skipped on the first call;
-//   2. migration (rebound when unbalanced) and the far solve of every particle
-//      on the fresh assignment, which selects H_new;
-//   3. the new-membership pass, closing (H_old/2)(L_new + S_new) and opening
-//      (H_new/2) L_new + (δ_new/2) S_new with the rungs chosen from S_new.
-//
-// Together the closing impulse is (δ_old/2) S_old + (H_old/2)(T_new − S_old):
-// the old interval's short half-kick and its exact long complement L_close =
-// T_new − S_old, so no far expansion is ever evaluated on wandered particles.
-// Symbol directory: S_old → near force on the frozen membership; S_new, L_new →
-// near and far forces on the fresh assignment; H_old → schedule.closingBaseTimestep;
-// H_new → far.nextInterval; δ → rungDt[rung] times the interval.
-ForceStepResult pmmmIntervalStep(int minRung, double scale, double scaleDerivative,
-    double baseTimestep, bool firstCall, bool closingOnly, bool global,
-    MeshKickSchedule const& schedule) {
-    if (global) {
-        throw std::invalid_argument(
-            "The global inner integrator is not available for the PMMM outer interval");
+ForceStepResult evaluateFmmKick(KickParameters parameters) {
+    Timer timer;
+    timer.start();
+    ExpansionBuffer l;
+    l.zero();
+    Vector3<Position> pos;
+    for (int dim = 0; dim < kDimensions; dim++) {
+        pos[dim] = 0.f;
     }
-    auto* const boundary = schedule.pmmmBoundary;
-    if (boundary == nullptr) {
-        auto const parameters =
-            pmmmIntervalParameters(minRung, scale, scaleDerivative, baseTimestep, firstCall);
-        profile::ScopedPhase phase("pmmmKick.inner");
-        return pmmmKick(parameters);
-    }
-    ForceStepResult closing;
-    if (!firstCall) {
-        auto parameters =
-            pmmmIntervalParameters(0, scale, scaleDerivative, schedule.closingBaseTimestep, false);
-        parameters.frozenNearClose = true;
-        parameters.closingBaseTimestep = schedule.closingBaseTimestep;
-        profile::ScopedPhase phase("pmmmKick.closeOldMembership");
-        closing = pmmmKick(parameters);
-    }
-    if (!closingOnly) {
-        updateOpeningSchedule(scale);
-    }
-    pmmmBoundaryMigrate(firstCall);
-    PmBoundaryResult far;
-    {
-        profile::ScopedPhase phase("pmmmBoundary");
-        far = pmmmOuterBoundary(
-            scale, scaleDerivative, boundary->time, boundary->coarseInterval, boundary->endTime);
-    }
-    boundary->nextInterval = far.nextInterval;
-    boundary->potentialEnergy = far.potentialEnergy;
-    if (!closingOnly && !(far.nextInterval > 0.0)) {
-        throw std::logic_error("The PMMM outer interval must be positive before the end time");
-    }
-    double const nextInterval = closingOnly ? schedule.closingBaseTimestep : far.nextInterval;
-    auto parameters = pmmmIntervalParameters(0, scale, scaleDerivative, nextInterval, firstCall);
-    parameters.refreshMembership = true;
-    parameters.closeShortOverInterval = !firstCall;
-    parameters.closingBaseTimestep = schedule.closingBaseTimestep;
-    parameters.longCloseTimestep = schedule.longCloseTimestep;
-    parameters.longOpenTimestep = closingOnly ? 0.0 : far.nextInterval;
-    parameters.doPhi = true;
-    ForceStepResult result;
-    {
-        profile::ScopedPhase phase("pmmmKick.boundary");
-        result = pmmmKick(parameters, true);
-    }
-    result.pot += far.potentialEnergy;
-    result.dkin += closing.dkin;
+    TreeId rootId;
+    rootId.proc = 0;
+    rootId.index = 0;
+    Vector<TreeId> checklist;
+    checklist.push_back(rootId);
+    terminal::detailPrint("Do kick\n");
+    profile::ScopedPhase phase("kick", parameters.profileCoordinator);
+    KickReturn result = kick(parameters, l, pos, rootId, checklist, checklist, nullptr);
+    timer.stop();
+    kickTime += timer.read();
+    terminal::detailPrint("kick done\n");
     return result;
 }
 
+void finishFmmKick() {
+    profile::ScopedPhase phase("kick.cleanup");
+    treeDestroy();
+    particlesCacheFree();
+}
+
 }    // namespace detail
+
+ForceStepResult kickStep(int minrung, double scale, double dadt, double t0, double theta,
+    bool firstCall, bool fullEval, double previousTimestep, double maximumGlobalTimestep,
+    bool deferHydroOpening) {
+    auto parameters = detail::prepareFmmKick(minrung, scale, dadt, t0, theta, firstCall, fullEval,
+        previousTimestep, maximumGlobalTimestep);
+#if COSMICTIGER_WITH_SPH
+    if (sphMidpointEnabled() && !parameters.globalTimestep) {
+        parameters.deferGasOpening = sphCommonBoundary(minrung);
+        parameters.freezeGasRungs = !parameters.deferGasOpening;
+        if (parameters.deferGasOpening) {
+            gravityBeginGlobalKick();
+        }
+    }
+    if (deferHydroOpening) {
+        ALWAYS_ASSERT(!parameters.deferGasOpening && !parameters.globalTimestep);
+        gravityBeginDeferredGasOpening();
+        parameters.deferHydroOpening = true;
+    }
+#endif
+    try {
+        auto result = detail::evaluateFmmKick(parameters);
+#if COSMICTIGER_WITH_SPH
+        if (parameters.deferGasOpening) {
+            result.maxRung = std::max(result.maxRung, sphBalanceBoundaryRungs(scale));
+            result += gravityFinishBalancedGasKick(t0, parameters.sign);
+        }
+        if (deferHydroOpening) {
+            gravitySealDeferredGasOpening();
+        }
+#endif
+        detail::finishFmmKick();
+        return result;
+    } catch (...) {
+#if COSMICTIGER_WITH_SPH
+        if (deferHydroOpening) {
+            gravityDiscardDeferredGasOpening();
+        }
+#endif
+        detail::finishFmmKick();
+        throw;
+    }
+}
+
 #endif
 
 /// Coordinate gravity, hydrodynamics, and optional reference-error sampling for the active
@@ -801,12 +832,10 @@ ForceStepResult pmmmIntervalStep(int minRung, double scale, double scaleDerivati
 ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative, double time,
     double baseTimestep, double theta, bool firstCall, bool fullEvaluation, EnergiesT& energies,
     int gravityErrorStep, bool closingOnly, double previousTimestep, double maximumGlobalTimestep,
-    MeshKickSchedule const& schedule, bool deferHydroOpening) {
+    ForceStepSchedule const& schedule, bool deferHydroOpening) {
     ForceStepResult result{};
     bool const global = maximumGlobalTimestep > 0.0;
-    bool const meshGravity = getOptions().gravity.enabled;
-    [[maybe_unused]] bool const meshInterval =
-        getOptions().gravity.enabled && usesOuterInterval(getOptions().gravity);
+
 #if COSMICTIGER_WITH_SPH
     bool const midpointHydro = sphMidpointEnabled();
 #endif
@@ -821,72 +850,9 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
         profile::profileEnd();
     }
     if (getOptions().gravity.enabled) {
-        if (meshGravity && meshInterval) {
-            // Outer interval with frozen near membership: migration happens only
-            // inside the boundary pass, inner passes solve no mesh.
-            Timer timer;
-            timer.start();
-            result = detail::pmmmIntervalStep(minRung, scale, scaleDerivative, baseTimestep,
-                firstCall, closingOnly, global, schedule);
-            timer.stop();
-            kickTime += timer.read();
-        } else if (meshGravity) {
-            // PMMM sorts particles while building its cell forest. Keep hydro
-            // serialized until this backend exposes an immutable source stage.
-            Timer timer;
-            timer.start();
-            profile::profileBegin("domains");
-            {
-                profile::ScopedPhase phase("domains.migrate");
-                domainsBegin(0);
-            }
-            {
-                profile::ScopedPhase phase("domains.install");
-                domainsEnd();
-            }
-            profile::profileEnd();
-            timer.stop();
-            domainTime += timer.read();
-            timer.reset();
-            timer.start();
-            double maximumTimestep = global ? maximumGlobalTimestep :
-                                              std::ldexp(baseTimestep, -getOptions().run.minRung);
-            if (getOptions().run.scenario == "cosmology") {
-                maximumTimestep = std::min(maximumTimestep,
-                    cosmology::expansionTimestep(
-                        scale, scaleDerivative / scale, cosmosD2adt2(scale), kScaleTimestep));
-            }
-            if (global) {
-                profile::profileBegin("pmmmSolve");
-                pmmmSolve(true);
-                profile::profileEnd();
-                result = particleMeshPrepareKick(
-                    scale, baseTimestep, maximumTimestep, firstCall, minRung, previousTimestep);
-            } else {
-                // Traditional PMMM retains all particles as force sources, but
-                // kicks only active sinks on their individual block timesteps.
-                KickParameters parameters;
-                parameters.htime = false;
-                parameters.ascending = parameters.descending = parameters.top = true;
-                parameters.minRung = minRung;
-                parameters.t0 = baseTimestep;
-                parameters.a = scale;
-                parameters.eta = getOptions().gravity.timestepEta;
-                parameters.gravitySmoothingLength = getOptions().gravity.smoothingLength;
-                parameters.gm = getOptions().gravity.gm;
-                parameters.sign = getOptions().run.scenario == "glass" ? -1.0 : 1.0;
-                parameters.firstCall = firstCall;
-                parameters.saveForce = getOptions().analysis.saveForce;
-                parameters.gpu = getOptions().gravity.cuda;
-                parameters.doPhi = true;
-                parameters.maxDt = maximumTimestep;
-                profile::profileBegin("pmmmKick");
-                result = pmmmKick(parameters);
-                profile::profileEnd();
-            }
-            timer.stop();
-            kickTime += timer.read();
-        }
+        result = kickStep(minRung, scale, scaleDerivative, baseTimestep, theta, firstCall,
+            fullEvaluation, previousTimestep, maximumGlobalTimestep, deferHydroOpening);
+
     } else
 #endif
     {
@@ -959,8 +925,8 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
     }
     if (global && !closingOnly && getOptions().gravity.enabled) {
         {
-            profile::ScopedPhase phase("pmmmKick.finishGlobal");
-            particleMeshFinishGlobalKick(result.minimumTimestep);
+            profile::ScopedPhase phase("kick.finishGlobal");
+            gravityFinishGlobalKick(result.minimumTimestep);
         }
         {
             profile::ScopedPhase phase("diagnostics.energies");
@@ -1009,15 +975,12 @@ void driftRungEverywhere(
 ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, double adot,
     double tau, double t0, double theta, EnergiesT* energies, int minrung0, bool doPhi,
     hpx::future<void>* lcFut, bool nocrop, double drag, int gravityErrorStep, bool closingOnly,
-    MeshKickSchedule const& schedule, bool deferHydroOpening) {
+    ForceStepSchedule const& schedule, bool deferHydroOpening) {
     // A terminal energy evaluation consumes only the outstanding closing
     // ladder. The saved checkpoint retains the original staggered momenta.
     nocrop = nocrop || closingOnly;
     bool const selfGravity = getOptions().gravity.enabled;
-    bool const meshGravity = selfGravity;
-    bool const meshInterval = selfGravity && usesOuterInterval(getOptions().gravity);
-    // The PMMM outer interval completes its boundary schedule at the top level.
-    MeshKickSchedule meshSchedule = schedule;
+
     bool const hierarchicalHydro = getOptions().hydro.enabled;
 #if COSMICTIGER_WITH_SPH
     bool const balanceHydro = hierarchicalHydro && !closingOnly && sphCommonBoundary(minrung);
@@ -1057,17 +1020,7 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
         }
 
         bool migrateThisLevel = ascending || top;
-        // PMMM outer interval: frozen membership keeps every particle with its
-        // owner inside an interval; only the boundary top level migrates, after
-        // the ascending levels have closed the old membership.
-        bool const meshBoundary = meshInterval && top && schedule.pmmmBoundary != nullptr;
-        if (meshBoundary && !closingOnly) {
-            detail::updateOpeningSchedule(scale);
-            theta = getOptions().gravity.openingAngle;
-        }
-        if (meshInterval) {
-            migrateThisLevel = meshBoundary;
-        }
+
 #if COSMICTIGER_WITH_SPH
         if (hierarchicalHydro && migrateThisLevel) {
             migrateThisLevel = prepareSphDomainEvent(levels[li]);
@@ -1077,18 +1030,10 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
             tm.reset();
             tm.start();
             profile::profileBegin("domains");
-            if (meshBoundary) {
-                // Every owned particle is in range for the all-rung migration.
-                particlesSortByRung(0);
-                if (tau > 0.0 && domainsGetLoadImbalance() > kMaxLoadImbalance) {
-                    profile::ScopedPhase phase("domains.rebound");
-                    terminal::detailPrint("Doing rebound\n");
-                    domainsRebound();
-                }
-            }
+
             {
                 profile::ScopedPhase phase("domains.migrate");
-                domainsBegin(meshBoundary ? -1 : levels[li]);
+                domainsBegin(levels[li]);
             }
             {
                 profile::ScopedPhase phase("domains.install");
@@ -1132,25 +1077,13 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
             gravityErrorBegin();
             profile::profileEnd();
         }
-        if (meshBoundary) {
-            // The far solve on the fresh assignment selects the next interval;
-            // the top kick then closes the old interval and opens the new one on
-            // the refreshed membership (docs/pmmm.md).
-            profile::profileBegin("pmmmBoundary");
-            auto const far = pmmmOuterBoundary(scale, scale * adot, tau,
-                schedule.pmmmBoundary->coarseInterval, schedule.pmmmBoundary->endTime);
-            profile::profileEnd();
-            schedule.pmmmBoundary->nextInterval = far.nextInterval;
-            schedule.pmmmBoundary->potentialEnergy = far.potentialEnergy;
-            if (!closingOnly) {
-                if (!(far.nextInterval > 0.0)) {
-                    throw std::logic_error(
-                        "The PMMM outer interval must be positive before the end time");
-                }
-                t0 = far.nextInterval;
-            }
-            meshSchedule.longOpenTimestep = closingOnly ? 0.0 : far.nextInterval;
-            meshSchedule.longPotentialEnergy = far.potentialEnergy;
+
+        int minimumTreeLevel = 0;
+        if (selfGravity) {
+            TreeCreateParameters tparams(levels[li], theta);
+            profile::ScopedPhase phase("treeCreate");
+            treeCreate(tparams);
+            minimumTreeLevel = tparams.minLevel;
         }
 
         KickParameters kparams;
@@ -1169,7 +1102,7 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
         kparams.velInit = getOptions().run.scenario == "plummer";
         kparams.nodeLoad = flopsPerNode / flopsPerParticle;
         kparams.gpu = getOptions().gravity.cuda;
-        kparams.minLevel = 0;
+        kparams.minLevel = minimumTreeLevel;
         kparams.saveForce = getOptions().analysis.saveForce;
         kparams.gm = getOptions().gravity.gm;
         kparams.eta = getOptions().gravity.timestepEta;
@@ -1202,17 +1135,10 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
             kparams.freezeGasRungs = !kparams.fullGasRungSelection;
         }
 #endif
-        // Every ascending level closes a substep of the previous outer interval;
-        // only the top level applies the long half-kicks of the boundary.
-        kparams.closingBaseTimestep = meshSchedule.closingBaseTimestep;
+
         if (kparams.top) {
-            kparams.longCloseTimestep = meshSchedule.longCloseTimestep;
-            kparams.longOpenTimestep = closingOnly ? 0.0 : meshSchedule.longOpenTimestep;
         }
-        // PMMM outer interval: near-only passes on the frozen membership; the
-        // boundary top level re-sorts by position and stores the new membership.
-        kparams.frozenNear = meshInterval;
-        kparams.refreshMembership = meshBoundary;
+
         ExpansionBuffer l;
         l.zero();
         Vector3<Position> pos;
@@ -1234,13 +1160,11 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
         if (!selfGravity) {
             thisKr.maxRung = top ? 0 : maxRung;
         }
-        if (selfGravity && meshGravity) {
-            profile::profileBegin("pmmmKick");
-            thisKr = pmmmKick(kparams, meshBoundary);
-            profile::profileEnd();
-            if (meshInterval && top) {
-                thisKr.pot += meshSchedule.longPotentialEnergy;
-            }
+        if (selfGravity) {
+            profile::ScopedPhase phase("kick");
+            thisKr = kick(kparams, l, pos, rootId, checklist, checklist, nullptr);
+            treeDestroy();
+            particlesCacheFree();
         }
         if (top) {
             setGravityCounterUse(false);
@@ -1474,17 +1398,19 @@ static void outputEnergy(double coarseTime, double scale, EnergiesT const& energ
 /// schedule.
 void driver() {
     profile::checkForInterrupt();
+#if COSMICTIGER_WITH_GRAVITY
+    if (getOptions().run.scenario == "benchmark") {
+        scenarios::runBenchmark();
+        return;
+    }
+#endif
     bool const global = usesGlobalIntegration(getOptions().run);
 #if COSMICTIGER_WITH_SPH
     bool const midpointHydro = sphMidpointEnabled();
 #else
     bool const midpointHydro = false;
 #endif
-    // PMMM outer interval: the integer rung clock subdivides the outer interval
-    // instead of the nominal coarse interval, with frozen near membership inside.
-    bool const meshInterval =
-        getOptions().gravity.enabled && usesOuterInterval(getOptions().gravity);
-    bool const outerInterval = meshInterval;
+
     if (scenarios::definition(getOptions().run.scenario).fixedTime) {
         runFixedScenario();
         return;
@@ -1510,24 +1436,7 @@ void driver() {
             params.tau > params.tauMax + endpointTolerance || params.step < 0) {
             throw std::runtime_error("Checkpoint contains an invalid evolution clock");
         }
-        if (outerInterval) {
-            long double const phase = std::ldexp(static_cast<long double>(params.itime), -64);
-            long double const expected = static_cast<long double>(params.outerStart) +
-                static_cast<long double>(params.outerInterval) * phase;
-            long double const clockTolerance =
-                1.0e-9L * std::max(static_cast<long double>(coarseInterval), std::abs(expected));
-            if ((params.iter > 0 && !(params.outerInterval > 0.0)) ||
-                params.outerInterval > coarseInterval * (1.0 + 1.0e-9) ||
-                (params.itime != 0 && std::abs(expected - params.tau) > clockTolerance) ||
-                (params.itime == 0 && params.iter > 0 &&
-                    std::abs(static_cast<long double>(params.outerStart) + params.outerInterval -
-                        params.tau) > clockTolerance)) {
-                throw std::runtime_error(
-                    "Checkpoint outer PM interval, phase and conformal time are inconsistent; "
-                    "retain the original mesh and timestep settings");
-            }
-            params.step = driverOutputStep(params.tau, coarseInterval);
-        } else if (!global) {
+        if (!global) {
             long double const phase = std::ldexp(static_cast<long double>(params.itime), -64);
             long double const coarsePosition =
                 static_cast<long double>(params.tau) / coarseInterval - phase;
@@ -1844,13 +1753,8 @@ void driver() {
             int minrung = global ? 0 : minRung(itime);
             bool fullEval = minrung == 0;
             int const outputStep = driverOutputStep(tau, coarseInterval);
-            if (outerInterval) {
-                step = outputStep;
-            }
-            // Mesh intervals end on coarse boundaries, so an output is due only at
-            // the first interval of a coarse step.
-            bool const outputDue =
-                fullEval && (!(global || outerInterval) || outputStep > lastOutputStep);
+
+            bool const outputDue = fullEval && (!(global) || outputStep > lastOutputStep);
             double const globalStepCap =
                 global ? std::min(tauMax - tau, (outputStep + 1) * coarseInterval - tau) : 0.0;
 #if COSMICTIGER_WITH_SPH
@@ -1883,10 +1787,6 @@ void driver() {
             bool rebound = false;
             if (tau == 0.0) {
                 rebound = true;
-            } else if (meshInterval) {
-                // Frozen membership: rebalancing waits for the boundary pass,
-                // after the old membership has been closed.
-                rebound = false;
             } else if (minrung == 0) {
                 // A full reorder invalidates the saved rung suffix stack. Keep
                 // the initial decomposition until a synchronized rebuild exists.
@@ -1908,32 +1808,19 @@ void driver() {
                 terminal::detailPrint("Rebound done\n");
                 profile::profileEnd();
             }
-            MeshKickSchedule schedule;
+            ForceStepSchedule schedule;
             schedule.endTime = tauMax;
-            PmmmBoundaryRequest pmmmBoundary;
-            if (meshInterval && itime == 0) {
-                // PMMM outer boundary: the force step closes the frozen
-                // membership, migrates, solves the far field once and selects
-                // the next interval, reported back through this record.
-                pmmmBoundary.time = tau;
-                pmmmBoundary.coarseInterval = coarseInterval;
-                pmmmBoundary.endTime = tauMax;
-                schedule.pmmmBoundary = &pmmmBoundary;
-                schedule.closingBaseTimestep = params.outerInterval;
-                schedule.longCloseTimestep = params.outerInterval;
-            }
-            if (meshInterval) {
-                t0 = params.outerInterval;
-            }
+
+            detail::updateOpeningSchedule(a);
             auto opts = getOptions();
             opts.gravity.smoothingLength =
                 hsoft0;    // Fixed comoving support for every particle type.
-            // Retain the active interval angle until the boundary closes its old ladder.
+
             double const theta = opts.gravity.openingAngle;
             bucketSize = opts.compute.bucketSize;
             ForceStepResult tmp;
             bool nocrop = false;
-            if ((outerInterval ? params.outerIndex % 8 : uint64_t(step % 8)) == 0 && fullEval) {
+            if ((uint64_t(step % 8)) == 0 && fullEval) {
                 nocrop = true;
                 minrung0 = global ? 0 : std::max(minrung0 - 1, getOptions().run.minRung);
             }
@@ -1965,10 +1852,7 @@ void driver() {
                 outputDue && errorInterval > 0 && outputStep % errorInterval == 0 ? outputStep : -1;
 #if COSMICTIGER_WITH_SPH
             if (midpointHydro && tau == 0.0) {
-                // With the PMMM outer interval the first interval is chosen by the boundary
-                // pass of the first force step, after this estimate. Every interval is at most
-                // the coarse interval, so rungs proposed against it are never too coarse.
-                double const estimateBase = meshInterval && !(t0 > 0.0) ? coarseInterval : t0;
+                double const estimateBase = t0;
                 auto const estimate = sphMidpointStep(-1, tau, 0.0, estimateBase, a, a * adot,
                     energies, global,
                     global ? estimateBase : std::ldexp(estimateBase, -getOptions().run.minRung));
@@ -2015,15 +1899,7 @@ void driver() {
                 }
             }
 #endif
-            if (meshInterval && itime == 0) {
-                if (!(pmmmBoundary.nextInterval > 0.0)) {
-                    throw std::logic_error(
-                        "The PMMM outer interval must be positive before the end time");
-                }
-                params.outerInterval = pmmmBoundary.nextInterval;
-                params.outerStart = tau;
-                t0 = params.outerInterval;
-            }
+
             if (tau == 0.0) {
                 energies0 = energies;
             }
@@ -2058,9 +1934,7 @@ void driver() {
             TimeType const nextIntegerTime = global ? 0 : inc(itime, maxRung);
             double const integerPhase =
                 nextIntegerTime == 0 ? 1.0 : std::ldexp(double(nextIntegerTime), -64);
-            double const nextTau = global ? tau + dt :
-                                            (outerInterval ? params.outerStart + t0 * integerPhase :
-                                                             t0 * (double(step) + integerPhase));
+            double const nextTau = global ? tau + dt : (t0 * (double(step) + integerPhase));
 
             double a0 = a;
             double physicalInterval = a * dt;
@@ -2226,9 +2100,7 @@ void driver() {
                 params.globalTimestep = dt;
                 ++step;
             }
-            if (outerInterval && itime == 0) {
-                ++params.outerIndex;
-            }
+
             domainTime = 0.0;
             sortTime = 0.0;
             kickTime = 0.0;
@@ -2310,22 +2182,11 @@ void driver() {
         // leave completed-checkpoint restarts alone (thisIter == 0).
         EnergiesT finalEnergies = energies;
         double t0 = tauMax / getOptions().run.outputIntervalCount();
+        detail::updateOpeningSchedule(params.a);
         double const theta = getOptions().gravity.openingAngle;
-        MeshKickSchedule schedule;
+        ForceStepSchedule schedule;
         schedule.endTime = tauMax;
-        PmmmBoundaryRequest terminalBoundary;
-        if (meshInterval) {
-            // The terminal boundary closes the frozen membership and the last
-            // interval's long half-kick on the fresh far solve; nothing opens.
-            terminalBoundary.time = tau;
-            terminalBoundary.coarseInterval = coarseInterval;
-            terminalBoundary.endTime = tauMax;
-            schedule.pmmmBoundary = &terminalBoundary;
-            schedule.closingBaseTimestep = params.outerInterval;
-            schedule.longCloseTimestep = params.outerInterval;
-            schedule.longOpenTimestep = 0.0;
-            t0 = params.outerInterval;
-        }
+
 #if COSMICTIGER_WITH_GRAVITY && COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
         if (getOptions().run.hierarchicalGravity) {
             int minimumRung = minrung0;
@@ -2349,16 +2210,7 @@ void driver() {
         particlesFree();
     }
     evolutionTime.stop();
-    if (meshInterval) {
-        // One mesh transform per outer boundary (plus the terminal energy pass);
-        // inner passes evaluate the near field on the frozen membership only.
-        std::cout << std::format("  PMMM outer intervals completed: {:d}; mesh transforms this "
-                                 "run: {:d}; force passes this run: {:d}\n",
-                         static_cast<unsigned long long>(params.outerIndex),
-                         static_cast<unsigned long long>(pmmmDiagnostics().transformCount),
-                         thisIter)
-                  << std::flush;
-    }
+
     std::cout << std::format("  Total evolution time (this run, initialization excluded): {:s}\n",
                      terminal::formatDuration(thisIter > 0 ? evolutionTime.read() : 0.0).c_str())
               << std::flush;

@@ -11,7 +11,7 @@ cmake -S . -B build/release_cpu -DCMAKE_BUILD_TYPE=Release \
   -DCOSMICTIGER_ENABLE_GRAVITY=ON \
   -DCOSMICTIGER_EXPANSION_DEGREE=6
 cmake --build build/release_cpu --target cosmictiger --parallel 3
-build/release_cpu/cosmictiger --gravity.meshSize=16 \
+build/release_cpu/cosmictiger \
   --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
 ```
 
@@ -28,7 +28,7 @@ direct formulas. See [matrix algorithms and measurements](docs/matrix.md).
 
 | Option | Fresh default | Purpose |
 | --- | --- | --- |
-| `COSMICTIGER_ENABLE_GRAVITY` | `ON` | Compile PMMM gravity: the periodic FFT far field with the FMM near field, including close leaf particle pairs. |
+| `COSMICTIGER_ENABLE_GRAVITY` | `ON` | Compile the global periodic FMM, including direct leaf particle pairs. |
 | `COSMICTIGER_DIMENSION_COUNT` | `3` | Spatial dimensions: 1, 2, or 3. Below 3 requires SPH, gravity OFF, chemistry OFF, and stars OFF. See [dimensional SPH](docs/sph_dimensions.md). |
 | `COSMICTIGER_ENABLE_SPH` | `ON` | Compile SPH and hydro problems. |
 | `COSMICTIGER_ENABLE_CHEMISTRY` | `ON` | Compile equilibrium cooling when SPH is also enabled. Inactive with SPH disabled. |
@@ -42,9 +42,9 @@ direct formulas. See [matrix algorithms and measurements](docs/matrix.md).
 | `COSMICTIGER_REQUIRE_APEX` | Build-dependent | ON for Debug, RelWithDebInfo, Profile; otherwise OFF. Requires an APEX-enabled HPX installation. |
 | `BUILD_TESTING` | `ON` | Compile and register tests supported by the enabled capabilities. |
 
-At least one physics component must be enabled. Hierarchical gravity with
-mandatory long/short splitting and midpoint SPH is the sole integration scheme.
-Gas and dark matter can evolve together under PMMM self-gravity.
+At least one physics component must be enabled. Hierarchical global FMM gravity
+and midpoint SPH form the sole integration scheme.
+Gas and dark matter can evolve together under global FMM self-gravity.
 To build SPH only, disable `COSMICTIGER_ENABLE_GRAVITY`.
 To build gravity only, disable `COSMICTIGER_ENABLE_SPH`.
 
@@ -70,8 +70,8 @@ synchronizes the legacy cache entry and compiler macro with it. Thus
 `-DCOSMICTIGER_ENABLE_STARS=OFF` disables stars even if the old cache entry
 was `ON`; after migration, change `STARS` to select either value.
 
-PMMM-FMM is the sole gravity solver. Hierarchical short gravity, outer long kicks
-and midpoint SPH are automatic. `gravity.method.near` and `run.timeIntegrator`
+Global FMM is the sole gravity solver. Hierarchical gravity kicks and midpoint
+SPH are automatic. `gravity.method.near` and `run.timeIntegrator`
 are retired. Restart requires the saved expansion degree to match the executable.
 
 `run.numberOfOutputs` counts equally spaced output phases including `t=0` and
@@ -79,13 +79,12 @@ are retired. Restart requires the saved expansion degree to match the executable
 and conformal code time for cosmology. It replaces `run.numberOfSteps` and
 `output.siloInterval`; enabled Silo snapshots are written at every phase.
 To retain a former interval count `M`, request `numberOfOutputs=M+1`. The
-checkpoint header continues storing `M`. Adaptive long steps round upward to an
-integer subdivision of the time remaining before the next output phase.
+checkpoint header continues storing `M`. The rung clock subdivides each output interval dyadically.
 
 `COSMICTIGER_EXPANSION_DEGREE` selects one degree at build time (default 6).
 Potential degree d means source multipole degree d-1 and internal order d+1.
-The PMMM far and near fields share this degree. Each build generates only its
-Cartesian and spherical operators under its own build directory; separate
+The global tree uses this degree for every interaction. Each build generates only its
+Cartesian operators under its own build directory; separate
 build directories can use different degrees without changing source headers.
 `gravity.expansionDegree` is no longer a CLI/INI option. Checkpoints retain the
 historical internal order and reject a binary compiled with a different degree.
@@ -190,4 +189,4 @@ capabilities reconfigures that directory. Use separate directories for builds
 that need to remain available simultaneously. Local jobs are capped at half the
 available cores; concurrent work shares that budget.
 
-Gravity uses hierarchical short kicks with mandatory outer long kicks; SPH uses midpoint kicks. There is no integrator build selector.
+Gravity uses hierarchical global FMM kicks; SPH uses midpoint kicks. There is no integrator build selector.

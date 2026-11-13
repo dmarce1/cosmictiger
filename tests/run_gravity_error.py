@@ -127,14 +127,9 @@ def main():
               "lightcone.enabled": "false", "output.silo": "false", "output.directory": ".",
               "checkpoint.intervalSeconds": 0}
     common.update(application_options(executable, integrator=args.time_integrator))
-    common["gravity.meshSize"] = 8
     if args.cuda:
-        # The near-field CUDA paths require enough candidate pairs to amortize a
-        # launch. The eight-cell power-of-two mesh with width two gives each
-        # cell a 5**3 neighbor cube; 512 particles and a 4096-particle batch
-        # keep the candidate pairs on the GPU rather than falling back to CPU.
-        common.update({"run.darkMatterParticleCount": 512, "run.gasParticleCount": 512, "gravity.meshSize": 8,
-                       "gravity.openingAngle": 0.5773502691896257, "gravity.pmmmBatchParticles": 4096})
+        common.update({"run.darkMatterParticleCount": 512, "run.gasParticleCount": 512,
+                       "gravity.openingAngle": 0.5773502691896257})
     if ranks > 1:
         common["hpx:localities"] = ranks
 
@@ -191,7 +186,7 @@ def main():
                  "run.darkMatterParticleCount": 64, "run.gasParticleCount": 64, "run.maxIterations": 1})
     readErrors(capped, [0], 64, duration)
     print(f"Gravity error sampling passed: cadence, 7/{particleCount} samples, restart, unchanged physics, "
-          f"and count cap (pmmm, {'CUDA' if args.cuda else 'CPU'}, "
+          f"and count cap (global FMM, {'CUDA' if args.cuda else 'CPU'}, "
           f"{args.position_type}, {ranks} rank(s))")
     return 0
 

@@ -118,7 +118,6 @@ def run_regression(args, directory):
                "run.darkMatterParticleCount": 512, "run.gasParticleCount": 512, "initial.closePack": "false",
                "scenario.cosmology.useGlass": "false", "chemistry.enabled": "false",
                "gravity.enabled": str(args.scenario == "plummer").lower(),
-               "gravity.meshSize": 8, "gravity.openingAngle": 0.5773502691896257,
                "run.endTime": END_TIME, "run.numberOfOutputs": STEP_COUNT + 1,
                "run.maxIterations": 1000000, "run.verbose": "true",
                "analysis.groups": "false", "analysis.tracers": "false",

@@ -34,11 +34,11 @@
 #include <cosmictiger/core/safe_io.hpp>
 #include <cosmictiger/core/startup.hpp>
 #include <cosmictiger/core/terminal.hpp>
-#include <cosmictiger/gravity/mesh_size.hpp>
 #include <cosmictiger/gravity/opening_schedule.hpp>
 #if COSMICTIGER_WITH_GRAVITY
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/gravity/tree.hpp>
+#include <cosmictiger/scenarios/benchmark.hpp>
 #endif
 #include <cosmictiger/io/checkpoint.hpp>
 #include <cosmictiger/io/output.hpp>
@@ -502,6 +502,10 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"scenario.cosmology.gadget4Restart", options.scenario.cosmology.gadget4Restart},
         {"scenario.cosmology.useGlass", options.scenario.cosmology.useGlass},
         {"scenario.plummer.radius", options.scenario.plummer.radius},
+        {"benchmark.testFiles", options.scenario.benchmark.testFiles},
+        {"benchmark.openingAngles", options.scenario.benchmark.openingAngles},
+        {"benchmark.size", options.scenario.benchmark.size},
+        {"benchmark.repeats", options.scenario.benchmark.repeats},
         {"initial.closePack", options.initial.closePack},
         {"scenario.cosmology.twoLpt", options.scenario.cosmology.twoLpt},
         {"scenario.kelvinHelmholz.packing", options.scenario.kelvinHelmholz.packing},
@@ -536,9 +540,6 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"gravity.enabled", options.gravity.enabled},
         {"gravity.errorInterval", options.gravity.errorInterval},
         {"gravity.errorSampleSize", options.gravity.errorSampleSize},
-        {"gravity.meshSize", options.gravity.meshSize},
-        {"gravity.pmmmBatchParticles", options.gravity.pmmmBatchParticles},
-        {"gravity.pmmmOuterInterval", options.gravity.pmmmOuterInterval},
         {"gravity.kernelFamily", options.gravity.kernelFamily},
         {"gravity.kernelDegree", options.gravity.kernelDegree},
         {"gravity.openingAngle", options.gravity.openingAngle},
@@ -670,7 +671,7 @@ bool processOptions(int argc, char* argv[]) {
         "print detailed internal diagnostics")("run.scenario",
         po::value<std::string>(&opts.run.scenario)->default_value(opts.run.scenario),
 #if COSMICTIGER_WITH_GRAVITY
-        "physical scenario: plummer, sod, blast, rayleighTaylor, kelvinHelmholtz, disc, "
+        "physical scenario: benchmark, plummer, sod, blast, rayleighTaylor, kelvinHelmholtz, disc, "
         "polytropicStar, hydroWave, jeansWave, gresho, cosmology, glass"
 #elif COSMICTIGER_DIMENSION_COUNT == 1
         "physical scenario: sod, blast, hydroWave"
@@ -751,6 +752,18 @@ bool processOptions(int argc, char* argv[]) {
         "initialize from a glass file")("scenario.cosmology.twoLpt",
         po::value<bool>(&opts.scenario.cosmology.twoLpt)->default_value(false),
         "use second-order Lagrangian initial conditions");
+
+    po::options_description benchmarkOpts("FMM benchmark scenario");
+    benchmarkOpts.add_options()("benchmark.testFiles",
+        po::value<std::string>(&opts.scenario.benchmark.testFiles)->default_value(""),
+        "comma-separated particle text files, with x y z in [0,1) and # comments")(
+        "benchmark.openingAngles",
+        po::value<std::string>(&opts.scenario.benchmark.openingAngles)->default_value(""),
+        "comma-separated opening angles in (0,1], one per test file")("benchmark.size",
+        po::value<int>(&opts.scenario.benchmark.size)->default_value(1),
+        "tile each distribution n by n by n times inside the unit box; n >= 1")("benchmark.repeats",
+        po::value<int>(&opts.scenario.benchmark.repeats)->default_value(3),
+        "number of timed tree builds and FMM solves per distribution; at least 1");
 
     po::options_description plummerScenarioOpts("Plummer scenario");
     plummerScenarioOpts.add_options()("scenario.plummer.radius",
@@ -895,23 +908,13 @@ bool processOptions(int argc, char* argv[]) {
         "gravity.errorSampleSize",
         po::value<int>(&opts.gravity.errorSampleSize)->default_value(100),
         "number of evenly spaced particles for gravity error checks (capped at particle count)")(
-        "gravity.meshSize", po::value<int>(&opts.gravity.meshSize)->default_value(0),
-        "PMMM cells per axis; 0 selects at most 32 particles per cell on average")(
-        "gravity.pmmmBatchParticles",
-        po::value<int>(&opts.gravity.pmmmBatchParticles)->default_value(4096),
-        "target sink particles per ready PMMM batch; oversized cells run alone")(
         "gravity.openingAngle",
         po::value<double>(&opts.gravity.openingAngle)->default_value(opts.gravity.openingAngle),
-        "FMM opening angle in (0, 1]; also sets the filled-cell PMMM near stencil")(
-        "gravity.openingSchedule",
+        "FMM opening angle in (0, 1]")("gravity.openingSchedule",
         po::value<std::string>(&opts.gravity.openingSchedule)->default_value(""),
-        "cosmological redshift:theta pairs, comma separated; applied at PMMM outer boundaries; "
-        "none selects a constant angle")("gravity.pmmmOuterInterval",
-        po::value<bool>(&opts.gravity.pmmmOuterInterval)->default_value(true),
-        "required true with gravity: solve the FFT far field only at outer interval boundaries and "
-        "keep the near-stencil "
-        "membership frozen inside; the near field advances on the inner rungs")(
-        "gravity.openLargerCell",
+        "cosmological redshift:theta pairs, comma separated; applied at synchronized FMM "
+        "boundaries; "
+        "none selects a constant angle")("gravity.openLargerCell",
         po::value<bool>(&opts.gravity.openLargerCell)->default_value(true),
         "tree walk opens only the larger of two rejected cells instead of both")(
         "gravity.effectiveRadius",
@@ -1057,6 +1060,7 @@ bool processOptions(int argc, char* argv[]) {
         .add(initialOpts)
         .add(cosmologyScenarioOpts)
         .add(plummerScenarioOpts)
+        .add(benchmarkOpts)
         .add(kelvinHelmholtzScenarioOpts)
         .add(discScenarioOpts)
         .add(rayleighTaylorScenarioOpts)
@@ -1072,9 +1076,8 @@ bool processOptions(int argc, char* argv[]) {
     // Deprecated aliases stay parseable but are hidden from help, the resolved
     // option listing and its metadata; resolveSmoothingLength warns when one is set.
     po::options_description deprecatedOpts("Deprecated aliases");
-    deprecatedOpts.add_options()("gravity.softening", po::value<double>(),
-        "deprecated alias for gravity.effectiveRadius")("gravity.pmmmCoarseMeshSize",
-        po::value<int>(), "ignored legacy input; gravity.meshSize sets the only PMMM mesh");
+    deprecatedOpts.add_options()(
+        "gravity.softening", po::value<double>(), "deprecated alias for gravity.effectiveRadius");
     po::options_description parserOpts("CosmicTiger options");
     parserOpts.add(commandOpts).add(deprecatedOpts);
     terminal::detailPrint("Processing options\n");
@@ -1090,8 +1093,7 @@ bool processOptions(int argc, char* argv[]) {
                   << (integration::kBuildHasTraditional ? " traditional" : "")
                   << (integration::kBuildHasHierarchical ? " hierarchical" : "")
                   << (integration::kBuildHasGlobal ? " global" : "") << "\n"
-                  << "  Gravity solvers:" << (gravity::kBuildHasGravity ? " pmmm" : " none") << "\n"
-                  << "  PMMM near solvers:" << (gravity::kBuildHasGravity ? " fmm" : "") << "\n";
+                  << "  Gravity solvers:" << (gravity::kBuildHasGravity ? " fmm" : " none") << "\n";
         std::cout << "  Equilibrium cooling: "
                   << (COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_CHEMISTRY ? "enabled" : "disabled")
                   << "\n";
@@ -1163,12 +1165,7 @@ bool processOptions(int argc, char* argv[]) {
         detail::throwOptionError(
             "gravity.errorSampleSize must be positive when gravity.errorInterval is enabled\n");
     }
-    if (opts.gravity.meshSize < 0) {
-        detail::throwOptionError("gravity.meshSize must be nonnegative\n");
-    }
-    if (opts.gravity.pmmmBatchParticles <= 0) {
-        detail::throwOptionError("gravity.pmmmBatchParticles must be positive\n");
-    }
+
     if (!detail::isPositiveFloatOption(opts.gravity.openingAngle) ||
         opts.gravity.openingAngle > 1.0) {
         detail::throwOptionError("gravity.openingAngle must be in (0, 1]\n");
@@ -1228,6 +1225,17 @@ bool processOptions(int argc, char* argv[]) {
             opts.output.directory = "./output/" + opts.run.scenario;
         }
     }
+#if COSMICTIGER_WITH_GRAVITY
+    if (opts.run.scenario == "benchmark") {
+        scenarios::parseBenchmarkCases(opts.scenario.benchmark);
+        if (!opts.gravity.enabled || opts.hydro.enabled || opts.chemistry.enabled ||
+            opts.starFormation.enabled || opts.checkpoint.readIndex >= 0 ||
+            !opts.run.test.empty()) {
+            detail::throwOptionError("benchmark requires enabled gravity, disabled hydro/chemistry/"
+                                     "star formation, no checkpoint restart and no run.test");
+        }
+    }
+#endif
     if (opts.gravity.errorInterval > 0 && !opts.gravity.enabled) {
         detail::throwOptionError("gravity.errorInterval requires gravity.enabled=true\n");
     }
@@ -1644,18 +1652,14 @@ bool processOptions(int argc, char* argv[]) {
         opts.run.timeIntegrator = "hierarchical";
     }
     if (opts.run.timeIntegrator != "hierarchical") {
-        detail::throwOptionError(
-            "run.timeIntegrator must be hierarchical: outer long kicks, hierarchical short "
-            "gravity and midpoint SPH are the sole integration scheme\n");
+        detail::throwOptionError("run.timeIntegrator must be hierarchical: global FMM "
+                                 "gravity and midpoint SPH are the sole integration scheme\n");
     }
     opts.run.hierarchicalGravity = opts.gravity.enabled;
     if (opts.run.minRung < 0 || opts.run.minRung >= kMaxRung) {
         detail::throwOptionError("run.minRung must be nonnegative and less than %i\n", kMaxRung);
     }
-    if (opts.gravity.enabled && !opts.gravity.pmmmOuterInterval) {
-        detail::throwOptionError(
-            "gravity.pmmmOuterInterval must be true; long/short gravity splitting is mandatory\n");
-    }
+
     detail::validateCudaBackends(opts);
     detail::validateHydroMethod(opts);
     detail::validateCooling(opts);
@@ -1699,49 +1703,7 @@ bool processOptions(int argc, char* argv[]) {
             int(std::ceil(std::cbrt(double(opts.initial.numberOfParticles))));
         opts.initial.fourierSize += opts.initial.fourierSize % 2;
     }
-#if COSMICTIGER_WITH_GRAVITY
-    if (opts.gravity.enabled) {
-        if (!pmmm::detail::isPowerOfTwo(uint64_t(hpxSize()))) {
-            detail::throwOptionError("PMMM gravity requires a power-of-two locality count; "
-                                     "%i localities were started\n",
-                hpxSize());
-        }
-        int const localityMinimum = pmmm::detail::minimumMeshSizeForLocalities(hpxSize());
-        if (opts.gravity.meshSize == 0) {
-            // Choose the smallest cubic mesh with mean occupancy <= 32,
-            // using the resolved population of both particle species.
-            // Integer comparisons keep exact cube boundaries and avoid overflow.
-            auto const population =
-                static_cast<unsigned __int128>(opts.run.darkMatterParticleCount) +
-                opts.run.gasParticleCount;
-            constexpr int kParticlesPerCell = 32;
-            int lower = 1;
-            int upper = 1 << 22;
-            while (lower < upper) {
-                int const middle = lower + (upper - lower) / 2;
-                auto const side = static_cast<unsigned __int128>(middle);
-                if (kParticlesPerCell * side * side * side >= population) {
-                    upper = middle;
-                } else {
-                    lower = middle + 1;
-                }
-            }
-            opts.gravity.meshSize = std::max(lower, localityMinimum);
-        }
-        if (opts.gravity.meshSize < localityMinimum) {
-            detail::throwOptionError("gravity.meshSize=%i cannot be cut among %i localities; the "
-                                     "mesh needs at least %i cells per axis\n",
-                opts.gravity.meshSize, hpxSize(), localityMinimum);
-        }
-        size_t const meshSize = static_cast<size_t>(opts.gravity.meshSize);
-        size_t const maximumCells = std::min(size_t(std::numeric_limits<ptrdiff_t>::max()),
-            std::numeric_limits<size_t>::max() / (8 * sizeof(float)));
-        if (meshSize > maximumCells / meshSize / meshSize) {
-            detail::throwOptionError(
-                "gravity.meshSize cubed exceeds mesh indexing/allocation limits\n");
-        }
-    }
-#endif
+
 #if COSMICTIGER_WITH_GRAVITY
     opts.compute.treeCacheLineSize = 65536 / sizeof(TreeNode);
 #else
@@ -1912,20 +1874,7 @@ bool processOptions(int argc, char* argv[]) {
         detail::throwOptionError(
             "Periodic gravity requires normalized gravity.smoothingLength below 0.5\n");
     }
-    if (opts.gravity.enabled && opts.gravity.meshSize > 0 &&
-        opts.gravity.smoothingLength >
-            pmmm::detail::nearStencilSupport(opts.gravity.meshSize, opts.gravity.openingAngle)) {
-        detail::throwOptionError(
-            "PMMM requires the normalized gravity.smoothingLength to be no larger than "
-            "the minimum separation of cells outside the opening-angle near stencil\n");
-    }
-    for (auto const& point : openingSchedule) {
-        if (opts.gravity.smoothingLength >
-            pmmm::detail::nearStencilSupport(opts.gravity.meshSize, point.theta)) {
-            detail::throwOptionError("gravity.openingSchedule has an angle whose near stencil does "
-                                     "not contain the gravitational softening support\n");
-        }
-    }
+
     detail::displayOptions = true;
     if (hpxRank() == 0 && opts.run.test.empty()) {
         std::cout << cosmictiger::kStartupScreen << "\n" << std::flush;
