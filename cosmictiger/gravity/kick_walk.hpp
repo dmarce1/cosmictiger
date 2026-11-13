@@ -355,32 +355,13 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                     doubleFlops += 9 * kSimdFloatSize;    // Source box extent addition and scaling.
                 }
                 for (int i = 0; i < maxi; i++) {
-                    if (params.geometry.meshSize == 0 || params.geometry.periodicNear) {
-                        bool const singleImage = detail::periodicFmmSingleImage(
-                            {dx[0][i], dx[1][i], dx[2][i]}, selfPtr->radius, otherPtrs[i]->radius);
-                        acceptance.cellCell[i] = bool(acceptance.cellCell[i]) && singleImage;
-                        acceptance.particleCell[i] =
-                            bool(acceptance.particleCell[i]) && singleImage;
-                        acceptance.cellParticle[i] =
-                            bool(acceptance.cellParticle[i]) && singleImage;
-                        flops += 7;
-                    }
-                    bool allowPairCost = true;
-                    if (params.geometry.periodicNear && selfPtr->leaf && otherPtrs[i]->leaf &&
-                        acceptance.cellCell[i]) {
-                        allowPairCost = detail::periodicFmmSingleImage(
-                            {dx[0][i], dx[1][i], dx[2][i]}, selfPtr->radius, otherPtrs[i]->radius);
-                        flops += 7;
-                    }
                     auto const interaction = selectFmmInteraction(bool(acceptance.cellCell[i]),
                         bool(acceptance.particleCell[i]), bool(acceptance.cellParticle[i]),
                         selfPtr->leaf, bool(otherLeaf[i]), selfPtr->radius, otherPtrs[i]->radius,
                         int(numberOfSelfParticles), int(otherPtrs[i]->numberOfParticles()),
                         FmmHybridCost<order>::kHybridPerParticle_,
                         FmmHybridCost<order>::kParticlePair_,
-                        params.geometry.meshSize > 0 && allowPairCost ?
-                            FmmHybridCost<order>::kCellCell_ :
-                            0.0f);
+                        params.geometry.meshSize > 0 ? FmmHybridCost<order>::kCellCell_ : 0.0f);
                     if (acceptance.cellCell[i] && selfPtr->leaf && otherLeaf[i] &&
                         params.geometry.meshSize > 0) {
                         flops += 2;

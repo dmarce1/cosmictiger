@@ -16,11 +16,11 @@
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/tree_id.hpp>
+#include <cosmictiger/gravity/fmm_box.hpp>
 #include <cosmictiger/gravity/fmm_types.hpp>
 #include <cosmictiger/gravity/sources.hpp>
 #include <cosmictiger/gravity/tree_source_moments.hpp>
 #include <cosmictiger/math/position.hpp>
-#include <cosmictiger/gravity/fmm_box.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
@@ -140,6 +140,8 @@ struct TreeCreateReturn {
     float radius;
     double radialTrace = 0;
     Range<double> box;
+    size_t nodeCount = 1;
+    size_t leafCount = 1;
     /// Archive this record in the field order required by distributed transport.
     template <class A>
     void serialize(A&& a, unsigned) {
@@ -149,6 +151,8 @@ struct TreeCreateReturn {
         a & radius;
         a & radialTrace;
         a & box;
+        a & nodeCount;
+        a & leafCount;
     }
 };
 

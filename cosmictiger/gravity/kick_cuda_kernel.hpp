@@ -661,29 +661,12 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                                         flops += acceptanceFlops;    // Box arithmetic is counted by
                                                                      // precision at its source.
                                     }
-                                    if (geometry.meshSize == 0 || geometry.periodicNear) {
-                                        bool const singleImage = detail::periodicFmmSingleImage(
-                                            dx, self.radius, other.radius);
-                                        acceptance.cellCell = acceptance.cellCell && singleImage;
-                                        acceptance.particleCell =
-                                            acceptance.particleCell && singleImage;
-                                        acceptance.cellParticle =
-                                            acceptance.cellParticle && singleImage;
-                                        flops += 7;
-                                    }
                                     if (acceptance.cellCell && self.leaf && other.leaf &&
                                         geometry.meshSize > 0) {
                                         flops += 2;
                                     } else if (!acceptance.cellCell && self.leaf && other.leaf) {
                                         flops += 2 + int(acceptance.particleCell) +
                                             int(acceptance.cellParticle);
-                                    }
-                                    bool allowPairCost = true;
-                                    if (geometry.periodicNear && self.leaf && other.leaf &&
-                                        acceptance.cellCell) {
-                                        allowPairCost = detail::periodicFmmSingleImage(
-                                            dx, self.radius, other.radius);
-                                        flops += 7;
                                     }
                                     auto const interaction = selectFmmInteraction(
                                         bool(acceptance.cellCell), bool(acceptance.particleCell),
@@ -692,9 +675,8 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                                         int(other.numberOfParticles()),
                                         FmmHybridCost<order>::kHybridPerParticle_,
                                         FmmHybridCost<order>::kParticlePair_,
-                                        geometry.meshSize > 0 && allowPairCost ?
-                                            FmmHybridCost<order>::kCellCell_ :
-                                            0.0f);
+                                        geometry.meshSize > 0 ? FmmHybridCost<order>::kCellCell_ :
+                                                                0.0f);
                                     sw[kCc] = interaction == FmmInteraction::CellCell;
                                     sw[kPc] = interaction == FmmInteraction::ParticleCell;
                                     sw[kCp] = interaction == FmmInteraction::CellParticle;

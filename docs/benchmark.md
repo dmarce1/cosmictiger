@@ -26,18 +26,28 @@ can include lazy initialization. Counter reset/read and output are outside the
 measured total. Existing counters supply aggregate CPU+GPU FLOP estimates across
 all localities, separated into single, double and unclassified precision; these
 are source-operation counts, not hardware instruction counters. FMA counts as two.
-Each row reports counts and total GFLOP/s. Summaries report minimum, median, mean
-and maximum elapsed time, summed counts and counts divided by summed time.
+Each case prints its input and setup details, followed by aligned columns of
+per-repeat timings in seconds and total GFLOP/s. Rows are printed as solves
+finish, followed by a mean row for each timed phase and aggregate GFLOP/s.
+The summary reports minimum, median, mean and maximum elapsed time and prints
+the exact total FLOPs for one solve once, since the particle distribution and
+work are unchanged across repetitions. The displayed count is not summed over
+repetitions.
+It also reports the total number of tree nodes across all localities, including
+internal nodes and leaves, rather than allocated arena capacity. The final table
+shows the particle count, leaf count and average particles per leaf (total
+particles divided by all leaves, including empty leaves).
 
 The prepared `configurations/benchmark.ini` uses 32^3-particle SILO exports at
-z=22.6499379613608, 2.18800951546296 and 0.117408174187551: the snapshots strictly
-above z=20,2,0. Their angles are 0.4,0.55,0.7. With `size=4`, each case contains
-2,097,152 particles. Run from the repository root, supplying the executable path:
+z=0.117408174187551, 2.18800951546296 and 22.6499379613608: the snapshots strictly
+above z=0,2,20. Their angles are 0.7,0.55,0.4. With `size=8`, each case contains
+16,777,216 particles and runs 10 repeats. Run from the repository root, supplying
+the executable path:
 
 ```sh
 /path/to/cosmictiger --configuration=configurations/benchmark.ini --hpx:threads=2
 ```
 
-The preset selects CPU gravity. Override `--gravity.cuda=true` for a CUDA build
-when GPU resources are available. The benchmark does not write evolution snapshots
+The preset selects CUDA gravity. Override `--gravity.cuda=false` for CPU gravity.
+The benchmark does not write evolution snapshots
 or checkpoints. Existing startup/profile output still uses `output.directory`.

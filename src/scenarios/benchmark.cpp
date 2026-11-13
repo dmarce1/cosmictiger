@@ -237,16 +237,30 @@ void runBenchmark() {
         domainsBegin(0);
         domainsEnd();
         double const domainSeconds = detail::seconds(loadEnd, detail::Clock::now());
-        std::cout << std::format("Benchmark case={} file=\"{}\" base_particles={} size={} "
-                                 "particles={} theta={:.9g} "
-                                 "repeats={} localities={} backend={} smoothing_length={:.9e} "
-                                 "load_s={:.9e} domain_s={:.9e}\n",
-                         test + 1, cases[test].filename, positions.size(), benchmark.size, count,
-                         options.gravity.openingAngle, benchmark.repeats, hpxSize(),
-                         options.gravity.cuda ? "cuda" : "cpu", options.gravity.smoothingLength,
-                         detail::seconds(loadStart, loadEnd), domainSeconds)
+        std::cout << std::format("\nBenchmark case {} / {}\n"
+                                 "{}\n"
+                                 "  File:       {}\n"
+                                 "  Particles:  {} ({} base particles x {}^3 copies)\n"
+                                 "  Solver:     {} | Localities: {} | Repeats: {}\n"
+                                 "  Theta:      {:.6g}\n"
+                                 "  Softening:  {:.6e}\n"
+                                 "  Setup (s):  load {:.6f} | decomposition {:.6f}\n\n"
+                                 "  {:>6} {:>13} {:>13} {:>13} {:>13} {:>12}\n"
+                                 "  {}\n",
+                         test + 1, cases.size(), std::string(82, '='), cases[test].filename, count,
+                         positions.size(), benchmark.size, options.gravity.cuda ? "cuda" : "cpu",
+                         hpxSize(), benchmark.repeats, options.gravity.openingAngle,
+                         options.gravity.smoothingLength, detail::seconds(loadStart, loadEnd),
+                         domainSeconds, "Repeat", "Tree (s)", "Force (s)", "Cleanup (s)",
+                         "Total (s)", "GFLOP/s", std::string(75, '-'))
                   << std::flush;
         std::vector<double> times;
+        double treeTotal = 0.0;
+        double forceTotal = 0.0;
+        double cleanupTotal = 0.0;
+        FlopCount solveFlops = 0;
+        size_t treeNodes = 0;
+        size_t treeLeaves = 0;
         FlopCounts totalCounts{};
         for (int repeat = 0; repeat < benchmark.repeats; ++repeat) {
             profile::checkForInterrupt();
@@ -257,6 +271,8 @@ void runBenchmark() {
                 auto const built =
                     treeCreate(TreeCreateParameters(0, float(options.gravity.openingAngle)));
                 auto const treeEnd = detail::Clock::now();
+                treeNodes = built.nodeCount;
+                treeLeaves = built.leafCount;
                 KickParameters parameters;
                 parameters.htime = true;
                 parameters.theta = options.gravity.openingAngle;
@@ -293,14 +309,16 @@ void runBenchmark() {
             double const elapsed = detail::seconds(start, end);
             auto const counts = readFlopCounts();
             totalCounts += counts;
+            if (repeat == 0) {
+                solveFlops = counts.total();
+            }
+            double const cleanupSeconds = detail::seconds(cleanupStart, end);
+            treeTotal += treeSeconds;
+            forceTotal += forceSeconds;
+            cleanupTotal += cleanupSeconds;
             times.push_back(elapsed);
-            std::cout << std::format("Benchmark repeat case={} repeat={} tree_s={:.9e} "
-                                     "force_s={:.9e} cleanup_s={:.9e} "
-                                     "total_s={:.9e} flops32={} flops64={} flops_other={} flops={} "
-                                     "gflops={:.9e}\n",
-                             test + 1, repeat + 1, treeSeconds, forceSeconds,
-                             detail::seconds(cleanupStart, end), elapsed, counts.singlePrecision,
-                             counts.doublePrecision, counts.unclassified, counts.total(),
+            std::cout << std::format("  {:>6} {:>13.6f} {:>13.6f} {:>13.3e} {:>13.6f} {:>12.2f}\n",
+                             repeat + 1, treeSeconds, forceSeconds, cleanupSeconds, elapsed,
                              double(counts.total()) / elapsed * 1.0e-9)
                       << std::flush;
         }
@@ -318,16 +336,24 @@ void runBenchmark() {
         }
         std::sort(times.begin(), times.end());
         double const median = (times[(times.size() - 1) / 2] + times[times.size() / 2]) * 0.5;
-        std::cout
-            << std::format(
-                   "Benchmark summary case={} repeats={} min_s={:.9e} median_s={:.9e} "
-                   "mean_s={:.9e} "
-                   "max_s={:.9e} flops32={} flops64={} flops_other={} flops={} gflops={:.9e}\n",
-                   test + 1, benchmark.repeats, times.front(), median, sum / times.size(),
-                   times.back(), totalCounts.singlePrecision, totalCounts.doublePrecision,
-                   totalCounts.unclassified, totalCounts.total(),
-                   double(totalCounts.total()) / sum * 1.0e-9)
-            << std::flush;
+        std::cout << std::format("  {}\n"
+                                 "  {:>6} {:>13.6f} {:>13.6f} {:>13.3e} {:>13.6f} {:>12.2f}\n"
+                                 "\n  Timing summary\n"
+                                 "  {:>13} {:>13} {:>13} {:>13}\n"
+                                 "  {}\n"
+                                 "  {:>13.6f} {:>13.6f} {:>13.6f} {:>13.6f}\n"
+                                 "\n  Tree and work per solve\n"
+                                 "  {:>12} {:>12} {:>12} {:>16} {:>18}\n"
+                                 "  {}\n"
+                                 "  {:>12} {:>12} {:>12} {:>16.2f} {:>18}\n\n",
+                         std::string(75, '-'), "Mean", treeTotal / times.size(),
+                         forceTotal / times.size(), cleanupTotal / times.size(), sum / times.size(),
+                         double(totalCounts.total()) / sum * 1.0e-9, "Minimum (s)", "Median (s)",
+                         "Mean (s)", "Maximum (s)", std::string(55, '-'), times.front(), median,
+                         sum / times.size(), times.back(), "Particles", "Tree nodes", "Leaves",
+                         "Particles/leaf", "FLOPs", std::string(74, '-'), count, treeNodes,
+                         treeLeaves, double(count) / double(treeLeaves), solveFlops)
+                  << std::flush;
     }
 }
 }    // namespace scenarios

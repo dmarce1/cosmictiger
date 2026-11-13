@@ -216,6 +216,8 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
         futr.wait();
         auto const rcl = futl.get();
         auto const rcr = futr.get();
+        rc.nodeCount += rcl.nodeCount + rcr.nodeCount;
+        rc.leafCount = rcl.leafCount + rcr.leafCount;
         auto const& xl = rcl.pos;
         auto const& xr = rcr.pos;
         auto const& ml = rcl.multi;

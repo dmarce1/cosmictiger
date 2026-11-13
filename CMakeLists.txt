@@ -619,6 +619,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                     src/core/flops.cu src/math/kernel.cu src/cuda/cuda_memory.cu src/core/assert.cu)
                 target_include_directories(kick_device_profile_${profile_mode}_test PRIVATE
                     ${PROJECT_SOURCE_DIR})
+                cosmictiger_use_generated_kernels(kick_device_profile_${profile_mode}_test)
                 target_compile_definitions(kick_device_profile_${profile_mode}_test PRIVATE
                     USE_CUDA CUDA_MEM_STACK_SIZE=128 COSMICTIGER_PROFILE=1
                     COSMICTIGER_DEVICE_PROFILE=$<IF:$<STREQUAL:${profile_mode},enabled>,1,0>)
