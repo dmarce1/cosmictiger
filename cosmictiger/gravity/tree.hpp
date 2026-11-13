@@ -37,7 +37,6 @@ struct TreeNode {
     Array<TreeId, kChildCount> children;
     Pair<ParticleInteger> particleRange;
     FmmParticleStore sourceStore = FmmParticleStore::Owned;
-    uint64_t meshCellKey = 0;
     Pair<int, int> processRange;
     Vector3<Position> pos;
     MultipolePosition* mpos;
@@ -86,7 +85,6 @@ struct TreeNode {
         arc & processRange;
         arc & particleRange;
         arc & sourceStore;
-        arc & meshCellKey;
         arc & radius;
         arc & radialTrace;
         int localRoot0;
@@ -113,7 +111,6 @@ struct TreeNode {
         arc & processRange;
         arc & particleRange;
         arc & sourceStore;
-        arc & meshCellKey;
         arc & radius;
         arc & radialTrace;
         int localRoot0;

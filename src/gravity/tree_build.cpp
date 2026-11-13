@@ -47,12 +47,6 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
     auto sources = fmmSourceView(policy.sourceStore);
     sources.geometry.meshSize = policy.meshSize;
     sources.geometry.frozenMembership = policy.frozenGeometry;
-    for (int dim = 0; dim < kDimensions; ++dim) {
-        if (policy.meshSize > 0) {
-            sources.geometry.sinkCell[dim] =
-                detail::fmmCellCoordinate(policy.meshCellKey, dim, policy.meshSize);
-        }
-    }
     FlopCounts frameFlops{};
     FlopCount frameDifferences = 0;
     auto difference = [&](Position target, Position source, int dim) {
@@ -529,7 +523,6 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
     node.localRoot = localRoot;
     node.particleRange = particleRange;
     node.sourceStore = policy.sourceStore;
-    node.meshCellKey = policy.meshCellKey;
     node.processRange = policy.representedProcessRange;
     node.pos = centerPosition;
     node.depth = depth;

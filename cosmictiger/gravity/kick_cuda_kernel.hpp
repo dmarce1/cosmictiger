@@ -638,8 +638,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                                 if (other.numberOfParticles()) {
                                     for (int dim = 0; dim < kDimensions; dim++) {
                                         dx[dim] = fmmPositionDifference(self.pos[dim],
-                                            other.pos[dim], dim, geometry, &geometryFlops,
-                                            other.meshCellKey);    // 3
+                                            other.pos[dim], dim, geometry, &geometryFlops);    // 3
                                     }
                                     float const r2 = fmaf(dx[kXi], dx[kXi],
                                         fmaf(dx[kYi], dx[kYi], dx[kZi] * dx[kZi]));
@@ -652,11 +651,10 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                                     if (!acceptance.cellCell && (other.leaf || self.leaf)) {
                                         acceptance =
                                             computeFmmAcceptance(r2, self.radius, other.radius,
-                                                fmmSinkBoxDistanceSquared(self.box, other.pos,
-                                                    geometry, &geometryFlops, other.meshCellKey),
+                                                fmmSinkBoxDistanceSquared(
+                                                    self.box, other.pos, geometry, &geometryFlops),
                                                 fmmSourceBoxDistanceSquared(other.box, self.pos,
-                                                    other.pos, geometry, &geometryFlops,
-                                                    other.meshCellKey),
+                                                    other.pos, geometry, &geometryFlops),
                                                 smoothingLength, thetainv, &acceptanceFlops);
                                         flops += acceptanceFlops;    // Box arithmetic is counted by
                                                                      // precision at its source.

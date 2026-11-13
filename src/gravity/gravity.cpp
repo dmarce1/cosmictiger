@@ -61,7 +61,6 @@ void cpuGravityPp(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
             Vector<Position> srcy;
             Vector<Position> srcz;
             Vector<float> sourceWeights;
-            Vector<uint64_t> sourceKeys(numberOfSources);
             Vector<char> types(numberOfSources);
             srcx.resize(numberOfSources);
             srcy.resize(numberOfSources);
@@ -71,8 +70,6 @@ void cpuGravityPp(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
             for (int i = 0; i < maxi; i++) {
                 gravityReadSourcePositions(*treePtrs[i], srcx.data(), srcy.data(), srcz.data(),
                     types.data(), sourceWeights.data(), count);
-                std::fill_n(sourceKeys.data() + count, treePtrs[i]->numberOfParticles(),
-                    treePtrs[i]->meshCellKey);
                 count += treePtrs[i]->numberOfParticles();
             }
             for (int i = count; i < numberOfSources; i++) {
@@ -80,7 +77,6 @@ void cpuGravityPp(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
                 srcy[i] = 0.f;
                 srcz[i] = 0.f;
                 sourceWeights[i] = 0.0f;
-                sourceKeys[i] = sourceKeys[count - 1];
             }
             //			feenableexcept (FE_DIVBYZERO);
             //			feenableexcept (FE_INVALID);
@@ -95,10 +91,8 @@ void cpuGravityPp(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
                 }
                 //					simd_float self_flags(0);
                 for (int j = 0; j < numberOfSources; j += kSimdFloatSize) {
-                    Array<uint64_t, kSimdFloatSize> keys{};
                     SimdFloat sourceWeight{};
                     for (int l = 0; l < kSimdFloatSize; l++) {
-                        keys[l] = sourceKeys[j + l];
                         simdSetLane(yValue[kXi], l, srcx[j + l].raw());
                         simdSetLane(yValue[kYi], l, srcy[j + l].raw());
                         simdSetLane(yValue[kZi], l, srcz[j + l].raw());
@@ -107,7 +101,7 @@ void cpuGravityPp(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
                     Vector3<SimdFloat> dx{};
                     for (int dim = 0; dim < kDimensions; dim++) {
                         dx[dim] = fmmPositionDifference(
-                            position[dim], yValue[dim], dim, geometry, &geometryFlops, &keys);
+                            position[dim], yValue[dim], dim, geometry, &geometryFlops);
                     }
                     SimdFloat const r2 = sqr(dx[kXi], dx[kYi], dx[kZi]);
                     SimdFloat const rinv1Far =

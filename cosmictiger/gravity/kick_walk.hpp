@@ -299,9 +299,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                 for (int i = ci; i < maxci; i++) {
                     otherPtrs[i - ci] = treeGetNode(checklist[i]);
                 }
-                Array<uint64_t, kSimdFloatSize> sourceKeys{};
                 for (int i = 0; i < maxi; i++) {
-                    sourceKeys[i] = otherPtrs[i]->meshCellKey;
                     for (int dim = 0; dim < kDimensions; dim++) {
                         simdSetLane(otherPos[dim], i, otherPtrs[i]->pos[dim].raw());
                     }
@@ -316,8 +314,8 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                     simdSetLane(otherLeaf, i, 0);
                 }
                 for (int dim = 0; dim < kDimensions; dim++) {
-                    dx[dim] = fmmPositionDifference(selfPos[dim], otherPos[dim], dim,
-                        params.geometry, &geometryFlops, &sourceKeys);
+                    dx[dim] = fmmPositionDifference(
+                        selfPos[dim], otherPos[dim], dim, params.geometry, &geometryFlops);
                 }
                 SimdFloat const r2 =
                     math::fma(dx[kXi], dx[kXi], math::fma(dx[kYi], dx[kYi], dx[kZi] * dx[kZi]));
@@ -347,9 +345,9 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                     }
                     acceptance = computeFmmAcceptance(r2, selfRadius, otherRadius,
                         fmmSinkBoxDistanceSquared(
-                            selfBox, otherPos, params.geometry, &geometryFlops, &sourceKeys),
-                        fmmSourceBoxDistanceSquared(otherBox, selfPos, otherPos, params.geometry,
-                            &geometryFlops, &sourceKeys),
+                            selfBox, otherPos, params.geometry, &geometryFlops),
+                        fmmSourceBoxDistanceSquared(
+                            otherBox, selfPos, otherPos, params.geometry, &geometryFlops),
                         smoothingLengthPack, thetainv);
                     flops += kSimdFloatSize * 19;         // Acceptance only.
                     doubleFlops += 9 * kSimdFloatSize;    // Source box extent addition and scaling.
