@@ -21,6 +21,7 @@
 #include <cosmictiger/gravity/global_fmm/distributed_tree.hpp>
 #include <cosmictiger/gravity/global_fmm/execution.hpp>
 #include <cosmictiger/gravity/tree.hpp>
+#include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/particles.hpp>
@@ -150,6 +151,26 @@ namespace detail {
 
     double seconds(Clock::time_point begin, Clock::time_point end) {
         return std::chrono::duration<double>(end - begin).count();
+    }
+
+    std::string appendBenchmarkResult(size_t caseNumber, std::string const& row) {
+        auto const filename = outputPath(std::format("bench.{}.dat", caseNumber));
+        std::ofstream output(filename, std::ios::app | std::ios::ate);
+        if (!output) {
+            throw std::ios_base::failure("Cannot open benchmark results file: " + filename);
+        }
+        if (output.tellp() == std::streampos(0)) {
+            output << "# particles size theta bucket_size fmm_order localities threads backend "
+                      "repeats tree_nodes leaves particles_per_leaf softening tree_mean_s "
+                      "force_mean_s cleanup_mean_s min_s median_s mean_s max_s flops gflops "
+                      "load_s domain_s\n";
+        }
+        output << row << '\n';
+        output.close();
+        if (!output) {
+            throw std::ios_base::failure("Cannot append benchmark results file: " + filename);
+        }
+        return filename;
     }
 }    // namespace detail
 }    // namespace scenarios
@@ -354,6 +375,18 @@ void runBenchmark() {
                          "Particles/leaf", "FLOPs", std::string(74, '-'), count, treeNodes,
                          treeLeaves, double(count) / double(treeLeaves), solveFlops)
                   << std::flush;
+        auto const resultsFile = detail::appendBenchmarkResult(test + 1,
+            std::format("{} {} {:.9g} {} {} {} {} {} {} {} {} {:.9e} {:.9e} {:.9e} {:.9e} {:.9e} "
+                        "{:.9e} {:.9e} {:.9e} {:.9e} {} {:.9e} {:.9e} {:.9e}",
+                count, benchmark.size, options.gravity.openingAngle, options.compute.bucketSize,
+                kFmmOrder, hpxSize(), hpxHardwareConcurrency(),
+                options.gravity.cuda ? "cuda" : "cpu", benchmark.repeats, treeNodes, treeLeaves,
+                double(count) / double(treeLeaves), options.gravity.smoothingLength,
+                treeTotal / times.size(), forceTotal / times.size(), cleanupTotal / times.size(),
+                times.front(), median, sum / times.size(), times.back(), solveFlops,
+                double(totalCounts.total()) / sum * 1.0e-9, detail::seconds(loadStart, loadEnd),
+                domainSeconds));
+        std::cout << "  Results appended to: " << resultsFile << "\n\n" << std::flush;
     }
 }
 }    // namespace scenarios

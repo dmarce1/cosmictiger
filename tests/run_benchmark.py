@@ -113,6 +113,28 @@ def main():
             assert math.isclose(average[column], sum(row[column] for row in timings) / 2,
                                 rel_tol=1e-3, abs_tol=1e-6)
         assert summary is not None and summary[0] <= summary[1] <= summary[3]
+        results = root / 'paired' / f'bench.{case}.dat'
+        lines = results.read_text().splitlines()
+        headers = [line for line in lines if line.startswith('#')]
+        assert len(headers) == 1
+        columns = headers[0][1:].split()
+        values = lines[-1].split()
+        assert len(columns) == len(values)
+        row = dict(zip(columns, values))
+        assert int(row['particles']) == int(population[1])
+        assert int(row['tree_nodes']) == tree_nodes and int(row['leaves']) == tree_leaves
+        assert int(row['flops']) == solve_flops and int(row['repeats']) == 2
+        assert int(row['bucket_size']) == 8 and row['backend'] == 'cpu'
+        assert math.isclose(float(row['theta']), (0.4, 0.7)[index], rel_tol=1e-7)
+        assert math.isclose(float(row['mean_s']), average[3], rel_tol=1e-3, abs_tol=1e-6)
+    result_files = [root / 'paired' / f'bench.{case}.dat' for case in (1, 2)]
+    previous = {path: path.read_text() for path in result_files}
+    run('paired')
+    for path in result_files:
+        current = path.read_text()
+        assert current.startswith(previous[path]), path
+        appended = current[len(previous[path]):].splitlines()
+        assert len(appended) == 1 and not appended[0].startswith('#'), path
     if not args.mpi:
         for name, changes, expected in (
             ('zero_size', {'benchmark.size': 0}, 'must be at least 1'),

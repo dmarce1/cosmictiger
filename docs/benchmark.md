@@ -38,6 +38,17 @@ internal nodes and leaves, rather than allocated arena capacity. The final table
 shows the particle count, leaf count and average particles per leaf (total
 particles divided by all leaves, including empty leaves).
 
+After each input file's repetitions finish, one summary row is appended to
+`output.directory/bench.1.dat`, `bench.2.dat`, etc., in `benchmark.testFiles` order.
+Existing results are preserved across launches. A new or empty file receives a
+single column header beginning with `#`; later rows do not repeat the header.
+Rows contain the particle count, tiling size, opening angle, bucket size, FMM
+order, localities, coordinator worker-thread count, backend, repeat count, tree
+and leaf counts, particles per leaf, gravity softening, phase mean times, total
+minimum/median/mean/maximum times, FLOPs per solve, aggregate GFLOP/s and excluded
+loading/decomposition times. All times are seconds. Only the coordinator writes
+the distributed results, outside the timed repetitions.
+
 The prepared `configurations/benchmark.ini` uses 32^3-particle SILO exports at
 z=0.117408174187551, 2.18800951546296 and 22.6499379613608: the snapshots strictly
 above z=0,2,20. Their angles are 0.7,0.55,0.4. With `size=8`, each case contains
