@@ -8,7 +8,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <limits>
 #include <stdexcept>
 
 #include <cosmictiger/core/flops.hpp>
@@ -18,6 +17,7 @@
 #include <cosmictiger/gravity/tree_multipole.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/vector3.hpp>
+#include <cosmictiger/particles/particle_partition.hpp>
 
 constexpr bool kVerbose = true;
 
@@ -33,8 +33,7 @@ constexpr FlopCount treePositionConversionExtraFlops(double coordinate) {
 
 }    // namespace detail
 
-/// Construct a tree node and its children using the supplied source, geometry, and dispatch
-/// policy.
+/// Construct a global FMM node and its children using the distributed dispatch policy.
 TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& policy) {
     auto params = request.params;
     auto const key = request.key;
@@ -43,19 +42,7 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
     auto const box = request.box;
     auto const depth = request.depth;
     auto const localRoot = request.localRoot;
-    bool const boundedGeometry = policy.boundedGeometry;
-    auto sources = fmmSourceView(policy.sourceStore);
-    sources.geometry.meshSize = policy.meshSize;
-    sources.geometry.frozenMembership = policy.frozenGeometry;
-    FlopCounts frameFlops{};
-    FlopCount frameDifferences = 0;
-    auto difference = [&](Position target, Position source, int dim) {
-        frameDifferences += policy.frozenGeometry;
-        return policy.frozenGeometry ?
-            detail::fmmCellDifference(
-                target, source, sources.geometry.sinkCell[dim], policy.meshSize, &frameFlops) :
-            unwrappedDoubleDistance(target, source);
-    };
+    auto const sources = fmmSourceView();
     FlopCounter<FlopCount> flops = 0;    // Double box/center arithmetic.
     FlopCounter<FlopCount> singleFlops = 0;
     FlopCounter<FlopCounts> multipoleFlops;
@@ -76,9 +63,6 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
     Array<TreeId, kChildCount> children;
     Vector3<Position>& centerPosition = rc.pos;
     auto& multi = rc.multi;
-    if (policy.sourceStore == FmmParticleStore::Owned || policy.frozenGeometry) {
-        multi.useDouble();
-    }
     auto& rbox = rc.box;
     float& radius = rc.radius;
     Vector3<double> xcValue;
@@ -118,7 +102,7 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
             right.box = rightBox;
             right.depth = depth + 1;
             right.localRoot = false;
-            policy.splitDomains(policy.context, left, right);
+            policy.splitDomains(left, right);
             leftBox = left.box;
             rightBox = right.box;
             leftRange = left.processRange;
@@ -128,18 +112,11 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
         } else {
             double xmid = 0.5 * (box.end[xdim] + box.begin[xdim]);
             flops += 2;
-            ParticleInteger mid =
-                fmmSourcePartitionFrame(policy.sourceStore, sources, particleRange, xmid, xdim);
+            ParticleInteger mid = particlesPartition(particleRange, Position(xmid), xdim);
             addCpuFlops(1, FlopPrecision::Double);
             flops += detail::treePositionConversionExtraFlops(xmid);
-            if (policy.frozenGeometry && numberOfParticles > 1 &&
-                (mid == particleRange.first || mid == particleRange.second)) {
-                // Coincident points (or sub-double extents) still need bounded,
-                // balanced leaves. Their actual bounds are rebuilt below.
-                mid = particleRange.first + numberOfParticles / 2;
-            }
-            if (!policy.frozenGeometry && (boundedGeometry || !policy.extraSubdivision) &&
-                numberOfParticles > 1 &&
+
+            if (!policy.extraSubdivision && numberOfParticles > 1 &&
                 (mid == particleRange.first || mid == particleRange.second)) {
                 // Once a global cell meets its geometric/Ewald subdivision
                 // requirement, empty midpoint branches only consume depth and
@@ -168,8 +145,7 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
                 if (upper[xdim] != lower[xdim]) {
                     auto const span = upper[xdim] - lower[xdim];
                     split.raw() = lower[xdim] + span / 2 + span % 2;
-                    mid =
-                        fmmSourcePartition(policy.sourceStore, sources, particleRange, split, xdim);
+                    mid = particlesPartition(particleRange, split, xdim);
                 } else {
                     split.raw() = lower[xdim];
                     mid = particleRange.first + numberOfParticles / 2;
@@ -188,7 +164,7 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
         rightRequest.box = rightBox;
         rightRequest.depth = depth + 1;
         rightRequest.localRoot = rightLocalRoot;
-        auto futr = policy.fork(policy.context, rightRequest, true, true);
+        auto futr = policy.fork(rightRequest, true);
         hpx::future<TreeCreateReturn> futl;
         try {
             TreeBuildRequest leftRequest;
@@ -199,7 +175,7 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
             leftRequest.box = leftBox;
             leftRequest.depth = depth + 1;
             leftRequest.localRoot = leftLocalRoot;
-            futl = policy.fork(policy.context, leftRequest, false, false);
+            futl = policy.fork(leftRequest, false);
         } catch (...) {
             futr.wait();
             throw;
@@ -239,13 +215,6 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
         for (int dim = 0; dim < kDimensions; dim++) {
             xlValue[dim] = xl[dim].toDouble();
             xrValue[dim] = xr[dim].toDouble();
-            if (policy.frozenGeometry) {
-                flops += 12;
-                xlValue[dim] += detail::fmmCellWinding(
-                    xl[dim], sources.geometry.sinkCell[dim], policy.meshSize);
-                xrValue[dim] += detail::fmmCellWinding(
-                    xr[dim], sources.geometry.sinkCell[dim], policy.meshSize);
-            }
         }
         flops += 2 * kDimensions;
         Vector3<double> xc1, xc2;
@@ -377,41 +346,18 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
             flops += 6;
         }
 
-        if (boundedGeometry) {
-            // The cell adapter accounts for all of its center conversions.
-            policy.constrainCenter(policy.context, xcValue, centerPosition);
-            double leftDistanceSquared = 0.0;
-            double rightDistanceSquared = 0.0;
-            for (int dim = 0; dim < kDimensions; ++dim) {
-                leftDistanceSquared += sqr(difference(xl[dim], centerPosition[dim], dim));
-                rightDistanceSquared += sqr(difference(xr[dim], centerPosition[dim], dim));
-            }
-            // Bound the children about the actual stored center. This also
-            // protects sub-double Q64 extents and center-clamping roundoff.
-            double const enclosingRadius = std::max(std::sqrt(leftDistanceSquared) + rlValue,
-                std::sqrt(rightDistanceSquared) + rrValue);
-            radius = std::nextafter(float(enclosingRadius), std::numeric_limits<float>::infinity());
-            flops += 6 * kDimensions + 5;    // Includes enclosing-radius narrowing.
-            singleFlops += 1;                // nextafter(float, float).
-        } else {
-            for (int dim = 0; dim < kDimensions; dim++) {
-                centerPosition[dim] = xcValue[dim];
-                flops += detail::treePositionConversionExtraFlops(xcValue[dim]);
-            }
-            flops += 3;
+        for (int dim = 0; dim < kDimensions; dim++) {
+            centerPosition[dim] = xcValue[dim];
+            flops += detail::treePositionConversionExtraFlops(xcValue[dim]);
         }
-        multipoleFlops += [&]() {
-            if (multi.isDouble()) {
-                return treeComputeMultipole<kFmmOrder>(
-                    multi.precise(), ml, mr, xl, xr, centerPosition, sources.geometry);
-            }
-            return treeComputeMultipole<kFmmOrder>(
-                multi.single(), ml.single(), mr.single(), xlValue, xrValue, xcValue);
-        }();
+        flops += 3;
+        multipoleFlops += treeComputeMultipole<kFmmOrder>(multi, ml, mr, xl, xr, centerPosition);
         rc.radialTrace = rcl.radialTrace + rcr.radialTrace;
         for (int dim = 0; dim < kDimensions; ++dim) {
-            double const leftShift = kScaleFactor * difference(xl[dim], centerPosition[dim], dim);
-            double const rightShift = kScaleFactor * difference(xr[dim], centerPosition[dim], dim);
+            double const leftShift =
+                kScaleFactor * unwrappedDoubleDistance(xl[dim], centerPosition[dim]);
+            double const rightShift =
+                kScaleFactor * unwrappedDoubleDistance(xr[dim], centerPosition[dim]);
             int const slot = dim == kXi ? 2 : dim == kYi ? 1 : 3;
             rc.radialTrace += leftShift * (leftShift * ml[0] + 2 * ml[slot]) +
                 rightShift * (rightShift * mr[0] + 2 * mr[slot]);
@@ -423,10 +369,8 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
         auto& xminValue = rbox.begin;
         auto& xmaxValue = rbox.end;
         for (int dim = 0; dim < kDimensions; dim++) {
-            xminValue[dim] =
-                policy.frozenGeometry ? std::numeric_limits<double>::infinity() : box.end[dim];
-            xmaxValue[dim] =
-                policy.frozenGeometry ? -std::numeric_limits<double>::infinity() : box.begin[dim];
+            xminValue[dim] = box.end[dim];
+            xmaxValue[dim] = box.begin[dim];
             if (numberOfParticles == 0) {
                 xminValue[dim] = xmaxValue[dim] = 0.5 * (box.begin[dim] + box.end[dim]);
                 flops += 2;
@@ -434,83 +378,44 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
         }
         for (ParticleInteger i = particleRange.first; i < particleRange.second; i++) {
             for (int dim = 0; dim < kDimensions; dim++) {
-                auto const position = sources.positions[dim][i];
-                double lower = position.toDouble();
-                double upper = lower;
-                if (boundedGeometry) {
-                    lower = positionDomainCoordinate(position);
-                    flops += 1;    // Additional fixed-to-double scaling in the domain helper.
-                    if constexpr (kPositionBits == 64) {
-                        // Its guard skips Position(upper) at one; otherwise the
-                        // host Fixed64 conversion uses four floating operations.
-                        flops += (upper < 1.0 ? 4 : 0) + int(lower != upper);
-                    }
-                    flops += upper < 1.0 ? (kPositionBits == 64 ? 4 : 1) : 0;
-                    if (upper < 1.0 && Position(upper).raw() < position.raw()) {
-                        upper = std::nextafter(upper, 1.0);
-                        flops += 1;
-                    }
-                }
-                if (policy.frozenGeometry) {
-                    flops += 7;
-                    int const winding = detail::fmmCellWinding(
-                        position, sources.geometry.sinkCell[dim], policy.meshSize);
-                    lower += winding;
-                    upper += winding;
-                }
-                xmaxValue[dim] = std::max(xmaxValue[dim], upper);
-                xminValue[dim] = std::min(xminValue[dim], lower);
+                double const position = sources.positions[dim][i].toDouble();
+                xmaxValue[dim] = std::max(xmaxValue[dim], position);
+                xminValue[dim] = std::min(xminValue[dim], position);
             }
         }
         for (int dim = 0; dim < kDimensions; dim++) {
             xcValue[dim] = (xmaxValue[dim] + xminValue[dim]) * 0.5;
         }
-        if (boundedGeometry) {
-            policy.constrainCenter(policy.context, xcValue, centerPosition);
-        }
+
         r = 0.0;
-        // Bounded displacement subtracts integer positions before its one
-        // scaling multiply, saving one floating subtraction per dimension.
-        flops += 6 + FlopCount(numberOfParticles) * (boundedGeometry ? 12 : 15);
+        flops += 6 + FlopCount(numberOfParticles) * 15;
         for (ParticleInteger i = particleRange.first; i < particleRange.second; i++) {
             double thisRadius = 0.0;
             for (int dim = 0; dim < kDimensions; dim++) {
-                double const delta = boundedGeometry ?
-                    difference(sources.positions[dim][i], centerPosition[dim], dim) :
-                    sources.positions[dim][i].toDouble() - xcValue[dim];
+                double const delta = sources.positions[dim][i].toDouble() - xcValue[dim];
                 thisRadius += sqr(delta);
             }
             r = std::max(r, thisRadius);
         }
         radius = std::sqrt(r);
         flops += 1;    // Double square-root result narrows into radius.
-        if (boundedGeometry) {
-            radius = std::nextafter(radius, std::numeric_limits<float>::infinity());
-            singleFlops += 1;
-        }
+
         flops += 4;    // Square root and three center-to-fixed conversions below.
         children[kLeftChild].index = children[kRightChild].index = -1;
-        if (!boundedGeometry) {
-            // P2M and the stored node must use the same initialized fixed-point center.
-            for (int dim = 0; dim < kDimensions; ++dim) {
-                centerPosition[dim] = xcValue[dim];
-                flops += detail::treePositionConversionExtraFlops(xcValue[dim]);
-            }
+        // P2M and the stored node must use the same initialized fixed-point center.
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            centerPosition[dim] = xcValue[dim];
+            flops += detail::treePositionConversionExtraFlops(xcValue[dim]);
         }
-        multipoleFlops += [&]() {
-            if (multi.isDouble()) {
-                return treeComputeMultipole<kFmmOrder>(
-                    multi.precise(), particleRange, centerPosition, sources);
-            }
-            return treeComputeMultipole<kFmmOrder>(multi.single(), particleRange, xcValue, sources);
-        }();
+        multipoleFlops +=
+            treeComputeMultipole<kFmmOrder>(multi, particleRange, centerPosition, sources);
     }
     if (isleaf) {
         for (ParticleInteger i = particleRange.first; i < particleRange.second; ++i) {
             double const mass = fmmSourceMass(sources, i);
             for (int dim = 0; dim < kDimensions; ++dim) {
-                double const offset =
-                    kScaleFactor * difference(sources.positions[dim][i], centerPosition[dim], dim);
+                double const offset = kScaleFactor *
+                    unwrappedDoubleDistance(sources.positions[dim][i], centerPosition[dim]);
                 rc.radialTrace += mass * offset * offset;
             }
         }
@@ -522,7 +427,6 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
     node.children = children;
     node.localRoot = localRoot;
     node.particleRange = particleRange;
-    node.sourceStore = policy.sourceStore;
     node.processRange = policy.representedProcessRange;
     node.pos = centerPosition;
     node.depth = depth;
@@ -530,17 +434,12 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
         node.box.setBounds(dim, rbox.begin[dim], rbox.end[dim]);
     }
     flops += 5 * kDimensions;    // Scale/floor/ceil endpoints and compare the rounded extent.
-    bool const global = processRange.second - processRange.first > 1;
     node.leaf = isleaf;
     treeStoreNode(index, node, multi.narrow());
-    if (multi.isDouble()) {
-        flops += fmmMultipoleCoefficientCount(kFmmOrder);
-    }
+    flops += fmmMultipoleCoefficientCount(kFmmOrder);
     rc.id.index = index;
     rc.id.proc = hpxRank();
-    if constexpr (kCountFlops) {
-        flops += frameFlops.doublePrecision - frameDifferences;
-    }
+
     addCpuFlops(flops, FlopPrecision::Double);
     addCpuFlops(singleFlops, FlopPrecision::Single);
     addCpuFlops(static_cast<FlopCounts>(multipoleFlops));

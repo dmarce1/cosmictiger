@@ -12,9 +12,7 @@
 #include <cosmictiger/gravity/tree.hpp>
 #include <cosmictiger/math/vector3.hpp>
 
-// Solver-neutral build input. Distributed domain routing and bounded-cell
-// geometry are supplied by the caller; the local kd and multipole arithmetic
-// are implemented once.
+// Build input for the distributed global FMM kd-tree.
 struct TreeBuildRequest {
     TreeCreateParameters params;
     size_t key;
@@ -26,17 +24,11 @@ struct TreeBuildRequest {
 };
 
 struct TreeBuildPolicy {
-    FmmParticleStore sourceStore = FmmParticleStore::Owned;
-    bool boundedGeometry = false;
-    bool frozenGeometry = false;
-    int meshSize = 0;
     bool extraSubdivision = false;
     FlopCounts subdivisionFlops{};
     Pair<int, int> representedProcessRange;
-    void* context = nullptr;
-    void (*constrainCenter)(void*, Vector3<double>&, Vector3<Position>&) = nullptr;
-    void (*splitDomains)(void*, TreeBuildRequest&, TreeBuildRequest&) = nullptr;
-    hpx::future<TreeCreateReturn> (*fork)(void*, TreeBuildRequest, bool, bool) = nullptr;
+    void (*splitDomains)(TreeBuildRequest&, TreeBuildRequest&) = nullptr;
+    hpx::future<TreeCreateReturn> (*fork)(TreeBuildRequest, bool) = nullptr;
 };
 
 TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& policy);

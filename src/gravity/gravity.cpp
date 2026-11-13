@@ -22,8 +22,8 @@
 // definitions live in gravity_cpu.hpp and the per-order instance translation
 // units instantiate them.
 
-void cpuGravityPp(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const& list, float hfloat,
-    FmmGeometry const& geometry) {
+void cpuGravityPp(
+    ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const& list, float hfloat) {
     FlopCounter<FlopCount> flops = 0;
     FlopCounts geometryFlops{};
     FlopCounter<FlopCount> doubleFlops = 0;
@@ -100,8 +100,7 @@ void cpuGravityPp(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
                     }
                     Vector3<SimdFloat> dx{};
                     for (int dim = 0; dim < kDimensions; dim++) {
-                        dx[dim] = fmmPositionDifference(
-                            position[dim], yValue[dim], dim, geometry, &geometryFlops);
+                        dx[dim] = fmmPositionDifference(position[dim], yValue[dim], &geometryFlops);
                     }
                     SimdFloat const r2 = sqr(dx[kXi], dx[kYi], dx[kZi]);
                     SimdFloat const rinv1Far =

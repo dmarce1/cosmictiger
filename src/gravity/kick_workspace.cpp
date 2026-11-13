@@ -112,7 +112,7 @@ void KickWorkspace::recordProcessedParticles(
 /// accounted for.
 void KickWorkspace::addWork(std::shared_ptr<KickWorkspace> ptr, ExpansionBuffer const& l,
     Vector3<Position> pos, TreeId self, Vector<TreeId>&& dchecks, Vector<TreeId>&& echecks,
-    FmmGeometry const& geometry, ParticleInteger outputOffset) {
+    ParticleInteger outputOffset) {
     profile::ScopedWork work(profile::WorkPhase::KickGpuQueue,
 #if COSMICTIGER_PROFILE
         hpxRank() == 0
@@ -121,7 +121,6 @@ void KickWorkspace::addWork(std::shared_ptr<KickWorkspace> ptr, ExpansionBuffer 
 #endif
     );
     KickWorkitem item;
-    item.geometry = geometry;
     item.outputOffset = outputOffset;
     item.l = l;
     item.pos = pos;

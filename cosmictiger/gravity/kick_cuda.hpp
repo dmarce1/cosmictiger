@@ -176,7 +176,6 @@ struct CudaKickControl {
 
 template <int order>
 struct CudaKickParameters {
-    FmmGeometry geometry;
     ParticleInteger outputOffset;
     float curvature;
     int* echecks;

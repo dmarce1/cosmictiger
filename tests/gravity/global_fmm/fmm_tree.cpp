@@ -104,9 +104,8 @@ void verifyTreeReturnArchive() {
     expected.radius = 0.125f;
     // Source moments retain double precision across locality boundaries.
     int const coefficientCount = fmmMultipoleCoefficientCount(kFmmOrder);
-    expected.multi.useDouble();
     for (int i = 0; i < coefficientCount; i++) {
-        expected.multi.precise()[i] = double(i + 1) + 1.0e-10;
+        expected.multi[i] = double(i + 1) + 1.0e-10;
     }
     for (int dim = 0; dim < kDimensions; dim++) {
         expected.pos[dim] = 0.25 + 0.0625 * dim;
@@ -119,7 +118,6 @@ void verifyTreeReturnArchive() {
         archive << expected;
     }
     TreeCreateReturn actual;
-    actual.multi.single().zero();
     for (int dim = 0; dim < kDimensions; dim++) {
         actual.box.begin[dim] = actual.box.end[dim] = -1.0;
     }

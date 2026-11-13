@@ -94,7 +94,7 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
     policy.subdivisionFlops.doublePrecision = 18 + 5 + (distanceSatisfied ? 2ULL : 0ULL) +
         (std::is_same_v<decltype(sqrt(boxR)), float> ? 0ULL : 3ULL);
     policy.subdivisionFlops.unclassified = 0;
-    policy.splitDomains = [](void*, TreeBuildRequest& left, TreeBuildRequest& right) {
+    policy.splitDomains = [](TreeBuildRequest& left, TreeBuildRequest& right) {
         int const mid = (left.processRange.first + left.processRange.second) / 2;
         left.box = domainsRange(left.key);
         right.box = domainsRange(right.key);
@@ -102,7 +102,7 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
         left.localRoot = left.processRange.second - left.processRange.first == 1;
         right.localRoot = right.processRange.second - right.processRange.first == 1;
     };
-    policy.fork = [](void*, TreeBuildRequest request, bool threadme, bool) {
+    policy.fork = [](TreeBuildRequest request, bool threadme) {
         return treeCreateFork(request, threadme);
     };
     auto result = [&]() {

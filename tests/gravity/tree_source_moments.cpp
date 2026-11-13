@@ -44,51 +44,6 @@ Options const& getOptions() {
 char* particlesTy = nullptr;
 
 namespace detail {
-/// Check rebuilt leaf and parent moments when a frozen cell spans the periodic seam.
-template <int order>
-void frozenCloud() {
-    namespace cartesian = cosmictiger::gravity::cartesian;
-    std::array<std::array<Position, 8>, kDimensions> positions;
-    std::array<float, 8> masses{.125f, .75f, 1.25f, .375f, 2.5f, .25f, .625f, 1.75f};
-    Vector3<Position> center, leftCenter, rightCenter;
-    FmmSourceView sources;
-    sources.store = FmmParticleStore::Ghost;
-    sources.count = masses.size();
-    sources.masses = masses.data();
-    sources.geometry.meshSize = 8;
-    sources.geometry.frozenMembership = true;
-    for (int axis = 0; axis < kDimensions; ++axis) {
-        center[axis] = .99;
-        leftCenter[axis] = .96;
-        rightCenter[axis] = .04;
-        sources.positions[axis] = positions[axis].data();
-        for (size_t i = 0; i < masses.size(); ++i) {
-            positions[axis][i] = -.09 + .025 * ((i + axis) % masses.size());
-        }
-    }
-    TreeBuildMoments left, right;
-    left.useDouble();
-    right.useDouble();
-    treeComputeMultipole<order>(left.precise(), {0, 4}, leftCenter, sources);
-    treeComputeMultipole<order>(right.precise(), {4, 8}, rightCenter, sources);
-    SourceMultipoleBuffer root;
-    treeComputeMultipole<order>(
-        root, left, right, leftCenter, rightCenter, center, sources.geometry);
-    cartesian::Multipole<double> expected{};
-    for (size_t i = 0; i < masses.size(); ++i) {
-        Vector3<double> offset;
-        for (int axis = 0; axis < kDimensions; ++axis) {
-            // Independent unfolding for this fixture's cell-zero frame.
-            double const point = positions[axis][i].toDouble();
-            offset[axis] = (point > .5 ? point - 1 : point) - (center[axis].toDouble() - 1);
-        }
-        cartesian::P2M(double(masses[i]), fmmScaleDisplacement(offset), expected);
-    }
-    for (int i = 0; i < expected.size(); ++i) {
-        check(root[i], expected[i], std::max(1., std::abs(expected[i])));
-    }
-}
-
 /// Compare a two-level source reduction with direct Cartesian moments at the root.
 template <int order>
 void cloud(double extent, bool subDoubleCenters) {
@@ -115,17 +70,14 @@ void cloud(double extent, bool subDoubleCenters) {
         }
     }
     FmmSourceView sources;
-    sources.store = FmmParticleStore::Ghost;
     sources.count = masses.size();
     sources.masses = masses.data();
     for (int axis = 0; axis < kDimensions; ++axis) {
         sources.positions[axis] = positions[axis].data();
     }
-    TreeBuildMoments left, right;
-    left.useDouble();
-    right.useDouble();
-    treeComputeMultipole<order>(left.precise(), {0, 4}, leftCenter, sources);
-    treeComputeMultipole<order>(right.precise(), {4, 9}, rightCenter, sources);
+    SourceMultipoleBuffer left, right;
+    treeComputeMultipole<order>(left, {0, 4}, leftCenter, sources);
+    treeComputeMultipole<order>(right, {4, 9}, rightCenter, sources);
     SourceMultipoleBuffer root;
     treeComputeMultipole<order>(root, left, right, leftCenter, rightCenter, center);
     cartesian::Multipole<double> expected{};
@@ -153,34 +105,30 @@ void cloud(double extent, bool subDoubleCenters) {
 }
 
 void transport() {
-    TreeBuildMoments value;
-    value.useDouble();
+    SourceMultipoleBuffer value;
     int const count = fmmMultipoleCoefficientCount(kFmmOrder);
     for (int i = 0; i < count; ++i) {
-        value.precise()[i] = i + .125 + std::ldexp(1., -36);
+        value[i] = i + .125 + std::ldexp(1., -36);
     }
-    auto roundTrip = [&](TreeBuildMoments const& input) {
+    auto roundTrip = [&](SourceMultipoleBuffer const& input) {
         std::vector<char> data;
         {
             hpx::serialization::output_archive archive(data);
             archive << input;
         }
-        TreeBuildMoments output;
+        SourceMultipoleBuffer output;
         hpx::serialization::input_archive archive(data);
         archive >> output;
-        if (output.isDouble() != input.isDouble()) {
-            throw std::runtime_error("source precision lost");
-        }
         for (int i = 0; i < count; ++i) {
             check(output[i], input[i], 1);
         }
-        return data.size();
     };
-    size_t const wide = roundTrip(value);
-    value.discardDouble();
-    size_t const narrow = roundTrip(value);
-    if (wide != narrow + count * sizeof(float)) {
-        throw std::runtime_error("inactive source coefficients or double ghost payload serialized");
+    roundTrip(value);
+    auto const narrowed = value.narrow();
+    for (int i = 0; i < count; ++i) {
+        if (narrowed[i] != float(value[i])) {
+            throw std::runtime_error("source moment narrowing mismatch");
+        }
     }
 }
 }    // namespace detail
@@ -188,7 +136,6 @@ void transport() {
 int main() {
     try {
         detail::transport();
-        detail::frozenCloud<kFmmOrder>();
         for (int inverseExtent : {1, 2, 3, 4, 5, 7, 8, 12, 30, 32, 1024}) {
             detail::cloud<kFmmOrder>(1. / inverseExtent, false);
         }

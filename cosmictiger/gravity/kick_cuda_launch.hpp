@@ -529,7 +529,6 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
     data.x = devX;
     data.y = devY;
     data.z = devZ;
-    data.ghostSources = fmmSourceView(FmmParticleStore::Ghost);
     data.treeNodes = devTreeNodes;
     data.vel = kparams.forceOnly ? nullptr : particlesVelData();
     data.rungs = kparams.forceOnly ? nullptr : &particlesRung(0);
@@ -568,7 +567,6 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
 
     for (int i = 0; i < workitems.size(); i++) {
         Parameters params;
-        params.geometry = workitems[i].geometry;
         params.outputOffset = workitems[i].outputOffset;
         params.lpos = workitems[i].pos;
         params.lValue = workitems[i].l.expansion();

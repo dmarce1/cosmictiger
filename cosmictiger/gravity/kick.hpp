@@ -27,7 +27,6 @@ struct CudaKickData {
     Position* x;
     Position* y;
     Position* z;
-    FmmSourceView ghostSources;
     Vector3<float>* vel;
     bool midpointHydro = false;
     SphParticleFlags const* sphHydroFlags = nullptr;
@@ -88,7 +87,6 @@ struct CudaKickArenaLayout {
 using KickReturn = ForceStepResult;
 
 struct KickParameters {
-    FmmGeometry geometry{};
     ParticleInteger outputOffset = 0;
     bool forceOnly = false;
     bool profileCoordinator = true;
@@ -163,7 +161,6 @@ struct KickParameters {
         arc & doPhi;
         arc & velInit;
         arc & openLargerCell;
-        arc & geometry;
         arc & forceOnly;
         arc & profileCoordinator;
         arc & globalTimestep;
@@ -193,7 +190,6 @@ bool gravityGasOpeningDeferred();
 Vector3<float>* gravityDeferredGasOpeningData();
 
 struct KickWorkitem {
-    FmmGeometry geometry{};
     ParticleInteger outputOffset = 0;
     ExpansionBuffer l;
     Vector3<Position> pos;

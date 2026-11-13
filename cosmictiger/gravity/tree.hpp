@@ -39,7 +39,6 @@ struct TreeNode {
     FmmBox box;
     Array<TreeId, kChildCount> children;
     Pair<ParticleInteger> particleRange;
-    FmmParticleStore sourceStore = FmmParticleStore::Owned;
     Pair<int, int> processRange;
     Vector3<Position> pos;
     MultipolePosition* mpos;
@@ -87,7 +86,6 @@ struct TreeNode {
         arc & children;
         arc & processRange;
         arc & particleRange;
-        arc & sourceStore;
         arc & radius;
         arc & radialTrace;
         int localRoot0;
@@ -113,7 +111,6 @@ struct TreeNode {
         arc & children;
         arc & processRange;
         arc & particleRange;
-        arc & sourceStore;
         arc & radius;
         arc & radialTrace;
         int localRoot0;
@@ -138,13 +135,8 @@ template <>
 struct is_not_bitwise_serializable<TreeNode> : std::true_type {};
 }    // namespace hpx::traits
 
-// Only local source nodes can be resolved against this locality's arrays.
-inline FmmSourceView treeSourceView(TreeNode const& node) {
-    return fmmSourceView(node.sourceStore);
-}
-
 struct TreeCreateReturn {
-    TreeBuildMoments multi;
+    SourceMultipoleBuffer multi;
     Vector3<Position> pos;
     TreeId id;
     float radius;

@@ -15,13 +15,12 @@ void gravitySetRemoteSourceReader(GravityRemoteSourceReader reader) {
 void gravityReadSourcePositions(TreeNode const& source, Position* x, Position* y, Position* z,
     char* types, float* masses, ParticleInteger offset) {
     if (!source.isLocalHere()) {
-        ALWAYS_ASSERT(source.sourceStore == FmmParticleStore::Owned);
         auto const reader = remoteSourceReader.load();
         ALWAYS_ASSERT(reader != nullptr);
         reader(source, x, y, z, types, masses, offset);
         return;
     }
-    auto const view = treeSourceView(source);
+    auto const view = fmmSourceView();
     auto const range = source.particleRange;
     ALWAYS_ASSERT(range.first >= 0 && range.second <= view.count);
     ParticleInteger const count = range.second - range.first;

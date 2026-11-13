@@ -105,12 +105,11 @@ __device__ FlopCount cudaPeriodicPoints(CudaKickData const& data, TreeNode const
         float potential = 0, gx = 0, gy = 0, gz = 0;
         for (int check = 0; check < control.echecks.size(); ++check) {
             auto const& source = data.treeNodes[control.echecks[check]];
-            bool const ghost = source.sourceStore == FmmParticleStore::Ghost;
-            auto const* x = ghost ? data.ghostSources.positions[0] : data.x;
-            auto const* y = ghost ? data.ghostSources.positions[1] : data.y;
-            auto const* z = ghost ? data.ghostSources.positions[2] : data.z;
-            auto const* masses = ghost ? data.ghostSources.masses : data.sourceMasses;
-            auto const* types = ghost ? data.ghostSources.types : data.type;
+            auto const* x = data.x;
+            auto const* y = data.y;
+            auto const* z = data.z;
+            auto const* masses = data.sourceMasses;
+            auto const* types = data.type;
             for (ParticleInteger j = source.particleRange.first; j < source.particleRange.second;
                 ++j) {
                 Vector3<float> displacement;

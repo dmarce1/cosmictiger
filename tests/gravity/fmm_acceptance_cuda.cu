@@ -71,7 +71,6 @@ struct SelectionInput {
     int sourceCount = 0;
     float hybridFlopsPerParticle = 0.0f;
     float particlePairFlops = 0.0f;
-    float cellCellFlops = 0.0f;
 };
 
 void require(bool condition, std::string const& label) {
@@ -120,7 +119,7 @@ __global__ void evaluateSelections(
         results[index] = selectFmmInteraction(input.cellCell, input.particleCell,
             input.cellParticle, input.sinkLeaf, input.sourceLeaf, input.sinkRadius,
             input.sourceRadius, input.sinkCount, input.sourceCount, input.hybridFlopsPerParticle,
-            input.particlePairFlops, input.cellCellFlops);
+            input.particlePairFlops);
     }
 }
 
@@ -320,23 +319,14 @@ void runSelections() {
             {false, true, true, true, true, .5f, .5f}, FmmInteraction::ParticleParticle},
         {"failed geometry retains PP fallback", {false, false, false, true, true, .25f, .5f},
             FmmInteraction::ParticleParticle},
-        {"tiny accepted leaves use PP when it costs less",
-            {true, true, true, true, true, .25f, .5f, 2, 8, 300.0f, 38.0f, 4000.0f},
-            FmmInteraction::ParticleParticle},
-        {"dense accepted leaves retain CC",
-            {true, true, true, true, true, .25f, .5f, 64, 64, 300.0f, 38.0f, 4000.0f},
+        {"tiny accepted leaves retain CC",
+            {true, true, true, true, true, .25f, .5f, 2, 8, 300.0f, 38.0f},
             FmmInteraction::CellCell},
-        {"equal accepted leaf costs retain CC",
-            {true, true, true, true, true, .25f, .5f, 8, 8, 300.0f, 38.0f, 2432.0f},
+        {"dense accepted leaves retain CC",
+            {true, true, true, true, true, .25f, .5f, 64, 64, 300.0f, 38.0f},
             FmmInteraction::CellCell},
         {"accepted internal cells retain CC regardless of particle count",
-            {true, true, true, true, false, .25f, .5f, 2, 2, 300.0f, 38.0f, 4000.0f},
-            FmmInteraction::CellCell},
-        {"accepted leaf cost comparison is opt in",
-            {true, true, true, true, true, .25f, .5f, 2, 2, 300.0f, 38.0f},
-            FmmInteraction::CellCell},
-        {"accepted leaf cost comparison requires a PP cost",
-            {true, true, true, true, true, .25f, .5f, 2, 2, 300.0f, 0.0f, 4000.0f},
+            {true, true, true, true, false, .25f, .5f, 2, 2, 300.0f, 38.0f},
             FmmInteraction::CellCell},
     };
     std::vector<SelectionInput> inputs;
@@ -354,7 +344,6 @@ void runSelections() {
         transposedInput.sourceCount = input.sinkCount;
         transposedInput.hybridFlopsPerParticle = input.hybridFlopsPerParticle;
         transposedInput.particlePairFlops = input.particlePairFlops;
-        transposedInput.cellCellFlops = input.cellCellFlops;
         inputs.push_back(transposedInput);
     };
     for (auto const& value : cases) {
@@ -391,14 +380,13 @@ void runSelections() {
         auto const expected = selectFmmInteraction(input.cellCell, input.particleCell,
             input.cellParticle, input.sinkLeaf, input.sourceLeaf, input.sinkRadius,
             input.sourceRadius, input.sinkCount, input.sourceCount, input.hybridFlopsPerParticle,
-            input.particlePairFlops, input.cellCellFlops);
+            input.particlePairFlops);
         auto const label = "Selection case " + std::to_string(i);
         require(results[i] == expected, label + " host/device mismatch");
         if (i % 2 == 0) {
             require(results[i] == transposed(results[i + 1]), label + " reciprocal mismatch");
         }
-        if (input.cellCell &&
-            (!input.sinkLeaf || !input.sourceLeaf || input.cellCellFlops == 0.0f)) {
+        if (input.cellCell) {
             require(results[i] == FmmInteraction::CellCell, label + " CC priority");
         }
         require(input.sinkLeaf || results[i] != FmmInteraction::ParticleCell,

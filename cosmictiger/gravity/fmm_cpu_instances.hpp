@@ -27,13 +27,11 @@ static_assert(COSMICTIGER_FMM_INSTANCE_ORDER == kFmmOrder);
 
 // CPU gravity operators (gravity_cpu.hpp).
 template void cpuGravityCc<COSMICTIGER_FMM_INSTANCE_ORDER>(
-    cosmictiger::gravity::cartesian::Expansion<float>&, Vector<TreeId> const&, TreeId, bool,
-    FmmGeometry const&);
+    cosmictiger::gravity::cartesian::Expansion<float>&, Vector<TreeId> const&, TreeId, bool);
 template void cpuGravityCp<COSMICTIGER_FMM_INSTANCE_ORDER>(
-    cosmictiger::gravity::cartesian::Expansion<float>&, Vector<TreeId> const&, TreeId, bool,
-    FmmGeometry const&);
+    cosmictiger::gravity::cartesian::Expansion<float>&, Vector<TreeId> const&, TreeId, bool);
 template void cpuGravityPc<COSMICTIGER_FMM_INSTANCE_ORDER>(
-    ForceVectors&, int, TreeId, Vector<TreeId> const&, FmmGeometry const&);
+    ForceVectors&, int, TreeId, Vector<TreeId> const&);
 
 // CPU tree walk (kick_walk.hpp).
 template KickReturn kickWalk<COSMICTIGER_FMM_INSTANCE_ORDER>(KickParameters, ExpansionBuffer,
@@ -41,17 +39,8 @@ template KickReturn kickWalk<COSMICTIGER_FMM_INSTANCE_ORDER>(KickParameters, Exp
     KickContext const&);
 
 // Tree multipole construction (tree_multipole.hpp).
-template FlopCounts treeComputeMultipole<COSMICTIGER_FMM_INSTANCE_ORDER>(MultipoleBuffer&,
-    MultipoleBuffer const&, MultipoleBuffer const&, Vector3<double> const&, Vector3<double> const&,
-    Vector3<double> const&);
-template FlopCounts treeComputeMultipole<COSMICTIGER_FMM_INSTANCE_ORDER>(
-    MultipoleBuffer&, Pair<ParticleInteger>, Vector3<double> const&, FmmSourceView const&);
 template FlopCounts treeComputeMultipole<COSMICTIGER_FMM_INSTANCE_ORDER>(SourceMultipoleBuffer&,
-    TreeBuildMoments const&, TreeBuildMoments const&, Vector3<Position> const&,
-    Vector3<Position> const&, Vector3<Position> const&, FmmGeometry const&);
+    SourceMultipoleBuffer const&, SourceMultipoleBuffer const&, Vector3<Position> const&,
+    Vector3<Position> const&, Vector3<Position> const&);
 template FlopCounts treeComputeMultipole<COSMICTIGER_FMM_INSTANCE_ORDER>(
     SourceMultipoleBuffer&, Pair<ParticleInteger>, Vector3<Position> const&, FmmSourceView const&);
-template FlopCounts treeComputeMixedMultipole<COSMICTIGER_FMM_INSTANCE_ORDER>(
-    SourceMultipoleBuffer&, Pair<ParticleInteger>, Vector3<double> const&, FmmSourceView const&);
-template FlopCounts treeComputeWideReductionMultipole<COSMICTIGER_FMM_INSTANCE_ORDER>(
-    SourceMultipoleBuffer&, Pair<ParticleInteger>, Vector3<double> const&, FmmSourceView const&);
