@@ -1663,6 +1663,7 @@ void driver() {
     double pot;
     int thisIter = 0;
     size_t progressRows = 0;
+    std::string progressRungHeader;
     terminal::section(getOptions().run.scenario.c_str());
     std::cout << "  tau is conformal time / coarse interval; dt is in code units.\n"
                  "  Wall durations use hh:mm:ss.ss; initialization is excluded.\n"
@@ -2054,30 +2055,6 @@ void driver() {
             if (!(dt > 0.0) || !std::isfinite(dt) || tau + dt == tau) {
                 throw std::underflow_error("Selected timestep cannot advance the evolution clock");
             }
-            if (global || itime == 0 || progressRows == 0) {
-                double const interval = global ? dt : std::min(t0, tauMax - tau);
-                if (getOptions().run.scenario == "cosmology") {
-                    double endScale = a;
-                    double endDerivative = adot;
-                    auto const advance = cosmosAdvance(endDerivative, endScale, interval);
-                    double const physicalYears =
-                        advance.physicalTime * getOptions().units.timeSeconds / constants::kSpyr;
-                    std::cout << std::format("\n  Coarse step: Δτ = {:.6e} code units, Δt = {:.6e} "
-                                             "yr, a = {:.6e} → {:.6e}\n",
-                        interval, physicalYears, a, endScale);
-                } else {
-                    std::cout << std::format("\n  Coarse step: Δt = {:.6e} code units ({:.6e} s)\n",
-                        interval, interval * getOptions().units.timeSeconds);
-                }
-                auto const counts = particlesRungCounts();
-                std::span<size_t const> const populations{counts.data(), counts.size()};
-                std::cout << std::format("{:>8s} {:>10s} {:>10s} {:>10s} {:>10s} {:>7s} {:>7s} "
-                                         "{:>13s} {:>13s} {:>10s} {:>10s} {:>10s}",
-                                 "Step", "z", "a", "tau", "dt", "MinRung", "MaxRung", "Wall",
-                                 "Step time", "FP32 GF/s", "FP64 GF/s", "GFLOP/s")
-                          << terminal::formatRungPopulations(populations, true) << '\n'
-                          << std::flush;
-            }
             TimeType const nextIntegerTime = global ? 0 : inc(itime, maxRung);
             double const integerPhase =
                 nextIntegerTime == 0 ? 1.0 : std::ldexp(double(nextIntegerTime), -64);
@@ -2210,6 +2187,23 @@ void driver() {
                 direct, flopRates.singlePrecision * 1e-9, flopRates.doublePrecision * 1e-9);
             auto const rungCounts = particlesRungCounts();
             std::span<size_t const> const rungPopulations{rungCounts.data(), rungCounts.size()};
+            bool const siloOutput = outputDue && getOptions().output.silo;
+            std::string events = siloOutput ? "SILO" : "";
+            double const activeTheta = getOptions().gravity.openingAngle;
+            if (activeTheta != theta) {
+                if (!events.empty()) {
+                    events += "; ";
+                }
+                events += std::format("θ {:.6g} → {:.6g}", theta, activeTheta);
+            }
+            auto const rungHeader = terminal::formatRungPopulations(rungPopulations, true);
+            if (siloOutput || progressRows % 25 == 0 || progressRungHeader != rungHeader) {
+                std::cout << std::format("\n{:>8s} {:>10s} {:>10s} {:>10s} {:>10s} {:>7s} {:>7s} "
+                                         "{:>13s} {:>13s} {:>10s} {:>10s} {:>10s}",
+                                 "Step", "z", "a", "tau", "dt", "MinRung", "MaxRung", "Wall",
+                                 "Step time", "FP32 GF/s", "FP64 GF/s", "GFLOP/s")
+                          << rungHeader << std::format("  {:>40s}\n", "Events") << std::flush;
+            }
             std::cout << std::format("{:8d} {:10.3e} {:10.3e} {:10.3e} {:10.3e} {:7d} {:7d} "
                                      "{:>13s} {:>13s} {:10.3e} {:10.3e} {:10.3e}",
                              iter, outputRedshift, a, nextTau / coarseInterval, dt,
@@ -2218,8 +2212,9 @@ void driver() {
                              terminal::formatDuration(stepTm.read()).c_str(),
                              flopRates.singlePrecision * 1e-9, flopRates.doublePrecision * 1e-9,
                              flops * 1e-9)
-                      << terminal::formatRungPopulations(rungPopulations) << '\n'
-                      << std::flush;
+                      << terminal::formatRungPopulations(rungPopulations)
+                      << std::format("  {:>40s}\n", events) << std::flush;
+            progressRungHeader = rungHeader;
             progressRows++;
             fclose(textfp);
             totalTime.reset();

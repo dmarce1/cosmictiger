@@ -62,21 +62,16 @@ def run_case(executable, base, name, fraction):
     (directory / "run.log").write_text(result.stdout)
     require(result.returncode == 0, f"{name} exited {result.returncode}; see {directory / 'run.log'}")
     require("Merging rung" not in result.stdout, "rung merges should be silent")
-    coarse_steps = result.stdout.count("  Coarse step:")
-    headers = len(re.findall(r"^\s*Step\s+z\s+a\s+tau\s+dt\s+MinRung", result.stdout, re.MULTILINE))
-    require(coarse_steps > 0 and headers == coarse_steps,
-            f"{name}: every coarse step should have exactly one progress header")
-    require(re.search(r"Coarse step: Δt = [0-9.e+-]+ code units \([0-9.e+-]+ s\)", result.stdout),
-            "physical coarse-step duration is missing")
+    require("Coarse step:" not in result.stdout, "coarse-step banners should be omitted")
+    headers = re.findall(r"^\s*Step\s+z\s+a\s+tau\s+dt\s+MinRung", result.stdout, re.MULTILINE)
+    require(headers, f"{name}: progress column headings are missing")
+    require(not re.search(r"\bSILO\b", result.stdout),
+            "disabled SILO output should not be announced")
     # Observe the actual saved lowest rung, rather than a user-facing notice.
     checkpoints = sorted(directory.glob("checkpoint.*/checkpoint.0.dat"),
                          key=lambda path: int(path.parent.name.split(".")[1]))
     drivers = [read_prefix(path.read_bytes()).driver for path in checkpoints]
     require(drivers, "rung merge fixture produced no checkpoints")
-    starts = 1 + sum(driver.iteration > 0 and driver.integer_time == 0
-                     for driver in drivers[:-1])
-    require(coarse_steps == starts,
-            f"{name}: {coarse_steps} headers for {starts} coarse-step starts")
     floor = 0
     merges = []
     for driver in drivers:

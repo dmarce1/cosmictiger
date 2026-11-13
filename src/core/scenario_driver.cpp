@@ -210,6 +210,7 @@ void runFixedScenario() {
     double const restoredRuntime = state.runtime;
     int iterations = 0;
     size_t progressRows = 0;
+    std::string progressRungHeader;
     if (hpxRank() == 0) {
         terminal::section(definition.name);
         std::cout << std::format("{:<38s}: {:e} code time units\n", "Scenario duration", duration)
@@ -411,21 +412,6 @@ void runFixedScenario() {
                 state.tau + timestep == state.tau) {
                 throw std::underflow_error("Scenario timestep cannot advance time");
             }
-            if (global || state.itime == 0 || progressRows == 0) {
-                double const interval = global ? timestep : std::min(t0, stageEnd - state.tau);
-                auto const counts = particlesRungCounts();
-                if (hpxRank() == 0) {
-                    std::span<size_t const> const populations{counts.data(), counts.size()};
-                    std::cout << std::format("\n  Coarse step: Δt = {:.6e} code units ({:.6e} s)\n",
-                        interval, interval * baseOptions.units.timeSeconds);
-                    std::cout << std::format("{:>8s} {:>13s} {:>13s} {:>7s} {:>13s} {:>13s} "
-                                             "{:>13s} {:>10s} {:>10s} {:>10s}",
-                                     "Step", "Time", "dt", "Done %", "Rung(min/max)", "Wall",
-                                     "Step time", "FP32 GF/s", "FP64 GF/s", "GFLOP/s")
-                              << terminal::formatRungPopulations(populations, true) << '\n'
-                              << std::flush;
-                }
-            }
 #if COSMICTIGER_WITH_SPH
             if (midpointHydro) {
                 double const midpointTime = state.tau + 0.5 * timestep;
@@ -503,6 +489,16 @@ void runFixedScenario() {
                 runtime.start();
                 auto const rungCounts = particlesRungCounts();
                 std::span<size_t const> const rungPopulations{rungCounts.data(), rungCounts.size()};
+                bool const siloOutput = outputDue && getOptions().output.silo;
+                std::string events = siloOutput ? "SILO" : "";
+                auto const rungHeader = terminal::formatRungPopulations(rungPopulations, true);
+                if (siloOutput || progressRows % 25 == 0 || progressRungHeader != rungHeader) {
+                    std::cout << std::format("\n{:>8s} {:>13s} {:>13s} {:>7s} {:>13s} {:>13s} "
+                                             "{:>13s} {:>10s} {:>10s} {:>10s}",
+                                     "Step", "Time", "dt", "Done %", "Rung(min/max)", "Wall",
+                                     "Step time", "FP32 GF/s", "FP64 GF/s", "GFLOP/s")
+                              << rungHeader << std::format("  {:>40s}\n", "Events") << std::flush;
+                }
                 std::cout << std::format("{:8d} {:13.6e} {:13.6e} {:7.2f} {:6d}/{:<6d} {:>13s} "
                                          "{:>13s} {:10.3e} {:10.3e} {:10.3e}",
                                  state.iter, state.tau, timestep,
@@ -512,8 +508,9 @@ void runFixedScenario() {
                                  terminal::formatDuration(stepTimer.read()).c_str(),
                                  flopRates.singlePrecision * 1e-9, flopRates.doublePrecision * 1e-9,
                                  flops * 1e-9)
-                          << terminal::formatRungPopulations(rungPopulations) << '\n'
-                          << std::flush;
+                          << terminal::formatRungPopulations(rungPopulations)
+                          << std::format("  {:>40s}\n", events) << std::flush;
+                progressRungHeader = rungHeader;
                 progressRows++;
             }
         }
