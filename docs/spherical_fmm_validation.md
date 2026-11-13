@@ -1,5 +1,10 @@
 # Spherical mesh / Cartesian tree validation
 
+> Historical record of the retired PMMM implementation. Its spherical kernels,
+> basis conversions, and mesh/tree adapters have been removed. The descriptions
+> and measurements below apply to the source version recorded here; see the
+> [Cartesian global FMM documentation](generated_fmm.md) for the active solver.
+
 Step 5 completed November 9, 2026, in the workspace checkout on `main`, based
 on `61c1e0ea3057c6652923ecdddc9a05a757c1b729`. Parts 1–5 remain uncommitted.
 The selected implementation reuses owned Cartesian roots for spherical source
@@ -19,7 +24,7 @@ Detailed commands and logs are retained in `/tmp/cosmictiger_step5/`.
 
 ## Precision and background mathematics
 
-Use the normalization derived in [fmm_basis_conversion.md](fmm_basis_conversion.md):
+Use the normalization derived in [historical basis-conversion derivation](https://github.com/dmarce1/cosmictiger/blob/38f59a72ab08e2355017728e60b338b352f1cd05/docs/fmm_basis_conversion.md):
 physical offset r, tree coordinate y=κr, mesh coordinate u=r/h, κ=1000,
 and mesh background coefficient βₘ. The derivative-dual map B gives
 

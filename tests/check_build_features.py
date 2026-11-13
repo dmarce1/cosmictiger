@@ -86,7 +86,7 @@ def degreeRange(value):
 
 
 def hasGravity(configuration):
-    # PMMM gravity: FFT far field and FMM near field, including close leaf pairs.
+    # Global periodic FMM gravity.
     return configuration["GRAVITY"]
 
 
@@ -155,9 +155,9 @@ def sourceSelectionErrors(sources, configuration):
                 "src/gravity/outer_interval.cpp",
                 "src/particles/particle_mesh_sort.cpp", "tests/particle_mesh_sort.cpp"}:
             errors.append(f"mesh solvers disabled but compiles mesh source: {source}")
-        if source.startswith(("src/gravity/global_fmm/", "src/gravity/p3m/", "tests/gravity/p3m/",
-                              "tests/gravity/global_fmm/")) or source in {
-                "src/gravity/pm/solver.cpp", "src/gravity/pm/interval.cpp", "tests/gravity/pm/pm.cpp"}:
+        if source.startswith(("src/gravity/fmm/", "src/gravity/p3m/", "tests/gravity/p3m/")) or source in {
+                "src/gravity/pm/solver.cpp", "src/gravity/pm/interval.cpp", "tests/gravity/pm/pm.cpp",
+                "src/gravity/solver.cpp", "src/gravity/pmmm_kick.cpp", "src/gravity/fft.cpp"}:
             errors.append(f"retired gravity solver source compiled: {source}")
         if not hasGravity(configuration) and source in {
                 "src/gravity/gravity.cpp", "src/gravity/kick.cpp", "src/gravity/kick.cu",
@@ -203,9 +203,9 @@ def requiredSources(configuration, cuda):
             required.update({"src/analysis/bh.cu", "src/analysis/healpix.cu", "src/analysis/lightcone.cu",
                              "src/analysis/rockstar.cu"})
     if hasGravity(configuration):
-        required.update({"src/gravity/solver.cpp", "src/gravity/fft.cpp",
-                         "src/gravity/fmm/cell_schedule.cpp", "src/gravity/fmm/fmm_batch.cpp",
-                         "src/gravity/pm_kick.cpp", "src/gravity/kick.cpp"})
+        required.update({"src/gravity/global_fmm/distributed_tree.cpp",
+                         "src/gravity/global_fmm/execution.cpp",
+                         "src/gravity/global_fmm/remote_cache.cpp", "src/gravity/kick.cpp"})
     if configuration["SPH"]:
         required.update({"src/sph/sph.cpp", "src/sph/hydro_cpu.cpp", "src/sph/prehydro_cpu.cpp",
                          "src/sph/rungs_cpu.cpp", "src/sph/particles.cpp", "src/sph/tree.cpp",

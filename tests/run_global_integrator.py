@@ -94,9 +94,9 @@ def main():
         cases.append(("hydro", False, True, None, None))
     # SPH has no self-gravity coupling in the PMMM solver: gravity cases are
     # dark matter only, hydro runs are gravity free.
-    if "pmmm" in available["far"]:
+    if "fmm" in available["far"]:
         for near in available["near"]:
-            cases.append(("pmmm_" + near, True, False, "pmmm", near))
+            cases.append(("global_fmm_" + near, True, False, "fmm", near))
 
     def run(directory, options, selections, restart=None, mpi=False, success=True):
         command = [str(executable), *args.hpx_argument] + selections
@@ -121,7 +121,6 @@ def main():
         options = dict(common, **{"run.scenario": "hydroWave" if hydro else "plummer",
                                   "gravity.enabled": str(gravity).lower(),
                                   "hydro.enabled": str(hydro).lower(), "hydro.cfl": 0.123,
-                                  "gravity.meshSize": 8, "run.endTime": 0.5,
                                   "run.maxIterations": 2})
         baseline = prepareCase(root, label)
         run(baseline, options, selections)

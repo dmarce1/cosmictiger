@@ -50,8 +50,8 @@ def main():
                "--lightcone.mapSize=1", "--lightcone.linkingLength=0.28",
                f"--hpx:threads={args.threads}", "--hpx:bind=none"]
     command += application_arguments(args.executable.resolve(), hydro=args.hydro)
-    if "pmmm" in compiled_algorithms(str(args.executable.resolve()))["far"]:
-        command.append("--gravity.meshSize=8")
+    if "fmm" in compiled_algorithms(str(args.executable.resolve()))["far"]:
+        command.append()
     if args.ranks > 1:
         command = [args.mpi_exec, args.mpi_numproc_flag, str(args.ranks), *args.mpi_preflag,
                    command[0], *args.mpi_postflag, *command[1:]]

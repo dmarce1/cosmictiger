@@ -29,7 +29,7 @@ is now A=P/rho^gamma; pressure work below describes the compatible diagnostic
 energy rate, not an energy kick. See [entropy evolution](sph_entropy_evolution.md)
 for initialization, cosmological scaling, prediction, and validation limits.
 Cooling and star formation act on the entropy at completed interval endpoints; SPH
-couples to PMMM self-gravity on the hierarchical integrator only.
+couples to global FMM self-gravity on the hierarchical integrator only.
 The historical validation records below concern the former energy integrator.
 
 ## Notation
@@ -124,7 +124,7 @@ October 30 record below has been removed.
 
 Cooling and star formation run at each gas particle's completed interval endpoint
 and apply their energy changes to the entropy (see [star formation](star_formation.md));
-their source-specific tests are registered. SPH with PMMM self-gravity requires the
+their source-specific tests are registered. SPH with global FMM self-gravity requires the
 hierarchical integrator; fixtures on the other integrators run with `gravity.enabled=false`.
 
 ## Supports at bounds

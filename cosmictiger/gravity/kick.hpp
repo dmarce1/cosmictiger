@@ -42,6 +42,7 @@ struct CudaKickData {
     float* gy;
     float* gz;
     float* pot;
+    Array<float*, kDimensions> globalAcceleration{};
     Vector3<float>* deferredGasOpening = nullptr;
     ParticleInteger const* gravitySampleIndices;
     Vector3<float>* gravitySampleAccelerations;
@@ -91,7 +92,6 @@ struct KickParameters {
     ParticleInteger outputOffset = 0;
     bool forceOnly = false;
     bool profileCoordinator = true;
-    // Reserved HPX message fields from the retired global tree-kick path.
     bool globalTimestep = false;
     bool deferGasOpening = false;
     // At a coarse hydro event, collect gas opening impulses until hydro finishes.
@@ -102,7 +102,7 @@ struct KickParameters {
     // Hold those balanced gas rungs through correction walks and intervening
     // boundaries. Dark-matter rung selection remains unchanged.
     bool freezeGasRungs = false;
-    double previousTimestep = 0.0;    // Reserved HPX message field from the retired path.
+    double previousTimestep = 0.0;
     bool htime;
     float sign;
     int minLevel{};
@@ -127,24 +127,6 @@ struct KickParameters {
     // Opening rule, stamped by kick() from the options so that the CPU walk,
     // the remote kick action and the CUDA kernel apply the same rule.
     bool openLargerCell;
-    // Mesh solvers (pm, p3m): base timestep of the substep being closed when a
-    // new outer interval changed t0, and the long half-kick durations applied
-    // from the per-particle long acceleration at an outer boundary (zero: none).
-    float closingBaseTimestep = 0.0f;
-    float longCloseTimestep = 0.0f;
-    float longOpenTimestep = 0.0f;
-    // PMMM outer interval with frozen near membership (docs/pmmm.md):
-    // frozenNear evaluates the near field on the stored cell membership without
-    // a mesh solve; refreshMembership re-sorts by position and stores the new
-    // keys first (boundary pass); frozenNearClose applies only the old-membership
-    // closing correction -g_near (closingBase/2 - dt_rung/2) at a new boundary;
-    // closeShortOverInterval makes the traditional short closing half-kick span
-    // closingBase/2 for every rung, the remainder having been applied by the
-    // old-membership pass.
-    bool frozenNear = false;
-    bool refreshMembership = false;
-    bool frozenNearClose = false;
-    bool closeShortOverInterval = false;
     /// Initialize common kick-policy defaults; callers populate the remaining
     /// invocation-specific state.
     KickParameters() {
@@ -191,15 +173,13 @@ struct KickParameters {
         arc & freezeGasRungs;
         arc & previousTimestep;
         arc & outputOffset;
-        arc & closingBaseTimestep;
-        arc & longCloseTimestep;
-        arc & longOpenTimestep;
-        arc & frozenNear;
-        arc & refreshMembership;
-        arc & frozenNearClose;
-        arc & closeShortOverInterval;
     }
 };
+
+void gravityBeginGlobalKick();
+double gravityFinishGlobalKick(double timestep);
+KickReturn gravityFinishBalancedGasKick(double baseTimestep, float sign);
+float* gravityGlobalAcceleration(int dimension);
 
 // Collective noncommon-boundary protocol: begin after migration, collect during
 // gravity walks, seal before any gas sort, and finish after hydro. Base-particle
@@ -211,17 +191,6 @@ KickReturn gravityFinishDeferredGasOpening();
 void gravityDiscardDeferredGasOpening();
 bool gravityGasOpeningDeferred();
 Vector3<float>* gravityDeferredGasOpeningData();
-
-// Rungs to add to a stored hydro rung proposal at an outer boundary. The proposal r₀ was
-// quantized against the closing interval H_old, Δτ ≥ H_old 2^−r₀; under the opening
-// interval H_new it needs r ≥ r₀ + log₂(H_new/H_old) (derived). A shorter new interval
-// keeps the proposal, which is then finer than needed.
-CUDA_EXPORT inline int hydroRungIntervalShift(KickParameters const& params) {
-    if (params.closingBaseTimestep > 0.0f && params.t0 > params.closingBaseTimestep) {
-        return int(ceilf(log2f(params.t0 / params.closingBaseTimestep)));
-    }
-    return 0;
-}
 
 struct KickWorkitem {
     FmmGeometry geometry{};

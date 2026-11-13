@@ -1,5 +1,10 @@
 # Cartesian downward evaluation of completed mesh locals
 
+> Historical record of the retired PMMM implementation. Its spherical kernels,
+> basis conversions, and mesh/tree adapters have been removed. The descriptions
+> and measurements below apply to the source version recorded here; see the
+> [Cartesian global FMM documentation](generated_fmm.md) for the active solver.
+
 Part 4 of `spherical_fmm_tree_plan.md` converts each completed spherical far
 local once per occupied active sink cell and descends the same owned kd-tree
 used for source deposition and near interactions. Step 5 now uses float within
@@ -9,7 +14,7 @@ paths retain direct spherical particle evaluation. Frozen-FMM remains unsupporte
 
 ## Numerical boundary
 
-The pure local map is the derivative dual map in `fmm_basis_conversion.md`.
+The pure local map is the derivative dual map in [the historical basis-conversion derivation](https://github.com/dmarce1/cosmictiger/blob/38f59a72ab08e2355017728e60b338b352f1cd05/docs/fmm_basis_conversion.md).
 For mesh width h, tree scale κ=`kScaleFactor`, and mesh background βₘ, the
 production helper `gravity/fmm/tree_local.hpp` first adds 2βₘ to L₂₀, maps
 spherical harmonics to Cartesian derivatives, and scales rank n by

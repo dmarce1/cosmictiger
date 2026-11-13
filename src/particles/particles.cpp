@@ -1046,8 +1046,6 @@ void particlesDestroy() {
     }
     particlesX = decltype(particlesX)();
     particlesGravityAccelerations = decltype(particlesGravityAccelerations)();
-    particlesLongAccelerations = decltype(particlesLongAccelerations)();
-    particlesFrozenCells = nullptr;
     particlesV = decltype(particlesV)();
     particlesP = decltype(particlesP)();
     particlesR = decltype(particlesR)();
@@ -1161,14 +1159,7 @@ static void particlesResizeStorage(ParticleInteger sz, bool lock) {
                 particlesArrayResize(particlesGravityAccelerations[dim], newCapacity, true);
             }
         }
-        if (particlesHasLongAcceleration(getOptions())) {
-            for (int dim = 0; dim < kSpatialDimensions; dim++) {
-                particlesArrayResize(particlesLongAccelerations[dim], newCapacity, true);
-            }
-        }
-        if (particlesHasFrozenCell(getOptions())) {
-            particlesArrayResize(particlesFrozenCells, newCapacity, true);
-        }
+
         if (saveParticlePotential(getOptions().analysis)) {
             particlesArrayResize(particlesP, newCapacity, true);
         }
@@ -1400,16 +1391,7 @@ void particlesFree() {
             freeManagedMemory(particlesGravityAccelerations[dim]);
         }
     }
-    if (particlesHasLongAcceleration(getOptions())) {
-        for (int dim = 0; dim < kSpatialDimensions; dim++) {
-            freeManagedMemory(particlesLongAccelerations[dim]);
-            particlesLongAccelerations[dim] = nullptr;
-        }
-    }
-    if (particlesHasFrozenCell(getOptions())) {
-        freeManagedMemory(particlesFrozenCells);
-        particlesFrozenCells = nullptr;
-    }
+
     if (saveParticlePotential(getOptions().analysis)) {
         freeManagedMemory(particlesP);
     }
@@ -1823,11 +1805,7 @@ void particlesLoad(FILE* fp) {
     if (getOptions().starFormation.enabled) {
         detail::loadStarFormationParticles(fp);
     }
-    if (particlesHasFrozenCell(getOptions())) {
-        // The frozen near membership of an interval in progress; a boundary
-        // checkpoint still holds the membership awaiting its closing pass.
-        FREAD(particlesFrozenCells, sizeof(uint64_t), particlesSize(), fp);
-    }
+
     int rungCount = 0;
     FREAD(&rungCount, sizeof(rungCount), 1, fp);
     ALWAYS_ASSERT(rungCount >= 0 && rungCount <= kMaxRung);
@@ -1871,9 +1849,7 @@ void particlesSave(FILE* fp) {
     if (getOptions().starFormation.enabled) {
         detail::saveStarFormationParticles(fp);
     }
-    if (particlesHasFrozenCell(getOptions())) {
-        fwrite(particlesFrozenCells, sizeof(uint64_t), particlesSize(), fp);
-    }
+
     int const rungCount = rungBegins.size();
     fwrite(&rungCount, sizeof(rungCount), 1, fp);
     fwrite(&rungBegin, sizeof(ParticleInteger), 1, fp);

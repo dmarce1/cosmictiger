@@ -28,7 +28,6 @@ def main():
                        CUDA_VISIBLE_DEVICES='', MPLBACKEND='Agg')
     common = {**cpu_backend_options(), 'hpx:threads': 2, 'hpx:bind': 'none',
               'run.darkMatterParticleCount': 64, 'run.gasParticleCount': 512,
-              'gravity.meshSize': 8, 'gravity.enabled': 'true', 'hydro.enabled': 'false',
               'chemistry.enabled': 'false', 'starFormation.enabled': 'false',
               'run.maxIterations': 2000, 'run.minRung': 1,
               'analysis.groups': 'false', 'analysis.power': 'false',
@@ -88,10 +87,10 @@ def main():
               'gravity.enabled': 'false', 'hydro.enabled': 'true', 'run.darkMatterParticleCount': 0}
     directory, _ = run('fixed_physical', values)
     check(directory, 5, 0.001, fixed=True)
-    values = {'run.scenario': 'polytropicStar', 'run.numberOfOutputs': 2,
+    values = {'run.scenario': 'polytropicStar', 'run.numberOfOutputs': 3,
               'run.endTime': 0.00001, 'hydro.enabled': 'true'}
     directory, _ = run('two_stage_physical', values)
-    check(directory, 2, 0.00001, fixed=True)
+    check(directory, 3, 0.00001, fixed=True)
     values = {'run.scenario': 'cosmology', 'run.numberOfOutputs': 4, 'run.endTime': 0.0002,
               'units.boxLength': 20}
     directory, _ = run('conformal', values)

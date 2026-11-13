@@ -25,7 +25,7 @@ def main():
     parser.add_argument("executable", type=Path)
     parser.add_argument("workdir", type=Path)
     parser.add_argument("--near-method", choices=("fmm",), default="fmm",
-                        help="fixed PMMM-FMM solver used by the fixtures")
+                        help="global FMM solver used by the fixtures")
     parser.add_argument("--order", type=int, choices=(0, *range(3, 10)), required=True,
                         help="compiled expansion order; 0 for an SPH-only build without gravity")
     parser.add_argument("--time-integrator", choices=("traditional", "hierarchical", "global"), required=True)
@@ -44,7 +44,7 @@ def main():
     parser.add_argument("--retired-viscosity-only", action="store_true",
                         help="Check that retired viscosity selectors are rejected")
     args = parser.parse_args()
-    # PMMM is the only gravity solver; order zero marks an SPH-only build.
+    # Global FMM is the only gravity solver; order zero marks an SPH-only build.
     gravity_compiled = args.order != 0
     if not gravity_compiled and (not args.startup_options_only or args.without_sph):
         parser.error("order=0 requires startup-options-only and SPH")
@@ -73,18 +73,14 @@ def main():
     hydro_rejected = False
     hydro_error = ""
 
-    def run(name, options, success=True, pmmm_mesh=8, selectors=True):
+    def run(name, options, success=True, selectors=True):
         if selectors:
             selected = {}
             if not gravity_compiled:
                 selected["gravity.enabled"] = "false"
             options = options + [f"--{key}={value}" for key, value in selected.items()
                                  if not any(option.startswith(f"--{key}=") for option in options)]
-        # Most cases inspect unrelated options; keep their fixture mesh fixed.
-        # Mesh/INI-specific cases can disable this fixture default explicitly.
-        if (gravity_compiled and pmmm_mesh is not None and
-                not any(option.startswith("--gravity.meshSize=") for option in options)):
-            options = options + [f"--gravity.meshSize={pmmm_mesh}"]
+
         result = subprocess.run(command + options, cwd=args.workdir, text=True,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=30,
                                 env=environment)
@@ -146,7 +142,7 @@ def main():
                 "hydro.viscosityEpsilon", "hydro.conductionCoefficient",
                 "hydro.neighborNumber", "gravity.enabled",
                 "gravity.kernelFamily", "gravity.kernelDegree",
-                "gravity.meshSize", "gravity.openingAngle", "gravity.openingSchedule",
+                "gravity.openingAngle", "gravity.openingSchedule",
                 "gravity.errorInterval", "gravity.errorSampleSize",
                 "hydro.kernelFamily", "hydro.kernelDegree",
                 "gravity.effectiveRadius", "gravity.smoothingLength",
@@ -238,11 +234,6 @@ def main():
                            success=False, selectors=False)
             if "force-buffer index range" not in rejected:
                 raise RuntimeError("bucket index overflow lacked a clear diagnostic")
-            rejected = run("startup_reject_unsplit",
-                           startupOptions + ["--gravity.pmmmOuterInterval=false"],
-                           success=False, selectors=False)
-            if "long/short gravity splitting is mandatory" not in rejected:
-                raise RuntimeError("unsplit gravity lacked a clear diagnostic")
         assertStartupOptions(output, hydroMethod)
         assertNumericSetting(output, "compute.sphBucketSize", 106)
         dimension = int(re.search(r"^build\.dimensionCount\s*:\s*(\d+)", output, re.MULTILINE)[1])
@@ -423,9 +414,9 @@ mapSize = 8
                      success=count == 1, selectors=False)
         if count > 1 and key not in output:
             raise RuntimeError(f"ambiguous {key} lacked an explicit-selection diagnostic")
-    compiled_near = re.search(r"^\s*PMMM near solvers:([^\n]*)", help_text, re.MULTILINE)
-    if compiled_near is None or compiled_near[1].split() != ["fmm"]:
-        raise RuntimeError("help did not identify PMMM-FMM as the sole gravity solver")
+    compiled_far = re.search(r"^\s*Gravity solvers:([^\n]*)", help_text, re.MULTILINE)
+    if compiled_far is None or compiled_far[1].split() != ["fmm"]:
+        raise RuntimeError("help did not identify global FMM as the sole gravity solver")
     for source in ("cli", "ini"):
         for value in ("fmm", "pp"):
             retired = args.workdir / f"retired_near_{value}.ini"
@@ -614,103 +605,12 @@ mapSize = 8
     for scenario in ("plummer", "glass"):
         output = run(f"integrator_{scenario}", metadata_options + [f"--run.scenario={scenario}"])
         assertCompiledSettings(output)
-    run("gravity_negative_mesh", metadata_options + ["--gravity.meshSize=-1"], success=False)
-    if gravity_compiled:
-        # All positive mesh sizes are accepted, including meshes wholly inside the near stencil.
-        minimum_mesh = {1: 1, 2: 2, 3: 3, 4: 4}
-        for near_width, mesh_size in minimum_mesh.items():
-            pmmm_output = run(f"pmmm_metadata_{near_width}", metadata_options + [
-                f"--gravity.meshSize={mesh_size}", f"--gravity.openingAngle={1.0 / near_width}"])
-            assertCompiledSettings(pmmm_output)
-            for key, expected in (("gravity.meshSize", mesh_size),
-                                  ("gravity.openingAngle", 1.0 / near_width)):
-                assertNumericSetting(pmmm_output, key, expected)
-            assertNumericSetting(pmmm_output, "gravity.openingAngle", 1.0 / near_width)
-        assertNumericSetting(error_defaults, "gravity.pmmmBatchParticles", 4096)
-        assertNumericSetting(error_defaults, "gravity.openingAngle", math.sqrt(3) / 3)
-        # Automatic sizing uses resolved species counts, rounds up to a cubic
-        # mesh, and treats zero exactly like an omitted setting.
-        auto_cases = [(1, 0, 1), (32, 0, 1), (33, 0, 2),
-                      (256, 0, 2), (257, 0, 3), (1000000, 0, 32)]
-        if not args.without_sph:
-            auto_cases.append((512, 512, 4))
-        for dark, gas, expected in auto_cases:
-            population_options = [f"--run.darkMatterParticleCount={dark}",
-                                  f"--run.gasParticleCount={gas}", f"--hydro.enabled={bool(gas)}",
-                                  "--initial.closePack=false"]
-            # Plummer retains exact counts; cosmology rounds both species to lattices.
-            scenario = "cosmology" if gas else "plummer"
-            options = ["--run.test=checkpointState"] + population_options + [f"--run.scenario={scenario}"]
-            for explicit_zero in (False, True):
-                output = run(f"pmmm_auto_{dark}_{gas}_{explicit_zero}", options +
-                             (["--gravity.meshSize=0"] if explicit_zero else []), pmmm_mesh=None)
-                assertNumericSetting(output, "gravity.meshSize", expected)
-        output = run("pmmm_auto_rounded", ["--run.test=checkpointState", "--run.scenario=cosmology",
-                     "--run.darkMatterParticleCount=250", "--run.gasParticleCount=0",
-                     "--hydro.enabled=false", "--initial.closePack=false"], pmmm_mesh=None)
-        assertNumericSetting(output, "run.darkMatterParticleCount", 343)
-        assertNumericSetting(output, "gravity.meshSize", 3)
-        output = run("pmmm_auto_override", ["--run.test=checkpointState", "--run.scenario=plummer",
-                     "--hydro.enabled=false",
-                     "--run.darkMatterParticleCount=1000000", "--run.gasParticleCount=0",
-                     "--gravity.meshSize=16"], pmmm_mesh=None)
-        assertNumericSetting(output, "gravity.meshSize", 16)
-        # Legacy coarse values cannot constrain the authoritative mesh, including
-        # an old INI value that does not divide a new CLI mesh override.
-        for mesh_size in (1, 7, 12, 30, 64, 120):
-            for coarse in (0, 3, 16, 128, -1):
-                output = run(f"pmmm_single_mesh_{mesh_size}_{coarse}", metadata_options + [
-                    f"--gravity.meshSize={mesh_size}", f"--gravity.pmmmCoarseMeshSize={coarse}"])
-                assertNumericSetting(output, "gravity.meshSize", mesh_size)
-                if re.search(r"^gravity\.pmmmCoarseMeshSize\s*:", output, re.MULTILINE):
-                    raise RuntimeError("legacy coarse key remains a resolved mesh setting")
-        coarse_config = args.workdir / "pmmm_legacy_coarse_mesh.ini"
-        coarse_config.write_text("[gravity]\nmeshSize = 64\npmmmCoarseMeshSize = 12\n")
-        output = run("pmmm_single_mesh_ini_cli", metadata_options + [
-            f"--configuration={coarse_config.resolve()}", "--gravity.meshSize=7"], pmmm_mesh=None)
-        assertNumericSetting(output, "gravity.meshSize", 7)
-        for mesh_size in (2147483647, 1073741824):
-            rejected = run(f"pmmm_mesh_overflow_{mesh_size}", metadata_options + [
-                f"--gravity.meshSize={mesh_size}"], success=False)
-            if "gravity.meshSize cubed exceeds mesh indexing/allocation limits" not in rejected:
-                raise RuntimeError("missing PMMM mesh overflow diagnostic")
-        # The support is normalized by the 8**3 fixture; the first excluded
-        # cell boxes are sqrt(3)/8 apart at the default angle.
-        radius_options = metadata_options + ["--gravity.meshSize=8"]
-        run("pmmm_support_within_stencil", radius_options + ["--gravity.smoothingLength=1.7"])
-        rejected = run("pmmm_support_beyond_stencil", radius_options + [
-            "--gravity.smoothingLength=1.8"], success=False)
-        if ("PMMM requires the normalized gravity.smoothingLength to be no larger than "
-                "the minimum separation of cells outside the opening-angle near stencil") not in rejected:
-            raise RuntimeError("PMMM support validation lacked its stencil diagnostic")
-        for scenario in ("cosmology", "plummer"):
-            # The same configured angle is used for every scenario.
-            pmmm_output = run(f"pmmm_default_angle_{scenario}", metadata_options + [
-                f"--run.scenario={scenario}"])
-            assertCompiledSettings(pmmm_output)
-            assertNumericSetting(pmmm_output, "gravity.openingAngle", math.sqrt(3) / 3)
-    if gravity_compiled:
-        for index, invalid in enumerate((
-                ["--gravity.meshSize=8", "--gravity.openingAngle=0"],
-                ["--gravity.meshSize=8", "--gravity.openingAngle=nan"],
-                ["--gravity.meshSize=8", "--gravity.openingAngle=inf"],
-                ["--gravity.meshSize=8", "--gravity.openingAngle=-0.5"],
-                ["--gravity.meshSize=16", "--gravity.openingAngle=1.01"],
-                ["--gravity.meshSize=8", "--gravity.smoothingLength=8"],
-                ["--gravity.meshSize=8", "--gravity.pmmmBatchParticles=0"],
-                ["--gravity.meshSize=8", "--gravity.pmmmBatchParticles=-1"],
-                ["--gravity.meshSize=2147483647"],
-                ["--gravity.meshSize=1073741824"])):
-            run(f"pmmm_invalid_{index}", metadata_options + invalid,
-                success=False, pmmm_mesh=None)
-        pmmm_config = args.workdir / "pmmm.ini"
-        pmmm_config.write_text("[gravity]\nmeshSize = 16\nopeningAngle = 0.5\n")
-        pmmm_output = run("pmmm_ini_cli", metadata_options + [
-            f"--configuration={pmmm_config.resolve()}", "--gravity.openingAngle=1"],
-            pmmm_mesh=None)
-        assertCompiledSettings(pmmm_output)
-        assertNumericSetting(pmmm_output, "gravity.meshSize", 16)
-        assertNumericSetting(pmmm_output, "gravity.openingAngle", 1)
+    for key in ("gravity.meshSize", "gravity.pmmmBatchParticles",
+                "gravity.pmmmOuterInterval", "gravity.pmmmCoarseMeshSize"):
+        run("retired_" + key, metadata_options + [f"--{key}=8"], success=False)
+    for value in ("0", "nan", "inf", "-0.5", "1.01"):
+        run("invalid_opening_" + value, metadata_options +
+            [f"--gravity.openingAngle={value}"], success=False)
 
     sph_options = [option for option in metadata_options
                    if not option.startswith("--hydro.enabled=")]
@@ -757,7 +657,7 @@ mapSize = 8
             if not re.search(r"^hydro\.enabled\s*:\s*T\s*$", output, re.MULTILINE):
                 raise RuntimeError("SPH CLI request was not enabled")
         sph_config = args.workdir / "sph_allowed.ini"
-        sph_config.write_text("[gravity]\nenabled = false\nmeshSize = 8\n"
+        sph_config.write_text("[gravity]\nenabled = false\n"
                               "[hydro]\nenabled = true\n")
         output = run("sph_ini_allowed", sph_options + [
             f"--configuration={sph_config.resolve()}"], success=not hydro_rejected)

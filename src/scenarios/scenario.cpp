@@ -78,6 +78,7 @@ ScenarioDefinition const& definition(std::string const& name) {
     static std::vector<ScenarioDefinition> const definitions{
 #if COSMICTIGER_WITH_GRAVITY
         {"plummer", true, false, false, 64, nullptr},
+        {"benchmark", true, false, false, 1, nullptr},
 #endif
 #if COSMICTIGER_WITH_SPH
         {"sod", false, true, true, 20, initializeSod},
@@ -94,7 +95,7 @@ ScenarioDefinition const& definition(std::string const& name) {
 #endif
         {"hydroWave", false, true, true, 64, initializeHydroWave},
 #if COSMICTIGER_WITH_GRAVITY
-        // SPH coupled to PMMM self-gravity: the Jeans dispersion relation.
+        // SPH coupled to global FMM self-gravity: the Jeans dispersion relation.
         {"jeansWave", true, true, true, 32, initializeJeansWave},
 #endif
 #if COSMICTIGER_DIMENSION_COUNT >= 2

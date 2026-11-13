@@ -34,8 +34,7 @@ def main():
             "run.gasParticleCount": gas, "initial.closePack": str(close_pack).lower(),
             "hydro.enabled": str(gas != 0).lower(), "hydro.neighborNumber": 42,
             # SPH has no self-gravity coupling in the PMMM solver.
-            "gravity.enabled": str(gas == 0).lower(), "gravity.meshSize": 8,
-            "scenario.disc.centralAcceleration": 1 if scenario == "disc" else 0,
+            "gravity.enabled": str(gas == 0).lower(), "scenario.disc.centralAcceleration": 1 if scenario == "disc" else 0,
             "cosmology.sigma8": 0, "analysis.groups": "false", "analysis.views": "false",
             "analysis.power": "false", "analysis.tracers": "false", "lightcone.enabled": "false",
             "output.silo": "false", "output.directory": ".", "checkpoint.intervalSeconds": 0,

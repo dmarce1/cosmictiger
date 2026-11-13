@@ -15,6 +15,7 @@
 #pragma once
 
 #include <cosmictiger/gravity/kernels/cartesian_tracefree_types.hpp>
+#include <cosmictiger/math/simd_math.hpp>
 
 namespace cosmictiger::gravity::cartesian {
 inline constexpr int kEwaldM2LFlops = 1865;

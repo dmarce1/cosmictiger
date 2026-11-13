@@ -35,7 +35,7 @@ def main():
               "--run.darkMatterParticleCount=64", "--run.gasParticleCount=64", "--analysis.groups=false",
               "--analysis.tracers=false", "--analysis.views=false", "--analysis.power=false",
               "--lightcone.enabled=false", "--output.silo=false", "--output.directory=."]
-    common += ["--gravity.meshSize=8"]
+    common += []
     metadata = ["--run.test=checkpointState"]
 
     def selection(name, options, program=executable):

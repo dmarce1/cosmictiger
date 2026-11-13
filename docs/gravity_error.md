@@ -30,8 +30,7 @@ the next scheduled check selects a new sample from the current ordering.
 
 For each selected particle, the diagnostic first computes and saves a direct
 acceleration from all source particles at the current positions. It then compares
-that reference with the gravity acceleration produced by the configured FMM or
-PMMM solve when the kick finishes. The direct solve uses the configured softening
+that reference with the gravity acceleration produced by the global FMM solve when the kick finishes. The direct solve uses the configured softening
 kernel and periodic gravity convention. Comparison does not require retaining
 acceleration fields for every particle with `analysis.saveAcceleration`.
 
@@ -55,7 +54,7 @@ correction is tabulated; the primary softened force is evaluated directly.
 
 Table construction uses an independent double Ewald sum with alpha 2, real-space
 radius 3.6, and reciprocal lattice radius 4. It does not use the production
-FMM/PMMM coefficients. Numerical regressions check the interpolated correction
+FMM coefficients. Numerical regressions check the interpolated correction
 against explicit sums, including an alternative alpha, boundaries, near-zero
 separations, and all sign/permutation symmetries. The table regressions require
 component errors below `1e-11` for the unit-source correction in a unit box;

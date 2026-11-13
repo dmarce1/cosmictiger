@@ -56,18 +56,18 @@ These bounds cover radial powers; coefficient factors, source masses and
 accumulations must also fit. The fixed global normalization remains active
 when the kernels use unit ratios between individual expansion scales.
 
-The imported partial-contraction M2L is used directly for near-field cell-cell
+The imported partial-contraction M2L is used directly for accepted cell-cell
 interactions; particle-cell interactions use the generated M2P. Both retain
 source dipoles. CPU SIMD and CUDA use the same generated arithmetic. P2M and
 L2P were added to the imported rational-expression generator. The periodic
-far field uses a cached spherical Ewald Green filter and Fourier contraction.
+correction uses Cartesian Ewald Green coefficients and M2L during the tree walk.
 
 The ordinary kernel emitter uses explicit `fma` with a function-local `math` import
 for single-use products
 consumed by addition, subtraction, or output accumulation. Shared products stay materialized; M2L retains source degree one below the local degree.
 The JSON report counts each FMA once for comparisons; generated `k*Flops`
-constants use FMA = 2 for runtime performance accounting. See [the representation comparison](generated_fmm.md)
-for the weighted M2L costs including geometry.
+constants use FMA = 2 for runtime performance accounting. See [the generator documentation](generated_fmm.md)
+for the weighted arithmetic cost convention.
 
 CUDA L2L has a generated cooperative schedule in `tools/cartesian/cuda.py`.
 It emits order-specific `L2LWarp` and `L2LWarpInto` functions for local
@@ -100,35 +100,36 @@ are kind zero.
 
 ## Periodic background
 
-PMMM builds its periodic Green filter in the spherical basis and applies the
-far-field contraction on the mesh. The completed mesh local is converted to a
-Cartesian trace-free local for tree descent. The uniform-background curvature
-is carried separately through local translation and point evaluation; it is
-not stored in Cartesian harmonic coefficients.
+Global FMM evaluates the nearest-image primary force and its regular Ewald
+correction during tree traversal. An accepted expansion must use one periodic
+image throughout; cells crossing an image selection plane are opened, and
+unresolved leaf pairs are evaluated directly. Source radial second moments and
+local uniform-background curvature are carried separately from the Cartesian
+trace-free coefficients through translation and point evaluation. The shared
+implementation lives in `cosmictiger/gravity/periodic_fmm.hpp`.
 
 ## Regeneration and validation
 
-Generated kernels are checked in under `cosmictiger/gravity/`. Ordinary builds
-and tests include these source headers directly; they do not regenerate or
-modify them. Regenerate explicitly after changing a generator:
+Reference declarations and implementations are checked in under
+`cosmictiger/gravity/kernels/` and `src/gravity/kernels/`. CMake generates its
+configured degree in the build directory before compilation, leaving these
+references unchanged. Regenerate the source references after changing a generator:
 
 ```sh
 python3 tools/generate_fmm.py
 python3 tools/generate_fmm.py --check
-# Equivalent regeneration through a configured build:
+# Regenerate the configured build-directory kernels:
 cmake --build build --target generate_fmm_kernels
 ```
 
-The generator defaults to the source header directory and uses the repository's
-clang-format configuration. It emits Cartesian and spherical families for FMM
-the requested `--degree` (default 6). `kernels/cartesian_tracefree_config.hpp`
+The generator defaults to the source reference directories and uses the repository's
+clang-format configuration. It emits Cartesian kernels for the requested
+`--degree` (default 6). `kernels/cartesian_tracefree_config.hpp`
 records the generated degree. Cartesian operators live in `kernels/cartesian_tracefree/m2l.hpp`,
 `m2m.hpp`, `l2l.hpp`, `p2m.hpp`, `p2l.hpp`, `m2p.hpp`, and `l2p.hpp`;
-the cooperative CUDA translation is in `l2l_warp.hpp`. Spherical operators are in
-`kernels/spherical_kernels.hpp` and `kernels/spherical_ewald_kernels.hpp`.
+the cooperative CUDA translation is in `l2l_warp.hpp`. Periodic operators are
+in `ewald_green.hpp` and `ewald_m2l.hpp` in the same directory.
 `operation_counts.json` accompanies the headers.
-The same Python entry point emits the spherical Ewald Green evaluator used to
-build the PMMM filter.
 The compatibility targets `generate_cartesian_kernels` and
 `cosmictiger_generated_kernels` invoke the same explicit regeneration command.
 CMake generates only the configured degree in its build directory, automatically
@@ -142,8 +143,8 @@ nonzero dipoles, the truncated direct-particle remainder
 series, and SIMD lanes for the build order,
 printing a pass line with the worst normalized discrepancy it saw.
 `cartesian_kernels_cuda` executes the same operations on the device in float,
-at the build order. The PMMM gravity tests compare periodic forces
-and potentials with an independent Ewald sum.
+at the build order. The global FMM walk tests compare periodic forces with an
+independent double-precision Ewald sum on CPU and CUDA, with one or two MPI ranks.
 
 `cartesian_l2l_cuda` independently checks every coefficient and every lane after one
 and 17 translations, both potential modes, linear fields, and
@@ -153,11 +154,6 @@ multiple warps per block, at each selected order's local degree. It checks
 The old CUDA generator omitted the last of 616 nonpotential terms,
 `Lzzzzzz * dz^4 / 24` in `Lzz`; the repeated-shift checks detect that
 translation error at local degree six.
-
-The spherical Ewald kernel tests check the generated Green coefficients at the
-origin, near the origin, along coordinate axes, and at general periodic
-separations. See [the spherical Ewald documentation](generated_spherical_ewald.md)
-for its recurrence, lattice cutoff, and validation.
 
 CPU runtime validation uses `--gravity.cuda=false`. It can run in either a
 CUDA-enabled application or a CPU-only build configured with

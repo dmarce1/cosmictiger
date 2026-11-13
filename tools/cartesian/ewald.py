@@ -145,7 +145,8 @@ def generate(minDegree, maxDegree, algebra):
     live = g.live(root for root, sign in signed)
     plan = algebra.EmissionPlan(g, signed)
     counts = plan.statistics(live, range(len(indices)))
-    m2l = ['#pragma once', '', '#include <cosmictiger/gravity/kernels/cartesian_tracefree_types.hpp>', '',
+    m2l = ['#pragma once', '', '#include <cosmictiger/gravity/kernels/cartesian_tracefree_types.hpp>',
+           '#include <cosmictiger/math/simd_math.hpp>', '',
            'namespace cosmictiger::gravity::cartesian {',
            f'inline constexpr int kEwaldM2LFlops = {counts["conventional_flops"]};',
            'template <class Real> CUDA_EXPORT void M2L(',

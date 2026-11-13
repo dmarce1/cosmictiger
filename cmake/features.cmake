@@ -26,11 +26,11 @@ if(cosmictiger_retired_cache_options)
         "-U COSMICTIGER_ENABLE_PMMM_FMM -U COSMICTIGER_ENABLE_PM "
         "-U COSMICTIGER_ENABLE_P3M_PP -U COSMICTIGER_ENABLE_P3M_FMM, "
         "and supply the desired new feature options. The only gravity solver is "
-        "PMMM with FMM near interactions, selected by COSMICTIGER_ENABLE_GRAVITY.")
+        "global FMM, selected by COSMICTIGER_ENABLE_GRAVITY.")
 endif()
-# PMMM gravity: periodic FFT far field and FMM near interactions. Close leaf
+# Global periodic FMM gravity. Close leaf
 # interactions use the particle-pair kernels inside the FMM tree walk.
-option(COSMICTIGER_ENABLE_GRAVITY "Compile PMMM gravity with FMM near interactions" ON)
+option(COSMICTIGER_ENABLE_GRAVITY "Compile global FMM gravity" ON)
 option(COSMICTIGER_ENABLE_SPH "Compile SPH hydrodynamics" ON)
 option(COSMICTIGER_ENABLE_ROCKSTAR "Compile ROCKSTAR halo finding and lightcone analysis when gravity is enabled" ON)
 option(COSMICTIGER_ENABLE_CHEMISTRY "Compile GADGET-4 equilibrium cooling when SPH is enabled" ON)
@@ -49,7 +49,7 @@ mark_as_advanced(COSMICTIGER_ENABLE_STAR_FORMATION)
 if(COSMICTIGER_ENABLE_STARS AND NOT COSMICTIGER_ENABLE_CHEMISTRY)
     message(FATAL_ERROR "COSMICTIGER_ENABLE_STARS=ON requires COSMICTIGER_ENABLE_CHEMISTRY=ON")
 endif()
-# One integration scheme: hierarchical short gravity, outer long kicks, midpoint SPH.
+# One integration scheme: hierarchical global FMM gravity and midpoint SPH.
 # Clear obsolete cache selectors so an existing build migrates to the sole scheme.
 foreach(mode IN ITEMS TRADITIONAL HIERARCHICAL GLOBAL)
     unset(COSMICTIGER_ENABLE_INTEGRATOR_${mode} CACHE)

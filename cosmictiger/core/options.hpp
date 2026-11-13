@@ -169,19 +169,9 @@ struct Gravity {
     int errorInterval{};
     // Evenly spaced global particle indices, capped at the particle count.
     int errorSampleSize{100};
-    int meshSize{};    // PMMM cells per axis for every stage and particle-domain cuts.
-    // Near field of the PMMM solver: fmm, or its direct particle-pair fallback pp.
-    // The field keeps its historical serialized name.
-    int pmmmBatchParticles{4096};    // Target owned sink count per ready near-field batch.
-    // PMMM outer interval: the FFT far field is solved only at synchronized
-    // outer boundaries, each particle's near-stencil membership is frozen for the
-    // interval, and the near field advances on the inner rungs (see docs/pmmm.md).
-    bool pmmmOuterInterval{true};
-    // Potential expansion degree + 1 of the far and near fields; template/storage
-    // convention.
     std::string kernelFamily{"ferrers"};
     int kernelDegree{4};
-    // Shared FMM opening angle and filled-cell PMMM near-stencil criterion.
+    // Global FMM opening angle.
     double openingAngle{0.5773502691896257};
     std::string openingSchedule{};    // Cosmological redshift:theta pairs; empty means constant.
     // Open only the larger of two rejected cells instead of both.
@@ -191,12 +181,6 @@ struct Gravity {
     double timestepEta{};
     double gm{};
 };
-
-// PMMM with its FFT far field on an outer interval and frozen near membership
-// inside; the inner rung clock subdivides that interval.
-inline bool usesOuterInterval(Gravity const& gravityOptions) {
-    return gravityOptions.pmmmOuterInterval;
-}
 
 /// Test whether the selected time integrator is hierarchical.
 inline bool usesHierarchicalIntegration(Run const& run) {
@@ -310,8 +294,16 @@ struct RayleighTaylorScenario {
     double zPlaneAcceleration{};
 };
 
+struct BenchmarkScenario {
+    std::string testFiles{};
+    std::string openingAngles{};
+    int size{1};
+    int repeats{3};
+};
+
 // Options read only by the run.scenario problem of the same name.
 struct Scenario {
+    BenchmarkScenario benchmark{};
     CosmologyScenario cosmology{};
     PlummerScenario plummer{};
     KelvinHelmholtzScenario kelvinHelmholz{};
@@ -468,14 +460,8 @@ struct Options {
         arc & run.verbose;
         arc & scenario.rayleighTaylor.zPlaneAcceleration;
         arc & hydro.method;
-        arc & gravity.meshSize;
         arc & analysis.saveAcceleration;
         arc & analysis.savePotential;
-        arc & gravity.pmmmBatchParticles;
-        // Preserve the historical archive slot; the mesh now has one size.
-        int legacyCoarseMeshSize = gravity.meshSize;
-        arc & legacyCoarseMeshSize;
-        arc & gravity.pmmmOuterInterval;
         arc & gravity.errorInterval;
         arc & gravity.errorSampleSize;
         arc & starFormation.enabled;
@@ -508,6 +494,10 @@ struct Options {
         arc & initial.darkMatterLatticeSide;
         arc & initial.gasLatticeSide;
         arc & scenario.kelvinHelmholz.packing;
+        arc & scenario.benchmark.testFiles;
+        arc & scenario.benchmark.openingAngles;
+        arc & scenario.benchmark.size;
+        arc & scenario.benchmark.repeats;
     }
 };
 

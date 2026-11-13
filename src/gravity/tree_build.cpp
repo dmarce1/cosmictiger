@@ -494,6 +494,13 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
         }
         flops += 4;    // Square root and three center-to-fixed conversions below.
         children[kLeftChild].index = children[kRightChild].index = -1;
+        if (!boundedGeometry) {
+            // P2M and the stored node must use the same initialized fixed-point center.
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                centerPosition[dim] = xcValue[dim];
+                flops += detail::treePositionConversionExtraFlops(xcValue[dim]);
+            }
+        }
         multipoleFlops += [&]() {
             if (multi.isDouble()) {
                 return treeComputeMultipole<kFmmOrder>(
@@ -501,11 +508,6 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
             }
             return treeComputeMultipole<kFmmOrder>(multi.single(), particleRange, xcValue, sources);
         }();
-        for (int dim = 0; dim < kDimensions; dim++) {
-            centerPosition[dim] = xcValue[dim];
-            // P2M counts its own center conversion; this is the stored center.
-            flops += detail::treePositionConversionExtraFlops(xcValue[dim]);
-        }
     }
     if (isleaf) {
         for (ParticleInteger i = particleRange.first; i < particleRange.second; ++i) {

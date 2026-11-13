@@ -183,7 +183,8 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
             (size_t) std::max(
                 rangeParticles / blockCount, (ParticleInteger) getOptions().compute.bucketSize));
         if (params.gpu && selfPtr->numberOfParticles() <= maximumGpuParticles &&
-            selfPtr->isLocal() && detail::kickSourcesAreSingleRank(dchecklist)) {
+            selfPtr->isLocal() && detail::kickSourcesAreSingleRank(dchecklist) &&
+            detail::kickSourcesAreSingleRank(echecklist)) {
             work.stop();
             if (selfPtr->numberOfParticles()) {
                 if (!cudaWorkspace->isBatch()) {
@@ -351,6 +352,16 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                     doubleFlops += 6 * kSimdFloatSize;    // Source box scaling.
                 }
                 for (int i = 0; i < maxi; i++) {
+                    if (params.geometry.meshSize == 0 || params.geometry.periodicNear) {
+                        bool const singleImage = detail::periodicFmmSingleImage(
+                            {dx[0][i], dx[1][i], dx[2][i]}, selfPtr->radius, otherPtrs[i]->radius);
+                        acceptance.cellCell[i] = bool(acceptance.cellCell[i]) && singleImage;
+                        acceptance.particleCell[i] =
+                            bool(acceptance.particleCell[i]) && singleImage;
+                        acceptance.cellParticle[i] =
+                            bool(acceptance.cellParticle[i]) && singleImage;
+                        flops += 7;
+                    }
                     bool allowPairCost = true;
                     if (params.geometry.periodicNear && selfPtr->leaf && otherPtrs[i]->leaf &&
                         acceptance.cellCell[i]) {
@@ -493,7 +504,46 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                 auto& vy = particlesVel(kYi, i);
                 auto& vz = particlesVel(kZi, i);
                 auto& rung = particlesRung(i);
-                if (params.htime) {
+                if (params.globalTimestep) {
+                    float const gx = forces.gx[j], gy = forces.gy[j], gz = forces.gz[j];
+                    float const accelerationSquared = sqr(gx, gy, gz) + 1e-35f;
+                    double const timestep = std::min(double(params.maxDt),
+                        double(eta * sqrtf(params.a) *
+                            sqrtf(gravityEffectiveRadius / sqrtf(accelerationSquared))));
+                    ALWAYS_ASSERT(std::isfinite(timestep) && timestep > 0.0);
+                    kr.minimumTimestep = std::min(kr.minimumTimestep, timestep);
+                    float const mass = particlesMass(i);
+                    double const oldKinetic = 0.5 * mass * sqr(vx, vy, vz);
+#if COSMICTIGER_WITH_SPH
+                    bool const gas = getOptions().hydro.enabled && particlesType(i) == kSphType;
+#else
+                    bool const gas = false;
+#endif
+                    if (!gas || midpointHydro) {
+                        gravityGlobalAcceleration(kXi)[i] = gx;
+                        gravityGlobalAcceleration(kYi)[i] = gy;
+                        gravityGlobalAcceleration(kZi)[i] = gz;
+                        double const halfStep = params.sign * 0.5 * params.previousTimestep;
+                        vx = std::fma(gx, halfStep, vx);
+                        vy = std::fma(gy, halfStep, vy);
+                        vz = std::fma(gz, halfStep, vz);
+                        doubleFlops +=
+                            18;    // Signed double half-step and three mixed-precision FMAs.
+                        // Midpoint gas receives the same gravitational kick as dark matter.
+                        kr.kin += 0.5 * mass * sqr(vx, vy, vz);
+                        kr.xmom += mass * vx;
+                        kr.ymom += mass * vy;
+                        kr.zmom += mass * vz;
+                        kr.nmom += mass * sqrt(sqr(vx, vy, vz));
+                    }
+                    kr.pot += 0.5 * mass * forces.phi[j];
+                    kr.dkin += 0.5 * mass * sqr(vx, vy, vz) - oldKinetic;
+                    if (!gas || midpointHydro) {
+                        rung = 0;
+                    }
+                    flops += 12;
+                    doubleFlops += 2;    // Float timestep and maximum widened for selection.
+                } else if (params.htime) {
                     // Signed gravity-only ladder, including gas on correction levels.
                     float const mass = particlesMass(i);
                     float g2;
@@ -541,9 +591,8 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                                     nextRung = std::max(int(ceilf(log2f(params.t0 / dt))),
                                         std::max(int(rung) - 1, params.minRung));
                                 }
-                                nextRung = std::max(nextRung,
-                                    sphParticlesHydroRung(particlesCatIndex(i)) +
-                                        hydroRungIntervalShift(params));
+                                nextRung =
+                                    std::max(nextRung, sphParticlesHydroRung(particlesCatIndex(i)));
                             }
                         }
 #endif
@@ -625,7 +674,11 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                         }
                         ALWAYS_ASSERT(rung >= 0 && rung < kMaxRung);
                         dt = params.sign * 0.5f * rungDt[rung] * params.t0;
-                        if (gas && params.deferHydroOpening) {
+                        if (gas && params.deferGasOpening) {
+                            gravityGlobalAcceleration(kXi)[i] = forces.gx[j];
+                            gravityGlobalAcceleration(kYi)[i] = forces.gy[j];
+                            gravityGlobalAcceleration(kZi)[i] = forces.gz[j];
+                        } else if (gas && params.deferHydroOpening) {
                             auto& increment = deferredGasOpening[particlesCatIndex(i)];
                             increment[kXi] = std::fma(forces.gx[j], dt, increment[kXi]);
                             increment[kYi] = std::fma(forces.gy[j], dt, increment[kYi]);

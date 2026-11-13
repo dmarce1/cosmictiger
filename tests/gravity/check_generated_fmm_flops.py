@@ -8,8 +8,7 @@
 A temporary simd_math adapter replaces the arithmetic backend only. The actual
 emitted C++ kernels are compiled unchanged, and every executed primitive charges
 its cost. This checks live operations, destination accumulation, rotation setup,
-and selected-kernel costs, independently of the Python expression DAGs. Candidate
-reports retain all variants and are checked against the selected minimum.
+and selected-kernel costs, independently of the Python expression DAGs.
 """
 import argparse
 from copy import deepcopy
@@ -90,11 +89,6 @@ def cartesianFmmOrder(kernel):
     return kernel['order'] + offset
 
 
-def sphericalFmmOrder(kernel):
-    offset = 2 if kernel['operator'] == 'P2m' else 1
-    return kernel['degree'] + offset
-
-
 def selectReportOrders(report, minFmmOrder, maxFmmOrder):
     selected = deepcopy(report)
 
@@ -105,47 +99,19 @@ def selectReportOrders(report, minFmmOrder, maxFmmOrder):
     for key in ('kernels', 'operators'):
         selected[key] = [row for row in selected[key] if includes(cartesianFmmOrder(row))]
         cartesian[key] = [row for row in cartesian[key] if includes(cartesianFmmOrder(row))]
-    spherical = selected['representations']['spherical']
-    spherical['kernels'] = [row for row in spherical['kernels'] if includes(sphericalFmmOrder(row))]
-    spherical['selections'] = [row for row in spherical['selections'] if includes(row['fmm_order'])]
-    ewald = selected['representations']['sphericalEwald']
-    ewald['orders'] = {order: counts for order, counts in ewald['orders'].items() if includes(int(order))}
-    conversions = selected['representations']['basisConversion']
-    conversions['kernels'] = [row for row in conversions['kernels'] if includes(row['fmm_order'])]
     return selected
 
 
-def appendAvailabilityChecks(lines, report, minFmmOrder, maxFmmOrder):
+def appendAvailabilityChecks(lines):
     lines.extend([
-        'template <typename Type> concept CompleteKernel = requires { sizeof(Type); };',
         'template <class Real> concept HasCartesianM2L = requires(',
         '    cosmictiger::gravity::cartesian::Expansion<Real>& L,',
         '    cosmictiger::gravity::cartesian::Multipole<Real> const& M,',
         '    Vector3<Real> const& distance) {',
         '    cosmictiger::gravity::cartesian::M2L(M, distance, L);',
         '};',
-        'template <class Real> concept HasSourceConversion = requires(',
-        '    cosmictiger::gravity::spherical::Multipole<Real>& S,',
-        '    cosmictiger::gravity::cartesian::Multipole<Real> const& C) {',
-        '    static_cast<cosmictiger::gravity::spherical::Multipole<Real>>(C);',
-        '};',
-        'template <class Real> concept HasLocalConversion = requires(',
-        '    cosmictiger::gravity::cartesian::Expansion<Real>& C,',
-        '    cosmictiger::gravity::spherical::Expansion<Real> const& L) {',
-        '    static_cast<cosmictiger::gravity::cartesian::Expansion<Real>>(L);',
-        '};',
+        'static_assert(HasCartesianM2L<CountingReal>);',
     ])
-    for order in range(report['min_local_degree'] + 1, report['max_local_degree'] + 2):
-        selected = str(minFmmOrder <= order <= maxFmmOrder).lower()
-        degree = order - 1
-        lines.append(f'static_assert(HasCartesianM2L<CountingReal> == {selected});')
-        lines.append(f'static_assert(HasSourceConversion<CountingReal> == {selected});')
-        lines.append(f'static_assert(HasLocalConversion<CountingReal> == {selected});')
-        for count in (f'spherical::detail::kP2MFlops<{order - 2}>',
-                      f'spherical::detail::kGreenFlops<{degree}>',
-                      f'spherical::detail::kL2PFlops<{degree}>',
-                      f'spherical::kEwaldGreenFlops<{degree}>'):
-            lines.append(f'static_assert((cosmictiger::gravity::{count} != 0) == {selected});')
 
 
 def appendCartesianChecks(lines, report, checks):
@@ -194,142 +160,18 @@ def appendCartesianChecks(lines, report, checks):
         checks.append(label)
 
 
-def buildChecks(report, minFmmOrder, maxFmmOrder):
+def buildChecks(report):
     checks = []
-    lines = ['#include <array>', '#include <cstdio>', '',
-             '#include <cosmictiger/gravity/kernels/basis_conversion.hpp>',
-             '#include <cosmictiger/gravity/kernels/cartesian_tracefree/p2m.hpp>',
-             '#include <cosmictiger/gravity/kernels/cartesian_tracefree/p2l.hpp>',
-             '#include <cosmictiger/gravity/kernels/cartesian_tracefree/m2m.hpp>',
-             '#include <cosmictiger/gravity/kernels/cartesian_tracefree/m2l.hpp>',
-             '#include <cosmictiger/gravity/kernels/cartesian_tracefree/m2p.hpp>',
-             '#include <cosmictiger/gravity/kernels/cartesian_tracefree/l2l.hpp>',
-             '#include <cosmictiger/gravity/kernels/cartesian_tracefree/l2p.hpp>',
-             '#include <cosmictiger/gravity/kernels/spherical_kernels.hpp>',
-             '#include <cosmictiger/gravity/kernels/spherical_ewald_kernels.hpp>', '']
-    for stem in ('basis_conversion', 'cartesian_tracefree_geometry',
-                 'cartesian_tracefree_p2m', 'cartesian_tracefree_p2l',
-                 'cartesian_tracefree_m2m', 'cartesian_tracefree_m2l',
-                 'cartesian_tracefree_m2p', 'cartesian_tracefree_l2l',
-                 'cartesian_tracefree_l2p', 'spherical_p2m', 'spherical_l2p',
-                 'spherical_green', 'spherical_ewald_green'):
-        lines.append(f'#include <tests/gravity/kernels/instrumentation/{stem}.cpp>')
-    appendAvailabilityChecks(lines, report, minFmmOrder, maxFmmOrder)
-    lines.extend(['struct CountingRadial {',
-                  '    template <int radial, int traces>',
-                  '    CountingReal coefficient() const { return CountingReal(0.3); }',
-                  '};'])
-    lines.extend(['int specialCalls[4]{};',
-                  'namespace cosmictiger::gravity::spherical::detail {'])
-    for i, name in enumerate(('Exp', 'Erfc', 'Sin', 'Cos')):
-        lines.extend(['template <>',
-                      f'CountingReal ewald{name}(CountingReal const& value) {{',
-                      f'    ++specialCalls[{i}]; return CountingReal(std::{name.lower()}(value.value));',
-                      '}'])
-    lines.extend(['}',
-             'int main() {', '    using Real = CountingReal;',
-             '    std::array<Real, 256> source{}, output{};',
-             '    Real trace(0.2);',
-             '    for (int i = 0; i < 256; ++i) {',
-             '        source[i] = Real(0.25 / (i + 1));',
-             '        output[i] = Real(0.125);', '    }'])
+    lines = ['#include <cstdio>', '']
+    operators = ('p2m', 'p2l', 'm2m', 'm2l', 'm2p', 'l2l', 'l2p')
+    for name in operators:
+        lines.append(f'#include <cosmictiger/gravity/kernels/cartesian_tracefree/{name}.hpp>')
+    for name in ('geometry',) + operators:
+        lines.append(f'#include <tests/gravity/kernels/instrumentation/cartesian_tracefree_{name}.cpp>')
+    appendAvailabilityChecks(lines)
+    lines.extend(['int main() {', '    using Real = CountingReal;'])
     appendCartesianChecks(lines, report, checks)
-    representations = report['representations']
-    for kernel in representations['basisConversion']['kernels']:
-        name, order = kernel['operator'], kernel['fmm_order']
-        constant = name[0].upper() + name[1:]
-        sourceType, targetType = (
-            ('cartesian::Multipole', 'spherical::Multipole') if name == 'multipoleCast'
-            else ('spherical::Expansion', 'cartesian::Expansion'))
-        expected = kernel['weighted_flops']
-        fused = kernel['arithmetic'].get('fma', 0)
-        if kernel['conventional_flops'] != expected + fused:
-            raise ValueError(f'Incorrect conventional basis-conversion count: {kernel}')
-        lines.extend(['    {', '        using namespace cosmictiger::gravity;',
-            f'        {sourceType}<Real> source{{}};',
-            f'        {targetType}<Real> target{{}};',
-            f'        static_assert(basis_conversion::k{constant}Flops<{order}> == {expected});',
-            f'        static_assert(basis_conversion::k{constant}ConventionalFlops<{order}> == {kernel["conventional_flops"]});',
-            '        Real::operations = Real::fusedOperations = 0;',
-            f'        target = static_cast<{targetType}<Real>>(source);',
-            f'        if (Real::operations != {expected} || Real::fusedOperations != {fused}) {{',
-            f'            std::fprintf(stderr, "{name}<{order}> operation count mismatch\\n");',
-            '            return 7;', '        }', '    }'])
-        checks.append(f'{name}<{order}>')
-    namespace = 'spherical'
-    spherical = representations['spherical']
-    selections = {}
-    for selection in spherical['selections']:
-        candidates = selection['candidate_flops']
-        winner = min(range(len(candidates)), key=lambda i: candidates[i])
-        if selection['selected_variant'] != winner or selection['weighted_flops'] != candidates[winner]:
-            raise ValueError(f'Incorrect minimum selection: {selection}')
-        key = selection['operator'], selection['degree']
-        if key in selections:
-            raise ValueError(f'Duplicate spherical selection: {selection}')
-        variants = [kernel for kernel in spherical['kernels']
-                    if (kernel['operator'], kernel['degree']) == key]
-        if len(variants) != len(candidates) or any(
-                kernel['variant'] != variant or kernel['weighted_flops'] != candidates[variant]
-                for variant, kernel in enumerate(sorted(variants, key=lambda kernel: kernel['variant']))):
-            raise ValueError(f'Candidate report disagrees with selection: {selection}')
-        selections[key] = selection
-    for kernel in spherical['kernels']:
-        operation = kernel['operator']
-        degree = kernel['degree']
-        variant = kernel.get('variant')
-        if variant is not None:
-            selection = selections[operation, degree]
-            if variant != selection['selected_variant']:
-                continue
-        name = {'P2m': 'P2M', 'L2p': 'L2P', 'Greens': 'Green'}[operation]
-        parameters = str(degree)
-        function = 'evaluateGreen' if operation == 'Greens' else name
-        if operation == 'P2m':
-            arguments = 'Real(0.7), Real(0.3), Real(-0.2), Real(0.4), output'
-        elif operation == 'Greens':
-            arguments = 'Real(0.3), Real(-0.2), Real(0.4), output'
-        else:
-            arguments = 'source, Real(0.3), Real(-0.2), Real(0.4), output'
-        prefix = f'cosmictiger::gravity::{namespace}::detail::'
-        label = f'{namespace}::{name}<{parameters}>'
-        expected = kernel['weighted_flops']
-        lines.extend(['    {',
-                      f'        static_assert({prefix}k{name}Flops<{degree}> == {expected});',
-                      '        Real::operations = 0;',
-                      f'        {prefix}{function}({arguments});',
-                      f'        if (Real::operations != {expected}) {{',
-                      f'            std::fprintf(stderr, "{label}: got %d, expected {expected}\\n", Real::operations);',
-                      '            return 1;', '        }', '    }'])
-        checks.append(label)
-    for order, counts in representations['sphericalEwald']['orders'].items():
-        degree = counts['local_degree']
-        for name, method, arguments, expected in (
-                ('EwaldGreen', 'evaluate',
-                 'trace, Real(0.13), Real(-0.21), Real(0.31), output',
-                 counts['green_weighted_flops']),
-):
-            prefix = 'cosmictiger::gravity::spherical::'
-            fullName = f'{prefix}{name}<{degree}>'
-            function = 'evaluateEwaldGreen'
-            count = f'{prefix}k{name}Flops<{degree}>'
-            lines.extend(['    {',
-                          '        Real::operations = 0;', '        Real::squareRoots = 0;',
-                          '        for (int i = 0; i < 4; ++i) { specialCalls[i] = 0; }',
-                          f'        {prefix}{function}({arguments});',
-                          f'        if (Real::operations != {count}) {{',
-                          f'            std::fprintf(stderr, "{name}<{degree}>: got %d, expected %d\\n", Real::operations, {count});',
-                          '            return 1;', '        }'])
-            if expected is not None:
-                lines.append(f'        static_assert({count} == {expected});')
-            if name == 'EwaldGreen':
-                for i, function in enumerate(('exp', 'erfc', 'sin', 'cos')):
-                    lines.append(f'        if (specialCalls[{i}] != {counts["special_function_calls"][function]}) {{ return 2; }}')
-                lines.append(f'        if (Real::squareRoots != {counts["sqrt_calls"]}) {{ return 3; }}')
-            lines.append('    }')
-            checks.append(fullName)
-    lines.extend([f'    std::printf("{len(checks)} executed weighted FLOP checks and '
-                  f'{len(representations["spherical"]["selections"])} minimum selections passed\\n");',
+    lines.extend([f'    std::printf("{len(checks)} executed weighted FLOP checks passed\\n");',
                   '    return 0;', '}'])
     return '\n'.join(lines) + '\n'
 
@@ -400,7 +242,7 @@ template <class Real> struct Field {
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 destination.symlink_to(path)
         source = root/'counts.cpp'
-        source.write_text(buildChecks(report, minFmmOrder, maxFmmOrder))
+        source.write_text(buildChecks(report))
         executable = root/'counts'
         subprocess.run([args.compiler, '-std=c++20', '-O0', '-fno-fast-math',
                         '-ffp-contract=off', '-I'+str(root), '-I'+str(projectRoot),

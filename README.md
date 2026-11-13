@@ -26,7 +26,7 @@ for all options and defaults. HPX's own options retain their `--hpx:*` syntax.
 | `output` | Particle Silo output, cadence, directory, unit system, frame, and selected box |
 | `analysis` | Power spectrum, halos, tracers, slices, and views |
 | `lightcone` | Lightcone output and group finding |
-| `gravity` | PMMM mesh, near field, softening, and timestep |
+| `gravity` | Global FMM, softening, and timestep |
 | `cosmology` | Redshifts, density parameters, and primordial spectrum |
 | `units` | Particle mass unit in solar masses |
 | `hydro` | SPH, equation of state, smoothing radii, and artificial viscosity |
@@ -115,23 +115,19 @@ cmake -S . -B build/release_cpu -DCMAKE_BUILD_TYPE=Release \
   -DCOSMICTIGER_ENABLE_GRAVITY=ON \
   -DCOSMICTIGER_EXPANSION_DEGREE=6
 cmake --build build/release_cpu --target cosmictiger --parallel 3
-build/release_cpu/cosmictiger --gravity.meshSize=16 \
+build/release_cpu/cosmictiger \
   --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
 ```
 
-Fresh defaults enable PMMM gravity, SPH, equilibrium cooling, ROCKSTAR, and
+Fresh defaults enable global FMM gravity, SPH, equilibrium cooling, ROCKSTAR, and
 potential expansion degree 6. Each executable generates and compiles one degree;
 change COSMICTIGER_EXPANSION_DEGREE and rebuild to use another (2 through 8).
 The sole integration scheme uses hierarchical
-short gravity kicks, long kicks at outer-interval boundaries, and midpoint SPH.
+global FMM gravity kicks and midpoint SPH.
 
-The gravity solver is PMMM: a periodic FFT far field with an FMM near field.
-`gravity.method.near=fmm|pp` selects the near field; `fmm` is the default and
-`pp`, the direct particle-pair evaluation, is its fallback. Long/short splitting
-is mandatory. `run.timeIntegrator=hierarchical` is automatic.
-The highest compiled degree is the runtime default. Potential degree d is old
-internal order d+1, so degrees 4-6 correspond to orders 5-7. The far and near
-fields share the degree. Old checkpoint order integers retain their original meaning.
+The gravity solver is the global periodic FMM, with a distributed particle tree,
+Cartesian multipole/local expansions, periodic Ewald corrections, and direct
+particle interactions for unresolved leaves.
 
 The hierarchical ladder supports gas and dark matter and merges its lowest rung
 by `run.rungMergeFraction` ([hierarchical gravity](docs/hierarchical_gravity.md)).
@@ -159,10 +155,10 @@ selected degrees keep separate CPU/CUDA instantiation units.
 the configured capabilities. See [CMake options](CMAKE_OPTIONS.md) for the full
 reference, defaults, and migration from the retired named physics targets.
 
-PMMM needs `gravity.meshSize`. `gravity.openingAngle` controls both the near FMM
-and the filled-cell near stencil, with default `0.5773502691896257`.
-`gravity.pmmmNearWidth` is retired.
-See [PMMM](docs/pmmm.md) for particle/FFT ownership and solver details.
+`gravity.openingAngle` controls the FMM acceptance criterion (default
+`0.5773502691896257`). `gravity.openingSchedule` can vary it at cosmological
+force steps. Mesh gravity and its configuration keys are removed;
+old PMMM checkpoints cannot be resumed by this solver.
 
 Use `--gravity.errorInterval=10 --gravity.errorSampleSize=100` to compare the
 gravity solver with direct accelerations on evenly spaced particles at coarse
@@ -293,7 +289,7 @@ for all SPH runs. It uses Monaghan artificial viscosity with the Morris & Monagh
 coefficient switch, limited by Rosswog et al. (2000) to `hydro.viscosityCoefficientMax`,
 and the Balsara shear limiter; equal `hydro.viscosityCoefficientMin` and
 `hydro.viscosityCoefficientMax` give constant coefficients. This shares the particle
-storage with PMMM gravity, which couples to gas on the hierarchical ladder. See
+storage with global FMM gravity, which couples to gas on the hierarchical ladder. See
 [the kernel, viscosity, and paper references](docs/monaghan_sph.md) for the equations,
 cosmological conversions, and deliberate implementation choices. SPH support is
 built by default; `-DCOSMICTIGER_ENABLE_SPH=OFF` excludes it. Enable gas
@@ -358,7 +354,7 @@ Physical conduction and general diffusion remain unsupported. The former boolean
 `hydro.conduction`/`hydro.diffusion` options, the obsolete `hydro.chemistry` switch,
 `hydro.yReflect`, and `gravity.sphSmoothing` are no longer accepted, including
 false entries in older INI files. Gas smoothing lengths remain adaptive;
-PMMM gravity uses one fixed comoving radius for every particle. With SPH on,
+global FMM gravity uses one fixed comoving radius for every particle. With SPH on,
 the FOF/ROCKSTAR halo finder and the lightcone halo catalogue link dark matter
 only, each particle counted at the total-matter mass of its lattice site (the
 ROCKSTAR `RESCALE_PARTICLE_MASSES` convention); gas and stars enter the power
@@ -421,8 +417,7 @@ an estimate of instrumented gravity, SPH and tree arithmetic divided by the wall
 of force advancement, summed across CPU workers, CUDA kernels and localities.
 SPH includes neighbor geometry, each density/support-radius iteration, pressure
 and viscosity pairs, timestep/rung calculations, and predictor/corrector kicks.
-PMMM includes its spherical operators, spectral contraction, and cached FFTW
-execution counts. Chemistry, other FFT paths and other uninstrumented work are not counted;
+FMM includes tree construction, Cartesian interactions, and periodic corrections. Chemistry, other FFT paths and other uninstrumented work are not counted;
 when they run inside force advancement their elapsed time is included. The
 tables also separate `FP32 TF/s`, `FP64 TF/s`, and `Mixed TF/s`. `Mixed` retains legacy counts whose arithmetic precision has not yet been
 split, rather than attributing them to the wrong precision. Cosmological
@@ -481,16 +476,13 @@ on concurrent HPX tasks: the single phase stack belongs to the coordinator.
 The report uses dotted names for finer stages. SPH separates tree creation,
 neighbor boxes/lists, density/support solves, closing/opening
 forces, predictor/corrector updates, rung limiting, sources, and cleanup.
-Gravity separates PMMM
-preparation/deposition/transforms/near-field evaluation, and cleanup. Drift separates
+Gravity separates tree construction, force walks, distributed staging, and cleanup. Drift separates
 CPU/CUDA execution, memory advice, and remaining remote waits.
 Domain migration, cosmological initialization, checkpoint I/O, particle output,
 group finding, lightcone processing, and power spectra have their own subphases.
 Only stages actually executed appear. A parent row (for example `hydro`) now
 contains its remaining overhead, excluding all its named children; its share
-is not the total share of that subsystem. In PMMM, the near-field pipeline can
-overlap the transform: `transform` includes that overlapping wall interval,
-and `finishNearPipeline` measures only the remaining wait.
+is not the total share of that subsystem.
 
 Normal driver exit and a clean first Ctrl-C print the table (phase, calls,
 total, mean, share) to the terminal and save it as `profile.txt` in the
@@ -516,7 +508,7 @@ tasks and nested waits can overlap; detail rows have no percentage share or
 grand total and must not be added to the coordinator total. The independent
 `profile::ScopedWork` counters do not use the coordinator's phase stack or a
 system-thread-local stack. They also cover force-only uses of the shared tree
-walk, such as the PMMM near-field FMM batches.
+walk, including the global FMM walk.
 
 For CUDA, a separate device table uses stream events to measure the explicit
 launch-packet host-to-device copy, fused gravity kernel, and result
@@ -663,12 +655,11 @@ emergency termination, and the completed APEX and `profile.txt` reports.
 
 Common gravity and SPH machinery lives directly in each subsystem directory.
 The same subsystem organization is used beneath `cosmictiger/` for headers and `src/` for
-implementations. The PMMM gravity solver and the tree walk of its FMM near
-field are directly under `gravity/`. SPH numerical modules are in
+implementations. The global solver is under `gravity/global_fmm/`, with shared
+tree and force kernels directly under `gravity/`. SPH numerical modules are in
 `hydro/sph/variational/`, `hydro/sph/monaghan/`, `hydro/sph/morris_and_monaghan/`,
 and `hydro/sph/balsara/`.
-Owned particle storage stays in `particles/`; PMMM owns its
-separate ghost arena in `gravity/fmm/`.
+Owned particle storage and distributed particle caches stay in `particles/`.
 
 See [the source organization guide](docs/source_layout.md) for file responsibilities,
 dependency boundaries, and generated-code placement. The [source and header inventory](docs/source_inventory.md)
@@ -711,7 +702,7 @@ methods, potential expansion degrees
 (a scalar or inclusive range),
 enabled time integrators, and fixed32 or fixed64 position storage.
 Builds use `build/<mode>_<cuda|cpu>` (for example `build/release_cuda`), with live
-output and a `builder.*.log`. The default builds `cosmictiger` with PMMM gravity, SPH,
+output and a `builder.*.log`. The default builds `cosmictiger` with global FMM gravity, SPH,
 equilibrium cooling, ROCKSTAR, hierarchical gravity with midpoint SPH, potential degrees 4–6,
 and fixed32 positions. Building and running the test suite is opt-in. Build concurrency
 defaults to the detected system thread count, with no upper cap. Use `./build.sh -j 4` to select a count,

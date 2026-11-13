@@ -259,18 +259,17 @@ void sphGhostsTest();
 void sphOnlyDiagnosticsTest();
 void unitsOutputTest();
 void distributedOutputTest();
-void meshDomainsTest();
-void pmmmTest();
-void particleMeshSortTest();
-void particleMeshTimestepTest();
-void particleMeshDispatchLaunchFailureTest();
-void particleMeshDispatchAsyncFailureTest();
 
 void rockstarTest();
 void bhPotentialTest();
 void groupsCatalogueTest();
 void groupsCatalogueDistributedTest();
 void analysisBackendsTest();
+
+#if COSMICTIGER_WITH_GRAVITY
+void fmmTreeTest();
+void fmmWalkTest();
+#endif
 
 namespace detail {
 
@@ -302,19 +301,16 @@ ApplicationTest const applicationTests[] = {
     {"groupsCatalogue", groupsCatalogueTest},
 #endif
 #if COSMICTIGER_WITH_GRAVITY
-    {"meshDomains", meshDomainsTest},
-    {"pmmm", pmmmTest},
-    {"pmmmSources", pmmmTest},
-    {"particleMeshSort", particleMeshSortTest},
-    {"particleMeshTimestep", particleMeshTimestepTest},
-    {"particleMeshDispatchLaunchFailure", particleMeshDispatchLaunchFailureTest},
-    {"particleMeshDispatchAsyncFailure", particleMeshDispatchAsyncFailureTest},
 #endif
 #if COSMICTIGER_WITH_SPH
     {"unitsOutput", unitsOutputTest},
     {"distributedOutput", distributedOutputTest},
 #endif
     {"checkpointState", checkpointStateTest},
+#if COSMICTIGER_WITH_GRAVITY
+    {"fmmTree", fmmTreeTest},
+    {"fmmWalk", fmmWalkTest},
+#endif
 #if COSMICTIGER_WITH_SPH
     {"sphTree", sphTreeTest},
     {"sphParentTree", sphParentTreeTest},

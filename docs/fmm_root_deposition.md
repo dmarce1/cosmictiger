@@ -1,5 +1,10 @@
 # Spherical mesh deposition from owned Cartesian roots
 
+> Historical record of the retired PMMM implementation. Its spherical kernels,
+> basis conversions, and mesh/tree adapters have been removed. The descriptions
+> and measurements below apply to the source version recorded here; see the
+> [Cartesian global FMM documentation](generated_fmm.md) for the active solver.
+
 Part 3 of `spherical_fmm_tree_plan.md` reuses the completed owned cell kd-tree
 as the source of the spherical FFT moments. The near walk uses that same tree.
 Boundary long solves use the endpoint forest for both deposition and Cartesian
@@ -13,7 +18,7 @@ particle deposition/evaluation paths are removed.
 Let r be a physical offset, y=κr the tree coordinate (κ=`kScaleFactor`), and
 u=r/h the mesh coordinate. Let c be the actual stored tree root center and a
 the mesh cell center. `treeSourceToMesh` first translates by κ(c-a), then
-applies the pure source map from `fmm_basis_conversion.md`, then scales rank n:
+applies the pure source map from [the historical basis-conversion derivation](https://github.com/dmarce1/cosmictiger/blob/38f59a72ab08e2355017728e60b338b352f1cd05/docs/fmm_basis_conversion.md), then scales rank n:
 
 \[
 C_n^a=\operatorname{M2M}_{\kappa(c-a)}(C^c)_n,\qquad

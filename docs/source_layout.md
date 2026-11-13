@@ -6,8 +6,7 @@ file can live directly in its subsystem directory, as `src/chemistry/recombinati
 does. Do not create single-file directories: flatten the file into its parent with
 a prefix naming the former directory. Within a subsystem directory, omit a
 redundant subsystem prefix (for example, `sph/cuda.hpp`, not `sph/sph_cuda.hpp`).
-This applies independently to the header and source trees; the single-file
-PMMM PP header is `gravity/pp_near_pp.hpp`. Common machinery sits directly
+This applies independently to the header and source trees. Common machinery sits directly
 in its subsystem directory; there is no `shared/` layer.
 
 ## Build libraries
@@ -39,61 +38,18 @@ definitions without linking unrelated physics libraries.
 
 ## Gravity
 
-```text
-gravity/
-├── kernels/                               # Generated STF Cartesian and spherical kernels
-├── fmm_types.hpp, fmm_order.*
-├── fmm_acceptance.hpp, fmm_geometry.hpp, softening.hpp
-├── sources.*, source_access.*
-├── tree*, gravity*, kick*                  # Local tree/walk/CPU/CUDA execution of the near field
-├── error.*, direct_reference.hpp, reference_table.*   # Sampled direct-force diagnostics
-├── solver.*, pmmm_kernels.*, mesh_size.hpp # PMMM solve, spherical contraction, mesh sides
-├── fft.cpp, mesh_exchange.cpp, evaluation.cpp, interval.cpp
-├── pmmm_kick.*                            # PMMM prepare/finish kick entry points
-├── pm_kick.*                              # Streamed field consumer with long half-kicks
-├── collective_dispatch.*, fft_flops.hpp   # Mesh collectives and FFT operation counts
-├── outer_interval.*                       # Outer interval selection
-├── state.hpp, actions.hpp                 # Private source implementation headers
-├── pp_near_pp.hpp, pp/near_pp.*           # Direct particle-pair near field (fallback)
-└── fmm/{cell_tree.*,fmm_batch.*,cell_schedule.cpp,ghost_storage.*,ghost_exchange.cpp}
-```
+`gravity/global_fmm/` contains distributed tree construction, remote node caches,
+particle exchange, task execution, and CUDA staging. Shared tree construction,
+Cartesian force operators, periodic Ewald corrections, and CPU/CUDA walks live
+directly in `gravity/`. Generated Cartesian kernels live in
+`gravity/kernels/`; direct-force diagnostics use `error.*`, `direct_reference.hpp`,
+and `reference_table.*`.
 
-An asterisk denotes the applicable header, C++ implementation, and/or CUDA
-implementation, rather than a requirement that every file have all three.
-The `state.hpp` and `actions.hpp` headers belong only to `src/gravity/`.
-
-PMMM is the only gravity solver, so its files sit directly in `gravity/`
-beside the local tree and walk machinery of its FMM near field. Two files that
-would otherwise collide with common names carry the prefix of their former
-directory: `pmmm_kick.*` (PMMM kick entry points, beside the common `kick.*`
-tree walk) and `pmmm_kernels.*` (beside the generated `kernels/` directory);
-`pm_kick.*` is the per-particle long acceleration consumer. The `fmm/` and
-`pp/` subdirectories hold the two PMMM near-field evaluations. PMMM's tensor
-convolution is not a scalar PM solve merely because it uses FFTs.
-
-`COSMICTIGER_ENABLE_GRAVITY=OFF` excludes the whole solver. Public runtime
-selectors and serialized layouts are preserved: `gravity.method.near` keeps its
-name, and checkpoints written by the retired global FMM, PM and P3M solvers are
-rejected rather than misread.
-
-The PMMM near FMM uses the parent directory's Cartesian operators, local tree
-construction, acceptance tests, traversal, and CPU/CUDA workspaces.
-The common tree builder accepts bounded-center and child-routing
-callbacks; the common walk receives solver execution callbacks. Remote source
-and tree access are registered by the active solver. These adapters run at task,
-node, or source-copy boundaries; pair operators remain inline CPU/CUDA code.
-
-Owned particle storage remains in `particles/`. It is also used by drift,
-domain migration, SPH, checkpoints, and output. Common gravity source views
-borrow that storage. PMMM owns a separate ghost arena and publishes its
-borrowed source view before readers start. Ghost packets contain source
-positions, particle types, and frozen timestep rungs, and never become owned
-particles. Generic particle-release hooks let solver-owned auxiliary storage
-follow particle teardown without a dependency from `particles/` to a solver.
-
-`core/tree_id.hpp` contains the tree identity and hashing types used by both
-gravity and SPH. The analysis Barnes–Hut tree lives in `analysis/`; analytic
-force references used by tests live in `tests/gravity/`.
+`COSMICTIGER_ENABLE_GRAVITY=OFF` excludes the solver. Global FMM uses owned
+particle storage and distributed caches in `particles/`, shared with drift,
+domain migration, SPH, checkpointing, and output. Mesh gravity and its retained
+long-force and frozen-cell storage have been removed. Checkpoint headers from
+retired mesh solvers are rejected before their payload is read.
 
 ## SPH
 
@@ -182,36 +138,29 @@ in `scenarios/`, alongside the scenarios that use them.
 
 ## Generated code and build integration
 
-The old `cosmictiger/fmm/` and `src/fmm/` directories are folded into gravity.
-Generated headers are checked in beneath `cosmictiger/gravity/kernels/`,
-with flat `cartesian_tracefree_*` names for the free-space near-field operators
-and `spherical_*` names for the free-space and Ewald far-field operators.
+Generated Cartesian trace-free declarations are checked in beneath
+`cosmictiger/gravity/kernels/`, with implementations beneath `src/gravity/kernels/`
+and counting-test definitions beneath `tests/gravity/kernels/instrumentation/`.
+Free-space and periodic Ewald operators share the `cartesian_tracefree/` directory.
 
-Generators remain organized by representation under `tools/cartesian/` and
-`tools/fmm/`, with `tools/generate_fmm.py` as the entry point. Running it without
-arguments regenerates both families for FMM orders 3 through 9 in the source
-header directory, using the repository's clang-format configuration.
-`generate_fmm_kernels` is the explicit CMake regeneration target;
+The generator entry point is `tools/generate_fmm.py`, with supporting emitters in
+`tools/cartesian/`. Running it without arguments regenerates the degree-6 source
+references using the repository's clang-format configuration; `--check` verifies
+those references without writing. CMake generates one kernel set per build for
+`COSMICTIGER_EXPANSION_DEGREE` (default 6, supported values 2 through 8). Build
+outputs live in `generated_fmm/` and take precedence over the source references.
+The internal FMM order is the potential degree plus one. Runtime degree selection
+is removed; a different degree requires another build directory.
+
+`generate_fmm_kernels` is the explicit CMake generation target;
 `generate_cartesian_kernels` and `cosmictiger_generated_kernels` are aliases.
-These targets always regenerate all internal orders 3 through 9, corresponding
-to potential degrees 2 through 8. `COSMICTIGER_EXPANSION_DEGREE` selects a scalar
-degree or inclusive range, defaulting to `4-6`. CMake converts that selection
-to internal orders by adding one, then uses `FMM_MIN_ORDER`/`FMM_MAX_ORDER`
-preprocessor guards and per-order instantiations. Runtime
-`gravity.expansionDegree` chooses one compiled degree, defaulting to the largest.
-Ordinary builds use the checked-in headers without rewriting them, and
-`python3 tools/generate_fmm.py --check` verifies them without writing.
-
-Per-order CPU/CUDA
-instantiation templates remain in `src/gravity/`; they assemble common and
-solver-specific instantiations exactly once per order. These are build
-composition points, not an algorithm dependency from common numerical code to
-a solver.
+The static `cosmictiger_fmm` library contains the selected scalar, SIMD, and,
+when enabled, CUDA definitions. CPU/CUDA instantiation templates in `src/gravity/`
+assemble the solver at that build's single order.
 
 A file move must update includes, CMake sources, generated output paths,
 per-source compiler options, and active test or benchmark inputs together.
-Tests mirror solver ownership under `tests/gravity/` and `tests/sph/`; PMMM
-tests sit directly in `tests/gravity/`, with near-field tests in the same
-`pp/` subdirectory as their sources. Historical benchmark manifests and patches retain the
+Tests mirror solver ownership under `tests/gravity/` and `tests/sph/`; global
+FMM tree and periodic-force regressions live in `tests/gravity/global_fmm/`. Historical benchmark manifests and patches retain the
 paths of the source versions they describe. Public option keys, serialized fields, and test names
 are independent of the source-directory names.

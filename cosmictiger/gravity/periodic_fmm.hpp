@@ -1,4 +1,4 @@
-/* CosmicTiger - float periodic near-field FMM; BSL-1.0. */
+/* CosmicTiger - float periodic global FMM; BSL-1.0. */
 #pragma once
 
 #include <cmath>
@@ -9,6 +9,9 @@
 #include <cosmictiger/gravity/kernels/cartesian_tracefree/ewald_green.hpp>
 #include <cosmictiger/gravity/kernels/cartesian_tracefree/ewald_m2l.hpp>
 #include <cosmictiger/gravity/tree.hpp>
+#ifndef __CUDACC__
+#include <cosmictiger/gravity/source_access.hpp>
+#endif
 
 namespace detail {
 
@@ -22,12 +25,12 @@ CUDA_EXPORT inline bool periodicFmmSingleImage(
 
 // Derived unit-box image distances. For a minimum-image displacement d,
 // R1²=d.d and R2²=R1²+1-2 max(|d_x|,|d_y|,|d_z|).
-// The correction excludes the nearest singularity. Across an image-selection
-// plane require the ordinary M2L separation as well, so the direct and periodic
-// expansions cancel their common image choice at the same accepted node.
+// The correction excludes the nearest singularity. Both parts of that split
+// must use a single periodic image throughout an accepted expansion. Open cells
+// crossing an image-selection plane and evaluate unresolved pairs directly.
 // Symbol directory: R1,R2 are the first/second image distances; d is separation.
 CUDA_EXPORT inline bool periodicFmmAccepted(Vector3<float> const& displacement, float sinkRadius,
-    float sourceRadius, float inverseTheta, float smoothingLength,
+    float sourceRadius, float inverseTheta, float /* smoothingLength */,
     FlopCount* operations = nullptr) {
     float const radius = sinkRadius + sourceRadius;
     float const largest =
@@ -36,13 +39,12 @@ CUDA_EXPORT inline bool periodicFmmAccepted(Vector3<float> const& displacement, 
     float const secondSquared = nearestSquared + 1.0f - 2.0f * largest;
     float const opening = radius * inverseTheta;
     bool const sameImage = largest + radius < 0.5f;
-    float const support = radius + smoothingLength;
-    bool const separated = opening * opening < (sameImage ? secondSquared : nearestSquared);
+    bool const separated = opening * opening < secondSquared;
     if (operations != nullptr) {
         // Includes three absolute values and two maxima, each one math result.
-        *operations = 18 + int(separated && !sameImage);
+        *operations = 17;
     }
-    return separated && (sameImage || support * support < nearestSquared);
+    return sameImage && separated;
 }
 
 // Derived constant-Laplacian contraction, in tree coordinates y=kappa*r:
@@ -99,7 +101,7 @@ inline FlopCount cpuPeriodicFmm(ExpansionBuffer& local, TreeNode const& sink,
         TreeId const id = checks.back();
         checks.pop_back();
         auto const& source = *treeGetNode(id);
-        if (source.numberOfParticles() == 0) {
+        if (source.isLocal() && source.numberOfParticles() == 0) {
             continue;
         }
         Vector3<float> displacement;
@@ -121,18 +123,21 @@ inline FlopCount cpuPeriodicFmm(ExpansionBuffer& local, TreeNode const& sink,
         } else {
             // Rare unresolved leaf pair: evaluate the regular correction,
             // including self images. No singular 1/r is evaluated here.
-            auto const view = fmmSourceView(source.sourceStore);
+            auto const count = source.numberOfParticles();
+            Vector<Position> x(count), y(count), z(count);
+            Vector<float> masses(count);
+            gravityReadSourcePositions(
+                source, x.data(), y.data(), z.data(), nullptr, masses.data(), 0);
+            Position const* positions[kDimensions] = {x.data(), y.data(), z.data()};
             for (ParticleInteger i = sink.particleRange.first; i < sink.particleRange.second; ++i) {
                 auto const target = i - sink.particleRange.first;
-                for (ParticleInteger j = source.particleRange.first;
-                    j < source.particleRange.second; ++j) {
+                for (ParticleInteger j = 0; j < count; ++j) {
                     for (int dim = 0; dim < kDimensions; ++dim) {
-                        displacement[dim] = distance(particlesPos(dim, i), view.positions[dim][j]);
+                        displacement[dim] = distance(particlesPos(dim, i), positions[dim][j]);
                     }
                     flops += 3 +
-                        periodicFmmPoint(displacement, fmmSourceMass(view, j), doPotential,
-                            forces.phi[target], forces.gx[target], forces.gy[target],
-                            forces.gz[target]);
+                        periodicFmmPoint(displacement, masses[j], doPotential, forces.phi[target],
+                            forces.gx[target], forces.gy[target], forces.gz[target]);
                 }
             }
         }

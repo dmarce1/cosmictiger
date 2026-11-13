@@ -196,8 +196,8 @@ chooseMode() {
 }
 
 chooseGravityFeatures() {
-    # PMMM gravity: FFT far field, FMM near field, direct PP fallback. Off for SPH only.
-    chooseToggle 'Compile PMMM gravity (FMM near field with PP fallback)' "$enableGravity"
+
+    chooseToggle 'Compile global FMM gravity' "$enableGravity"
     enableGravity=$promptValue
 }
 
@@ -321,7 +321,7 @@ showMainMenu() {
     printf '  6) HPX installation prefix: %s\n' "${hpxPrefix:-automatic by build mode}"
     printf '  7) CUDA architectures: %s\n' "${cudaArchitectures:-$defaultCudaArchitectures}"
     printf '  8) Additional dependency prefixes: %s\n' "${dependencyPrefixes:-system default}"
-    printf '  9) Gravity (PMMM, FMM near field with PP fallback): %s\n' "$enableGravity"
+    printf '  9) Gravity (global FMM): %s\n' "$enableGravity"
     printf ' 10) Potential expansion degrees: %s\n' "$expansionDegree"
     printf ' 12) Build SPH support: %s\n' "$enableSph"
     printf ' 13) Position storage: %s\n' "$positionType"
@@ -346,7 +346,7 @@ chooseMainMenu() {
             6 "HPX installation prefix: ${hpxPrefix:-automatic by build mode}" \
             7 "CUDA architectures: ${cudaArchitectures:-$defaultCudaArchitectures}" \
             8 "Additional dependency prefixes: ${dependencyPrefixes:-system default}" \
-            9 "Gravity (PMMM, FMM near field with PP fallback): $enableGravity" \
+            9 "Gravity (global FMM): $enableGravity" \
             10 "Potential expansion degrees: $expansionDegree" \
             12 "Build SPH support: $enableSph" \
             13 "Position storage: $positionType" \
@@ -513,7 +513,7 @@ runStage() {
     printf '%s succeeded.\n' "$stageName"
 }
 
-printf '\nGravity (PMMM, FMM near field with PP fallback): %s; potential degrees=%s\n' "$enableGravity" "$expansionDegree"
+printf '\nGravity (global FMM): %s; potential degrees=%s\n' "$enableGravity" "$expansionDegree"
 printf 'SPH support: %s\n' "$enableSph"
 printf 'Equilibrium cooling: %s (requires SPH)\n' "$enableChemistry"
 printf 'Stars: %s (requires chemistry and SPH)\n' "$enableStars"

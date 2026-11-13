@@ -13,11 +13,10 @@
 #include <cosmictiger/core/containers.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/gravity/kernels/cartesian_tracefree_types.hpp>
-#include <cosmictiger/gravity/kernels/spherical_types.hpp>
 #include <cosmictiger/math/position.hpp>
 #include <cosmictiger/math/vector3.hpp>
 
-// Build-order FMM value types and their inline basis casts. Tree operator
+// Build-order FMM value types. Tree operator
 // kernels live separately in kernels/*_operators.hpp.
 
 namespace cosmictiger::gravity {
@@ -85,28 +84,16 @@ constexpr bool fmmTypedLayout() {
     using CartesianMultipole = cosmictiger::gravity::cartesian::Multipole<float>;
     using CartesianExpansion = cosmictiger::gravity::cartesian::Expansion<float>;
     using CartesianGreen = cosmictiger::gravity::cartesian::Green<float>;
-    using SphericalMultipole = cosmictiger::gravity::spherical::Multipole<float>;
-    using SphericalExpansion = cosmictiger::gravity::spherical::Expansion<float>;
-    using SphericalGreen = cosmictiger::gravity::spherical::Green<float>;
     return sizeof(CartesianMultipole) == sizeof(float) * fmmMultipoleCoefficientCount(kFmmOrder) &&
         sizeof(CartesianExpansion) == sizeof(float) * fmmLocalCoefficientCount(kFmmOrder) &&
         sizeof(CartesianGreen) == sizeof(CartesianExpansion) &&
-        sizeof(SphericalMultipole) == sizeof(CartesianMultipole) &&
-        sizeof(SphericalExpansion) == sizeof(float) * fmmLocalHarmonicCoefficientCount(kFmmOrder) &&
-        sizeof(SphericalGreen) == sizeof(SphericalExpansion) &&
         sizeof(FmmMultiPos) == fmmPositionedMultipoleBytes(kFmmOrder) &&
         alignof(CartesianMultipole) == alignof(float) &&
         alignof(CartesianExpansion) == alignof(float) &&
-        alignof(SphericalMultipole) == alignof(float) &&
-        alignof(SphericalExpansion) == alignof(float) &&
         std::is_standard_layout_v<CartesianMultipole> &&
         std::is_standard_layout_v<CartesianExpansion> &&
-        std::is_standard_layout_v<SphericalMultipole> &&
-        std::is_standard_layout_v<SphericalExpansion> &&
         std::is_trivially_copyable_v<CartesianMultipole> &&
-        std::is_trivially_copyable_v<CartesianExpansion> &&
-        std::is_trivially_copyable_v<SphericalMultipole> &&
-        std::is_trivially_copyable_v<SphericalExpansion>;
+        std::is_trivially_copyable_v<CartesianExpansion>;
 }
 static_assert(fmmTypedLayout());
 
