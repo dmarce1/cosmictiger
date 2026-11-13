@@ -21,7 +21,7 @@ def finish(A,g,outputs,signature,name,order,extra=None):
     plan=A.EmissionPlan(g,signed)
     stats=plan.statistics(live,range(len(signed)))
     descriptions = {
-        'P2M': 'Accumulate the point mass into raw trace-free moments at the supplied displacement.',
+        'P2M': 'Accumulate the point mass into the configured Cartesian moments at the supplied displacement.',
         'P2L': 'Accumulate Newtonian local coefficients from a point mass at the supplied displacement.',
         'M2P': 'Accumulate potential and acceleration from all retained multipole ranks.',
         'L2P': 'Accumulate the local potential and negative gradient in the displacement coordinates.',
@@ -37,7 +37,7 @@ def finish(A,g,outputs,signature,name,order,extra=None):
     return '\n'.join(code),stats
 
 
-def p2l(A,P):
+def p2l(A,P,quadrupoleTrace=True):
     g=A.Dag()
     invr=g.symbol('iR')
     u=[g.mul(g.symbol(x), invr) for x in ('dx','dy','dz')]
@@ -53,6 +53,9 @@ def p2l(A,P):
             polynomial={tuple(v//2 for v in power):g.const(c)
                         for power,c in A.radialPolynomial(0,a).items()}
             outputs[f'L[{A.index(a)}]']=g.mul(coefficient,A.horner(g,polynomial,squared))
+    if quadrupoleTrace and P >= 2:
+        outputs['L.zz'] = g.scale(g.add(outputs[f'L[{A.index((2,0,0))}]'],
+                                      outputs[f'L[{A.index((0,2,0))}]']), -1)
     signature=f'''template <class Real> CUDA_EXPORT void P2L(
     Expansion<Real, {P+1}>& L, Real mass, Vector3<Real> const& distance) {{
     Real const iR = inverseRadius(distance);
@@ -63,7 +66,7 @@ def p2l(A,P):
     return finish(A,g,outputs,signature,'P2L',P)
 
 
-def m2p(A,P):
+def m2p(A,P,quadrupoleTrace=True):
     g=A.Dag()
     invr=g.symbol('iR')
     u=[g.mul(g.symbol(x), invr) for x in ('dx','dy','dz')]
@@ -71,7 +74,7 @@ def m2p(A,P):
     weight=g.one; scalar=[]; radial=[]; vector=[[] for _ in range(A.NDIM)]
     for n in range(P+1):
         if n: weight=g.scale(g.mul(weight,invr),2*n-1)
-        M={a:g.symbol(f'M[{A.index(a)}]') for a in A.indices(n)}
+        M=A.sourceComponents(g, 'M', n, quadrupoleTrace)
         if n==0:
             value=M[(0,0,0)]
         else:
@@ -101,18 +104,21 @@ def m2p(A,P):
     return finish(A,g,outputs,signature,'M2P',P)
 
 
-def p2m(A, order):
-    """Project a point mass into raw Cartesian moments at normalized displacement."""
+def p2m(A, order, quadrupoleTrace=True):
+    """Store raw rank two when enabled and STF higher-rank particle moments."""
     g = A.Dag()
     displacement = [g.symbol(name) for name in ('dx', 'dy', 'dz')]
     mass = g.symbol('mass')
     outputs = {}
     for degree in range(order + 1):
         for alpha in A.indices(degree):
-            polynomial = {power: g.const(coefficient)
-                          for power, coefficient in cartesianMonomial(alpha)}
+            polynomial = ({alpha: g.one} if quadrupoleTrace and degree == 2 else
+                          {power: g.const(coefficient)
+                           for power, coefficient in cartesianMonomial(alpha)})
             outputs[f'M[{A.index(alpha)}]'] = g.mul(
                 mass, A.horner(g, polynomial, displacement))
+    if quadrupoleTrace and order >= 2:
+        outputs['M.zz'] = g.mul(mass, g.mul(displacement[2], displacement[2]))
     signature = f'''template <class Real> CUDA_EXPORT void P2M(
     Multipole<Real, {order+2}>& M, Real mass, Vector3<Real> const& distance) {{
     Real const dx = distance[0];
@@ -122,7 +128,7 @@ def p2m(A, order):
     return finish(A, g, outputs, signature, 'P2M', order)
 
 
-def l2p(A, order):
+def l2p(A, order, quadrupoleTrace=True):
     """Evaluate a local Taylor polynomial and its negative gradient.
 
     With u = (x - center) / scale, the stored local coefficients are
@@ -144,6 +150,14 @@ def l2p(A, order):
                  for beta in A.indices(degree)]
         value = g.add(*terms)
         outputs[f'field[{component}]'] = value if component == 0 else g.scale(value, -1)
+    if quadrupoleTrace and order >= 2:
+        # The harmonic basis substitutes Lzz=-Lxx-Lyy. Restore the actual
+        # constant Laplacian through its missing lambda*dz**2/2 polynomial.
+        trace = g.add(source[(2,0,0)], source[(0,2,0)], g.symbol('L.zz'))
+        traceZ = g.mul(trace, displacement[2])
+        outputs['field[0]'] = g.add(outputs['field[0]'],
+                                   g.scale(g.mul(traceZ, displacement[2]), Q(1,2)))
+        outputs['field[3]'] = g.sub(outputs['field[3]'], traceZ)
     signature = f'''template <class Real> CUDA_EXPORT void L2P(
     gravity::Field<Real>& field, Expansion<Real, {order+1}> const& L,
     Vector3<Real> const& distance) {{
@@ -154,12 +168,12 @@ def l2p(A, order):
     return finish(A, g, outputs, signature, 'L2P', order)
 
 
-def generateParticles(minOrder,maxOrder,algebra):
+def generateParticles(minOrder,maxOrder,algebra,quadrupoleTrace=True):
     code=[]
     stats=[]
     for operation, args in [(p2m, (minOrder,)), (p2l, (maxOrder,)),
                             (m2p, (minOrder,)), (l2p, (maxOrder,))]:
-        text, counts = operation(algebra, *args)
+        text, counts = operation(algebra, *args, quadrupoleTrace)
         code.append(text)
         stats.append(counts)
     return code,stats

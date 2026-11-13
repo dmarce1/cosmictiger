@@ -43,7 +43,6 @@ struct TreeNode {
     Vector3<Position> pos;
     MultipolePosition* mpos;
     float radius;
-    float radialTrace = 0;
     struct {
         unsigned short depth : 14;
         unsigned short localRoot : 1;
@@ -87,7 +86,6 @@ struct TreeNode {
         arc & processRange;
         arc & particleRange;
         arc & radius;
-        arc & radialTrace;
         int localRoot0;
         int leaf0;
         int depth0;
@@ -112,7 +110,6 @@ struct TreeNode {
         arc & processRange;
         arc & particleRange;
         arc & radius;
-        arc & radialTrace;
         int localRoot0;
         int leaf0;
         int depth0;
@@ -140,7 +137,6 @@ struct TreeCreateReturn {
     Vector3<Position> pos;
     TreeId id;
     float radius;
-    double radialTrace = 0;
     Range<double> box;
     size_t nodeCount = 1;
     size_t leafCount = 1;
@@ -151,7 +147,6 @@ struct TreeCreateReturn {
         a & id;
         a & pos;
         a & radius;
-        a & radialTrace;
         a & box;
         a & nodeCount;
         a & leafCount;

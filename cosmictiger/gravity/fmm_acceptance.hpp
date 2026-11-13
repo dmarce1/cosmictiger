@@ -39,8 +39,9 @@ CUDA_EXPORT inline float fmmInverseOpeningAngle(float theta) {
 // A Taylor expansion uses the image selected by its cell centers. Both the
 // nearest-image Newtonian force and its Ewald correction jump when a particle
 // pair selects a different image. Their jumps cancel only if the two walks
-// preserve the same split, so independently accepted cells must not cross an
-// image-selection plane. Equality is opened to retain the pointwise tie rule.
+// preserve the same split. A true result allows their walks to proceed
+// independently; a false result requires a joint M2L at identical centers.
+// Equality takes the coupled path to retain the pointwise tie rule.
 CUDA_EXPORT inline bool fmmSinglePeriodicImage(
     Vector3<float> const& displacement, float sinkRadius, float sourceRadius) {
     return fmaxf(fabsf(displacement[0]), fmaxf(fabsf(displacement[1]), fabsf(displacement[2]))) +

@@ -111,6 +111,13 @@ def appendAvailabilityChecks(lines):
         '    cosmictiger::gravity::cartesian::M2L(M, distance, L);',
         '};',
         'static_assert(HasCartesianM2L<CountingReal>);',
+        'template <class Real> concept HasCartesianM2Lewald = requires(',
+        '    cosmictiger::gravity::cartesian::Expansion<Real>& L,',
+        '    cosmictiger::gravity::cartesian::Multipole<Real> const& M,',
+        '    cosmictiger::gravity::cartesian::Green<Real> const& G) {',
+        '    cosmictiger::gravity::cartesian::M2Lewald(M, G, L);',
+        '};',
+        'static_assert(HasCartesianM2Lewald<CountingReal>);',
     ])
 
 
@@ -133,7 +140,7 @@ def appendCartesianChecks(lines, report, checks):
         order = degree + (2 if name in ('P2M','M2M','M2P') else 1)
         constant, call, geometry = operations[name]
         if name == 'M2L' and report['independent_m2l_ratios']:
-            call = 'M2L(L, M, distance, ratio, ratio)'
+            call = 'M2L(M, distance, ratio, ratio, L)'
         expected = kernel['weighted_flops'] + geometry
         expectedFma = kernel['arithmetic'].get('fma',0) + (2 if geometry else 0)
         label = f'Cartesian {name} degree {degree}'
@@ -160,10 +167,37 @@ def appendCartesianChecks(lines, report, checks):
         checks.append(label)
 
 
+def appendEwaldChecks(lines, report, checks):
+    ewald = report['representations']['cartesianEwald']
+    kernel = ewald['m2l']
+    expected = kernel['weighted_flops']
+    expectedFma = kernel['arithmetic'].get('fma', 0)
+    label = f'Cartesian M2Lewald degree {ewald["local_degree"]}'
+    lines.extend([
+        '    {',
+        '        using namespace cosmictiger::gravity::cartesian;',
+        f'        static_assert(kEwaldM2LFlops == {kernel["conventional_flops"]});',
+        '        Multipole<Real> M{};',
+        '        Green<Real> G{};',
+        '        Expansion<Real> L{};',
+        '        Real::operations = 0;',
+        '        Real::squareRoots = 0;',
+        '        Real::fusedOperations = 0;',
+        '        M2Lewald(M, G, L);',
+        f'        if (Real::operations != {expected} || Real::fusedOperations != {expectedFma}) {{',
+        f'            std::fprintf(stderr, "{label}: got %d ops/%d FMAs, expected {expected}/{expectedFma}\\n",',
+        '                Real::operations, Real::fusedOperations);',
+        '            return 7;',
+        '        }',
+        '    }',
+    ])
+    checks.append(label)
+
+
 def buildChecks(report):
     checks = []
     lines = ['#include <cstdio>', '']
-    operators = ('p2m', 'p2l', 'm2m', 'm2l', 'm2p', 'l2l', 'l2p')
+    operators = ('p2m', 'p2l', 'm2m', 'm2l', 'm2p', 'l2l', 'l2p', 'ewald_m2l')
     for name in operators:
         lines.append(f'#include <cosmictiger/gravity/kernels/cartesian_tracefree/{name}.hpp>')
     for name in ('geometry',) + operators:
@@ -171,6 +205,7 @@ def buildChecks(report):
     appendAvailabilityChecks(lines)
     lines.extend(['int main() {', '    using Real = CountingReal;'])
     appendCartesianChecks(lines, report, checks)
+    appendEwaldChecks(lines, report, checks)
     lines.extend([f'    std::printf("{len(checks)} executed weighted FLOP checks passed\\n");',
                   '    return 0;', '}'])
     return '\n'.join(lines) + '\n'

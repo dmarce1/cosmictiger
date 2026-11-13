@@ -106,12 +106,12 @@ def coordinatePowers(g, value, order):
     return result
 
 
-def m2mDirect(order, algebra):
+def m2mDirect(order, algebra, quadrupoleTrace=True):
     g = algebra.Dag()
     displacement = [g.symbol(name) for name in ('dx', 'dy', 'dz')]
     ratio = coordinatePowers(g, g.symbol('scaleRatio'), order)
-    scaled = {a: g.mul(ratio[n], g.symbol(f'Mi[{algebra.index(a)}]'))
-              for n in range(order+1) for a in algebra.indices(n)}
+    scaled = {a: g.mul(ratio[n], value) for n in range(order+1)
+              for a, value in algebra.sourceComponents(g, 'Mi', n, quadrupoleTrace).items()}
     result = {}
     for n in range(order+1):
         for alpha in algebra.indices(n):
@@ -120,6 +120,8 @@ def m2mDirect(order, algebra):
                 polynomial.setdefault(power, []).append(g.scale(scaled[source], coefficient))
             coefficients = {power: g.add(*terms) for power, terms in polynomial.items()}
             result[algebra.index(alpha)] = algebra.horner(g, coefficients, displacement)
+    if quadrupoleTrace and order >= 2:
+        rawQuadrupole(g, result, displacement, ratio, order, algebra)
     return g, result
 
 
@@ -142,7 +144,7 @@ def equivalentTransform(order):
     return tuple(sorted((key, value) for key, value in result.items() if value))
 
 
-def m2mCompact(order, algebra):
+def m2mCompact(order, algebra, quadrupoleTrace=True):
     """Factor a shift through compact harmonic-equivalent polynomials.
 
     Formal-variable multiplication occurs in the quotient tz**2=-tx**2-ty**2.
@@ -155,8 +157,8 @@ def m2mCompact(order, algebra):
     displacement = [g.symbol(name) for name in ('dx', 'dy', 'dz')]
     ratio = coordinatePowers(g, g.symbol('scaleRatio'), order)
     basis = algebra.dualBasis(g, displacement, order)
-    scaled = {a: g.mul(ratio[n], g.symbol(f'Mi[{algebra.index(a)}]'))
-              for n in range(order+1) for a in algebra.indices(n)}
+    scaled = {a: g.mul(ratio[n], value) for n in range(order+1)
+              for a, value in algebra.sourceComponents(g, 'Mi', n, quadrupoleTrace).items()}
     equivalent = {}
     for n in range(order):
         transformed = {}
@@ -180,11 +182,31 @@ def m2mCompact(order, algebra):
                 if beta[2] < 2:
                     terms.append(g.scale(lower[beta], coefficient*indexFactorial(beta)))
             result[algebra.index(alpha)] = g.add(*terms)
+    if quadrupoleTrace and order >= 2:
+        rawQuadrupole(g, result, displacement, ratio, order, algebra)
     return g, result
 
 
-def m2m(order, algebra):
-    candidates = [m2mDirect(order, algebra), m2mCompact(order, algebra)]
+def rawQuadrupole(g, result, displacement, ratio, order, algebra):
+    """Replace the rank-two projection with the full translated raw moment."""
+    mass = g.symbol('Mi[0]')
+    dipole = [g.symbol(f'Mi[{algebra.index(tuple(int(i == axis) for i in range(3)))}]')
+              for axis in range(3)]
+    for alpha in [*algebra.indices(2), (0, 0, 2)]:
+        axes = [axis for axis, count in enumerate(alpha) for _ in range(count)]
+        i, j = axes
+        source = (g.symbol('Mi.zz') if alpha == (0, 0, 2) else
+                  g.symbol(f'Mi[{algebra.index(alpha)}]'))
+        target = (order + 1)**2 if alpha == (0, 0, 2) else algebra.index(alpha)
+        result[target] = g.add(g.mul(ratio[2], source),
+                              g.mul(ratio[1], g.add(g.mul(displacement[i], dipole[j]),
+                                                   g.mul(displacement[j], dipole[i]))),
+                              g.mul(mass, g.mul(displacement[i], displacement[j])))
+
+
+def m2m(order, algebra, quadrupoleTrace=True):
+    candidates = [m2mDirect(order, algebra, quadrupoleTrace),
+                  m2mCompact(order, algebra, quadrupoleTrace)]
     def cost(candidate):
         g, result = candidate
         normalized, signed = algebra.normalizeSigns(g, list(result.values()))
@@ -194,7 +216,7 @@ def m2m(order, algebra):
     return min(candidates, key=cost)
 
 
-def l2l(order, algebra):
+def l2l(order, algebra, quadrupoleTrace=True):
     g = algebra.Dag()
     displacement = [g.symbol(name) for name in ('dx', 'dy', 'dz')]
     ratio = coordinatePowers(g, g.symbol('scaleRatio'), order)
@@ -211,18 +233,29 @@ def l2l(order, algebra):
                     index = tuple(a+b for a, b in zip(alpha, beta))
                     terms.append(g.mul(get(index), basis[beta]))
             result[algebra.index(alpha)] = g.mul(ratio[n], g.add(*terms))
+    if quadrupoleTrace and order >= 2:
+        # Ranks above two are harmonic. The remaining quadratic is
+        # lambda*dz**2/2, with lambda the true rank-two trace.
+        trace = g.add(source[(2, 0, 0)], source[(0, 2, 0)], g.symbol('Li.zz'))
+        traceZ = g.mul(trace, displacement[2])
+        result[0] = g.add(result[0], g.scale(g.mul(traceZ, displacement[2]), Q(1, 2)))
+        zIndex = algebra.index((0, 0, 1))
+        result[zIndex] = g.add(result[zIndex], g.mul(ratio[1], traceZ))
+        result[(order + 1)**2] = g.sub(g.mul(ratio[2], trace),
+                                     g.add(result[algebra.index((2, 0, 0))],
+                                           result[algebra.index((0, 2, 0))]))
     return g, result
 
 
-def emit(operator, order, algebra):
+def emit(operator, order, algebra, quadrupoleTrace=True):
     if operator == 'M2M':
-        g, result = m2m(order, algebra)
+        g, result = m2m(order, algebra, quadrupoleTrace)
         destination = 'Mo'
         source = 'Mi'
         data_type = 'Multipole'
         fmm_order = order + 2
     else:
-        g, result = l2l(order, algebra)
+        g, result = l2l(order, algebra, quadrupoleTrace)
         destination = 'Lo'
         source = 'Li'
         data_type = 'Expansion'
@@ -245,13 +278,14 @@ def emit(operator, order, algebra):
     lines.extend(g.emitConstants(live))
     lines.extend(plan.emit(live))
     for output, index in enumerate(result):
-        lines.extend(plan.accumulate(f'{destination}[{index}]', output))
+        target = f'{destination}.zz' if index == (order + 1)**2 else f'{destination}[{index}]'
+        lines.extend(plan.accumulate(target, output))
     lines.extend(['}', ''])
     statistics.update({'operator': operator, 'order': order})
     return '\n'.join(lines), statistics
 
 
-def generateTranslations(minOrder, maxOrder, algebra):
+def generateTranslations(minOrder, maxOrder, algebra, quadrupoleTrace=True):
     """Return C++ definitions and operation counts for the inclusive range.
 
     The caller emits these definitions inside the Cartesian namespace.
@@ -262,7 +296,7 @@ def generateTranslations(minOrder, maxOrder, algebra):
     definitions = []
     statistics = []
     for operator, order in [('M2M', minOrder), ('L2L', maxOrder)]:
-        code, counts = emit(operator, order, algebra)
+        code, counts = emit(operator, order, algebra, quadrupoleTrace)
         definitions.append(code)
         statistics.append(counts)
     return definitions, statistics

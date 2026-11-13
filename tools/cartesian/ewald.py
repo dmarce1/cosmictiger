@@ -5,7 +5,7 @@ Derived Ewald formulas for the negative unit-box potential, alpha=2:
  C(r) = erf(2r)/r - sum[n!=0] erfc(2|r+n|)/|r+n|
         - sum[h!=0] exp(-pi^2 h^2/4) cos(2pi h.r)/(pi h^2) + pi/4.
 The nearest singular image is excluded. The constant Laplacian is -4pi;
-its quadratic is carried separately from harmonic Cartesian coefficients.
+the independent zz component retains its full quadratic Hessian by default.
 Real images are paired before accumulation. Reciprocal coefficients are
 computed at generation time. All runtime arithmetic uses the supplied Real.
 """
@@ -18,7 +18,7 @@ def half(alpha):
     return product(*(range(n // 2 + 1) for n in alpha))
 
 
-def generate(minDegree, maxDegree, algebra):
+def generate(minDegree, maxDegree, algebra, quadrupoleTrace=True):
     if minDegree != maxDegree:
         raise ValueError('Cartesian Ewald emission requires one build degree')
     p = minDegree
@@ -126,14 +126,34 @@ def generate(minDegree, maxDegree, algebra):
     green += ['}', f'output[0] += broadcast<Real>({pi/4:.18e});']
     for i, a in enumerate(indices):
         green += [f'output[{i}] *= broadcast<Real>(kScaleFactorInverse1' + ' * kScaleFactorInverse1'*sum(a) + ');']
+    if quadrupoleTrace:
+        # Derived from the unit-box Poisson background. Only the Hessian has
+        # a nonzero trace; every further derivative of this constant vanishes.
+        green += [f'output.zz = broadcast<Real>({-4*pi:.18e} * kScaleFactorInverse3) - '
+                  f'output[{algebra.index((2, 0, 0))}] - output[{algebra.index((0, 2, 0))}];']
     green += ['}', '}']
 
     g = algebra.Dag()
     source = {a: g.symbol(f'M[{algebra.index(a)}]') for n in range(p) for a in algebra.indices(n)}
     deriv = {a: g.symbol(f'G[{algebra.index(a)}]') for a in indices}
-    getM, getG = algebra.accessor(g, source), algebra.accessor(g, deriv)
+    localIndices = list(indices)
+    if quadrupoleTrace:
+        if p >= 3:
+            source[(0, 0, 2)] = g.symbol('M.zz')
+        deriv[(0, 0, 2)] = g.symbol('G.zz')
+        localIndices.append((0, 0, 2))
+
+    def accessor(components):
+        def get(a):
+            if a in components:
+                return components[a]
+            x, y, z = a
+            return g.scale(g.add(get((x+2, y, z-2)), get((x, y+2, z-2))), -1)
+        return get
+
+    getM, getG = accessor(source), accessor(deriv)
     result = []
-    for a in indices:
+    for a in localIndices:
         terms = []
         for n in range(min(p-1, p-sum(a))+1):
             for nx in range(n+1):
@@ -144,22 +164,25 @@ def generate(minDegree, maxDegree, algebra):
     g, signed = algebra.normalizeSigns(g, result)
     live = g.live(root for root, sign in signed)
     plan = algebra.EmissionPlan(g, signed)
-    counts = plan.statistics(live, range(len(indices)))
+    counts = plan.statistics(live, range(len(localIndices)))
     m2l = ['#pragma once', '', '#include <cosmictiger/gravity/kernels/cartesian_tracefree_types.hpp>',
            '#include <cosmictiger/math/simd_math.hpp>', '',
            'namespace cosmictiger::gravity::cartesian {',
            f'inline constexpr int kEwaldM2LFlops = {counts["conventional_flops"]};',
-           'template <class Real> CUDA_EXPORT void M2L(',
+           'template <class Real> CUDA_EXPORT void M2Lewald(',
            f'Expansion<Real, {order}>& L, Multipole<Real, {order}> const& M, Green<Real, {order}> const& G) {{']
     m2l += g.emitConstants(live) + plan.emit(live)
-    for i in range(len(indices)):
-        m2l += plan.accumulate(f'L[{i}]', i)
+    for i, a in enumerate(localIndices):
+        target = 'L.zz' if a == (0, 0, 2) else f'L[{algebra.index(a)}]'
+        m2l += plan.accumulate(target, i)
     m2l += ['}', '}']
     # Fixed lattice loops execute the same source arithmetic on every call.
     central = 5+1+1+24*3+2+1+p*5
     real = 6+5+2+1+3+3+p*4-1
     fft = 6+1+2+2*len(indices)
     greenFlops = central + radialCount['conventional_flops'] + len(realImages)*(2*(real+radialCount['conventional_flops'])+len(indices)) + len(waves)*fft + 1 + len(indices)
+    if quadrupoleTrace:
+        greenFlops += 2
     green.insert(-1, f'inline constexpr int kEwaldGreenFlops = {greenFlops};')
     return {'cartesian_tracefree/ewald_common.hpp': '\n'.join(table)+'\n',
             'cartesian_tracefree/ewald_green.hpp': '\n'.join(green)+'\n',

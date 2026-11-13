@@ -352,17 +352,6 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
         }
         flops += 3;
         multipoleFlops += treeComputeMultipole<kFmmOrder>(multi, ml, mr, xl, xr, centerPosition);
-        rc.radialTrace = rcl.radialTrace + rcr.radialTrace;
-        for (int dim = 0; dim < kDimensions; ++dim) {
-            double const leftShift =
-                kScaleFactor * unwrappedDoubleDistance(xl[dim], centerPosition[dim]);
-            double const rightShift =
-                kScaleFactor * unwrappedDoubleDistance(xr[dim], centerPosition[dim]);
-            int const slot = dim == kXi ? 2 : dim == kYi ? 1 : 3;
-            rc.radialTrace += leftShift * (leftShift * ml[0] + 2 * ml[slot]) +
-                rightShift * (rightShift * mr[0] + 2 * mr[slot]);
-        }
-        flops += 1 + 12 * kDimensions;
         children[kLeftChild] = rcl.id;
         children[kRightChild] = rcr.id;
     } else {
@@ -410,20 +399,8 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
         multipoleFlops +=
             treeComputeMultipole<kFmmOrder>(multi, particleRange, centerPosition, sources);
     }
-    if (isleaf) {
-        for (ParticleInteger i = particleRange.first; i < particleRange.second; ++i) {
-            double const mass = fmmSourceMass(sources, i);
-            for (int dim = 0; dim < kDimensions; ++dim) {
-                double const offset = kScaleFactor *
-                    unwrappedDoubleDistance(sources.positions[dim][i], centerPosition[dim]);
-                rc.radialTrace += mass * offset * offset;
-            }
-        }
-        flops += FlopCount(numberOfParticles) * 5 * kDimensions;
-    }
     TreeNode node;
     node.radius = radius;
-    node.radialTrace = rc.radialTrace;
     node.children = children;
     node.localRoot = localRoot;
     node.particleRange = particleRange;

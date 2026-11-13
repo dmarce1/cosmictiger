@@ -35,9 +35,9 @@ inline constexpr int kL2LWarpNoPotentialFlops = 0;
 // lanes hold zero and are excluded by the generated active-lane bounds.
 
 template <>
-inline constexpr int kL2LWarpFlops<6> = 8902;
+inline constexpr int kL2LWarpFlops<6> = 8912;
 template <>
-inline constexpr int kL2LWarpNoPotentialFlops<6> = 6724;
+inline constexpr int kL2LWarpNoPotentialFlops<6> = 6730;
 /// Translate a local expansion collectively across a full warp; synchronize all Li reads.
 #if defined(COSMICTIGER_FMM_COUNTING_ONLY) || defined(COSMICTIGER_FMM_INSTRUMENTATION)
 template <bool kReplicate, class Real, class Target>

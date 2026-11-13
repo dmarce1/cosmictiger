@@ -753,6 +753,8 @@ void evaluateEwaldGreen(Vector3<float> const& distance, Green<float>& output) {
     output[48] *= static_cast<float>(kScaleFactorInverse1 * kScaleFactorInverse1 *
         kScaleFactorInverse1 * kScaleFactorInverse1 * kScaleFactorInverse1 * kScaleFactorInverse1 *
         kScaleFactorInverse1);
+    output.zz = static_cast<float>(-1.256637061435917246e+01 * kScaleFactorInverse3) - output[6] -
+        output[4];
 }
 }    // namespace cosmictiger::gravity::cartesian
 namespace cosmictiger::gravity::cartesian {
@@ -1052,5 +1054,7 @@ void evaluateEwaldGreen(Vector3<double> const& distance, Green<double>& output) 
     output[48] *= static_cast<double>(kScaleFactorInverse1 * kScaleFactorInverse1 *
         kScaleFactorInverse1 * kScaleFactorInverse1 * kScaleFactorInverse1 * kScaleFactorInverse1 *
         kScaleFactorInverse1);
+    output.zz = static_cast<double>(-1.256637061435917246e+01 * kScaleFactorInverse3) - output[6] -
+        output[4];
 }
 }    // namespace cosmictiger::gravity::cartesian

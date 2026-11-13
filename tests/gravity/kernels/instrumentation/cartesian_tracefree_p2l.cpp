@@ -48,11 +48,13 @@ void P2L(Real mass, Vector3<Real> const& distance, Expansion<Real>& L) {
     Real const t15 = iR * t7;
     Real const t16 = t6 * t6;
     Real const t19 = fma((-t16), broadcast<Real>(k01), broadcast<Real>(k00));
+    Real const t20 = t15 * t19;
     Real const t21 = iR * t11;
     Real const t22 = t10 * t15;
     Real const t23 = t6 * t21;
     Real const t25 = t10 * t10;
     Real const t27 = fma((-broadcast<Real>(k01)), t25, broadcast<Real>(k00));
+    Real const t28 = t15 * t27;
     Real const t29 = iR * t8;
     Real const t30 = t6 * t15;
     Real const t31 = t13 * t29;
@@ -143,13 +145,14 @@ void P2L(Real mass, Vector3<Real> const& distance, Expansion<Real>& L) {
     Real const t206 = t117 - t177;
     Real const t208 = broadcast<Real>(k13) - t182;
     Real const t210 = fma((-t16), t208, t122);
+    Real const t214 = t20 + t28;
     L.m -= t4;
     L.y += t8;
     L.x += t11;
     L.z = fma(t7, t13, L.z);
-    L.yy = fma(t15, t19, L.yy);
+    L.yy += t20;
     L.xy = fma((-broadcast<Real>(k01)), t23, L.xy);
-    L.xx = fma(t15, t27, L.xx);
+    L.xx += t28;
     L.yz = fma((-broadcast<Real>(k01)), t31, L.yz);
     L.xz = fma((-broadcast<Real>(k01)), t33, L.xz);
     L.yyy = fma((-t35), t39, L.yyy);
@@ -192,6 +195,7 @@ void P2L(Real mass, Vector3<Real> const& distance, Expansion<Real>& L) {
     L.xxxyyz = fma((-t204), t210, L.xxxyyz);
     L.xxxxyz = fma((-t185), t202, L.xxxxyz);
     L.xxxxxz = fma((-t191), t204, L.xxxxxz);
+    L.zz -= t214;
 }
 }    // namespace cosmictiger::gravity::cartesian
 namespace cosmictiger::gravity::cartesian {
@@ -234,11 +238,13 @@ void P2L(Real mass, Vector3<Real> const& distance, Derivatives<Real>& L) {
     Real const t15 = iR * t7;
     Real const t16 = t6 * t6;
     Real const t19 = fma((-t16), broadcast<Real>(k01), broadcast<Real>(k00));
+    Real const t20 = t15 * t19;
     Real const t21 = iR * t11;
     Real const t22 = t10 * t15;
     Real const t23 = t6 * t21;
     Real const t25 = t10 * t10;
     Real const t27 = fma((-broadcast<Real>(k01)), t25, broadcast<Real>(k00));
+    Real const t28 = t15 * t27;
     Real const t29 = iR * t8;
     Real const t30 = t6 * t15;
     Real const t31 = t13 * t29;
@@ -329,13 +335,14 @@ void P2L(Real mass, Vector3<Real> const& distance, Derivatives<Real>& L) {
     Real const t206 = t117 - t177;
     Real const t208 = broadcast<Real>(k13) - t182;
     Real const t210 = fma((-t16), t208, t122);
+    Real const t214 = t20 + t28;
     L.m -= t4;
     L.y += t8;
     L.x += t11;
     L.z = fma(t7, t13, L.z);
-    L.yy = fma(t15, t19, L.yy);
+    L.yy += t20;
     L.xy = fma((-broadcast<Real>(k01)), t23, L.xy);
-    L.xx = fma(t15, t27, L.xx);
+    L.xx += t28;
     L.yz = fma((-broadcast<Real>(k01)), t31, L.yz);
     L.xz = fma((-broadcast<Real>(k01)), t33, L.xz);
     L.yyy = fma((-t35), t39, L.yyy);
@@ -378,5 +385,6 @@ void P2L(Real mass, Vector3<Real> const& distance, Derivatives<Real>& L) {
     L.xxxyyz = fma((-t204), t210, L.xxxyyz);
     L.xxxxyz = fma((-t185), t202, L.xxxxyz);
     L.xxxxxz = fma((-t191), t204, L.xxxxxz);
+    L.zz -= t214;
 }
 }    // namespace cosmictiger::gravity::cartesian

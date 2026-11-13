@@ -319,6 +319,22 @@ def accessor(g,components):
     return get
 
 
+def sourceComponents(g, variable, rank, quadrupoleTrace=True):
+    """Read the STF projection used by harmonic contractions.
+
+    Degree two stores the full raw tensor when enabled. Its isotropic part
+    contracts to zero with Newtonian derivatives and with every higher-rank
+    derivative of the constant-Laplacian periodic Green function.
+    """
+    result = {a: g.symbol(f'{variable}[{index(a)}]') for a in indices(rank)}
+    if quadrupoleTrace and rank == 2:
+        trace = g.scale(g.add(result[(2, 0, 0)], result[(0, 2, 0)],
+                              g.symbol(f'{variable}.zz')), Q(1, 3))
+        for a in ((2, 0, 0), (0, 2, 0)):
+            result[a] = g.sub(result[a], trace)
+    return result
+
+
 def dualBasis(g,u,degree):
     """Exact harmonic dual basis, factored by coordinate parity.
 
@@ -388,7 +404,7 @@ def horner(g,p,u,used=None):
     return root
 
 
-def buildKernel(E,independentM2lRatios=False):
+def buildKernel(E,independentM2lRatios=False,quadrupoleTrace=True):
     g=Dag(); u=[g.mul(g.symbol(name), g.symbol('iR')) for name in ('dx','dy','dz')]
     invr=g.symbol('iR')
     eta=g.symbol('sourceRatio') if independentM2lRatios else invr
@@ -401,7 +417,7 @@ def buildKernel(E,independentM2lRatios=False):
     contractions={}
     for n in range(E):
         K=E-n; J=min(n,K)
-        M={a:g.symbol(f'M[{index(a)}]') for a in indices(n)}
+        M=sourceComponents(g, 'M', n, quadrupoleTrace)
         get=accessor(g,M)
         C={J:{a:g.mul(weights[n],g.add(*(g.mul(get(plus(a,b)),B[b]) for b in indices(n-J)))) for a in indices(J)}}
         for j in range(J-1,-1,-1):
@@ -436,6 +452,8 @@ def buildKernel(E,independentM2lRatios=False):
                 result[a]=g.mul(coefficient,horner(g,polynomial,[g.mul(x,x) for x in u]))
             else:
                 result[a]=g.mul(localWeights[k],horner(g,polynomial,u))
+    if quadrupoleTrace:
+        result[(0, 0, 2)] = g.scale(g.add(result[(2, 0, 0)], result[(0, 2, 0)]), -1)
     return g,result
 
 
@@ -475,8 +493,8 @@ def normalizeSigns(old,roots):
     return new,result
 
 
-def emitKernel(E,independentM2lRatios=False):
-    g,result=buildKernel(E,independentM2lRatios)
+def emitKernel(E,independentM2lRatios=False,quadrupoleTrace=True):
+    g,result=buildKernel(E,independentM2lRatios,quadrupoleTrace)
     g,signed=normalizeSigns(g,list(result.values()))
     result=dict(zip(result,signed))
     live=g.live(root for root,sign in result.values())
@@ -497,7 +515,8 @@ def emitKernel(E,independentM2lRatios=False):
     out+=g.emitConstants(live)
     out+=plan.emit(live)
     for output,a in enumerate(result):
-        out+=plan.accumulate(f'L[{index(a)}]',output)
+        target = 'L.zz' if a == (0, 0, 2) else f'L[{index(a)}]'
+        out+=plan.accumulate(target,output)
     out.append('}')
     if independentM2lRatios:
         out.extend(['/// Accumulate the multipole contribution using inverse-distance scale ratios.',
@@ -521,6 +540,8 @@ def emitKernel(E,independentM2lRatios=False):
 def replaceCartesianFields(cpp, sourceDegree, localDegree):
     from cartesian.types import component_name
     def field(number, degree):
+        if number == (degree + 1)**2:
+            return 'zz'
         return component_name(next(a for rank in range(degree + 1)
                                    for a in indices(rank) if index(a) == number))
     # Emitted straight-line arithmetic names each coefficient directly.
@@ -534,7 +555,8 @@ def replaceCartesianFields(cpp, sourceDegree, localDegree):
     return cpp
 
 
-def generateCartesianTracefree(minLocalDegree=2, maxLocalDegree=8, independentM2lRatios=False):
+def generateCartesianTracefree(minLocalDegree=2, maxLocalDegree=8, independentM2lRatios=False,
+                              quadrupoleTrace=True):
     """Generate typed free functions in one header per Cartesian operator."""
     from cartesian.particles import generateParticles
     from cartesian.translations import generateTranslations
@@ -550,14 +572,14 @@ def generateCartesianTracefree(minLocalDegree=2, maxLocalDegree=8, independentM2
                  'p2l':'kP2LFlops', 'm2p':'kM2PFlops', 'l2p':'kL2PFlops'}
     for localDegree in range(minLocalDegree, maxLocalDegree + 1):
         sourceDegree = localDegree - 1
-        direct, directStats = emitKernel(localDegree, independentM2lRatios)
+        direct, directStats = emitKernel(localDegree, independentM2lRatios, quadrupoleTrace)
         statistics.append(directStats)
-        translations, translationStats = generateTranslations(sourceDegree, localDegree, sys.modules[__name__])
-        particles, particleStats = generateParticles(sourceDegree, localDegree, sys.modules[__name__])
+        translations, translationStats = generateTranslations(sourceDegree, localDegree, sys.modules[__name__], quadrupoleTrace)
+        particles, particleStats = generateParticles(sourceDegree, localDegree, sys.modules[__name__], quadrupoleTrace)
         particles[1] += particles[1].replace(
             f'Expansion<Real, {localDegree+1}>& L',
             f'Derivatives<Real, {localDegree+1}>& L')
-        warp, warpStats = generateWarpL2l(localDegree, sys.modules[__name__])
+        warp, warpStats = generateWarpL2l(localDegree, sys.modules[__name__], quadrupoleTrace)
         warp = re.sub(r'\bsource\b', 'Li', warp)
         warp = re.sub(r'\btarget\b', 'Lo', warp)
         operatorStats += translationStats + particleStats + [warpStats]
@@ -620,7 +642,7 @@ template <class Real> CUDA_EXPORT Real inverseRadius(Vector3<Real> const& distan
 }
 } // namespace cosmictiger::gravity::cartesian
 '''
-    outputs['cartesian_tracefree_types.hpp'] = generate_types(maxLocalDegree)
+    outputs['cartesian_tracefree_types.hpp'] = generate_types(maxLocalDegree, quadrupoleTrace)
     outputs['cartesian_tracefree_config.hpp'] = f'''// Generated by tools/generate_fmm.py. Do not edit.
 #pragma once
 namespace cosmictiger::gravity::cartesian {{
@@ -629,10 +651,12 @@ inline constexpr int kMaxLocalDegree = {maxLocalDegree};
 inline constexpr int kMinMultipoleDegree = {minLocalDegree - 1};
 inline constexpr int kMaxMultipoleDegree = {maxLocalDegree - 1};
 inline constexpr bool kIndependentM2lRatios = {str(independentM2lRatios).lower()};
+inline constexpr bool kQuadrupoleTrace = {str(quadrupoleTrace).lower()};
 }}
 '''
     report = {'min_local_degree':minLocalDegree, 'max_local_degree':maxLocalDegree,
               'independent_m2l_ratios':independentM2lRatios,
+              'quadrupole_trace':quadrupoleTrace,
               'description':'Static emitted arithmetic counts. Conventional FMA=2; weighted FMA=1. '
                             'Distance geometry is evaluated inside direct kernels and excluded from DAG counts.',
               'kernels':statistics, 'operators':operatorStats}
@@ -640,14 +664,14 @@ inline constexpr bool kIndependentM2lRatios = {str(independentM2lRatios).lower()
     return outputs
 
 
-def generate(minLocalDegree=2, maxLocalDegree=8, independentM2lRatios=False):
+def generate(minLocalDegree=2, maxLocalDegree=8, independentM2lRatios=False, quadrupoleTrace=True):
     """Generate Cartesian trace-free free-space and periodic operators."""
     from cartesian.ewald import generate as generateCartesianEwald
 
-    outputs = generateCartesianTracefree(minLocalDegree, maxLocalDegree, independentM2lRatios)
+    outputs = generateCartesianTracefree(minLocalDegree, maxLocalDegree, independentM2lRatios, quadrupoleTrace)
     report = json.loads(outputs.pop('operation_counts.json'))
     report['representations'] = {}
-    generated, counts = generateCartesianEwald(minLocalDegree, maxLocalDegree, sys.modules[__name__])
+    generated, counts = generateCartesianEwald(minLocalDegree, maxLocalDegree, sys.modules[__name__], quadrupoleTrace)
     outputs.update(generated)
     report['representations']['cartesianEwald'] = counts
     report['representations']['cartesianTracefree'] = {
@@ -689,18 +713,21 @@ SYMBOL_DIRECTORIES = {
 // output: raw derivatives of the regular negative-potential Ewald correction,
 // scaled by kappa^(-rank-1), with the nearest 1/r singularity excluded.
 // q: radial derivatives (1/r d/dr)^n; x: displacement to a real image.
-// The constant Laplacian -4*pi/kappa^3 is carried separately by the caller.
+// With quadrupole trace storage, output.zz completes the Hessian with
+// constant Laplacian -4*pi/kappa^3; every higher rank remains trace-free.
 // Generated by tools/generate_fmm.py. Do not edit.
 """,
     'cartesian_tracefree/ewald_m2l.hpp': """// Symbol directory (Cartesian periodic M2L):
-// M: raw STF source moments in tree coordinates; G: periodic Green derivatives.
+// M: source moments in tree coordinates; degree two is raw when zz is enabled.
+// G: periodic Green derivatives including the constant Hessian trace.
 // L: target local derivatives. Source/local total degree matches free-space M2L.
-// Constant-Laplacian contractions are added separately by the caller.
+// M2Lewald includes the constant-Laplacian contractions in the local tensor.
 // Generated by tools/generate_fmm.py. Do not edit.
 """,
     'cartesian_tracefree_types.hpp': """// Symbol directory (Cartesian trace-free coefficients):
 // m: rank-zero coefficient; x, xy, xyz, etc.: stored tensor components.
-// z-pair components are derived from trace-free symmetry.
+// zz is independently stored when quadrupole trace storage is enabled.
+// Higher-rank z-pair components are derived from trace-free symmetry.
 """,
     'cartesian_tracefree/geometry.hpp': """// Symbol directory (Cartesian distance geometry):
 // dx, dy, dz: target-minus-source displacement; R: its radius; iR: inverse radius.
@@ -712,7 +739,7 @@ SYMBOL_DIRECTORIES = {
     'cartesian_tracefree/m2l.hpp': """// Symbol directory (Cartesian M2L):
 // M: source multipole; L: destination local expansion.
 // dx, dy, dz: target-minus-source center displacement; R: its radius; iR: 1/R.
-// Stored tensor fields are named by Cartesian indices; zz and other z-pairs follow from trace-free symmetry.
+// Stored tensor fields are named by Cartesian indices; higher-rank z-pairs follow from trace-free symmetry.
 """,
     'cartesian_tracefree/m2m.hpp': """// Symbol directory (Cartesian M2M):
 // Mi: input multipole; Mo: output multipole; dx, dy, dz: center displacement.
@@ -786,6 +813,9 @@ def main():
                          'OUTPUT_DIR/instrumentation for a custom --output-dir)')
     ap.add_argument('--independent-m2l-ratios',dest='independentM2lRatios',
                     action='store_true',help='emit independent Cartesian M2L source/target scale ratios')
+    ap.add_argument('--quadrupole-trace',dest='quadrupoleTrace',
+                    action=argparse.BooleanOptionalAction,default=True,
+                    help='store the independent degree-two zz component (default: enabled)')
     ap.add_argument('--no-format',dest='noFormat',action='store_true',
                     help='skip clang-format for temporary output; checked-in C++ uses formatting')
     args=ap.parse_args()
@@ -799,7 +829,7 @@ def main():
     from fmm.constants import hoistConstants
     from fmm.sources import executionSpace, singleOrderApi, splitSources
 
-    outputs=generate(args.degree,args.degree,args.independentM2lRatios)
+    outputs=generate(args.degree,args.degree,args.independentM2lRatios,args.quadrupoleTrace)
     outputs = {name: unnameUnusedGeneratedParameters(code) if name.endswith('.hpp') else code
                for name, code in outputs.items()}
     outputs = splitSources(singleOrderApi(outputs, args.degree), args.degree)

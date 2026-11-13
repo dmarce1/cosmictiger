@@ -767,7 +767,7 @@ ForceStepResult evaluateFmmKick(KickParameters parameters) {
     checklist.push_back(rootId);
     terminal::detailPrint("Do kick\n");
     profile::ScopedPhase phase("kick", parameters.profileCoordinator);
-    KickReturn result = kick(parameters, l, pos, rootId, checklist, checklist, nullptr);
+    KickReturn result = kick(parameters, l, pos, rootId, {}, checklist, nullptr);
     timer.stop();
     kickTime += timer.read();
     terminal::detailPrint("kick done\n");
@@ -1162,7 +1162,7 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
         }
         if (selfGravity) {
             profile::ScopedPhase phase("kick");
-            thisKr = kick(kparams, l, pos, rootId, checklist, checklist, nullptr);
+            thisKr = kick(kparams, l, pos, rootId, {}, checklist, nullptr);
             treeDestroy();
             particlesCacheFree();
         }

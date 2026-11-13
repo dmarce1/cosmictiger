@@ -77,6 +77,9 @@ double component(Canonical<order> const& source, int x, int y, int z) {
     if (z <= 1) {
         return source[canonicalIndex(x, y, z)];
     }
+    if (cosmictiger::gravity::cartesian::kQuadrupoleTrace && x + y + z == 2) {
+        return source[FmmOrder<order>::kLocalHarmonicCoefficients_];
+    }
     return -component<order>(source, x + 2, y, z - 2) - component<order>(source, x, y + 2, z - 2);
 }
 
@@ -91,6 +94,10 @@ Canonical<order> canonical(LocalExpansion<order> const& source) {
                 result[canonicalIndex(x, y, z)] = source(x, y, z);
             }
         }
+    }
+    if (cosmictiger::gravity::cartesian::kQuadrupoleTrace) {
+        result[FmmOrder<order>::kLocalHarmonicCoefficients_] =
+            source[FmmOrder<order>::kLocalHarmonicCoefficients_];
     }
     return result;
 }
@@ -107,6 +114,10 @@ LocalExpansion<order> stored(Canonical<order> const& source) {
             }
         }
     }
+    if (cosmictiger::gravity::cartesian::kQuadrupoleTrace) {
+        result[FmmOrder<order>::kLocalHarmonicCoefficients_] =
+            float(source[FmmOrder<order>::kLocalHarmonicCoefficients_]);
+    }
     return result;
 }
 
@@ -120,6 +131,8 @@ Fixture<order> fixture(int sample) {
         for (int i = 0; i < kCoefficients; ++i) {
             source[i] = float(.025 * std::sin(.31 * (i + 1) * (sample + 2)));
         }
+    } else if (kind == 2 && cosmictiger::gravity::cartesian::kQuadrupoleTrace) {
+        source[FmmOrder<order>::kLocalHarmonicCoefficients_] = .73;
     }
     source[0] = .75;
     source[canonicalIndex(1, 0, 0)] = .12;
@@ -163,6 +176,18 @@ Canonical<order> translateReference(
                 result[canonicalIndex(x, y, z)] = value;
             }
         }
+    }
+    if (cosmictiger::gravity::cartesian::kQuadrupoleTrace) {
+        double value = 0;
+        for (int bx = 0; bx <= kDegree - 2; ++bx) {
+            for (int by = 0; by <= kDegree - 2 - bx; ++by) {
+                for (int bz = 0; bz <= kDegree - 2 - bx - by; ++bz) {
+                    value += component<order>(source, bx, by, 2 + bz) * powers[0][bx] *
+                        powers[1][by] * powers[2][bz];
+                }
+            }
+        }
+        result[FmmOrder<order>::kLocalHarmonicCoefficients_] = value;
     }
     if (!doPhi) {
         result[0] = source[0];

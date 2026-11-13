@@ -194,7 +194,9 @@ struct KickWorkitem {
     ExpansionBuffer l;
     Vector3<Position> pos;
     TreeId self;
+    // Newtonian-only sources whose periodic correction is already in the local.
     Vector<TreeId> dchecklist;
+    // Sources with both Newtonian and periodic interactions still pending.
     Vector<TreeId> echecklist;
 };
 

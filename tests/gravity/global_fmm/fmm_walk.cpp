@@ -19,7 +19,21 @@
 namespace detail {
 constexpr int kForceParticles = 96;
 
-Vector3<Position> forcePosition(int index) {
+Vector3<Position> forcePosition(int index, bool imageBoundary) {
+    if (imageBoundary) {
+        if (index == 0) {
+            return {.235, .5, .5};
+        }
+        // From the isolated target at x=.235, the two source sheets select
+        // opposite images: x=.72 lies within half a box, x=.74 beyond it.
+        // Their shared cell center lies near x=.73, so accepting the smooth
+        // correction there while independently wrapping Newtonian pairs gives
+        // a large error. The isolated target keeps that error visible despite
+        // the much stronger internal forces within each source sheet.
+        int const source = index - 1;
+        int const point = source / 2;
+        return {.72 + .02 * (source % 2), .5 + .003 * (point % 7 - 3), .5 + .003 * (point / 7 - 3)};
+    }
     // Deterministic, uneven points include both sides of each periodic seam.
     Vector3<Position> result;
     for (int dim = 0; dim < kDimensions; ++dim) {
@@ -30,12 +44,12 @@ Vector3<Position> forcePosition(int index) {
 }
 }    // namespace detail
 
-void initializeGlobalForceTest() {
+void initializeGlobalForceTest(bool imageBoundary) {
     int const begin = detail::kForceParticles * hpxRank() / hpxSize();
     int const end = detail::kForceParticles * (hpxRank() + 1) / hpxSize();
     particlesResize(end - begin);
     for (int i = begin; i < end; ++i) {
-        auto const position = detail::forcePosition(i);
+        auto const position = detail::forcePosition(i, imageBoundary);
         for (int dim = 0; dim < kDimensions; ++dim) {
             particlesPos(dim, i - begin) = position[dim];
             particlesVel(dim, i - begin) = 0.0f;
@@ -45,12 +59,12 @@ void initializeGlobalForceTest() {
 }
 HPX_PLAIN_ACTION(initializeGlobalForceTest, InitializeGlobalForceTestAction);
 
-Array<double, 3> verifyGlobalForceTest() {
+Array<double, 3> verifyGlobalForceTest(bool imageBoundary) {
     Array<double, 3> sums{};
     for (ParticleInteger i = 0; i < particlesOwnedSize(); ++i) {
         Vector3<double> reference{};
         for (int source = 0; source < detail::kForceParticles; ++source) {
-            auto const position = detail::forcePosition(source);
+            auto const position = detail::forcePosition(source, imageBoundary);
             Vector3<double> displacement;
             for (int dim = 0; dim < kDimensions; ++dim) {
                 displacement[dim] = doubleDistance(particlesPos(dim, i), position[dim]);
@@ -86,59 +100,66 @@ void fmmWalkTest() {
     options.initial.numberOfParticles = detail::kForceParticles;
     options.gravity.smoothingLength = .005;
     setOptions(options);
-    Vector<hpx::future<void>> initialization;
-    for (auto const& locality : hpxLocalities()) {
-        initialization.push_back(hpx::async<InitializeGlobalForceTestAction>(locality));
-    }
-    for (auto& future : initialization) {
-        future.get();
-    }
-    particlesSortByRung(0);
-    domainsRebound();
-    domainsBegin(0);
-    domainsEnd();
     bool passed = true;
-    double previousRms = std::numeric_limits<double>::infinity();
-    for (float const theta : {.5f, .25f}) {
-        auto const built = treeCreate(TreeCreateParameters(0, theta));
-        KickParameters parameters;
-        parameters.htime = true;
-        parameters.theta = theta;
-        parameters.minRung = 0;
-        parameters.t0 = 1.0f;
-        parameters.gm = 1.0f;
-        parameters.eta = options.gravity.timestepEta;
-        parameters.gravitySmoothingLength = options.gravity.smoothingLength;
-        parameters.saveForce = true;
-        parameters.firstCall = true;
-        parameters.gpu = options.gravity.cuda;
-        parameters.nodeLoad = 1.0f;
-        parameters.ascending = parameters.descending = false;
-        parameters.top = true;
-        parameters.doPhi = true;
-        ExpansionBuffer local;
-        local.zero();
-        Vector3<Position> center{};
-        Vector<TreeId> checks{built.id};
-        kick(parameters, local, center, built.id, checks, checks, nullptr);
-        Array<double, 3> sums{};
+    for (bool imageBoundary : {false, true}) {
+        Vector<hpx::future<void>> initialization;
         for (auto const& locality : hpxLocalities()) {
-            auto const part = hpx::async<VerifyGlobalForceTestAction>(locality).get();
-            sums[0] += part[0];
-            sums[1] += part[1];
-            sums[2] = std::max(sums[2], part[2]);
+            initialization.push_back(
+                hpx::async<InitializeGlobalForceTestAction>(locality, imageBoundary));
         }
-        double const rms = std::sqrt(sums[0] / sums[1]);
-        std::cout << std::format("Global FMM theta={} relative RMS={} max={} ({} localities)\n",
-                         theta, rms, sums[2], hpxSize())
-                  << std::flush;
-        // The first omitted multipole scales with theta to the potential degree.
-        // Keep a float-roundoff floor and require the tighter walk to converge.
-        double const bound = std::max(1.0e-5, std::pow(double(theta), kFmmOrder - 1));
-        passed = passed && rms < bound && sums[2] < 10 * bound && rms < .5 * previousRms + 1.0e-5;
-        previousRms = rms;
-        treeDestroy(true);
-        particlesCacheFree();
+        for (auto& future : initialization) {
+            future.get();
+        }
+        particlesSortByRung(0);
+        domainsRebound();
+        domainsBegin(0);
+        domainsEnd();
+        double previousRms = std::numeric_limits<double>::infinity();
+        for (float const theta : {.5f, .25f}) {
+            auto const built = treeCreate(TreeCreateParameters(0, theta));
+            KickParameters parameters;
+            parameters.htime = true;
+            parameters.theta = theta;
+            parameters.minRung = 0;
+            parameters.t0 = 1.0f;
+            parameters.gm = 1.0f;
+            parameters.eta = options.gravity.timestepEta;
+            parameters.gravitySmoothingLength = options.gravity.smoothingLength;
+            parameters.saveForce = true;
+            parameters.firstCall = true;
+            parameters.gpu = options.gravity.cuda;
+            parameters.nodeLoad = 1.0f;
+            parameters.ascending = parameters.descending = false;
+            parameters.top = true;
+            parameters.doPhi = true;
+            ExpansionBuffer local;
+            local.zero();
+            Vector3<Position> center{};
+            Vector<TreeId> checks{built.id};
+            kick(parameters, local, center, built.id, {}, checks, nullptr);
+            Array<double, 3> sums{};
+            for (auto const& locality : hpxLocalities()) {
+                auto const part =
+                    hpx::async<VerifyGlobalForceTestAction>(locality, imageBoundary).get();
+                sums[0] += part[0];
+                sums[1] += part[1];
+                sums[2] = std::max(sums[2], part[2]);
+            }
+            double const rms = std::sqrt(sums[0] / sums[1]);
+            std::cout << std::format(
+                             "Global FMM {} theta={} relative RMS={} max={} ({} localities)\n",
+                             imageBoundary ? "image boundary" : "uneven points", theta, rms,
+                             sums[2], hpxSize())
+                      << std::flush;
+            // The first omitted multipole scales with theta to the potential degree.
+            // Keep a float-roundoff floor and require the tighter walk to converge.
+            double const bound = std::max(1.0e-5, std::pow(double(theta), kFmmOrder - 1));
+            passed =
+                passed && rms < bound && sums[2] < 10 * bound && rms < .5 * previousRms + 1.0e-5;
+            previousRms = rms;
+            treeDestroy(true);
+            particlesCacheFree();
+        }
     }
     if (!passed) {
         throw std::runtime_error("Global FMM disagrees with independent periodic direct force");

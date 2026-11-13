@@ -105,5 +105,5 @@ __device__
 #endif
 
 template <>
-inline constexpr int kL2LFlops<6> = 1242;
+inline constexpr int kL2LFlops<6> = 1252;
 }    // namespace cosmictiger::gravity::cartesian

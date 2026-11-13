@@ -3,9 +3,11 @@
 #include <concepts>
 #include <cstdlib>
 #include <initializer_list>
+#include <utility>
 
 #include <gtest/gtest.h>
 
+#include <cosmictiger/gravity/kernels/cartesian_tracefree/ewald_m2l.hpp>
 #include <cosmictiger/gravity/kernels/cartesian_tracefree_operators.hpp>
 #include <cosmictiger/math/vector3.hpp>
 
@@ -19,6 +21,7 @@ namespace {
 
 using CartesianMultipole = cosmictiger::gravity::cartesian::Multipole<double>;
 using CartesianExpansion = cosmictiger::gravity::cartesian::Expansion<double>;
+using CartesianGreen = cosmictiger::gravity::cartesian::Green<double>;
 using Field = cosmictiger::gravity::Field<double>;
 // Production overloads accept only the compiled scalar types and put the
 // accumulator last. An unconstrained declaration would incorrectly accept long double.
@@ -31,6 +34,42 @@ static_assert(HasCompiledM2P<float>);
 static_assert(HasCompiledM2P<double>);
 static_assert(HasCompiledM2P<SimdVector<float, 8>>);
 static_assert(!HasCompiledM2P<long double>);
+
+template <class Real>
+concept HasCompiledM2Lewald =
+    requires(cosmictiger::gravity::cartesian::Multipole<Real> const& source,
+        cosmictiger::gravity::cartesian::Green<Real> const& green,
+        cosmictiger::gravity::cartesian::Expansion<Real>& local) {
+        { cosmictiger::gravity::cartesian::M2Lewald(source, green, local) } -> std::same_as<void>;
+    };
+static_assert(HasCompiledM2Lewald<float>);
+static_assert(HasCompiledM2Lewald<double>);
+static_assert(HasCompiledM2Lewald<SimdVector<float, 8>>);
+static_assert(!HasCompiledM2Lewald<long double>);
+
+template <class Coefficient>
+concept HasQuadraticZz = requires(Coefficient value) { value.zz; };
+
+template <class Coefficient>
+void checkQuadraticStorage() {
+    constexpr bool kStored =
+        cosmictiger::gravity::cartesian::kQuadrupoleTrace && Coefficient::kDegree_ >= 2;
+    constexpr int kHarmonicCount = (Coefficient::kDegree_ + 1) * (Coefficient::kDegree_ + 1);
+    static_assert(HasQuadraticZz<Coefficient> == kStored);
+    Coefficient value{};
+    EXPECT_EQ(value.size(), kHarmonicCount + int(kStored));
+    if constexpr (kStored) {
+        value.xx = 2.0;
+        value.yy = 3.0;
+        value.zz = 7.0;
+        EXPECT_DOUBLE_EQ(value[kHarmonicCount], 7.0);
+        EXPECT_DOUBLE_EQ(std::as_const(value)(0, 0, 2), 7.0);
+        value(0, 0, 2) = 11.0;
+        EXPECT_DOUBLE_EQ(value.zz, 11.0);
+        EXPECT_DOUBLE_EQ(value.xx, 2.0);
+        EXPECT_DOUBLE_EQ(value.yy, 3.0);
+    }
+}
 
 template <class Multipole, class Expansion>
 void checkPointFields() {
@@ -72,6 +111,12 @@ void checkPointFields() {
 
 TEST(FmmApi, CartesianPointFields) {
     checkPointFields<CartesianMultipole, CartesianExpansion>();
+}
+
+TEST(FmmApi, CartesianQuadraticStorage) {
+    checkQuadraticStorage<CartesianMultipole>();
+    checkQuadraticStorage<CartesianExpansion>();
+    checkQuadraticStorage<CartesianGreen>();
 }
 
 }    // namespace

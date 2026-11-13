@@ -48,12 +48,14 @@ void P2L(SimdVector<float, 8> mass, Vector3<SimdVector<float, 8>> const& distanc
     SimdVector<float, 8> const t16 = t6 * t6;
     SimdVector<float, 8> const t19 =
         fma((-t16), broadcast<SimdVector<float, 8>>(k01), broadcast<SimdVector<float, 8>>(k00));
+    SimdVector<float, 8> const t20 = t15 * t19;
     SimdVector<float, 8> const t21 = iR * t11;
     SimdVector<float, 8> const t22 = t10 * t15;
     SimdVector<float, 8> const t23 = t6 * t21;
     SimdVector<float, 8> const t25 = t10 * t10;
     SimdVector<float, 8> const t27 =
         fma((-broadcast<SimdVector<float, 8>>(k01)), t25, broadcast<SimdVector<float, 8>>(k00));
+    SimdVector<float, 8> const t28 = t15 * t27;
     SimdVector<float, 8> const t29 = iR * t8;
     SimdVector<float, 8> const t30 = t6 * t15;
     SimdVector<float, 8> const t31 = t13 * t29;
@@ -145,13 +147,14 @@ void P2L(SimdVector<float, 8> mass, Vector3<SimdVector<float, 8>> const& distanc
     SimdVector<float, 8> const t206 = t117 - t177;
     SimdVector<float, 8> const t208 = broadcast<SimdVector<float, 8>>(k13) - t182;
     SimdVector<float, 8> const t210 = fma((-t16), t208, t122);
+    SimdVector<float, 8> const t214 = t20 + t28;
     L.m -= t4;
     L.y += t8;
     L.x += t11;
     L.z = fma(t7, t13, L.z);
-    L.yy = fma(t15, t19, L.yy);
+    L.yy += t20;
     L.xy = fma((-broadcast<SimdVector<float, 8>>(k01)), t23, L.xy);
-    L.xx = fma(t15, t27, L.xx);
+    L.xx += t28;
     L.yz = fma((-broadcast<SimdVector<float, 8>>(k01)), t31, L.yz);
     L.xz = fma((-broadcast<SimdVector<float, 8>>(k01)), t33, L.xz);
     L.yyy = fma((-t35), t39, L.yyy);
@@ -194,6 +197,7 @@ void P2L(SimdVector<float, 8> mass, Vector3<SimdVector<float, 8>> const& distanc
     L.xxxyyz = fma((-t204), t210, L.xxxyyz);
     L.xxxxyz = fma((-t185), t202, L.xxxxyz);
     L.xxxxxz = fma((-t191), t204, L.xxxxxz);
+    L.zz -= t214;
 }
 }    // namespace cosmictiger::gravity::cartesian
 namespace cosmictiger::gravity::cartesian {
@@ -236,12 +240,14 @@ void P2L(SimdVector<double, 2> mass, Vector3<SimdVector<double, 2>> const& dista
     SimdVector<double, 2> const t16 = t6 * t6;
     SimdVector<double, 2> const t19 =
         fma((-t16), broadcast<SimdVector<double, 2>>(k01), broadcast<SimdVector<double, 2>>(k00));
+    SimdVector<double, 2> const t20 = t15 * t19;
     SimdVector<double, 2> const t21 = iR * t11;
     SimdVector<double, 2> const t22 = t10 * t15;
     SimdVector<double, 2> const t23 = t6 * t21;
     SimdVector<double, 2> const t25 = t10 * t10;
     SimdVector<double, 2> const t27 =
         fma((-broadcast<SimdVector<double, 2>>(k01)), t25, broadcast<SimdVector<double, 2>>(k00));
+    SimdVector<double, 2> const t28 = t15 * t27;
     SimdVector<double, 2> const t29 = iR * t8;
     SimdVector<double, 2> const t30 = t6 * t15;
     SimdVector<double, 2> const t31 = t13 * t29;
@@ -333,13 +339,14 @@ void P2L(SimdVector<double, 2> mass, Vector3<SimdVector<double, 2>> const& dista
     SimdVector<double, 2> const t206 = t117 - t177;
     SimdVector<double, 2> const t208 = broadcast<SimdVector<double, 2>>(k13) - t182;
     SimdVector<double, 2> const t210 = fma((-t16), t208, t122);
+    SimdVector<double, 2> const t214 = t20 + t28;
     L.m -= t4;
     L.y += t8;
     L.x += t11;
     L.z = fma(t7, t13, L.z);
-    L.yy = fma(t15, t19, L.yy);
+    L.yy += t20;
     L.xy = fma((-broadcast<SimdVector<double, 2>>(k01)), t23, L.xy);
-    L.xx = fma(t15, t27, L.xx);
+    L.xx += t28;
     L.yz = fma((-broadcast<SimdVector<double, 2>>(k01)), t31, L.yz);
     L.xz = fma((-broadcast<SimdVector<double, 2>>(k01)), t33, L.xz);
     L.yyy = fma((-t35), t39, L.yyy);
@@ -382,6 +389,7 @@ void P2L(SimdVector<double, 2> mass, Vector3<SimdVector<double, 2>> const& dista
     L.xxxyyz = fma((-t204), t210, L.xxxyyz);
     L.xxxxyz = fma((-t185), t202, L.xxxxyz);
     L.xxxxxz = fma((-t191), t204, L.xxxxxz);
+    L.zz -= t214;
 }
 }    // namespace cosmictiger::gravity::cartesian
 namespace cosmictiger::gravity::cartesian {
@@ -424,12 +432,14 @@ void P2L(SimdVector<float, 4> mass, Vector3<SimdVector<float, 4>> const& distanc
     SimdVector<float, 4> const t16 = t6 * t6;
     SimdVector<float, 4> const t19 =
         fma((-t16), broadcast<SimdVector<float, 4>>(k01), broadcast<SimdVector<float, 4>>(k00));
+    SimdVector<float, 4> const t20 = t15 * t19;
     SimdVector<float, 4> const t21 = iR * t11;
     SimdVector<float, 4> const t22 = t10 * t15;
     SimdVector<float, 4> const t23 = t6 * t21;
     SimdVector<float, 4> const t25 = t10 * t10;
     SimdVector<float, 4> const t27 =
         fma((-broadcast<SimdVector<float, 4>>(k01)), t25, broadcast<SimdVector<float, 4>>(k00));
+    SimdVector<float, 4> const t28 = t15 * t27;
     SimdVector<float, 4> const t29 = iR * t8;
     SimdVector<float, 4> const t30 = t6 * t15;
     SimdVector<float, 4> const t31 = t13 * t29;
@@ -521,13 +531,14 @@ void P2L(SimdVector<float, 4> mass, Vector3<SimdVector<float, 4>> const& distanc
     SimdVector<float, 4> const t206 = t117 - t177;
     SimdVector<float, 4> const t208 = broadcast<SimdVector<float, 4>>(k13) - t182;
     SimdVector<float, 4> const t210 = fma((-t16), t208, t122);
+    SimdVector<float, 4> const t214 = t20 + t28;
     L.m -= t4;
     L.y += t8;
     L.x += t11;
     L.z = fma(t7, t13, L.z);
-    L.yy = fma(t15, t19, L.yy);
+    L.yy += t20;
     L.xy = fma((-broadcast<SimdVector<float, 4>>(k01)), t23, L.xy);
-    L.xx = fma(t15, t27, L.xx);
+    L.xx += t28;
     L.yz = fma((-broadcast<SimdVector<float, 4>>(k01)), t31, L.yz);
     L.xz = fma((-broadcast<SimdVector<float, 4>>(k01)), t33, L.xz);
     L.yyy = fma((-t35), t39, L.yyy);
@@ -570,6 +581,7 @@ void P2L(SimdVector<float, 4> mass, Vector3<SimdVector<float, 4>> const& distanc
     L.xxxyyz = fma((-t204), t210, L.xxxyyz);
     L.xxxxyz = fma((-t185), t202, L.xxxxyz);
     L.xxxxxz = fma((-t191), t204, L.xxxxxz);
+    L.zz -= t214;
 }
 }    // namespace cosmictiger::gravity::cartesian
 namespace cosmictiger::gravity::cartesian {
@@ -612,12 +624,14 @@ void P2L(SimdVector<double, 4> mass, Vector3<SimdVector<double, 4>> const& dista
     SimdVector<double, 4> const t16 = t6 * t6;
     SimdVector<double, 4> const t19 =
         fma((-t16), broadcast<SimdVector<double, 4>>(k01), broadcast<SimdVector<double, 4>>(k00));
+    SimdVector<double, 4> const t20 = t15 * t19;
     SimdVector<double, 4> const t21 = iR * t11;
     SimdVector<double, 4> const t22 = t10 * t15;
     SimdVector<double, 4> const t23 = t6 * t21;
     SimdVector<double, 4> const t25 = t10 * t10;
     SimdVector<double, 4> const t27 =
         fma((-broadcast<SimdVector<double, 4>>(k01)), t25, broadcast<SimdVector<double, 4>>(k00));
+    SimdVector<double, 4> const t28 = t15 * t27;
     SimdVector<double, 4> const t29 = iR * t8;
     SimdVector<double, 4> const t30 = t6 * t15;
     SimdVector<double, 4> const t31 = t13 * t29;
@@ -709,13 +723,14 @@ void P2L(SimdVector<double, 4> mass, Vector3<SimdVector<double, 4>> const& dista
     SimdVector<double, 4> const t206 = t117 - t177;
     SimdVector<double, 4> const t208 = broadcast<SimdVector<double, 4>>(k13) - t182;
     SimdVector<double, 4> const t210 = fma((-t16), t208, t122);
+    SimdVector<double, 4> const t214 = t20 + t28;
     L.m -= t4;
     L.y += t8;
     L.x += t11;
     L.z = fma(t7, t13, L.z);
-    L.yy = fma(t15, t19, L.yy);
+    L.yy += t20;
     L.xy = fma((-broadcast<SimdVector<double, 4>>(k01)), t23, L.xy);
-    L.xx = fma(t15, t27, L.xx);
+    L.xx += t28;
     L.yz = fma((-broadcast<SimdVector<double, 4>>(k01)), t31, L.yz);
     L.xz = fma((-broadcast<SimdVector<double, 4>>(k01)), t33, L.xz);
     L.yyy = fma((-t35), t39, L.yyy);
@@ -758,6 +773,7 @@ void P2L(SimdVector<double, 4> mass, Vector3<SimdVector<double, 4>> const& dista
     L.xxxyyz = fma((-t204), t210, L.xxxyyz);
     L.xxxxyz = fma((-t185), t202, L.xxxxyz);
     L.xxxxxz = fma((-t191), t204, L.xxxxxz);
+    L.zz -= t214;
 }
 }    // namespace cosmictiger::gravity::cartesian
 namespace cosmictiger::gravity::cartesian {
@@ -800,12 +816,14 @@ void P2L(SimdVector<double, 8> mass, Vector3<SimdVector<double, 8>> const& dista
     SimdVector<double, 8> const t16 = t6 * t6;
     SimdVector<double, 8> const t19 =
         fma((-t16), broadcast<SimdVector<double, 8>>(k01), broadcast<SimdVector<double, 8>>(k00));
+    SimdVector<double, 8> const t20 = t15 * t19;
     SimdVector<double, 8> const t21 = iR * t11;
     SimdVector<double, 8> const t22 = t10 * t15;
     SimdVector<double, 8> const t23 = t6 * t21;
     SimdVector<double, 8> const t25 = t10 * t10;
     SimdVector<double, 8> const t27 =
         fma((-broadcast<SimdVector<double, 8>>(k01)), t25, broadcast<SimdVector<double, 8>>(k00));
+    SimdVector<double, 8> const t28 = t15 * t27;
     SimdVector<double, 8> const t29 = iR * t8;
     SimdVector<double, 8> const t30 = t6 * t15;
     SimdVector<double, 8> const t31 = t13 * t29;
@@ -897,13 +915,14 @@ void P2L(SimdVector<double, 8> mass, Vector3<SimdVector<double, 8>> const& dista
     SimdVector<double, 8> const t206 = t117 - t177;
     SimdVector<double, 8> const t208 = broadcast<SimdVector<double, 8>>(k13) - t182;
     SimdVector<double, 8> const t210 = fma((-t16), t208, t122);
+    SimdVector<double, 8> const t214 = t20 + t28;
     L.m -= t4;
     L.y += t8;
     L.x += t11;
     L.z = fma(t7, t13, L.z);
-    L.yy = fma(t15, t19, L.yy);
+    L.yy += t20;
     L.xy = fma((-broadcast<SimdVector<double, 8>>(k01)), t23, L.xy);
-    L.xx = fma(t15, t27, L.xx);
+    L.xx += t28;
     L.yz = fma((-broadcast<SimdVector<double, 8>>(k01)), t31, L.yz);
     L.xz = fma((-broadcast<SimdVector<double, 8>>(k01)), t33, L.xz);
     L.yyy = fma((-t35), t39, L.yyy);
@@ -946,6 +965,7 @@ void P2L(SimdVector<double, 8> mass, Vector3<SimdVector<double, 8>> const& dista
     L.xxxyyz = fma((-t204), t210, L.xxxyyz);
     L.xxxxyz = fma((-t185), t202, L.xxxxyz);
     L.xxxxxz = fma((-t191), t204, L.xxxxxz);
+    L.zz -= t214;
 }
 }    // namespace cosmictiger::gravity::cartesian
 namespace cosmictiger::gravity::cartesian {
@@ -988,12 +1008,14 @@ void P2L(SimdVector<float, 8> mass, Vector3<SimdVector<float, 8>> const& distanc
     SimdVector<float, 8> const t16 = t6 * t6;
     SimdVector<float, 8> const t19 =
         fma((-t16), broadcast<SimdVector<float, 8>>(k01), broadcast<SimdVector<float, 8>>(k00));
+    SimdVector<float, 8> const t20 = t15 * t19;
     SimdVector<float, 8> const t21 = iR * t11;
     SimdVector<float, 8> const t22 = t10 * t15;
     SimdVector<float, 8> const t23 = t6 * t21;
     SimdVector<float, 8> const t25 = t10 * t10;
     SimdVector<float, 8> const t27 =
         fma((-broadcast<SimdVector<float, 8>>(k01)), t25, broadcast<SimdVector<float, 8>>(k00));
+    SimdVector<float, 8> const t28 = t15 * t27;
     SimdVector<float, 8> const t29 = iR * t8;
     SimdVector<float, 8> const t30 = t6 * t15;
     SimdVector<float, 8> const t31 = t13 * t29;
@@ -1085,13 +1107,14 @@ void P2L(SimdVector<float, 8> mass, Vector3<SimdVector<float, 8>> const& distanc
     SimdVector<float, 8> const t206 = t117 - t177;
     SimdVector<float, 8> const t208 = broadcast<SimdVector<float, 8>>(k13) - t182;
     SimdVector<float, 8> const t210 = fma((-t16), t208, t122);
+    SimdVector<float, 8> const t214 = t20 + t28;
     L.m -= t4;
     L.y += t8;
     L.x += t11;
     L.z = fma(t7, t13, L.z);
-    L.yy = fma(t15, t19, L.yy);
+    L.yy += t20;
     L.xy = fma((-broadcast<SimdVector<float, 8>>(k01)), t23, L.xy);
-    L.xx = fma(t15, t27, L.xx);
+    L.xx += t28;
     L.yz = fma((-broadcast<SimdVector<float, 8>>(k01)), t31, L.yz);
     L.xz = fma((-broadcast<SimdVector<float, 8>>(k01)), t33, L.xz);
     L.yyy = fma((-t35), t39, L.yyy);
@@ -1134,6 +1157,7 @@ void P2L(SimdVector<float, 8> mass, Vector3<SimdVector<float, 8>> const& distanc
     L.xxxyyz = fma((-t204), t210, L.xxxyyz);
     L.xxxxyz = fma((-t185), t202, L.xxxxyz);
     L.xxxxxz = fma((-t191), t204, L.xxxxxz);
+    L.zz -= t214;
 }
 }    // namespace cosmictiger::gravity::cartesian
 namespace cosmictiger::gravity::cartesian {
@@ -1176,12 +1200,14 @@ void P2L(SimdVector<double, 2> mass, Vector3<SimdVector<double, 2>> const& dista
     SimdVector<double, 2> const t16 = t6 * t6;
     SimdVector<double, 2> const t19 =
         fma((-t16), broadcast<SimdVector<double, 2>>(k01), broadcast<SimdVector<double, 2>>(k00));
+    SimdVector<double, 2> const t20 = t15 * t19;
     SimdVector<double, 2> const t21 = iR * t11;
     SimdVector<double, 2> const t22 = t10 * t15;
     SimdVector<double, 2> const t23 = t6 * t21;
     SimdVector<double, 2> const t25 = t10 * t10;
     SimdVector<double, 2> const t27 =
         fma((-broadcast<SimdVector<double, 2>>(k01)), t25, broadcast<SimdVector<double, 2>>(k00));
+    SimdVector<double, 2> const t28 = t15 * t27;
     SimdVector<double, 2> const t29 = iR * t8;
     SimdVector<double, 2> const t30 = t6 * t15;
     SimdVector<double, 2> const t31 = t13 * t29;
@@ -1273,13 +1299,14 @@ void P2L(SimdVector<double, 2> mass, Vector3<SimdVector<double, 2>> const& dista
     SimdVector<double, 2> const t206 = t117 - t177;
     SimdVector<double, 2> const t208 = broadcast<SimdVector<double, 2>>(k13) - t182;
     SimdVector<double, 2> const t210 = fma((-t16), t208, t122);
+    SimdVector<double, 2> const t214 = t20 + t28;
     L.m -= t4;
     L.y += t8;
     L.x += t11;
     L.z = fma(t7, t13, L.z);
-    L.yy = fma(t15, t19, L.yy);
+    L.yy += t20;
     L.xy = fma((-broadcast<SimdVector<double, 2>>(k01)), t23, L.xy);
-    L.xx = fma(t15, t27, L.xx);
+    L.xx += t28;
     L.yz = fma((-broadcast<SimdVector<double, 2>>(k01)), t31, L.yz);
     L.xz = fma((-broadcast<SimdVector<double, 2>>(k01)), t33, L.xz);
     L.yyy = fma((-t35), t39, L.yyy);
@@ -1322,6 +1349,7 @@ void P2L(SimdVector<double, 2> mass, Vector3<SimdVector<double, 2>> const& dista
     L.xxxyyz = fma((-t204), t210, L.xxxyyz);
     L.xxxxyz = fma((-t185), t202, L.xxxxyz);
     L.xxxxxz = fma((-t191), t204, L.xxxxxz);
+    L.zz -= t214;
 }
 }    // namespace cosmictiger::gravity::cartesian
 namespace cosmictiger::gravity::cartesian {
@@ -1364,12 +1392,14 @@ void P2L(SimdVector<float, 4> mass, Vector3<SimdVector<float, 4>> const& distanc
     SimdVector<float, 4> const t16 = t6 * t6;
     SimdVector<float, 4> const t19 =
         fma((-t16), broadcast<SimdVector<float, 4>>(k01), broadcast<SimdVector<float, 4>>(k00));
+    SimdVector<float, 4> const t20 = t15 * t19;
     SimdVector<float, 4> const t21 = iR * t11;
     SimdVector<float, 4> const t22 = t10 * t15;
     SimdVector<float, 4> const t23 = t6 * t21;
     SimdVector<float, 4> const t25 = t10 * t10;
     SimdVector<float, 4> const t27 =
         fma((-broadcast<SimdVector<float, 4>>(k01)), t25, broadcast<SimdVector<float, 4>>(k00));
+    SimdVector<float, 4> const t28 = t15 * t27;
     SimdVector<float, 4> const t29 = iR * t8;
     SimdVector<float, 4> const t30 = t6 * t15;
     SimdVector<float, 4> const t31 = t13 * t29;
@@ -1461,13 +1491,14 @@ void P2L(SimdVector<float, 4> mass, Vector3<SimdVector<float, 4>> const& distanc
     SimdVector<float, 4> const t206 = t117 - t177;
     SimdVector<float, 4> const t208 = broadcast<SimdVector<float, 4>>(k13) - t182;
     SimdVector<float, 4> const t210 = fma((-t16), t208, t122);
+    SimdVector<float, 4> const t214 = t20 + t28;
     L.m -= t4;
     L.y += t8;
     L.x += t11;
     L.z = fma(t7, t13, L.z);
-    L.yy = fma(t15, t19, L.yy);
+    L.yy += t20;
     L.xy = fma((-broadcast<SimdVector<float, 4>>(k01)), t23, L.xy);
-    L.xx = fma(t15, t27, L.xx);
+    L.xx += t28;
     L.yz = fma((-broadcast<SimdVector<float, 4>>(k01)), t31, L.yz);
     L.xz = fma((-broadcast<SimdVector<float, 4>>(k01)), t33, L.xz);
     L.yyy = fma((-t35), t39, L.yyy);
@@ -1510,6 +1541,7 @@ void P2L(SimdVector<float, 4> mass, Vector3<SimdVector<float, 4>> const& distanc
     L.xxxyyz = fma((-t204), t210, L.xxxyyz);
     L.xxxxyz = fma((-t185), t202, L.xxxxyz);
     L.xxxxxz = fma((-t191), t204, L.xxxxxz);
+    L.zz -= t214;
 }
 }    // namespace cosmictiger::gravity::cartesian
 namespace cosmictiger::gravity::cartesian {
@@ -1552,12 +1584,14 @@ void P2L(SimdVector<double, 4> mass, Vector3<SimdVector<double, 4>> const& dista
     SimdVector<double, 4> const t16 = t6 * t6;
     SimdVector<double, 4> const t19 =
         fma((-t16), broadcast<SimdVector<double, 4>>(k01), broadcast<SimdVector<double, 4>>(k00));
+    SimdVector<double, 4> const t20 = t15 * t19;
     SimdVector<double, 4> const t21 = iR * t11;
     SimdVector<double, 4> const t22 = t10 * t15;
     SimdVector<double, 4> const t23 = t6 * t21;
     SimdVector<double, 4> const t25 = t10 * t10;
     SimdVector<double, 4> const t27 =
         fma((-broadcast<SimdVector<double, 4>>(k01)), t25, broadcast<SimdVector<double, 4>>(k00));
+    SimdVector<double, 4> const t28 = t15 * t27;
     SimdVector<double, 4> const t29 = iR * t8;
     SimdVector<double, 4> const t30 = t6 * t15;
     SimdVector<double, 4> const t31 = t13 * t29;
@@ -1649,13 +1683,14 @@ void P2L(SimdVector<double, 4> mass, Vector3<SimdVector<double, 4>> const& dista
     SimdVector<double, 4> const t206 = t117 - t177;
     SimdVector<double, 4> const t208 = broadcast<SimdVector<double, 4>>(k13) - t182;
     SimdVector<double, 4> const t210 = fma((-t16), t208, t122);
+    SimdVector<double, 4> const t214 = t20 + t28;
     L.m -= t4;
     L.y += t8;
     L.x += t11;
     L.z = fma(t7, t13, L.z);
-    L.yy = fma(t15, t19, L.yy);
+    L.yy += t20;
     L.xy = fma((-broadcast<SimdVector<double, 4>>(k01)), t23, L.xy);
-    L.xx = fma(t15, t27, L.xx);
+    L.xx += t28;
     L.yz = fma((-broadcast<SimdVector<double, 4>>(k01)), t31, L.yz);
     L.xz = fma((-broadcast<SimdVector<double, 4>>(k01)), t33, L.xz);
     L.yyy = fma((-t35), t39, L.yyy);
@@ -1698,6 +1733,7 @@ void P2L(SimdVector<double, 4> mass, Vector3<SimdVector<double, 4>> const& dista
     L.xxxyyz = fma((-t204), t210, L.xxxyyz);
     L.xxxxyz = fma((-t185), t202, L.xxxxyz);
     L.xxxxxz = fma((-t191), t204, L.xxxxxz);
+    L.zz -= t214;
 }
 }    // namespace cosmictiger::gravity::cartesian
 namespace cosmictiger::gravity::cartesian {
@@ -1740,12 +1776,14 @@ void P2L(SimdVector<double, 8> mass, Vector3<SimdVector<double, 8>> const& dista
     SimdVector<double, 8> const t16 = t6 * t6;
     SimdVector<double, 8> const t19 =
         fma((-t16), broadcast<SimdVector<double, 8>>(k01), broadcast<SimdVector<double, 8>>(k00));
+    SimdVector<double, 8> const t20 = t15 * t19;
     SimdVector<double, 8> const t21 = iR * t11;
     SimdVector<double, 8> const t22 = t10 * t15;
     SimdVector<double, 8> const t23 = t6 * t21;
     SimdVector<double, 8> const t25 = t10 * t10;
     SimdVector<double, 8> const t27 =
         fma((-broadcast<SimdVector<double, 8>>(k01)), t25, broadcast<SimdVector<double, 8>>(k00));
+    SimdVector<double, 8> const t28 = t15 * t27;
     SimdVector<double, 8> const t29 = iR * t8;
     SimdVector<double, 8> const t30 = t6 * t15;
     SimdVector<double, 8> const t31 = t13 * t29;
@@ -1837,13 +1875,14 @@ void P2L(SimdVector<double, 8> mass, Vector3<SimdVector<double, 8>> const& dista
     SimdVector<double, 8> const t206 = t117 - t177;
     SimdVector<double, 8> const t208 = broadcast<SimdVector<double, 8>>(k13) - t182;
     SimdVector<double, 8> const t210 = fma((-t16), t208, t122);
+    SimdVector<double, 8> const t214 = t20 + t28;
     L.m -= t4;
     L.y += t8;
     L.x += t11;
     L.z = fma(t7, t13, L.z);
-    L.yy = fma(t15, t19, L.yy);
+    L.yy += t20;
     L.xy = fma((-broadcast<SimdVector<double, 8>>(k01)), t23, L.xy);
-    L.xx = fma(t15, t27, L.xx);
+    L.xx += t28;
     L.yz = fma((-broadcast<SimdVector<double, 8>>(k01)), t31, L.yz);
     L.xz = fma((-broadcast<SimdVector<double, 8>>(k01)), t33, L.xz);
     L.yyy = fma((-t35), t39, L.yyy);
@@ -1886,5 +1925,6 @@ void P2L(SimdVector<double, 8> mass, Vector3<SimdVector<double, 8>> const& dista
     L.xxxyyz = fma((-t204), t210, L.xxxyyz);
     L.xxxxyz = fma((-t185), t202, L.xxxxyz);
     L.xxxxxz = fma((-t191), t204, L.xxxxxz);
+    L.zz -= t214;
 }
 }    // namespace cosmictiger::gravity::cartesian

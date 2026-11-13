@@ -32,14 +32,15 @@ kIndexBits = 8
 kKindBits = 2
 
 
-def generateWarpL2l(order, algebra):
+def generateWarpL2l(order, algebra, quadrupoleTrace=True):
     if order < kMinDegree or order > kMaxDegree:
         raise ValueError(f'The CUDA warp L2L schedule supports local degrees {kMinDegree} '
                          f'through {kMaxDegree}; degree {order} was requested')
-    coefficientCount = (order + 1)**2
+    harmonicCoefficientCount = (order + 1)**2
+    coefficientCount = harmonicCoefficientCount + int(quadrupoleTrace)
     indexLimit = 1 << kIndexBits
     assert coefficientCount <= indexLimit, 'Coefficient indices must fit the packed entry'
-    basisWords = (coefficientCount + kLanes - 1) // kLanes
+    basisWords = (harmonicCoefficientCount + kLanes - 1) // kLanes
     outputs = []
     for rank in range(order):
         for alpha in algebra.indices(rank):
@@ -147,6 +148,13 @@ def generateWarpL2l(order, algebra):
     # Existing contraction FMAs remain explicit and get both cost conventions.
     fullWeightedFlops = fullFlops - len(schedule) * 32
     baseWeightedFlops = baseFlops - len(schedule) * 32
+    if quadrupoleTrace:
+        # A single leader computes each trace correction, regardless of the
+        # replicated/register or shared/output destination variant.
+        fullFlops += 10
+        baseFlops += 6
+        fullWeightedFlops += 8
+        baseWeightedFlops += 5
     code += [f'template <> inline constexpr int kL2LWarpFlops<{order}> = {fullFlops};',
              f'template <> inline constexpr int kL2LWarpNoPotentialFlops<{order}> = {baseFlops};',
              '/// Translate a local expansion collectively across a full warp; synchronize all source reads.',
@@ -158,6 +166,17 @@ def generateWarpL2l(order, algebra):
              f'        // {basisWords} register(s) per lane hold the complete distributed Taylor basis:',
              '        // basis index i lives in word i >> 5 on lane i & 31. Shuffles avoid a',
              '        // large register-selection tree for dynamic indexing.']
+    if quadrupoleTrace:
+        xxIndex = algebra.index((2, 0, 0))
+        yyIndex = algebra.index((0, 2, 0))
+        zIndex = algebra.index((0, 0, 1))
+        code += ['        Real trace = math::broadcast<Real>(0);',
+                 '        if (lane == 0) {',
+                 f'            trace = source[{xxIndex}] + source[{yyIndex}] + source[{harmonicCoefficientCount}];',
+                 '        }',
+                 '        trace = __shfl_sync(kMask, trace, 0);',
+                 f'        Real translatedXx = source[{xxIndex}];',
+                 f'        Real translatedYy = source[{yyIndex}];']
     code += [f'        Real basis{word} = math::broadcast<Real>(0);' for word in range(basisWords)]
     code += g.emitConstants(fullLive, '        ')
     code += g.emit(baseLive, indent='        ')
@@ -219,7 +238,22 @@ def generateWarpL2l(order, algebra):
                      f'            partial += (lane & (groupWidth - 1)) + {shift} < groupWidth ? shuffled{shift} : math::broadcast<Real>(0);']
         code += [f'            bool const leader = (lane & (groupWidth - 1)) == 0 && lane < {activeLanes};',
                  '            if (leader) {',
-                 '                partial += source[targetIndex];', '            }']
+                 '                partial += source[targetIndex];']
+        if quadrupoleTrace:
+            if any(target == 0 for _, (target, _, _, _) in groups):
+                code += ['                if (targetIndex == 0 && doPhi) {',
+                         '                    partial = math::fma(math::broadcast<Real>(0.5) * dz * dz, trace, partial);',
+                         '                }']
+            if any(target == zIndex for _, (target, _, _, _) in groups):
+                code += [f'                if (targetIndex == {zIndex}) {{',
+                         '                    partial = math::fma(trace, dz, partial);',
+                         '                }']
+        code.append('            }')
+        if quadrupoleTrace:
+            for firstLane, (target, _, _, _) in groups:
+                if target in (xxIndex, yyIndex):
+                    name = 'translatedXx' if target == xxIndex else 'translatedYy'
+                    code.append(f'            {name} = __shfl_sync(kMask, partial, {firstLane});')
         code.append('            if constexpr (kReplicate) {')
         for firstLane, (target, alpha, width, terms) in groups:
             code.append(f'                target[{target}] = __shfl_sync(kMask, partial, {firstLane});')
@@ -230,7 +264,7 @@ def generateWarpL2l(order, algebra):
                  '            }',
                  '        }']
     topIndices = [algebra.index(alpha) for alpha in algebra.indices(order)]
-    assert topIndices == list(range(order**2, coefficientCount)), 'Top-rank coefficients must be contiguous'
+    assert topIndices == list(range(order**2, harmonicCoefficientCount)), 'Top-rank coefficients must be contiguous'
     code.append('        if constexpr (kReplicate) {')
     for index in topIndices:
         code.append(f'            target[{index}] = source[{index}];')
@@ -239,15 +273,27 @@ def generateWarpL2l(order, algebra):
              '            }',
              '        } else {',
              '            // Top-rank coefficients copy through unchanged.',
-             f'            for (int index = {order**2} + lane; index < {coefficientCount}; index += 32) {{',
+             f'            for (int index = {order**2} + lane; index < {harmonicCoefficientCount}; index += 32) {{',
              '                target[index] = source[index];',
              '            }',
              '            // Lane zero led the potential group, so this restore is same-thread.',
              '            if (!doPhi && lane == 0) {',
              '                target[0] = source[0];',
              '            }',
-             '        }',
-             '        // The caller may overwrite shared source storage from lane zero on',
+             '        }']
+    if quadrupoleTrace:
+        code += ['        Real translatedZz = math::broadcast<Real>(0);',
+                 '        if (lane == 0) {',
+                 '            translatedZz = trace - translatedXx - translatedYy;',
+                 '        }',
+                 '        if constexpr (kReplicate) {',
+                 f'            target[{harmonicCoefficientCount}] = __shfl_sync(kMask, translatedZz, 0);',
+                 '        } else {',
+                 '            if (lane == 0) {',
+                 f'                target[{harmonicCoefficientCount}] = translatedZz;',
+                 '            }',
+                 '        }']
+    code += ['        // The caller may overwrite shared source storage from lane zero on',
              '        // return. Finish EVERY lane source read (and every target write)',
              '        // before permitting that write.',
              '        __syncwarp(kMask);', '    }',
@@ -263,11 +309,12 @@ def generateWarpL2l(order, algebra):
              f'    Expansion<Real, {order+1}> const& source, Vector3<Real> const& distance, bool doPhi) {{',
              '    executeL2LWarp<false>(target, source, distance[0], distance[1], distance[2], doPhi);',
              '}', '#endif', '']
+    traceShuffles = (2 + 2 * int(order > 2)) if quadrupoleTrace else 0
     statistics = {'operator': 'CUDA_L2L_WARP', 'order': order, 'coefficients': coefficientCount,
                   'schedule_rows': len(schedule), 'phases': len(phases),
                   'basis_words_per_lane': basisWords,
-                  'shuffle_instructions_per_lane': reductions + len(outputs) + basisWords * len(schedule),
-                  'shuffle_instructions_per_lane_into': reductions + basisWords * len(schedule),
+                  'shuffle_instructions_per_lane': reductions + len(outputs) + basisWords * len(schedule) + traceShuffles,
+                  'shuffle_instructions_per_lane_into': reductions + basisWords * len(schedule) + traceShuffles - int(quadrupoleTrace),
                   'whole_warp_flops_with_potential': fullFlops,
                   'whole_warp_flops_without_potential': baseFlops,
                   'whole_warp_weighted_flops_with_potential': fullWeightedFlops,

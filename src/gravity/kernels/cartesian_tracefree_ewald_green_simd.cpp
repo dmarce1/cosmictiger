@@ -1495,6 +1495,8 @@ void evaluateEwaldGreen(
     output[48] *= broadcast<SimdVector<float, 8>>(kScaleFactorInverse1 * kScaleFactorInverse1 *
         kScaleFactorInverse1 * kScaleFactorInverse1 * kScaleFactorInverse1 * kScaleFactorInverse1 *
         kScaleFactorInverse1);
+    output.zz = broadcast<SimdVector<float, 8>>(-1.256637061435917246e+01 * kScaleFactorInverse3) -
+        output[6] - output[4];
 }
 }    // namespace cosmictiger::gravity::cartesian
 namespace cosmictiger::gravity::cartesian {
@@ -1859,6 +1861,8 @@ void evaluateEwaldGreen(
     output[48] *= broadcast<SimdVector<double, 2>>(kScaleFactorInverse1 * kScaleFactorInverse1 *
         kScaleFactorInverse1 * kScaleFactorInverse1 * kScaleFactorInverse1 * kScaleFactorInverse1 *
         kScaleFactorInverse1);
+    output.zz = broadcast<SimdVector<double, 2>>(-1.256637061435917246e+01 * kScaleFactorInverse3) -
+        output[6] - output[4];
 }
 }    // namespace cosmictiger::gravity::cartesian
 namespace cosmictiger::gravity::cartesian {
@@ -2223,6 +2227,8 @@ void evaluateEwaldGreen(
     output[48] *= broadcast<SimdVector<float, 4>>(kScaleFactorInverse1 * kScaleFactorInverse1 *
         kScaleFactorInverse1 * kScaleFactorInverse1 * kScaleFactorInverse1 * kScaleFactorInverse1 *
         kScaleFactorInverse1);
+    output.zz = broadcast<SimdVector<float, 4>>(-1.256637061435917246e+01 * kScaleFactorInverse3) -
+        output[6] - output[4];
 }
 }    // namespace cosmictiger::gravity::cartesian
 namespace cosmictiger::gravity::cartesian {
@@ -2587,6 +2593,8 @@ void evaluateEwaldGreen(
     output[48] *= broadcast<SimdVector<double, 4>>(kScaleFactorInverse1 * kScaleFactorInverse1 *
         kScaleFactorInverse1 * kScaleFactorInverse1 * kScaleFactorInverse1 * kScaleFactorInverse1 *
         kScaleFactorInverse1);
+    output.zz = broadcast<SimdVector<double, 4>>(-1.256637061435917246e+01 * kScaleFactorInverse3) -
+        output[6] - output[4];
 }
 }    // namespace cosmictiger::gravity::cartesian
 namespace cosmictiger::gravity::cartesian {
@@ -2951,5 +2959,7 @@ void evaluateEwaldGreen(
     output[48] *= broadcast<SimdVector<double, 8>>(kScaleFactorInverse1 * kScaleFactorInverse1 *
         kScaleFactorInverse1 * kScaleFactorInverse1 * kScaleFactorInverse1 * kScaleFactorInverse1 *
         kScaleFactorInverse1);
+    output.zz = broadcast<SimdVector<double, 8>>(-1.256637061435917246e+01 * kScaleFactorInverse3) -
+        output[6] - output[4];
 }
 }    // namespace cosmictiger::gravity::cartesian

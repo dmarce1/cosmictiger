@@ -9,13 +9,18 @@ namespace detail {
 template <int order>
 __device__ FlopCount cudaPeriodicFmm(CudaKickData const& data, TreeNode const& sink,
     CudaKickControl<order>& control, float theta, float smoothingLength, bool doPotential,
-    cosmictiger::gravity::cartesian::Expansion<float>& expansion, float& curvature) {
+    cosmictiger::gravity::cartesian::Expansion<float>& expansion) {
     int const tid = threadIdx.x;
+    // echecks retain both parts of the periodic force. A separately accepted
+    // correction transfers its source to dchecks for the Newtonian walk;
+    // a joint acceptance consumes both parts with the same image selection.
     auto& checks = control.echecks;
     auto& accepted = control.cclist;
+    auto& coupled = control.pclist;
     auto& deferred = control.leaflist;
     auto& next = control.nextlist;
     accepted.resize(0);
+    coupled.resize(0);
     deferred.resize(0);
     next.resize(0);
     float const inverseTheta = fmmInverseOpeningAngle(theta);
@@ -23,7 +28,7 @@ __device__ FlopCount cudaPeriodicFmm(CudaKickData const& data, TreeNode const& s
     do {
         int const count = roundUp(checks.size(), kWarpSize);
         for (int i = tid; i < count; i += kWarpSize) {
-            Array<bool, 3> selected{};
+            Array<bool, 4> selected{};
             if (i < checks.size()) {
                 auto const& source = data.treeNodes[checks[i]];
                 if (source.numberOfParticles()) {
@@ -32,21 +37,33 @@ __device__ FlopCount cudaPeriodicFmm(CudaKickData const& data, TreeNode const& s
                         displacement[dim] = distance(sink.pos[dim], source.pos[dim]);
                     }
                     FlopCount acceptanceFlops;
-                    selected[0] = periodicFmmAccepted(displacement, sink.radius, source.radius,
-                        inverseTheta, smoothingLength, &acceptanceFlops);
-                    selected[1] =
-                        !selected[0] && !source.leaf && (sink.leaf || source.radius >= sink.radius);
-                    selected[2] = !selected[0] && !selected[1];
+                    bool const separated = periodicFmmAccepted(displacement, sink.radius,
+                        source.radius, inverseTheta, smoothingLength, &acceptanceFlops);
                     flops += 3 + acceptanceFlops;
+                    if (separated) {
+                        selected[0] =
+                            fmmSinglePeriodicImage(displacement, sink.radius, source.radius);
+                        flops += 7;
+                        if (!selected[0]) {
+                            selected[1] = periodicFmmDirectAccepted(displacement, sink.radius,
+                                source.radius, inverseTheta, smoothingLength, &acceptanceFlops);
+                            flops += acceptanceFlops;
+                        }
+                    }
+                    bool const unresolved = !selected[0] && !selected[1];
+                    selected[2] =
+                        unresolved && !source.leaf && (sink.leaf || source.radius >= sink.radius);
+                    selected[3] = unresolved && !selected[2];
+                    ALWAYS_ASSERT(!unresolved || !sink.leaf || !source.leaf);
                 }
             }
-            Array<int, 3> offsets, totals;
-            for (int list = 0; list < 3; ++list) {
+            Array<int, 4> offsets, totals;
+            for (int list = 0; list < 4; ++list) {
                 offsets[list] = selected[list];
             }
             computeIndicesArray(offsets, totals);
-            DeviceVector<int>* lists[3] = {&accepted, &next, &deferred};
-            for (int list = 0; list < 3; ++list) {
+            DeviceVector<int>* lists[4] = {&accepted, &coupled, &next, &deferred};
+            for (int list = 0; list < 4; ++list) {
                 int const start = lists[list]->size();
                 __syncwarp();
                 lists[list]->resize(start + totals[list]);
@@ -65,75 +82,40 @@ __device__ FlopCount cudaPeriodicFmm(CudaKickData const& data, TreeNode const& s
         __syncwarp();
         next.resize(0);
     } while (checks.size());
-    if (accepted.size()) {
+    if (accepted.size() || coupled.size()) {
         cosmictiger::gravity::cartesian::Expansion<float> local{};
-        float localCurvature = 0;
-        for (int i = tid; i < accepted.size(); i += kWarpSize) {
-            auto const& source = data.treeNodes[accepted[i]];
+        int const count = accepted.size() + coupled.size();
+        for (int i = tid; i < count; i += kWarpSize) {
+            bool const includeNewtonian = i >= accepted.size();
+            int const sourceIndex = includeNewtonian ? coupled[i - accepted.size()] : accepted[i];
+            auto const& source = data.treeNodes[sourceIndex];
             Vector3<float> displacement;
             for (int dim = 0; dim < kDimensions; ++dim) {
                 displacement[dim] = distance(sink.pos[dim], source.pos[dim]);
             }
             flops += 3 +
-                periodicFmmM2L(fmmMultiPos(source.mpos).multi, source.radialTrace, displacement,
-                    doPotential, local, localCurvature);
+                periodicFmmM2L(fmmMultiPos(source.mpos).multi, displacement, doPotential, local,
+                    includeNewtonian);
         }
         sharedReduceAddArray(local);
-        sharedReduceAdd(localCurvature);
-        curvature += localCurvature;
         for (int i = tid; i < local.size(); i += kWarpSize) {
             expansion[i] += local[i];
             ++flops;
         }
-        flops += 5 * local.size() + 6;
+        flops += 5 * local.size();
     }
+    if (accepted.size()) {
+        auto& directChecks = control.dchecks;
+        int const directStart = directChecks.size();
+        directChecks.resize(directStart + accepted.size());
+        for (int i = tid; i < accepted.size(); i += kWarpSize) {
+            directChecks[directStart + i] = accepted[i];
+        }
+    }
+    ALWAYS_ASSERT(!sink.leaf || deferred.size() == 0);
     checks.resize(deferred.size());
     for (int i = tid; i < deferred.size(); i += kWarpSize) {
         checks[i] = deferred[i];
-    }
-    __syncwarp();
-    return flops;
-}
-
-template <int order>
-__device__ FlopCount cudaPeriodicPoints(CudaKickData const& data, TreeNode const& sink,
-    CudaKickControl<order>& control, CudaKickForceTile const& force, int sinkBegin, int sinkCount,
-    bool doPotential) {
-    FlopCount flops = 0;
-    for (int i = threadIdx.x; i < sinkCount; i += kWarpSize) {
-        ParticleInteger const target = sink.particleRange.first + sinkBegin + i;
-        float potential = 0, gx = 0, gy = 0, gz = 0;
-        for (int check = 0; check < control.echecks.size(); ++check) {
-            auto const& source = data.treeNodes[control.echecks[check]];
-            auto const* x = data.x;
-            auto const* y = data.y;
-            auto const* z = data.z;
-            auto const* masses = data.sourceMasses;
-            auto const* types = data.type;
-            for (ParticleInteger j = source.particleRange.first; j < source.particleRange.second;
-                ++j) {
-                Vector3<float> displacement;
-                displacement[0] = distance(data.x[target], x[j]);
-                displacement[1] = distance(data.y[target], y[j]);
-                displacement[2] = distance(data.z[target], z[j]);
-                float const mass = masses != nullptr ?
-                    masses[j] :
-                    (!data.sph ?
-                            1.0f :
-                            (types[j] == kDarkMatterType ? data.darkMatterMass : data.sphMass));
-                flops +=
-                    3 + periodicFmmPoint(displacement, mass, doPotential, potential, gx, gy, gz);
-            }
-        }
-        if (control.echecks.size()) {
-            force.gx[i] += gx;
-            force.gy[i] += gy;
-            force.gz[i] += gz;
-            if (doPotential) {
-                force.phi[i] += potential;
-            }
-            flops += 3 + int(doPotential);
-        }
     }
     __syncwarp();
     return flops;

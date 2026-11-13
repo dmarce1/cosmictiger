@@ -104,6 +104,12 @@ hpx::future<KickReturn> kickFork(KickParameters params, ExpansionBuffer const& l
             break;
         }
     }
+    for (auto const& i : echecklist) {
+        if (i.proc != hpxRank()) {
+            allLocal = false;
+            break;
+        }
+    }
     if (self.proc != hpxRank()) {
         threadme = true;
         remote = true;

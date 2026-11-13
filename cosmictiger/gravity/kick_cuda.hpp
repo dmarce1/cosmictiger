@@ -30,7 +30,6 @@
 template <int order>
 struct CudaExpansionType {
     Vector3<Position> pos;
-    float curvature;
     cosmictiger::gravity::cartesian::Expansion<float> expansion;
 };
 
@@ -177,7 +176,6 @@ struct CudaKickControl {
 template <int order>
 struct CudaKickParameters {
     ParticleInteger outputOffset;
-    float curvature;
     int* echecks;
     int ecount;
     Vector3<Position> lpos;

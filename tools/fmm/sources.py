@@ -29,7 +29,7 @@ def functions(cpp):
 
 # These operators accumulate into their final argument. Geometry and scheduling
 # helpers retain their own signatures; they do not implement an X-to-Y operator.
-OPERATORS = ('P2M', 'P2L', 'M2M', 'M2L', 'M2P', 'L2L', 'L2P',
+OPERATORS = ('P2M', 'P2L', 'M2M', 'M2L', 'M2Lewald', 'M2P', 'L2L', 'L2P',
              'L2LWarp', 'L2LWarpInto', 'evaluateEwaldGreen')
 
 

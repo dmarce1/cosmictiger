@@ -119,6 +119,13 @@ __device__ void executeL2LWarp(Expansion<float>& Lo, Expansion<float> const& Li,
     // 2 register(s) per lane hold the complete distributed Taylor basis:
     // basis index i lives in word i >> 5 on lane i & 31. Shuffles avoid a
     // large register-selection tree for dynamic indexing.
+    float trace = k00;
+    if (lane == 0) {
+        trace = Li[6] + Li[4] + Li[49];
+    }
+    trace = __shfl_sync(kMask, trace, 0);
+    float translatedXx = Li[6];
+    float translatedYy = Li[4];
     float basis0 = k00;
     float basis1 = k00;
     float const t5 = dx * dx;
@@ -463,6 +470,12 @@ __device__ void executeL2LWarp(Expansion<float>& Lo, Expansion<float> const& Li,
         bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
         if (leader) {
             partial += Li[targetIndex];
+            if (targetIndex == 0 && doPhi) {
+                partial = fma(k12 * dz * dz, trace, partial);
+            }
+            if (targetIndex == 3) {
+                partial = fma(trace, dz, partial);
+            }
         }
         if constexpr (kReplicate) {
             Lo[0] = __shfl_sync(kMask, partial, 0);
@@ -503,6 +516,8 @@ __device__ void executeL2LWarp(Expansion<float>& Lo, Expansion<float> const& Li,
         if (leader) {
             partial += Li[targetIndex];
         }
+        translatedYy = __shfl_sync(kMask, partial, 0);
+        translatedXx = __shfl_sync(kMask, partial, 8);
         if constexpr (kReplicate) {
             Lo[4] = __shfl_sync(kMask, partial, 0);
             Lo[5] = __shfl_sync(kMask, partial, 4);
@@ -600,6 +615,17 @@ __device__ void executeL2LWarp(Expansion<float>& Lo, Expansion<float> const& Li,
         // Lane zero led the potential group, so this restore is same-thread.
         if (!doPhi && lane == 0) {
             Lo[0] = Li[0];
+        }
+    }
+    float translatedZz = k00;
+    if (lane == 0) {
+        translatedZz = trace - translatedXx - translatedYy;
+    }
+    if constexpr (kReplicate) {
+        Lo[49] = __shfl_sync(kMask, translatedZz, 0);
+    } else {
+        if (lane == 0) {
+            Lo[49] = translatedZz;
         }
     }
     // The caller may overwrite shared Li storage from lane zero on
@@ -634,6 +660,13 @@ __device__ void executeL2LWarp(float*& Lo, Expansion<float> const& Li, float con
     // 2 register(s) per lane hold the complete distributed Taylor basis:
     // basis index i lives in word i >> 5 on lane i & 31. Shuffles avoid a
     // large register-selection tree for dynamic indexing.
+    float trace = k00;
+    if (lane == 0) {
+        trace = Li[6] + Li[4] + Li[49];
+    }
+    trace = __shfl_sync(kMask, trace, 0);
+    float translatedXx = Li[6];
+    float translatedYy = Li[4];
     float basis0 = k00;
     float basis1 = k00;
     float const t5 = dx * dx;
@@ -978,6 +1011,12 @@ __device__ void executeL2LWarp(float*& Lo, Expansion<float> const& Li, float con
         bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
         if (leader) {
             partial += Li[targetIndex];
+            if (targetIndex == 0 && doPhi) {
+                partial = fma(k12 * dz * dz, trace, partial);
+            }
+            if (targetIndex == 3) {
+                partial = fma(trace, dz, partial);
+            }
         }
         if constexpr (kReplicate) {
             Lo[0] = __shfl_sync(kMask, partial, 0);
@@ -1018,6 +1057,8 @@ __device__ void executeL2LWarp(float*& Lo, Expansion<float> const& Li, float con
         if (leader) {
             partial += Li[targetIndex];
         }
+        translatedYy = __shfl_sync(kMask, partial, 0);
+        translatedXx = __shfl_sync(kMask, partial, 8);
         if constexpr (kReplicate) {
             Lo[4] = __shfl_sync(kMask, partial, 0);
             Lo[5] = __shfl_sync(kMask, partial, 4);
@@ -1117,6 +1158,17 @@ __device__ void executeL2LWarp(float*& Lo, Expansion<float> const& Li, float con
             Lo[0] = Li[0];
         }
     }
+    float translatedZz = k00;
+    if (lane == 0) {
+        translatedZz = trace - translatedXx - translatedYy;
+    }
+    if constexpr (kReplicate) {
+        Lo[49] = __shfl_sync(kMask, translatedZz, 0);
+    } else {
+        if (lane == 0) {
+            Lo[49] = translatedZz;
+        }
+    }
     // The caller may overwrite shared Li storage from lane zero on
     // return. Finish EVERY lane Li read (and every Lo write)
     // before permitting that write.
@@ -1149,6 +1201,13 @@ __device__ void executeL2LWarp(Expansion<double>& Lo, Expansion<double> const& L
     // 2 register(s) per lane hold the complete distributed Taylor basis:
     // basis index i lives in word i >> 5 on lane i & 31. Shuffles avoid a
     // large register-selection tree for dynamic indexing.
+    double trace = k00;
+    if (lane == 0) {
+        trace = Li[6] + Li[4] + Li[49];
+    }
+    trace = __shfl_sync(kMask, trace, 0);
+    double translatedXx = Li[6];
+    double translatedYy = Li[4];
     double basis0 = k00;
     double basis1 = k00;
     double const t5 = dx * dx;
@@ -1493,6 +1552,12 @@ __device__ void executeL2LWarp(Expansion<double>& Lo, Expansion<double> const& L
         bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
         if (leader) {
             partial += Li[targetIndex];
+            if (targetIndex == 0 && doPhi) {
+                partial = fma(k12 * dz * dz, trace, partial);
+            }
+            if (targetIndex == 3) {
+                partial = fma(trace, dz, partial);
+            }
         }
         if constexpr (kReplicate) {
             Lo[0] = __shfl_sync(kMask, partial, 0);
@@ -1533,6 +1598,8 @@ __device__ void executeL2LWarp(Expansion<double>& Lo, Expansion<double> const& L
         if (leader) {
             partial += Li[targetIndex];
         }
+        translatedYy = __shfl_sync(kMask, partial, 0);
+        translatedXx = __shfl_sync(kMask, partial, 8);
         if constexpr (kReplicate) {
             Lo[4] = __shfl_sync(kMask, partial, 0);
             Lo[5] = __shfl_sync(kMask, partial, 4);
@@ -1630,6 +1697,17 @@ __device__ void executeL2LWarp(Expansion<double>& Lo, Expansion<double> const& L
         // Lane zero led the potential group, so this restore is same-thread.
         if (!doPhi && lane == 0) {
             Lo[0] = Li[0];
+        }
+    }
+    double translatedZz = k00;
+    if (lane == 0) {
+        translatedZz = trace - translatedXx - translatedYy;
+    }
+    if constexpr (kReplicate) {
+        Lo[49] = __shfl_sync(kMask, translatedZz, 0);
+    } else {
+        if (lane == 0) {
+            Lo[49] = translatedZz;
         }
     }
     // The caller may overwrite shared Li storage from lane zero on
@@ -1664,6 +1742,13 @@ __device__ void executeL2LWarp(double*& Lo, Expansion<double> const& Li, double 
     // 2 register(s) per lane hold the complete distributed Taylor basis:
     // basis index i lives in word i >> 5 on lane i & 31. Shuffles avoid a
     // large register-selection tree for dynamic indexing.
+    double trace = k00;
+    if (lane == 0) {
+        trace = Li[6] + Li[4] + Li[49];
+    }
+    trace = __shfl_sync(kMask, trace, 0);
+    double translatedXx = Li[6];
+    double translatedYy = Li[4];
     double basis0 = k00;
     double basis1 = k00;
     double const t5 = dx * dx;
@@ -2008,6 +2093,12 @@ __device__ void executeL2LWarp(double*& Lo, Expansion<double> const& Li, double 
         bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
         if (leader) {
             partial += Li[targetIndex];
+            if (targetIndex == 0 && doPhi) {
+                partial = fma(k12 * dz * dz, trace, partial);
+            }
+            if (targetIndex == 3) {
+                partial = fma(trace, dz, partial);
+            }
         }
         if constexpr (kReplicate) {
             Lo[0] = __shfl_sync(kMask, partial, 0);
@@ -2048,6 +2139,8 @@ __device__ void executeL2LWarp(double*& Lo, Expansion<double> const& Li, double 
         if (leader) {
             partial += Li[targetIndex];
         }
+        translatedYy = __shfl_sync(kMask, partial, 0);
+        translatedXx = __shfl_sync(kMask, partial, 8);
         if constexpr (kReplicate) {
             Lo[4] = __shfl_sync(kMask, partial, 0);
             Lo[5] = __shfl_sync(kMask, partial, 4);
@@ -2145,6 +2238,17 @@ __device__ void executeL2LWarp(double*& Lo, Expansion<double> const& Li, double 
         // Lane zero led the potential group, so this restore is same-thread.
         if (!doPhi && lane == 0) {
             Lo[0] = Li[0];
+        }
+    }
+    double translatedZz = k00;
+    if (lane == 0) {
+        translatedZz = trace - translatedXx - translatedYy;
+    }
+    if constexpr (kReplicate) {
+        Lo[49] = __shfl_sync(kMask, translatedZz, 0);
+    } else {
+        if (lane == 0) {
+            Lo[49] = translatedZz;
         }
     }
     // The caller may overwrite shared Li storage from lane zero on

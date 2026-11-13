@@ -2,24 +2,22 @@
 #pragma once
 
 #include <cmath>
-#include <numbers>
 
 #include <cosmictiger/gravity/fmm_acceptance.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/kernels/cartesian_tracefree/ewald_green.hpp>
 #include <cosmictiger/gravity/kernels/cartesian_tracefree/ewald_m2l.hpp>
+#include <cosmictiger/gravity/kernels/cartesian_tracefree_operators.hpp>
 #include <cosmictiger/gravity/tree.hpp>
-#ifndef __CUDACC__
-#include <cosmictiger/gravity/source_access.hpp>
-#endif
 
 namespace detail {
 
 // Derived unit-box image distances. For a minimum-image displacement d,
 // R1²=d.d and R2²=R1²+1-2 max(|d_x|,|d_y|,|d_z|).
 // The correction excludes the nearest image selected by the expansion centers.
-// Its opening criterion uses the distance to the second-nearest image and
-// preserves that excluded image throughout the accepted pair of cells.
+// Its opening criterion uses the distance to the second-nearest image. Pairs
+// crossing an image-selection plane resolve the Newtonian term at these same
+// centers, so the primary-image choice cancels from the complete periodic field.
 // Symbol directory: R1,R2 are the first/second image distances; d is separation.
 CUDA_EXPORT inline bool periodicFmmAccepted(Vector3<float> const& displacement, float sinkRadius,
     float sourceRadius, float inverseTheta, float /* smoothingLength */,
@@ -30,62 +28,64 @@ CUDA_EXPORT inline bool periodicFmmAccepted(Vector3<float> const& displacement, 
     float const nearestSquared = displacement.dot(displacement);
     float const secondSquared = nearestSquared + 1.0f - 2.0f * largest;
     float const opening = radius * inverseTheta;
-    bool const sameImage = largest + radius < .5f;
     bool const separated = opening * opening < secondSquared;
     if (operations != nullptr) {
         // Includes three absolute values and two maxima, each one math result.
-        *operations = 17;
+        *operations = 16;
     }
-    return sameImage && separated;
+    return separated;
 }
 
-// Derived constant-Laplacian contraction, in tree coordinates y=kappa*r:
-// G = H + K dz²/2, K=-4pi/kappa³; Qzz=M_STF,zz+Tr(Q)/3.
-// L0 += K Qzz/2; Lz -= K Mz; curvature += K M0.
-// H uses the stored xx/yy derivatives and reconstructs zz harmonically.
-// Symbol directory: G is the Ewald correction, H its local harmonic proxy,
-// K its Laplacian, M the source STF moments, Q its raw second moment.
+// Derived cell-cell criteria: R1 > (rs + rt)/theta and R1 > rs + rt + h.
+// Symbol directory: R1 is center separation; rs,rt are enclosing radii;
+// theta is the opening angle; h is the pair-softening support.
+CUDA_EXPORT inline bool periodicFmmDirectAccepted(Vector3<float> const& displacement,
+    float sinkRadius, float sourceRadius, float inverseTheta, float smoothingLength,
+    FlopCount* operations = nullptr) {
+    float const radius = sinkRadius + sourceRadius;
+    float const opening = radius * inverseTheta;
+    float const support = radius + smoothingLength;
+    float const distanceSquared = displacement.dot(displacement);
+    bool const separated = opening * opening < distanceSquared;
+    bool const supportSeparated = support * support < distanceSquared;
+    if (operations != nullptr) {
+        *operations = 10;
+    }
+    return separated && supportSeparated;
+}
+
+// The generated Ewald contraction retains the complete quadratic tensor in the
+// local expansion; higher derivatives and moments remain trace-free. When both
+// terms are pending, their common center-selected image cancels algebraically.
 CUDA_EXPORT inline FlopCount periodicFmmM2L(
-    cosmictiger::gravity::cartesian::Multipole<float> const& source, float radialTrace,
+    cosmictiger::gravity::cartesian::Multipole<float> const& source,
     Vector3<float> const& displacement, bool doPotential,
-    cosmictiger::gravity::cartesian::Expansion<float>& local, float& curvature) {
+    cosmictiger::gravity::cartesian::Expansion<float>& local, bool includeNewtonian = false) {
     namespace cartesian = cosmictiger::gravity::cartesian;
+    static_assert(cartesian::kQuadrupoleTrace,
+        "Periodic gravity requires Cartesian quadrupole trace storage");
     cartesian::Green<float> green;
     cartesian::evaluateEwaldGreen(displacement, green);
     float const oldPotential = local[0];
-    cartesian::M2L(source, green, local);
-    constexpr float kCurvature = -4.0f * std::numbers::pi_v<float> * kScaleFactorInverse3;
-    if constexpr (kFmmOrder >= 4) {
-        float const secondZ = -source(2, 0, 0) - source(0, 2, 0) + radialTrace / 3.0f;
-        local[0] += .5f * kCurvature * secondZ;
+    cartesian::M2Lewald(source, green, local);
+    FlopCount flops = cartesian::kEwaldGreenFlops + cartesian::kEwaldM2LFlops;
+    if (includeNewtonian) {
+        cartesian::M2L(source, fmmScaleDisplacement(displacement), local);
+        flops += 3 + cartesian::kM2LFlops<fmmLocalDegree(kFmmOrder)>;
     }
-    local(0, 0, 1) -= kCurvature * source(0, 0, 1);
-    curvature += kCurvature * source[0];
     if (!doPotential) {
         local[0] = oldPotential;
     }
-    return cartesian::kEwaldGreenFlops + cartesian::kEwaldM2LFlops + 4 + (kFmmOrder >= 4 ? 6 : 0);
-}
-
-CUDA_EXPORT inline FlopCount periodicFmmPoint(Vector3<float> const& displacement, float mass,
-    bool doPotential, float& potential, float& gx, float& gy, float& gz) {
-    namespace cartesian = cosmictiger::gravity::cartesian;
-    cartesian::Green<float> green;
-    cartesian::evaluateEwaldGreen(displacement, green);
-    if (doPotential) {
-        potential += mass * kScaleFactor * green[0];
-    }
-    float const scale = mass * kScaleFactor2;
-    gx -= scale * green(1, 0, 0);
-    gy -= scale * green(0, 1, 0);
-    gz -= scale * green(0, 0, 1);
-    return cartesian::kEwaldGreenFlops + 7 + (doPotential ? 3 : 0);
+    return flops;
 }
 
 #ifndef __CUDACC__
+// checks holds pairs with both primary and periodic terms pending. Only pairs
+// whose excluded image is uniform may hand their primary term to directChecks;
+// all image-crossing pairs are consumed here by the coupled cell-cell kernels.
 inline FlopCount cpuPeriodicFmm(ExpansionBuffer& local, TreeNode const& sink,
-    Vector<TreeId>& checks, ForceVectors& forces, float theta, float smoothingLength,
-    bool doPotential) {
+    Vector<TreeId>& checks, Vector<TreeId>& directChecks, float theta, float smoothingLength,
+    bool doPotential, long long& directCellCount) {
     FlopCount flops = 1;
     float const inverseTheta = fmmInverseOpeningAngle(theta);
     Vector<TreeId> deferred;
@@ -101,37 +101,36 @@ inline FlopCount cpuPeriodicFmm(ExpansionBuffer& local, TreeNode const& sink,
             displacement[dim] = distance(sink.pos[dim], source.pos[dim]);
         }
         FlopCount acceptanceFlops;
-        bool const accepted = periodicFmmAccepted(displacement, sink.radius, source.radius,
+        bool const separated = periodicFmmAccepted(displacement, sink.radius, source.radius,
             inverseTheta, smoothingLength, &acceptanceFlops);
         flops += 3 + acceptanceFlops;
-        if (accepted) {
-            flops += periodicFmmM2L(fmmMultiPos(source.mpos).multi, source.radialTrace,
-                displacement, doPotential, local.expansion(), local.curvature);
+        bool singleImage = false;
+        bool includeNewtonian = false;
+        if (separated) {
+            singleImage = fmmSinglePeriodicImage(displacement, sink.radius, source.radius);
+            flops += 7;
+            if (!singleImage) {
+                includeNewtonian = periodicFmmDirectAccepted(displacement, sink.radius,
+                    source.radius, inverseTheta, smoothingLength, &acceptanceFlops);
+                flops += acceptanceFlops;
+            }
+        }
+        if (singleImage || includeNewtonian) {
+            flops += periodicFmmM2L(fmmMultiPos(source.mpos).multi, displacement, doPotential,
+                local.expansion(), includeNewtonian);
+            if (singleImage) {
+                directChecks.push_back(id);
+            } else {
+                ++directCellCount;
+            }
         } else if (!source.leaf && (sink.leaf || source.radius >= sink.radius)) {
             checks.push_back(source.children[kLeftChild]);
             checks.push_back(source.children[kRightChild]);
-        } else if (!sink.leaf) {
-            deferred.push_back(id);
         } else {
-            // Rare unresolved leaf pair: evaluate the regular correction,
-            // including self images. No singular 1/r is evaluated here.
-            auto const count = source.numberOfParticles();
-            Vector<Position> x(count), y(count), z(count);
-            Vector<float> masses(count);
-            gravityReadSourcePositions(
-                source, x.data(), y.data(), z.data(), nullptr, masses.data(), 0);
-            Position const* positions[kDimensions] = {x.data(), y.data(), z.data()};
-            for (ParticleInteger i = sink.particleRange.first; i < sink.particleRange.second; ++i) {
-                auto const target = i - sink.particleRange.first;
-                for (ParticleInteger j = 0; j < count; ++j) {
-                    for (int dim = 0; dim < kDimensions; ++dim) {
-                        displacement[dim] = distance(particlesPos(dim, i), positions[dim][j]);
-                    }
-                    flops += 3 +
-                        periodicFmmPoint(displacement, masses[j], doPotential, forces.phi[target],
-                            forces.gx[target], forces.gy[target], forces.gz[target]);
-                }
-            }
+            // The mandatory Ewald tree subdivision guarantees that every leaf
+            // pair passes either the uniform-image or coupled acceptance path.
+            ALWAYS_ASSERT(!sink.leaf);
+            deferred.push_back(id);
         }
     }
     checks = std::move(deferred);

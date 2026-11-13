@@ -314,7 +314,7 @@ void runBenchmark() {
                 Vector3<Position> center{};
                 Vector<TreeId> checks{built.id};
                 // kick joins remote tasks and local/GPU completion before returning.
-                kick(parameters, local, center, built.id, checks, checks, nullptr);
+                kick(parameters, local, center, built.id, {}, checks, nullptr);
                 auto const forceEnd = detail::Clock::now();
                 treeSeconds = detail::seconds(start, treeEnd);
                 forceSeconds = detail::seconds(treeEnd, forceEnd);

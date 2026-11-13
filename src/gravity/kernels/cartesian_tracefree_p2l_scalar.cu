@@ -47,11 +47,13 @@ __device__ void P2L(float mass, Vector3<float> const& distance, Expansion<float>
     float const t15 = iR * t7;
     float const t16 = t6 * t6;
     float const t19 = fma((-t16), k01, k00);
+    float const t20 = t15 * t19;
     float const t21 = iR * t11;
     float const t22 = t10 * t15;
     float const t23 = t6 * t21;
     float const t25 = t10 * t10;
     float const t27 = fma((-k01), t25, k00);
+    float const t28 = t15 * t27;
     float const t29 = iR * t8;
     float const t30 = t6 * t15;
     float const t31 = t13 * t29;
@@ -142,13 +144,14 @@ __device__ void P2L(float mass, Vector3<float> const& distance, Expansion<float>
     float const t206 = t117 - t177;
     float const t208 = k13 - t182;
     float const t210 = fma((-t16), t208, t122);
+    float const t214 = t20 + t28;
     L.m -= t4;
     L.y += t8;
     L.x += t11;
     L.z = fma(t7, t13, L.z);
-    L.yy = fma(t15, t19, L.yy);
+    L.yy += t20;
     L.xy = fma((-k01), t23, L.xy);
-    L.xx = fma(t15, t27, L.xx);
+    L.xx += t28;
     L.yz = fma((-k01), t31, L.yz);
     L.xz = fma((-k01), t33, L.xz);
     L.yyy = fma((-t35), t39, L.yyy);
@@ -191,6 +194,7 @@ __device__ void P2L(float mass, Vector3<float> const& distance, Expansion<float>
     L.xxxyyz = fma((-t204), t210, L.xxxyyz);
     L.xxxxyz = fma((-t185), t202, L.xxxxyz);
     L.xxxxxz = fma((-t191), t204, L.xxxxxz);
+    L.zz -= t214;
 }
 }    // namespace cosmictiger::gravity::cartesian
 namespace cosmictiger::gravity::cartesian {
@@ -231,11 +235,13 @@ __device__ void P2L(double mass, Vector3<double> const& distance, Expansion<doub
     double const t15 = iR * t7;
     double const t16 = t6 * t6;
     double const t19 = fma((-t16), k01, k00);
+    double const t20 = t15 * t19;
     double const t21 = iR * t11;
     double const t22 = t10 * t15;
     double const t23 = t6 * t21;
     double const t25 = t10 * t10;
     double const t27 = fma((-k01), t25, k00);
+    double const t28 = t15 * t27;
     double const t29 = iR * t8;
     double const t30 = t6 * t15;
     double const t31 = t13 * t29;
@@ -326,13 +332,14 @@ __device__ void P2L(double mass, Vector3<double> const& distance, Expansion<doub
     double const t206 = t117 - t177;
     double const t208 = k13 - t182;
     double const t210 = fma((-t16), t208, t122);
+    double const t214 = t20 + t28;
     L.m -= t4;
     L.y += t8;
     L.x += t11;
     L.z = fma(t7, t13, L.z);
-    L.yy = fma(t15, t19, L.yy);
+    L.yy += t20;
     L.xy = fma((-k01), t23, L.xy);
-    L.xx = fma(t15, t27, L.xx);
+    L.xx += t28;
     L.yz = fma((-k01), t31, L.yz);
     L.xz = fma((-k01), t33, L.xz);
     L.yyy = fma((-t35), t39, L.yyy);
@@ -375,6 +382,7 @@ __device__ void P2L(double mass, Vector3<double> const& distance, Expansion<doub
     L.xxxyyz = fma((-t204), t210, L.xxxyyz);
     L.xxxxyz = fma((-t185), t202, L.xxxxyz);
     L.xxxxxz = fma((-t191), t204, L.xxxxxz);
+    L.zz -= t214;
 }
 }    // namespace cosmictiger::gravity::cartesian
 namespace cosmictiger::gravity::cartesian {
@@ -415,11 +423,13 @@ __device__ void P2L(float mass, Vector3<float> const& distance, Derivatives<floa
     float const t15 = iR * t7;
     float const t16 = t6 * t6;
     float const t19 = fma((-t16), k01, k00);
+    float const t20 = t15 * t19;
     float const t21 = iR * t11;
     float const t22 = t10 * t15;
     float const t23 = t6 * t21;
     float const t25 = t10 * t10;
     float const t27 = fma((-k01), t25, k00);
+    float const t28 = t15 * t27;
     float const t29 = iR * t8;
     float const t30 = t6 * t15;
     float const t31 = t13 * t29;
@@ -510,13 +520,14 @@ __device__ void P2L(float mass, Vector3<float> const& distance, Derivatives<floa
     float const t206 = t117 - t177;
     float const t208 = k13 - t182;
     float const t210 = fma((-t16), t208, t122);
+    float const t214 = t20 + t28;
     L.m -= t4;
     L.y += t8;
     L.x += t11;
     L.z = fma(t7, t13, L.z);
-    L.yy = fma(t15, t19, L.yy);
+    L.yy += t20;
     L.xy = fma((-k01), t23, L.xy);
-    L.xx = fma(t15, t27, L.xx);
+    L.xx += t28;
     L.yz = fma((-k01), t31, L.yz);
     L.xz = fma((-k01), t33, L.xz);
     L.yyy = fma((-t35), t39, L.yyy);
@@ -559,6 +570,7 @@ __device__ void P2L(float mass, Vector3<float> const& distance, Derivatives<floa
     L.xxxyyz = fma((-t204), t210, L.xxxyyz);
     L.xxxxyz = fma((-t185), t202, L.xxxxyz);
     L.xxxxxz = fma((-t191), t204, L.xxxxxz);
+    L.zz -= t214;
 }
 }    // namespace cosmictiger::gravity::cartesian
 namespace cosmictiger::gravity::cartesian {
@@ -599,11 +611,13 @@ __device__ void P2L(double mass, Vector3<double> const& distance, Derivatives<do
     double const t15 = iR * t7;
     double const t16 = t6 * t6;
     double const t19 = fma((-t16), k01, k00);
+    double const t20 = t15 * t19;
     double const t21 = iR * t11;
     double const t22 = t10 * t15;
     double const t23 = t6 * t21;
     double const t25 = t10 * t10;
     double const t27 = fma((-k01), t25, k00);
+    double const t28 = t15 * t27;
     double const t29 = iR * t8;
     double const t30 = t6 * t15;
     double const t31 = t13 * t29;
@@ -694,13 +708,14 @@ __device__ void P2L(double mass, Vector3<double> const& distance, Derivatives<do
     double const t206 = t117 - t177;
     double const t208 = k13 - t182;
     double const t210 = fma((-t16), t208, t122);
+    double const t214 = t20 + t28;
     L.m -= t4;
     L.y += t8;
     L.x += t11;
     L.z = fma(t7, t13, L.z);
-    L.yy = fma(t15, t19, L.yy);
+    L.yy += t20;
     L.xy = fma((-k01), t23, L.xy);
-    L.xx = fma(t15, t27, L.xx);
+    L.xx += t28;
     L.yz = fma((-k01), t31, L.yz);
     L.xz = fma((-k01), t33, L.xz);
     L.yyy = fma((-t35), t39, L.yyy);
@@ -743,6 +758,7 @@ __device__ void P2L(double mass, Vector3<double> const& distance, Derivatives<do
     L.xxxyyz = fma((-t204), t210, L.xxxyyz);
     L.xxxxyz = fma((-t185), t202, L.xxxxyz);
     L.xxxxxz = fma((-t191), t204, L.xxxxxz);
+    L.zz -= t214;
 }
 }    // namespace cosmictiger::gravity::cartesian
 #endif

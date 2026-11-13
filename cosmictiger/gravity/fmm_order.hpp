@@ -15,6 +15,7 @@
 #include <cosmictiger/core/defs.hpp>
 #include <cosmictiger/cuda/cuda.hpp>
 #include <cosmictiger/gravity/build_config.hpp>
+#include <cosmictiger/gravity/kernels/cartesian_tracefree_config.hpp>
 #include <cosmictiger/math/position.hpp>
 
 // FMM order conventions.
@@ -29,9 +30,9 @@
 // COSMICTIGER_EXPANSION_DEGREE selects one potential degree per executable.
 // Checkpoints retain the internal order (potential degree plus one).
 //
-// Coefficient counts use compact rank-major harmonic storage: a degree-d
-// tensor stores (d + 1)^2 coefficients. The known periodic background trace
-// is implicit and does not occupy another local coefficient.
+// Coefficient counts use compact rank-major harmonic storage plus the independent
+// quadrupole zz component when enabled by the Cartesian generator. Degrees above
+// two remain trace-free.
 
 inline constexpr int kFmmOrder = gravity::kBuildFmmOrder;
 
@@ -50,9 +51,15 @@ CUDA_EXPORT constexpr int fmmHarmonicCoefficientCount(int degree) {
     return (degree + 1) * (degree + 1);
 }
 
+/// Count Cartesian coefficients, including the independent quadrupole trace.
+CUDA_EXPORT constexpr int fmmCartesianCoefficientCount(int degree) {
+    return fmmHarmonicCoefficientCount(degree) +
+        int(cosmictiger::gravity::cartesian::kQuadrupoleTrace && degree >= 2);
+}
+
 /// Count source-multipole coefficients for the requested FMM order.
 CUDA_EXPORT constexpr int fmmMultipoleCoefficientCount(int order) {
-    return fmmHarmonicCoefficientCount(fmmMultipoleDegree(order));
+    return fmmCartesianCoefficientCount(fmmMultipoleDegree(order));
 }
 
 /// Count harmonic local-expansion coefficients for the requested FMM order.
@@ -62,7 +69,7 @@ CUDA_EXPORT constexpr int fmmLocalHarmonicCoefficientCount(int order) {
 
 /// Return the stored local-expansion coefficient count for this FMM order.
 CUDA_EXPORT constexpr int fmmLocalCoefficientCount(int order) {
-    return fmmLocalHarmonicCoefficientCount(order);
+    return fmmCartesianCoefficientCount(fmmLocalDegree(order));
 }
 
 // A positioned multipole stores NDIM Position positions followed by the coefficients.
@@ -95,21 +102,35 @@ inline constexpr int kFmmMultipoleCoefficients = fmmMultipoleCoefficientCount(kF
 inline constexpr int kFmmLocalCoefficients = fmmLocalCoefficientCount(kFmmOrder);
 
 static_assert(kPositionBits != 32 ||
-    (fmmPositionedMultipoleBytes(3) == 28 && fmmPositionedMultipoleBytes(7) == 156 &&
-        fmmPositionedMultipoleBytes(9) == 268));
+    (fmmPositionedMultipoleBytes(3) == 28 &&
+        fmmPositionedMultipoleBytes(7) ==
+            (cosmictiger::gravity::cartesian::kQuadrupoleTrace ? 160 : 156) &&
+        fmmPositionedMultipoleBytes(9) ==
+            (cosmictiger::gravity::cartesian::kQuadrupoleTrace ? 272 : 268)));
 static_assert(kPositionBits != 64 ||
-    (fmmPositionedMultipoleBytes(3) == 40 && fmmPositionedMultipoleBytes(7) == 168 &&
-        fmmPositionedMultipoleBytes(9) == 280));
+    (fmmPositionedMultipoleBytes(3) == 40 &&
+        fmmPositionedMultipoleBytes(7) ==
+            (cosmictiger::gravity::cartesian::kQuadrupoleTrace ? 176 : 168) &&
+        fmmPositionedMultipoleBytes(9) ==
+            (cosmictiger::gravity::cartesian::kQuadrupoleTrace ? 288 : 280)));
 static_assert(kPositionBits != 32 ||
-    (fmmPositionedMultipoleStride(3) == 32 && fmmPositionedMultipoleStride(4) == 48 &&
-        fmmPositionedMultipoleStride(7) == 160 && fmmPositionedMultipoleStride(8) == 208 &&
+    (fmmPositionedMultipoleStride(3) == 32 &&
+        fmmPositionedMultipoleStride(4) ==
+            (cosmictiger::gravity::cartesian::kQuadrupoleTrace ? 64 : 48) &&
+        fmmPositionedMultipoleStride(7) == 160 &&
+        fmmPositionedMultipoleStride(8) ==
+            (cosmictiger::gravity::cartesian::kQuadrupoleTrace ? 224 : 208) &&
         fmmPositionedMultipoleStride(9) == 272));
 static_assert(kPositionBits != 64 ||
     (fmmPositionedMultipoleStride(3) == 48 && fmmPositionedMultipoleStride(4) == 64 &&
         fmmPositionedMultipoleStride(7) == 176 && fmmPositionedMultipoleStride(8) == 224 &&
         fmmPositionedMultipoleStride(9) == 288));
-static_assert(fmmLocalExpansionBytes(3) == 36 && fmmLocalExpansionBytes(7) == 196 &&
-        fmmLocalExpansionBytes(9) == 324,
+static_assert(
+    fmmLocalExpansionBytes(3) == (cosmictiger::gravity::cartesian::kQuadrupoleTrace ? 40 : 36) &&
+        fmmLocalExpansionBytes(7) ==
+            (cosmictiger::gravity::cartesian::kQuadrupoleTrace ? 200 : 196) &&
+        fmmLocalExpansionBytes(9) ==
+            (cosmictiger::gravity::cartesian::kQuadrupoleTrace ? 328 : 324),
     "Local expansion byte sizes");
 
 // Compile-time view of one order.

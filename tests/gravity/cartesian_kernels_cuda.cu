@@ -36,8 +36,53 @@ __global__ void evaluate(
     }
 }
 
-// One float launch per order: the device results of every generated
-// kernel of that order must match the host evaluation of the same inputs.
+template <int order>
+double resultScale(KernelResult<double, order> const& reference, int component) {
+    using Layout = KernelLayout<order>;
+    struct CoefficientBlock {
+        int offset;
+        int degree;
+        int count;
+    };
+    constexpr std::array<CoefficientBlock, 6> kBlocks{{
+        {Layout::kP2mOffset_, Layout::kMultipoleDegree_, Layout::kMultipoleCount_},
+        {Layout::kM2mOffset_, Layout::kMultipoleDegree_, Layout::kMultipoleCount_},
+        {Layout::kP2lOffset_, Layout::kLocalDegree_, Layout::kLocalCount_},
+        {Layout::kM2lOffset_, Layout::kLocalDegree_, Layout::kLocalCount_},
+        {Layout::kEwaldM2lOffset_, Layout::kLocalDegree_, Layout::kLocalCount_},
+        {Layout::kL2lOffset_, Layout::kLocalDegree_, Layout::kLocalCount_},
+    }};
+    for (auto const& block : kBlocks) {
+        if (component >= block.offset && component < block.offset + block.count) {
+            int const coefficient = component - block.offset;
+            int const harmonicCount = (block.degree + 1) * (block.degree + 1);
+            int const rank = coefficient == harmonicCount ? 2 : int(std::sqrt(double(coefficient)));
+            double scale = 1;
+            for (int i = rank * rank; i < (rank + 1) * (rank + 1); ++i) {
+                scale = std::max(scale, std::abs(reference[block.offset + i]));
+            }
+            if (rank == 2 && block.count > harmonicCount) {
+                scale = std::max(scale, std::abs(reference[block.offset + harmonicCount]));
+            }
+            return scale;
+        }
+    }
+    int const offset = component < Layout::kL2pOffset_ ? Layout::kM2pOffset_ : Layout::kL2pOffset_;
+    if (component == offset) {
+        return std::max(1., std::abs(reference[component]));
+    }
+    double scale = 1;
+    for (int i = 1; i < kFieldCount; ++i) {
+        scale = std::max(scale, std::abs(reference[offset + i]));
+    }
+    return scale;
+}
+
+// One float launch per order: compare against host double arithmetic on the
+// exact float inputs. Independent moment components can nearly cancel a local
+// coefficient, so host float arithmetic is not a sufficiently accurate oracle.
+// As in the independent CPU Cartesian oracle, errors are scaled by the largest
+// coefficient of the same tensor rank, including the separately stored zz.
 template <int order>
 double testDeviceParity() {
     using Input = KernelInput<float, order>;
@@ -62,19 +107,29 @@ double testDeviceParity() {
         check(cudaMemcpy(results.data(), deviceResults, sizeof(results), cudaMemcpyDeviceToHost));
         double const tolerance = 2e-5;
         for (int sample = 0; sample < kSampleCount; ++sample) {
-            Result expected{};
-            evaluateKernels(inputs[sample], expected);
+            KernelInput<double, order> preciseInput{};
+            for (int i = 0; i < KernelLayout<order>::kMultipoleCount_; ++i) {
+                preciseInput.multipole[i] = inputs[sample].multipole[i];
+            }
+            for (int i = 0; i < KernelLayout<order>::kLocalCount_; ++i) {
+                preciseInput.local[i] = inputs[sample].local[i];
+            }
+            for (int i = 0; i < kGeometryCount; ++i) {
+                preciseInput.geometry[i] = inputs[sample].geometry[i];
+            }
+            KernelResult<double, order> precise{};
+            evaluateKernels(preciseInput, precise);
             for (int i = 0; i < KernelLayout<order>::kResultCount_; ++i) {
                 double const actualValue = results[sample][i];
-                double const expectedValue = expected[i];
-                double const normalized =
-                    std::abs(actualValue - expectedValue) / std::max(1., std::abs(expectedValue));
+                double const expectedValue = precise[i];
+                double const scale = resultScale<order>(precise, i);
+                double const normalized = std::abs(actualValue - expectedValue) / scale;
                 worst = std::isfinite(actualValue) ? std::max(worst, normalized) : INFINITY;
                 if (!std::isfinite(actualValue) || normalized > tolerance) {
                     std::fprintf(stderr,
                         "CUDA float Cartesian parity at order %d: sample %d, "
-                        "component %d: %.17g != %.17g\n",
-                        order, sample, i, actualValue, expectedValue);
+                        "component %d: %.17g != %.17g; rank scale %.9g, normalized error %.3g\n",
+                        order, sample, i, actualValue, expectedValue, scale, normalized);
                     throw std::runtime_error("CUDA Cartesian coefficient mismatch");
                 }
             }

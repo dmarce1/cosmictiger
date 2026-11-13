@@ -82,12 +82,14 @@ void cloud(double extent, bool subDoubleCenters) {
     treeComputeMultipole<order>(root, left, right, leftCenter, rightCenter, center);
     cartesian::Multipole<double> expected{};
     double maximumOffset = 0;
+    double expectedZz = 0;
     for (size_t i = 0; i < masses.size(); ++i) {
         Vector3<double> offset;
         for (int axis = 0; axis < kDimensions; ++axis) {
             offset[axis] = unwrappedDoubleDistance(positions[axis][i], center[axis]);
         }
         auto const scaledOffset = fmmScaleDisplacement(offset);
+        expectedZz += double(masses[i]) * scaledOffset[2] * scaledOffset[2];
         for (int axis = 0; axis < kDimensions; ++axis) {
             maximumOffset = std::max(maximumOffset, std::abs(scaledOffset[axis]));
         }
@@ -100,6 +102,11 @@ void cloud(double extent, bool subDoubleCenters) {
         }
         for (int i = n * n; i < (n + 1) * (n + 1); ++i) {
             check(root[i], expected[i], rankScale);
+        }
+        if (cartesian::kQuadrupoleTrace && n == 2) {
+            int const zzIndex = fmmHarmonicCoefficientCount(order - 2);
+            check(root[zzIndex], expectedZz, rankScale);
+            check(expected[zzIndex], expectedZz, rankScale);
         }
     }
 }

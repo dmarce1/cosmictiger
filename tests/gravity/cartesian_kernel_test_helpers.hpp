@@ -12,6 +12,7 @@
 
 #include <cosmictiger/cuda/cuda_export.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
+#include <cosmictiger/gravity/kernels/cartesian_tracefree/ewald_m2l.hpp>
 #include <cosmictiger/gravity/kernels/cartesian_tracefree_config.hpp>
 #include <cosmictiger/gravity/kernels/cartesian_tracefree_operators.hpp>
 
@@ -28,8 +29,8 @@ constexpr int kFieldCount = 4;
 constexpr int kGeometryCount = 8;
 constexpr int kOrderCount = 1;
 
-// Compact rank-major Cartesian storage: (degree + 1)^2 harmonic coefficients.
-// Local expansions append one constant Laplacian (the periodic background trace).
+// Compact rank-major Cartesian storage, with the actual zz component appended
+// when independent quadratic trace storage is enabled.
 // The result buffer concatenates every kernel
 // output of one order at these offsets.
 template <int order>
@@ -43,8 +44,9 @@ struct KernelLayout {
     static constexpr int kP2mOffset_ = 0;
     static constexpr int kM2mOffset_ = kP2mOffset_ + kMultipoleCount_;
     static constexpr int kP2lOffset_ = kM2mOffset_ + kMultipoleCount_;
-    static constexpr int kM2lOffset_ = kP2lOffset_ + kLocalHarmonicCount_;
-    static constexpr int kL2lOffset_ = kM2lOffset_ + kLocalHarmonicCount_;
+    static constexpr int kM2lOffset_ = kP2lOffset_ + kLocalCount_;
+    static constexpr int kEwaldM2lOffset_ = kM2lOffset_ + kLocalCount_;
+    static constexpr int kL2lOffset_ = kEwaldM2lOffset_ + kLocalCount_;
     static constexpr int kM2pOffset_ = kL2lOffset_ + kLocalCount_;
     static constexpr int kL2pOffset_ = kM2pOffset_ + kFieldCount;
     static constexpr int kResultCount_ = kL2pOffset_ + kFieldCount;
@@ -98,10 +100,17 @@ CUDA_EXPORT void evaluateKernels(
     store(Mo, Layout::kM2mOffset_, Layout::kMultipoleCount_);
     Expansion p2l{};
     kernels::P2L(g[7], separation, p2l);
-    store(p2l, Layout::kP2lOffset_, Layout::kLocalHarmonicCount_);
+    store(p2l, Layout::kP2lOffset_, Layout::kLocalCount_);
     Expansion m2l{};
     kernels::M2L(input.multipole, separation, m2l);
-    store(m2l, Layout::kM2lOffset_, Layout::kLocalHarmonicCount_);
+    store(m2l, Layout::kM2lOffset_, Layout::kLocalCount_);
+    cosmictiger::gravity::cartesian::Green<Real> green{};
+    for (int i = 0; i < Layout::kLocalCount_; ++i) {
+        green[i] = input.local[i];
+    }
+    Expansion ewaldM2l{};
+    kernels::M2Lewald(input.multipole, green, ewaldM2l);
+    store(ewaldM2l, Layout::kEwaldM2lOffset_, Layout::kLocalCount_);
     auto const& Li = input.local;
     Expansion Lo{};
     kernels::L2L(Li, translation, g[6], Lo);

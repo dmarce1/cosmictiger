@@ -2,19 +2,20 @@
   "min_local_degree": 6,
   "max_local_degree": 6,
   "independent_m2l_ratios": false,
+  "quadrupole_trace": true,
   "description": "Static emitted arithmetic counts. Conventional FMA=2; weighted FMA=1. Distance geometry is evaluated inside direct kernels and excluded from DAG counts.",
   "kernels": [
     {
       "arithmetic": {
-        "*": 204,
-        "+": 56,
-        "-": 64,
-        "fma": 368
+        "*": 207,
+        "+": 59,
+        "-": 66,
+        "fma": 366
       },
-      "accumulations": 0,
-      "fused_accumulations": 49,
-      "weighted_flops": 692,
-      "conventional_flops": 1060,
+      "accumulations": 3,
+      "fused_accumulations": 47,
+      "weighted_flops": 701,
+      "conventional_flops": 1067,
       "expansion_order": 6,
       "source_order": 5
     }
@@ -23,100 +24,100 @@
     {
       "arithmetic": {
         "*": 179,
-        "+": 63,
-        "-": 43,
-        "fma": 278
+        "+": 60,
+        "-": 46,
+        "fma": 280
       },
-      "accumulations": 36,
+      "accumulations": 37,
       "fused_accumulations": 0,
-      "weighted_flops": 599,
-      "conventional_flops": 877,
+      "weighted_flops": 602,
+      "conventional_flops": 882,
       "operator": "M2M",
       "order": 5
     },
     {
       "arithmetic": {
-        "*": 83,
-        "+": 15,
+        "*": 87,
+        "+": 17,
         "-": 29,
         "fma": 557
       },
-      "accumulations": 1,
-      "fused_accumulations": 48,
-      "weighted_flops": 685,
-      "conventional_flops": 1242,
+      "accumulations": 5,
+      "fused_accumulations": 45,
+      "weighted_flops": 695,
+      "conventional_flops": 1252,
       "operator": "L2L",
       "order": 6
     },
     {
       "arithmetic": {
-        "*": 159,
-        "+": 1,
-        "-": 10,
-        "fma": 107
+        "*": 90,
+        "+": 5,
+        "-": 16,
+        "fma": 96
       },
       "accumulations": 4,
-      "fused_accumulations": 32,
-      "weighted_flops": 281,
-      "conventional_flops": 388,
+      "fused_accumulations": 33,
+      "weighted_flops": 211,
+      "conventional_flops": 307,
       "operator": "P2M",
       "order": 5
     },
     {
       "arithmetic": {
-        "*": 54,
-        "+": 1,
+        "*": 56,
+        "+": 2,
         "-": 26,
-        "fma": 70
+        "fma": 68
       },
-      "accumulations": 3,
-      "fused_accumulations": 46,
-      "weighted_flops": 154,
-      "conventional_flops": 224,
+      "accumulations": 6,
+      "fused_accumulations": 44,
+      "weighted_flops": 158,
+      "conventional_flops": 226,
       "operator": "P2L",
       "order": 6
     },
     {
       "arithmetic": {
-        "*": 73,
-        "+": 16,
-        "-": 16,
+        "*": 74,
+        "+": 18,
+        "-": 18,
         "fma": 92
       },
       "accumulations": 0,
       "fused_accumulations": 4,
-      "weighted_flops": 197,
-      "conventional_flops": 289,
+      "weighted_flops": 202,
+      "conventional_flops": 294,
       "operator": "M2P",
       "order": 5
     },
     {
       "arithmetic": {
         "*": 78,
-        "+": 15,
+        "+": 16,
         "-": 29,
-        "fma": 179
+        "fma": 181
       },
       "accumulations": 4,
       "fused_accumulations": 0,
-      "weighted_flops": 305,
-      "conventional_flops": 484,
+      "weighted_flops": 308,
+      "conventional_flops": 489,
       "operator": "L2P",
       "order": 6
     },
     {
       "operator": "CUDA_L2L_WARP",
       "order": 6,
-      "coefficients": 49,
+      "coefficients": 50,
       "schedule_rows": 22,
       "phases": 3,
       "basis_words_per_lane": 2,
-      "shuffle_instructions_per_lane": 86,
-      "shuffle_instructions_per_lane_into": 50,
-      "whole_warp_flops_with_potential": 8902,
-      "whole_warp_flops_without_potential": 6724,
-      "whole_warp_weighted_flops_with_potential": 8198,
-      "whole_warp_weighted_flops_without_potential": 6020
+      "shuffle_instructions_per_lane": 90,
+      "shuffle_instructions_per_lane_into": 53,
+      "whole_warp_flops_with_potential": 8912,
+      "whole_warp_flops_without_potential": 6730,
+      "whole_warp_weighted_flops_with_potential": 8206,
+      "whole_warp_weighted_flops_without_potential": 6025
     }
   ],
   "representations": {
@@ -126,15 +127,15 @@
       "fourier_pairs": 128,
       "m2l": {
         "arithmetic": {
-          "*": 499,
-          "+": 61,
-          "-": 19,
-          "fma": 625
+          "*": 528,
+          "+": 59,
+          "-": 20,
+          "fma": 658
         },
-        "accumulations": 36,
+        "accumulations": 37,
         "fused_accumulations": 13,
-        "weighted_flops": 1240,
-        "conventional_flops": 1865
+        "weighted_flops": 1302,
+        "conventional_flops": 1960
       },
       "radial": {
         "arithmetic": {
@@ -147,22 +148,22 @@
         "weighted_flops": 212,
         "conventional_flops": 286
       },
-      "green_conventional_flops": 102519
+      "green_conventional_flops": 102521
     },
     "cartesianTracefree": {
       "description": "Static emitted arithmetic counts. Conventional FMA=2; weighted FMA=1. Distance geometry is evaluated inside direct kernels and excluded from DAG counts.",
       "kernels": [
         {
           "arithmetic": {
-            "*": 204,
-            "+": 56,
-            "-": 64,
-            "fma": 368
+            "*": 207,
+            "+": 59,
+            "-": 66,
+            "fma": 366
           },
-          "accumulations": 0,
-          "fused_accumulations": 49,
-          "weighted_flops": 692,
-          "conventional_flops": 1060,
+          "accumulations": 3,
+          "fused_accumulations": 47,
+          "weighted_flops": 701,
+          "conventional_flops": 1067,
           "expansion_order": 6,
           "source_order": 5
         }
@@ -171,100 +172,100 @@
         {
           "arithmetic": {
             "*": 179,
-            "+": 63,
-            "-": 43,
-            "fma": 278
+            "+": 60,
+            "-": 46,
+            "fma": 280
           },
-          "accumulations": 36,
+          "accumulations": 37,
           "fused_accumulations": 0,
-          "weighted_flops": 599,
-          "conventional_flops": 877,
+          "weighted_flops": 602,
+          "conventional_flops": 882,
           "operator": "M2M",
           "order": 5
         },
         {
           "arithmetic": {
-            "*": 83,
-            "+": 15,
+            "*": 87,
+            "+": 17,
             "-": 29,
             "fma": 557
           },
-          "accumulations": 1,
-          "fused_accumulations": 48,
-          "weighted_flops": 685,
-          "conventional_flops": 1242,
+          "accumulations": 5,
+          "fused_accumulations": 45,
+          "weighted_flops": 695,
+          "conventional_flops": 1252,
           "operator": "L2L",
           "order": 6
         },
         {
           "arithmetic": {
-            "*": 159,
-            "+": 1,
-            "-": 10,
-            "fma": 107
+            "*": 90,
+            "+": 5,
+            "-": 16,
+            "fma": 96
           },
           "accumulations": 4,
-          "fused_accumulations": 32,
-          "weighted_flops": 281,
-          "conventional_flops": 388,
+          "fused_accumulations": 33,
+          "weighted_flops": 211,
+          "conventional_flops": 307,
           "operator": "P2M",
           "order": 5
         },
         {
           "arithmetic": {
-            "*": 54,
-            "+": 1,
+            "*": 56,
+            "+": 2,
             "-": 26,
-            "fma": 70
+            "fma": 68
           },
-          "accumulations": 3,
-          "fused_accumulations": 46,
-          "weighted_flops": 154,
-          "conventional_flops": 224,
+          "accumulations": 6,
+          "fused_accumulations": 44,
+          "weighted_flops": 158,
+          "conventional_flops": 226,
           "operator": "P2L",
           "order": 6
         },
         {
           "arithmetic": {
-            "*": 73,
-            "+": 16,
-            "-": 16,
+            "*": 74,
+            "+": 18,
+            "-": 18,
             "fma": 92
           },
           "accumulations": 0,
           "fused_accumulations": 4,
-          "weighted_flops": 197,
-          "conventional_flops": 289,
+          "weighted_flops": 202,
+          "conventional_flops": 294,
           "operator": "M2P",
           "order": 5
         },
         {
           "arithmetic": {
             "*": 78,
-            "+": 15,
+            "+": 16,
             "-": 29,
-            "fma": 179
+            "fma": 181
           },
           "accumulations": 4,
           "fused_accumulations": 0,
-          "weighted_flops": 305,
-          "conventional_flops": 484,
+          "weighted_flops": 308,
+          "conventional_flops": 489,
           "operator": "L2P",
           "order": 6
         },
         {
           "operator": "CUDA_L2L_WARP",
           "order": 6,
-          "coefficients": 49,
+          "coefficients": 50,
           "schedule_rows": 22,
           "phases": 3,
           "basis_words_per_lane": 2,
-          "shuffle_instructions_per_lane": 86,
-          "shuffle_instructions_per_lane_into": 50,
-          "whole_warp_flops_with_potential": 8902,
-          "whole_warp_flops_without_potential": 6724,
-          "whole_warp_weighted_flops_with_potential": 8198,
-          "whole_warp_weighted_flops_without_potential": 6020
+          "shuffle_instructions_per_lane": 90,
+          "shuffle_instructions_per_lane_into": 53,
+          "whole_warp_flops_with_potential": 8912,
+          "whole_warp_flops_without_potential": 6730,
+          "whole_warp_weighted_flops_with_potential": 8206,
+          "whole_warp_weighted_flops_without_potential": 6025
         }
       ]
     }

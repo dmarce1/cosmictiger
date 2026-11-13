@@ -22,7 +22,7 @@ namespace cosmictiger::gravity::cartesian {
 template <int degree>
 inline constexpr int kP2MFlops = 0;
 // FMM order 7.
-/// Accumulate the point mass into raw trace-free moments at the supplied displacement.
+/// Accumulate the point mass into the configured Cartesian moments at the supplied displacement.
 #if defined(COSMICTIGER_FMM_COUNTING_ONLY) || defined(COSMICTIGER_FMM_INSTRUMENTATION)
 template <class Real>
 #ifdef __CUDA_ARCH__
@@ -96,5 +96,5 @@ __device__
 #endif
 
 template <>
-inline constexpr int kP2MFlops<5> = 388;
+inline constexpr int kP2MFlops<5> = 307;
 }    // namespace cosmictiger::gravity::cartesian

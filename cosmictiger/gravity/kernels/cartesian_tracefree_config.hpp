@@ -14,4 +14,5 @@ inline constexpr int kMaxLocalDegree = 6;
 inline constexpr int kMinMultipoleDegree = 5;
 inline constexpr int kMaxMultipoleDegree = 5;
 inline constexpr bool kIndependentM2lRatios = false;
+inline constexpr bool kQuadrupoleTrace = true;
 }    // namespace cosmictiger::gravity::cartesian

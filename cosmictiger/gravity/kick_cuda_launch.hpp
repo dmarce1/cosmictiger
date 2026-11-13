@@ -575,7 +575,6 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
         params.dcount = eindices[i] - dindices[i];
         params.echecks = devDchecks + eindices[i];
         params.ecount = dindices[i + 1] - eindices[i];
-        params.curvature = workitems[i].l.curvature;
         ikickParams[i] = std::move(params);
     }
     cudaSetDevice();

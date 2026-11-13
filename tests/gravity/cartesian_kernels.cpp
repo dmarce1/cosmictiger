@@ -18,6 +18,8 @@
 
 #include <gtest/gtest.h>
 
+#include <cosmictiger/gravity/direct_reference.hpp>
+#include <cosmictiger/gravity/kernels/cartesian_tracefree/ewald_green.hpp>
 #include <cosmictiger/math/simd_math.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include "cartesian_kernel_test_helpers.hpp"
@@ -153,11 +155,15 @@ Multipole<order> projectedMoments(std::vector<Particle> const& particles) {
             {{0, 1, 0}, particle.position[1]}, {{0, 0, 1}, particle.position[2]}};
         Polynomial raw{{{0, 0, 0}, 1}};
         for (int rank = 0; rank <= kMultipoleDegree; ++rank) {
-            auto const harmonic = harmonicProjection(raw, rank);
+            auto const harmonic =
+                kernels::kQuadrupoleTrace && rank == 2 ? raw : harmonicProjection(raw, rank);
             for (auto const& [index, value] : harmonic) {
                 if (index[2] <= 1) {
                     result[compactIndex(index)] +=
                         particle.mass * value * factorial(index) / factorial(rank);
+                } else if (kernels::kQuadrupoleTrace && rank == 2) {
+                    result[(kMultipoleDegree + 1) * (kMultipoleDegree + 1)] +=
+                        particle.mass * value;
                 }
             }
             raw = multiply(raw, linear, kMultipoleDegree);
@@ -208,8 +214,15 @@ void compareRanks(Actual const& actual, Expected const& expected, char const* la
         for (int i = rank * rank; i < (rank + 1) * (rank + 1); ++i) {
             scale = std::max(scale, std::abs(expected[i]));
         }
+        if (kernels::kQuadrupoleTrace && rank == 2) {
+            scale = std::max(scale, std::abs(expected[(degree + 1) * (degree + 1)]));
+        }
         for (int i = rank * rank; i < (rank + 1) * (rank + 1); ++i) {
             near(actual[i], expected[i], scale, label);
+        }
+        if (kernels::kQuadrupoleTrace && rank == 2) {
+            near(actual[(degree + 1) * (degree + 1)], expected[(degree + 1) * (degree + 1)], scale,
+                label);
         }
     }
 }
@@ -228,7 +241,7 @@ void testParticleMomentsAndTranslation() {
     for (auto const& particle : particles) {
         kernels::P2M(particle.mass, particle.position, Mi);
     }
-    compareRanks<kMultipoleDegree>(Mi, expected, "P2M independent harmonic projection");
+    compareRanks<kMultipoleDegree>(Mi, expected, "P2M independent Cartesian moments");
     Position const displacement{.13, -.17, .09};
     auto shifted = particles;
     for (auto& particle : shifted) {
@@ -270,7 +283,7 @@ void testInteractions() {
         Expansion<order> expected{}, actual{}, pointExpected{}, pointActual{};
         for (int rank = 0; rank <= kLocalDegree; ++rank) {
             for (auto const& a : indices(rank)) {
-                if (a[2] > 1) {
+                if (a[2] > 1 && !(kernels::kQuadrupoleTrace && rank == 2)) {
                     continue;
                 }
                 double value = 0;
@@ -280,8 +293,10 @@ void testInteractions() {
                             factorial(b);
                     }
                 }
-                expected[compactIndex(a)] = value;
-                pointExpected[compactIndex(a)] = 1.7 * derivatives.at(a);
+                int const index =
+                    a[2] == 2 ? (kLocalDegree + 1) * (kLocalDegree + 1) : compactIndex(a);
+                expected[index] = value;
+                pointExpected[index] = 1.7 * derivatives.at(a);
             }
         }
         if constexpr (cosmictiger::gravity::cartesian::kIndependentM2lRatios) {
@@ -357,6 +372,9 @@ Expansion<order> localAt(Polynomial const& polynomial, Position const& position)
         for (auto const& index : indices(rank)) {
             if (index[2] <= 1) {
                 result[compactIndex(index)] = polynomialDerivative(polynomial, index, position);
+            } else if (kernels::kQuadrupoleTrace && rank == 2) {
+                result[(kLocalDegree + 1) * (kLocalDegree + 1)] =
+                    polynomialDerivative(polynomial, index, position);
             }
         }
     }
@@ -366,7 +384,7 @@ Expansion<order> localAt(Polynomial const& polynomial, Position const& position)
 template <int order>
 void testLocalTranslation() {
     constexpr int kLocalDegree = KernelLayout<order>::kLocalDegree_;
-    double const background = 0;
+    double const background = kernels::kQuadrupoleTrace ? -1.7 : 0;
     auto const polynomial = potentialPolynomial(kLocalDegree, background);
     Position const displacement{.13, -.17, .09};
     auto const Li = localAt<order>(polynomial, {});
@@ -383,6 +401,181 @@ void testLocalTranslation() {
         derivative[d] = 1;
         near(field[d + 1], -polynomialDerivative(polynomial, derivative, displacement), 1,
             "L2P direct polynomial acceleration");
+    }
+    Position const nextDisplacement{-.07, .05, .11};
+    Position const totalDisplacement = displacement + nextDisplacement;
+    Expansion<order> repeated{};
+    kernels::L2L(Lo, nextDisplacement, 1.0, repeated);
+    compareRanks<kLocalDegree>(repeated, localAt<order>(polynomial, totalDisplacement),
+        "L2L repeated nonharmonic polynomial translation");
+    Field accelerationOnly{};
+    accelerationOnly[0] = 7.0;
+    kernels::L2P(Li, displacement, false, accelerationOnly);
+    near(accelerationOnly[0], 7.0, 7.0, "L2P acceleration-only preserves potential");
+    for (int d = 0; d < 3; ++d) {
+        near(accelerationOnly[d + 1], field[d + 1], 1.0,
+            "L2P acceleration-only nonharmonic polynomial acceleration");
+    }
+}
+
+template <int order, class Coefficient>
+double fullDerivative(Coefficient const& source, Index index) {
+    constexpr int kLocalDegree = KernelLayout<order>::kLocalDegree_;
+    if (index[2] <= 1) {
+        return source[compactIndex(index)];
+    }
+    if (kernels::kQuadrupoleTrace && degree(index) == 2) {
+        return source[(kLocalDegree + 1) * (kLocalDegree + 1)];
+    }
+    index[2] -= 2;
+    auto x = index;
+    auto y = index;
+    x[0] += 2;
+    y[1] += 2;
+    return -fullDerivative<order>(source, x) - fullDerivative<order>(source, y);
+}
+
+template <int order>
+void testEwaldContraction() {
+    constexpr int kMultipoleDegree = KernelLayout<order>::kMultipoleDegree_;
+    constexpr int kLocalDegree = KernelLayout<order>::kLocalDegree_;
+    // Contraction of the full Cartesian derivatives with raw particle moments
+    // is independent of the generator's STF source reconstruction and DAG.
+    for (bool physicalGreen : {false, true}) {
+        auto particles = particleCloud();
+        if (physicalGreen) {
+            for (auto& particle : particles) {
+                particle.position = particle.position * double(kScaleFactor);
+            }
+        }
+        auto const source = projectedMoments<order>(particles);
+        Green<order> green{};
+        if (physicalGreen) {
+            kernels::evaluateEwaldGreen(Position{.23, -.19, .31}, green);
+        } else {
+            double const background = kernels::kQuadrupoleTrace ? -1.7 : 0;
+            auto const local = localAt<order>(potentialPolynomial(kLocalDegree, background), {});
+            for (int i = 0; i < green.size(); ++i) {
+                green[i] = local[i];
+            }
+        }
+        Expansion<order> actual{}, expected{};
+        for (int rank = 0; rank <= kLocalDegree; ++rank) {
+            for (auto const& a : indices(rank)) {
+                if (a[2] > 1 && !(kernels::kQuadrupoleTrace && rank == 2)) {
+                    continue;
+                }
+                double value = 0;
+                for (int sourceRank = 0;
+                    sourceRank <= std::min(kMultipoleDegree, kLocalDegree - rank); ++sourceRank) {
+                    for (auto const& b : indices(sourceRank)) {
+                        double moment = 0;
+                        for (auto const& particle : particles) {
+                            moment += particle.mass * monomial(particle.position, b);
+                        }
+                        value += (sourceRank % 2 ? -1 : 1) * moment *
+                            fullDerivative<order>(green, sum(a, b)) / factorial(b);
+                    }
+                }
+                int const index =
+                    a[2] == 2 ? (kLocalDegree + 1) * (kLocalDegree + 1) : compactIndex(a);
+                expected[index] = value;
+            }
+        }
+        kernels::M2Lewald(source, green, actual);
+        compareRanks<kLocalDegree>(actual, expected,
+            physicalGreen ? "M2Lewald raw particle contraction of periodic Green" :
+                            "M2Lewald raw particle contraction of nonharmonic polynomial");
+        kernels::M2Lewald(source, green, actual);
+        for (int i = 0; i < expected.size(); ++i) {
+            expected[i] *= 2;
+        }
+        compareRanks<kLocalDegree>(actual, expected, "M2Lewald accumulates full derivatives");
+    }
+}
+
+template <int order>
+void testEwaldGreenHessian() {
+    if (!kernels::kQuadrupoleTrace) {
+        return;
+    }
+    double const expectedTrace = -4 * std::acos(-1.0) * double(kScaleFactorInverse3);
+    std::array<Position, 3> const positions{{{}, {.23, -.19, .31}, {.49, -.43, .11}}};
+    for (auto const& position : positions) {
+        Green<order> green{};
+        kernels::evaluateEwaldGreen(position, green);
+        double trace = 0;
+        for (int d = 0; d < 3; ++d) {
+            Index diagonal{};
+            diagonal[d] = 2;
+            trace += fullDerivative<order>(green, diagonal);
+        }
+        near(trace, expectedTrace, std::abs(expectedTrace), "Ewald Green constant Laplacian");
+        // Differentiate the generated first derivatives in physical coordinates.
+        // The additional kappa converts one derivative to tree coordinates.
+        double const step = 1e-5;
+        for (int d = 0; d < 3; ++d) {
+            auto lowerPosition = position;
+            auto upperPosition = position;
+            lowerPosition[d] -= step;
+            upperPosition[d] += step;
+            Green<order> lower{}, upper{};
+            kernels::evaluateEwaldGreen(lowerPosition, lower);
+            kernels::evaluateEwaldGreen(upperPosition, upper);
+            for (int e = 0; e < 3; ++e) {
+                Index first{}, second{};
+                first[e] = 1;
+                second = first;
+                ++second[d];
+                double const finiteDifference =
+                    (fullDerivative<order>(upper, first) - fullDerivative<order>(lower, first)) /
+                    (2 * step * double(kScaleFactor));
+                near(fullDerivative<order>(green, second), finiteDifference,
+                    std::abs(expectedTrace), "Ewald Green full Hessian finite difference", 3e-7);
+            }
+        }
+    }
+}
+
+template <int order>
+void testPeriodicBoundaryCancellation() {
+    if (!kernels::kQuadrupoleTrace) {
+        return;
+    }
+    // The source pair straddles the minimum-image choice x = 1/2. Both
+    // expansions use the same cell-center branch; the independent particle
+    // reference wraps each pair separately before summing the periodic field.
+    Position const separation{.5, .13, .21};
+    std::vector<Particle> const particles{{.7, {-.0002, .0001, 0}}, {1.3, {.0002, -.0001, 0}}};
+    Multipole<order> source{};
+    for (auto const& particle : particles) {
+        kernels::P2M(particle.mass, particle.position * double(kScaleFactor), source);
+    }
+    Green<order> green{};
+    kernels::evaluateEwaldGreen(separation, green);
+    Expansion<order> local{};
+    kernels::M2L(source, separation * double(kScaleFactor), local);
+    kernels::M2Lewald(source, green, local);
+    for (double x : {-.0001, .0001}) {
+        Position const displacement{x, -.00003, .00007};
+        Field actual{};
+        kernels::L2P(local, displacement * double(kScaleFactor), actual);
+        Position expected{};
+        for (auto const& particle : particles) {
+            auto distance = separation + displacement - particle.position;
+            for (int d = 0; d < 3; ++d) {
+                distance[d] -= std::nearbyint(distance[d]);
+            }
+            double const r2 = distance.dot(distance);
+            auto const correction = gravityReferenceCorrection(distance, gravityReferenceTables());
+            for (int d = 0; d < 3; ++d) {
+                expected[d] += particle.mass * (correction[d] - distance[d] / (r2 * std::sqrt(r2)));
+            }
+        }
+        for (int d = 0; d < 3; ++d) {
+            near(actual[d + 1] * double(kScaleFactor2), expected[d], expected.norm(),
+                "Periodic boundary consistent-center cancellation", 2e-6);
+        }
     }
 }
 
@@ -514,10 +707,14 @@ void testOrder() {
     testParticleMomentsAndTranslation<order>();
     testInteractions<order>();
     testLocalTranslation<order>();
+    testEwaldContraction<order>();
+    testEwaldGreenHessian<order>();
+    testPeriodicBoundaryCancellation<order>();
     testDirectParticleRemainder<order>();
     testSimd<order, float, 8>();
     testSimd<order, double, 2>();
     double worstOracle = 0;
+    double worstEwaldReference = 0;
     double worstSimdFloat = 0;
     double worstSimdDouble = 0;
     for (auto const& [label, value] : worstDiscrepancy) {
@@ -525,16 +722,19 @@ void testOrder() {
             worstSimdFloat = std::max(worstSimdFloat, value);
         } else if (label.rfind("SIMD/scalar double", 0) == 0) {
             worstSimdDouble = std::max(worstSimdDouble, value);
+        } else if (label == "Ewald Green full Hessian finite difference" ||
+            label == "Periodic boundary consistent-center cancellation") {
+            worstEwaldReference = std::max(worstEwaldReference, value);
         } else {
             worstOracle = std::max(worstOracle, value);
         }
     }
     std::printf("Cartesian order %d (degree %d/%d) scalar, Cartesian reference, "
                 "dipole and "
-                "SIMD checks passed; worst normalized discrepancy: oracles %.1e, SIMD float %.1e, "
-                "SIMD double %.1e.\n",
+                "SIMD checks passed; worst normalized discrepancy: algebra %.1e, Ewald references "
+                "%.1e, SIMD float %.1e, SIMD double %.1e.\n",
         order, KernelLayout<order>::kMultipoleDegree_, KernelLayout<order>::kLocalDegree_,
-        worstOracle, worstSimdFloat, worstSimdDouble);
+        worstOracle, worstEwaldReference, worstSimdFloat, worstSimdDouble);
 }
 
 }    // namespace detail

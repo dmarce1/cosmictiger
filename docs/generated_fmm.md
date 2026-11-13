@@ -1,7 +1,10 @@
 # Generated Cartesian FMM kernels
 
-`tools/generate_fmm.py` emits Cartesian trace-free operators for the global
-periodic FMM. A tensor through degree d stores `(d + 1)^2` coefficients.
+`tools/generate_fmm.py` emits compact Cartesian operators for the global
+periodic FMM. By default, a tensor through degree d stores `(d + 1)^2 + 1`
+coefficients when d >= 2: the harmonic slots followed by an independent `.zz`.
+Degree-two source moments are raw symmetric moments, and local/Green tensors
+store the full Hessian. All ranks above two remain trace-free.
 
 Each build generates kernels for its single potential degree, selected by
 `COSMICTIGER_EXPANSION_DEGREE` (default 6, supported values 2 through 8).
@@ -17,7 +20,7 @@ it regenerates the degree-6 reference declarations and sources. Build generation
 the source tree, so independent builds may use different degrees concurrently.
 
 The runtime walk, tree layout, checkpoint representation, and periodic correction
-use Cartesian trace-free coefficients. The C++ namespace
+use these compact Cartesian coefficients. The C++ namespace
 `cosmictiger::gravity::cartesian` provides distinct `Multipole`, `Expansion`,
 and `Green` types, source-first tree operators, and periodic Ewald operators.
 Field acceleration is minus the potential gradient. Callers include
@@ -28,7 +31,7 @@ Field acceleration is minus the potential gradient. Callers include
 the coefficient types nor kernel calls take an order template argument.
 Generated operators are ordinary scalar/SIMD overloads. Accumulators come last,
 for example `M2P(M, distance, field)` and `P2M(mass, distance, M)`. Operations
-continue to accumulate in place, with unchanged arithmetic and FLOP counts.
+continue to accumulate in place, with generated arithmetic and FLOP counts.
 Types use PascalCase, functions and variables camelCase, and namespaces and
 filenames snake_case, with the standard FMM operator abbreviations retained.
 
@@ -85,8 +88,8 @@ python3 tests/gravity/check_generated_fmm_flops.py --generated-dir cosmictiger/g
 Generated implementations are checked in under `src/gravity/kernels/`.
 Declarations and their operation report remain under `cosmictiger/gravity/kernels/`:
 
-- `cartesian_tracefree_types.hpp` contains named STF coefficient structs;
-  `cartesian_tracefree_config.hpp` records the generated degree.
+- `cartesian_tracefree_types.hpp` contains named coefficient structs;
+  `cartesian_tracefree_config.hpp` records the generated degree and trace option.
 - `cartesian_tracefree/{p2m,p2l,m2m,m2l,m2p,l2l,l2p,l2l_warp}.hpp`
   declares one Cartesian operator per header, with `geometry.hpp` for radius work.
 - `cartesian_tracefree/{ewald_green,ewald_m2l}.hpp` declares the periodic
@@ -95,7 +98,9 @@ Declarations and their operation report remain under `cosmictiger/gravity/kernel
 
 The generator defaults to these source-tree directories and emits Cartesian kernels for
 the selected degree (default 6), formatting C++ with the repository's clang-format
-configuration. Use `--output-dir` for a separate declaration/report directory and
+configuration. `--quadrupole-trace` is enabled by default; `--no-quadrupole-trace`
+emits the harmonic-only algebra for standalone use. The production periodic
+solver uses the default full degree-two representation. Use `--output-dir` for a separate declaration/report directory and
 `--source-dir` for its production implementations and `--instrumentation-dir`
 for its counting-test implementations. With only a custom `--output-dir`,
 these go into its `sources/` and `instrumentation/` subdirectories, keeping generation isolated
@@ -136,8 +141,21 @@ derivative emitter retain their existing explicit FMAs and count conventions.
 ## Traces and periodic fields
 
 Global FMM evaluates the Cartesian Ewald correction during the tree walk.
-The nearest-image primary force and its regular periodic correction use a
-single image throughout each accepted expansion. Cells crossing an image
-selection plane are opened; unresolved leaf pairs are evaluated directly.
-Source radial second moments and local background curvature are stored
-separately from trace-free coefficients; see `gravity/periodic_fmm.hpp`.
+The primary force and its regular periodic correction use a common image
+throughout each accepted expansion. The periodic checklist holds pairs with
+both interactions pending. Image-consistent pairs can resolve Ewald early
+and transfer their remaining primary interaction to the Newtonian checklist.
+Pairs crossing an image-selection plane resolve both interactions together
+with Newtonian M2L and `M2Lewald` at identical centers. The Ewald separation
+and smoothing depth requirements are retained: they guarantee that crossing
+leaf pairs can use this joint M2L. There is no Ewald particle-pair fallback.
+`evaluateEwaldGreen(distance, green)` sets the full Hessian, including
+`green.zz = -4*pi/kappa^3 - green.xx - green.yy`. The generated
+`M2Lewald(source, green, local)` contracts the whole periodic field, including
+the constant-Laplacian contributions. `P2M` and `M2M` retain all six raw
+degree-two moments; Newtonian contractions use their STF projection.
+`L2L`, cooperative CUDA `L2LWarp`, and `L2P` propagate and evaluate the full
+quadratic, so no separate radial-moment or curvature field is required.
+The stored trace and the coupled image choice address separate requirements:
+the former retains the Poisson quadratic, while the latter keeps the primary
+and periodic image contributions consistent.

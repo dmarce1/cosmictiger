@@ -256,13 +256,8 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
         Lo[0] = Li[0];
     }
     cosmictiger::gravity::cartesian::L2L(Li, fmmScaleDisplacement(ldx), params.doPhi, Lo);
-    float const shiftZ = kScaleFactor * ldx[kZi];
-    Lo(0, 0, 1) += l.curvature * shiftZ;
-    if (params.doPhi) {
-        Lo[0] += .5f * l.curvature * shiftZ * shiftZ;
-    }
     expansion = Lo;
-    flops += cosmictiger::gravity::cartesian::kL2LFlops<kLocalDegree> + 5 + (params.doPhi ? 7 : 3);
+    flops += cosmictiger::gravity::cartesian::kL2LFlops<kLocalDegree> + 5;
     // Box scaling stays double; each local displacement scales in double and
     // narrows before the float L2L coordinate scaling. Two reciprocals are float.
     doubleFlops += 6 + 6 * kSimdFloatSize + kDimensions;
@@ -279,8 +274,8 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
         }
     }
     work.next(profile::WorkPhase::KickCpuM2L);
-    flops += detail::cpuPeriodicFmm(
-        l, *selfPtr, echecklist, forces, params.theta, params.gravitySmoothingLength, params.doPhi);
+    flops += detail::cpuPeriodicFmm(l, *selfPtr, echecklist, dchecklist, params.theta,
+        params.gravitySmoothingLength, params.doPhi, counts.cellCellDirect);
     {
         work.next(profile::WorkPhase::KickCpuTraversal);
         nextlist.resize(0);
@@ -347,12 +342,6 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                     doubleFlops += 9 * kSimdFloatSize;    // Source box extent addition and scaling.
                 }
                 for (int i = 0; i < maxi; i++) {
-                    bool const singleImage = fmmSinglePeriodicImage(
-                        {dx[0][i], dx[1][i], dx[2][i]}, selfPtr->radius, otherPtrs[i]->radius);
-                    acceptance.cellCell[i] = bool(acceptance.cellCell[i]) && singleImage;
-                    acceptance.particleCell[i] = bool(acceptance.particleCell[i]) && singleImage;
-                    acceptance.cellParticle[i] = bool(acceptance.cellParticle[i]) && singleImage;
-                    flops += 7;
                     auto const interaction = selectFmmInteraction(bool(acceptance.cellCell[i]),
                         bool(acceptance.particleCell[i]), bool(acceptance.cellParticle[i]),
                         selfPtr->leaf, bool(otherLeaf[i]), selfPtr->radius, otherPtrs[i]->radius,
@@ -434,12 +423,6 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                 cosmictiger::gravity::Field<float> l2{};
                 cosmictiger::gravity::cartesian::L2P(
                     expansion, fmmScaleDisplacement(dx), params.doPhi, l2);
-                float const z = kScaleFactor * dx[kZi];
-                l2.accelerationZ() -= l.curvature * z;
-                if (params.doPhi) {
-                    l2.potential() += .5f * l.curvature * z * z;
-                }
-                flops += params.doPhi ? 7 : 3;
                 float const gravityEffectiveRadius =
                     gravitySofteningEffectiveRadius(params.gravitySmoothingLength);
                 forces.phi[j] += kScaleFactor1 * l2.potential();

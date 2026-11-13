@@ -51,8 +51,7 @@ __device__ inline void cudaCopyExpansion(float* destination, float const* source
 template <int order>
 __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKickData const& data,
     cosmictiger::gravity::cartesian::Expansion<float> const& lValue2, TreeNode const& self,
-    CudaKickForceTile const& force, int sinkBegin, int sinkCount, ParticleInteger outputOffset,
-    float curvature) {
+    CudaKickForceTile const& force, int sinkBegin, int sinkCount, ParticleInteger outputOffset) {
     int const& tid = threadIdx.x;
     auto& allPhi = data.pot;
     auto& allGx = data.gx;
@@ -103,12 +102,6 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
         dx[kYi] = unwrappedDistance(sinkY[i], self.pos[kYi]);
         dx[kZi] = unwrappedDistance(sinkZ[i], self.pos[kZi]);
         cosmictiger::gravity::cartesian::L2P(lValue2, fmmScaleDisplacement(dx), params.doPhi, l2);
-        float const z = kScaleFactor * dx[kZi];
-        l2.accelerationZ() -= curvature * z;
-        if (params.doPhi) {
-            l2.potential() += .5f * curvature * z * z;
-        }
-        flops += params.doPhi ? 7 : 3;
         float gx = force.gx[i];
         float gy = force.gy[i];
         float gz = force.gz[i];
@@ -520,7 +513,6 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
         ancestors.resize(0);
         dchecks.resize(0);
         echecks.resize(0);
-        float curvature = params[index].curvature;
         sparams.resize(0);
         detail::cudaCopyExpansion<order>(&expansion[0], &params[index].lValue[0]);
         if (tid < kDimensions) {
@@ -562,15 +554,6 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                     auto* Lo = scratch;
                     cosmictiger::gravity::cartesian::L2LWarpInto(
                         Li, fmmScaleDisplacement(dx), globalParams.doPhi, Lo);
-                    if (tid == 0) {
-                        float const z = kScaleFactor * dx[kZi];
-                        scratch[cosmictiger::gravity::cartesian::Expansion<float>::index(
-                            0, 0, 1)] += curvature * z;
-                        if (globalParams.doPhi) {
-                            scratch[0] += .5f * curvature * z * z;
-                        }
-                        flops += globalParams.doPhi ? 7 : 3;
-                    }
                     __syncwarp();
                     detail::cudaCopyExpansion<order>(&expansion[0], scratch);
                     if (tid < kDimensions) {
@@ -585,7 +568,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                     }
                 }
                 flops += detail::cudaPeriodicFmm(data, self, control, globalParams.theta,
-                    smoothingLength, globalParams.doPhi, expansion, curvature);
+                    smoothingLength, globalParams.doPhi, expansion);
                 ParticleInteger const numberOfSinks =
                     self.particleRange.second - self.particleRange.first;
                 if (numberOfSinks) {
@@ -641,14 +624,8 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                                         flops += acceptanceFlops;    // Box arithmetic is counted by
                                                                      // precision at its source.
                                     }
-                                    bool const singleImage =
-                                        fmmSinglePeriodicImage(dx, self.radius, other.radius);
-                                    acceptance.cellCell = acceptance.cellCell && singleImage;
-                                    acceptance.particleCell =
-                                        acceptance.particleCell && singleImage;
-                                    acceptance.cellParticle =
-                                        acceptance.cellParticle && singleImage;
-                                    flops += 7;
+                                    // These checks inherited a separately accepted Ewald
+                                    // correction whose cells use one periodic image.
                                     if (!acceptance.cellCell && self.leaf && other.leaf) {
                                         flops += 2 + int(acceptance.particleCell) +
                                             int(acceptance.cellParticle);
@@ -757,11 +734,8 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                             }
                             __syncwarp();
                             work.next(profile::DevicePhase::KickLeafKick);
-                            flops += detail::cudaPeriodicPoints(data, self, control, force,
-                                sinkBegin, sinkCount, globalParams.doPhi);
-                            interactionFlops +=
-                                doKick<order>(kr, globalParams, data, expansion, self, force,
-                                    sinkBegin, sinkCount, params[index].outputOffset, curvature);
+                            interactionFlops += doKick<order>(kr, globalParams, data, expansion,
+                                self, force, sinkBegin, sinkCount, params[index].outputOffset);
                             // The next tile reinitializes the force planes.
                             __syncwarp();
                         }
@@ -813,10 +787,6 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                         ancestors[top].pos[tid] = expansionPos[tid];
                     }
                     __syncwarp();
-                    if (tid == 0) {
-                        ancestors[top].curvature = curvature;
-                    }
-                    __syncwarp();
                     echecks.pushTop();
                     dchecks.pushTop();
                     if (tid == 0) {
@@ -841,7 +811,6 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                     expansionPos[tid] = ancestors[top].pos[tid];
                 }
                 __syncwarp();
-                curvature = ancestors[top].curvature;
                 ancestors.popBack();
                 echecks.popTop();
                 dchecks.popTop();

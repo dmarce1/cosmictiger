@@ -533,5 +533,7 @@ void evaluateEwaldGreen(Vector3<Real> const& distance, Green<Real>& output) {
     output[48] *= broadcast<Real>(kScaleFactorInverse1 * kScaleFactorInverse1 *
         kScaleFactorInverse1 * kScaleFactorInverse1 * kScaleFactorInverse1 * kScaleFactorInverse1 *
         kScaleFactorInverse1);
+    output.zz =
+        broadcast<Real>(-1.256637061435917246e+01 * kScaleFactorInverse3) - output[6] - output[4];
 }
 }    // namespace cosmictiger::gravity::cartesian
