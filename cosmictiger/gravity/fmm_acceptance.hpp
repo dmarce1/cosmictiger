@@ -13,6 +13,7 @@
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/cuda/cuda.hpp>
 #include <cosmictiger/math/simd_math.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 enum class FmmInteraction { CellCell, ParticleCell, CellParticle, ParticleParticle };
 
@@ -33,6 +34,18 @@ CUDA_EXPORT inline float fmmInverseOpeningAngle(float theta) {
 #else
     return 1.0f / theta;
 #endif
+}
+
+// A Taylor expansion uses the image selected by its cell centers. Both the
+// nearest-image Newtonian force and its Ewald correction jump when a particle
+// pair selects a different image. Their jumps cancel only if the two walks
+// preserve the same split, so independently accepted cells must not cross an
+// image-selection plane. Equality is opened to retain the pointwise tie rule.
+CUDA_EXPORT inline bool fmmSinglePeriodicImage(
+    Vector3<float> const& displacement, float sinkRadius, float sourceRadius) {
+    return fmaxf(fabsf(displacement[0]), fmaxf(fabsf(displacement[1]), fabsf(displacement[2]))) +
+        (sinkRadius + sourceRadius) <
+        .5f;
 }
 
 // Inputs describe enclosing cells and periodic minimum distances. Every particle

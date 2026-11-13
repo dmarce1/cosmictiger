@@ -659,6 +659,16 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                                         flops += acceptanceFlops;    // Box arithmetic is counted by
                                                                      // precision at its source.
                                     }
+                                    if (geometry.meshSize == 0 || geometry.periodicNear) {
+                                        bool const singleImage =
+                                            fmmSinglePeriodicImage(dx, self.radius, other.radius);
+                                        acceptance.cellCell = acceptance.cellCell && singleImage;
+                                        acceptance.particleCell =
+                                            acceptance.particleCell && singleImage;
+                                        acceptance.cellParticle =
+                                            acceptance.cellParticle && singleImage;
+                                        flops += 7;
+                                    }
                                     if (acceptance.cellCell && self.leaf && other.leaf &&
                                         geometry.meshSize > 0) {
                                         flops += 2;

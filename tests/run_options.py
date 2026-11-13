@@ -163,6 +163,9 @@ def main():
     required.update({"scenario.cosmology.gadget4Restart", "scenario.cosmology.useGlass",
                      "scenario.cosmology.twoLpt", "scenario.plummer.radius",
                      "scenario.kelvinHelmholz.packing"})
+    benchmark_keys = {"benchmark.testFiles", "benchmark.openingAngles",
+                      "benchmark.size", "benchmark.repeats"}
+    required.update(benchmark_keys)
     required.update(cuda_keys)
     required.update({"cosmology.omegaLambda", "cosmology.startRedshift", "lightcone.enabled"})
     required.update("gravity.cuda." + key for key in cuda_tunings)
@@ -1244,6 +1247,7 @@ mapSize = 8
     preset_curvatures = {"critical.ini": 0.0}
     checked_presets = set()
     local_presets = {root / "configurations/lcdm_present.ini"}
+    sparse_presets = {root / "configurations/benchmark.ini": {"run.scenario", *benchmark_keys}}
     preset_paths = [root / "default.ini", *sorted((root / "configurations").rglob("*.ini"))]
     for path in preset_paths:
         relative_path = path.relative_to(root)
@@ -1256,7 +1260,14 @@ mapSize = 8
         actual_keys = {f"{section}.{key}" for section in ini.sections() for key in ini[section]}
         active_optional_keys = actual_keys & preset_optional_keys
         expected_keys = (public_keys - preset_optional_keys) | active_optional_keys
-        if actual_keys != expected_keys:
+        sparse_preset = path in sparse_presets
+        if sparse_preset:
+            unknown_keys = actual_keys - public_keys
+            missing_keys = sparse_presets[path] - actual_keys
+            if unknown_keys or missing_keys:
+                raise RuntimeError(f"{relative_path} sparse option coverage differs: "
+                                   f"unknown={sorted(unknown_keys)}, missing={sorted(missing_keys)}")
+        elif actual_keys != expected_keys:
             raise RuntimeError(f"{relative_path} option coverage differs: {sorted(actual_keys ^ expected_keys)}")
         # Build-selected position width/bucket size and radius alternatives may
         # remain commented. All three cooling controls must be explicit.
@@ -1270,11 +1281,12 @@ mapSize = 8
                 r"\s*[#;]\s*([A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z][A-Za-z0-9]*)*)\s*=", line)
             if section and alternative_match:
                 documented_alternatives.add(f"{section}.{alternative_match.group(1)}")
-        if not preset_optional_keys <= documented_alternatives:
+        if not sparse_preset and not preset_optional_keys <= documented_alternatives:
             raise RuntimeError(f"{relative_path} is missing optional settings: "
                                f"{sorted(preset_optional_keys - documented_alternatives)}")
         if (path not in local_presets and
-                (ini["output"]["units"] != "code" or ini["output"]["frame"] != "comoving")):
+                (ini.get("output", "units", fallback="code") != "code" or
+                 ini.get("output", "frame", fallback="comoving") != "comoving")):
             raise RuntimeError(f"{relative_path} must preserve native output defaults")
         metadata_directory = args.workdir.resolve() / "output" / "options_presets" / case_name
         runtime_overrides = [*[f"--{key}=false" for key in cuda_keys],
@@ -1289,10 +1301,14 @@ mapSize = 8
             # Validate gravity options and serialization with hydro disabled
             # even for presets whose physical problem uses imposed forces only.
             preset_options.append("--gravity.enabled=true")
-        if args.without_sph and ini["run"]["scenario"] not in ("cosmology", "plummer", "glass"):
+        if args.without_sph and ini["run"]["scenario"] not in ("cosmology", "plummer", "glass", "benchmark"):
             # Keep validating every example's option coverage and syntax when its
             # physical scenario is unavailable in the compiled executable.
             preset_options.append("--run.scenario=cosmology")
+        if sparse_preset:
+            # The benchmark forbids run.test. Parse its complete INI through the
+            # checkpoint metadata test under a scenario that performs no file reads.
+            preset_options.append("--run.scenario=plummer")
         if (ini["run"]["scenario"] == "kelvinHelmholtz" and build_dimension != 2 and
                 ini.has_option("scenario.kelvinHelmholz", "packing")):
             # The Kelvin-Helmholtz preset targets the 2D build (make.sh); its CEV/E
@@ -1302,6 +1318,13 @@ mapSize = 8
         output = run(f"complete_{case_name}", metadata_options + preset_options)
         if "Checkpoint state and mode validation passed" not in output:
             raise RuntimeError(f"{relative_path} did not finish metadata validation")
+        if sparse_preset:
+            for key in ("size", "repeats"):
+                assertNumericSetting(output, "benchmark." + key, ini.getint("benchmark", key))
+            for key in ("testFiles", "openingAngles"):
+                match = re.search(r"^benchmark\." + key + r"\s*:\s*(.*?)\s*$", output, re.MULTILINE)
+                if match is None or match[1] != ini["benchmark"][key]:
+                    raise RuntimeError(f"{relative_path} did not preserve benchmark.{key}")
         if (ini["run"]["scenario"] == "cosmology" and coupledSourcesAvailable and chemistryAvailable and
                 starFormationAvailable and not hydro_rejected):
             enabled_options = [option for option in metadata_options

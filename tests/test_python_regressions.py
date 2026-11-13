@@ -20,6 +20,7 @@ import check_build_features
 import checkpoint_format as checkpoint
 import compare_native_recombination
 import run_gadget4_cooling
+import run_interrupt_simulation
 import run_star_formation_ids
 import run_variational_sph
 
@@ -133,6 +134,39 @@ class BuildCapabilityTests(unittest.TestCase):
                     [] if gravity else [
                         'gravity disabled but compiles cosmology source: src/analysis/power.cpp',
                         'gravity disabled but compiles gravity source: src/tools/healpix2silo.cpp'])
+
+
+class InterruptProgressTests(unittest.TestCase):
+    def test_completed_gravity_rows_preserve_iteration_and_time_columns(self):
+        row = [0.25, 2, 0, 1, 0, 3, 3.5, 0, 0, 128, 1.5, 0.01, 0, 0, 1.4, 0.1]
+        text = ' '.join(map(str, row))
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'progress.txt'
+            # Polling must ignore headers, obsolete rows, and an in-flight write.
+            path.write_text('runtime i z a adot timestep\n' +
+                            ' '.join(map(str, row[:14])) + '\n' + text + '\n' + text)
+            rows = run_interrupt_simulation.progress_rows(path, 'plummer')
+        self.assertEqual(rows, [row])
+        self.assertEqual(int(rows[-1][1]) + 1, 3)
+        self.assertLess(rows[-1][5], run_interrupt_simulation.STEP_COUNT)
+
+    def test_hydro_progress_keeps_its_five_column_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'progress.txt'
+            path.write_text('3 0.00003 0.00001 0 0\n')
+            rows = run_interrupt_simulation.progress_rows(path, 'hydroWave')
+        self.assertEqual(rows, [[3, 0.00003, 0.00001, 0, 0]])
+        self.assertEqual(int(rows[-1][0]), 3)
+        self.assertLess(rows[-1][1], run_interrupt_simulation.END_TIME)
+
+    def test_nonfinite_complete_progress_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'progress.txt'
+            for scenario, columns in (('plummer', 16), ('hydroWave', 5)):
+                with self.subTest(scenario=scenario):
+                    path.write_text('0 ' * (columns - 1) + 'nan\n')
+                    with self.assertRaisesRegex(RuntimeError, 'nonfinite simulation progress'):
+                        run_interrupt_simulation.progress_rows(path, scenario)
 
 
 class CheckpointTests(unittest.TestCase):

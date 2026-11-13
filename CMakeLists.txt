@@ -741,14 +741,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
         set_tests_properties(stack_trace_hpx PROPERTIES TIMEOUT 120 PROCESSORS 2
             LABELS "diagnostics;cpu;hpx")
         if(cosmictiger_mpi_tests)
-            set(stack_trace_mpi_args --mpi-exec=${MPIEXEC_EXECUTABLE}
-                --mpi-numproc-flag=${MPIEXEC_NUMPROC_FLAG} --mpi-only)
-            foreach(flag IN LISTS MPIEXEC_PREFLAGS)
-                list(APPEND stack_trace_mpi_args --mpi-preflag=${flag})
-            endforeach()
-            foreach(flag IN LISTS MPIEXEC_POSTFLAGS)
-                list(APPEND stack_trace_mpi_args --mpi-postflag=${flag})
-            endforeach()
+            set(stack_trace_mpi_args ${cosmictiger_python_mpi_args} --mpi-only)
             add_test(NAME stack_trace_hpx_mpi COMMAND ${Python3_EXECUTABLE}
                 ${PROJECT_SOURCE_DIR}/tests/run_stack_trace_hpx.py $<TARGET_FILE:stack_trace_hpx_test>
                 ${PROJECT_BINARY_DIR}/stack_trace_hpx_mpi_test_output ${stack_trace_mpi_args})

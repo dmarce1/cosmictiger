@@ -47,7 +47,9 @@ def progress_rows(path, scenario):
             values = [float(value) for value in line.split()]
         except ValueError:
             continue
-        if len(values) == (5 if scenario == "hydroWave" else 14):
+        # Gravity progress appends FP32/FP64 rates to the original 14 columns;
+        # iteration remains column 1 and elapsed coarse intervals remain column 5.
+        if len(values) == (5 if scenario == "hydroWave" else 16):
             require(all(math.isfinite(value) for value in values), "nonfinite simulation progress")
             rows.append(values)
     return rows

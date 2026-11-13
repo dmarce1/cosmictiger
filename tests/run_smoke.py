@@ -45,13 +45,16 @@ def validateFlopRates(outputLog, rows):
     if any(not math.isfinite(value) for row in rows for value in row):
         raise RuntimeError("progress contains nonfinite values")
     if not re.search(
-            r"^\s*Step\s+z.*\s+FP32 GF/s\s+FP64 GF/s\s+GFLOP/s(?:\s+\d+)+\s*$",
+            r"^\s*Step\s+z.*\s+FP32 GF/s\s+FP64 GF/s\s+GFLOP/s"
+            r"(?:[ \t]+\d+)+(?:[ \t]+Events)?[ \t]*$",
             outputLog, re.MULTILINE):
         raise RuntimeError("terminal progress is missing the precision FLOP rate columns")
+    # Event annotations follow the rung populations without changing the numeric columns.
     terminalRows = re.findall(
         r"^\s*\d+(?:\s+[+\-]?[\d.]+e[+\-]\d+){4}"
         r"\s+\d+\s+\d+(?:\s+\d{2,}:\d{2}:\d{2}\.\d{2}){2}"
-        r"\s+(\S+)\s+(\S+)\s+(\S+)(?:\s+\d+)+\s*$",
+        r"\s+(\S+)\s+(\S+)\s+(\S+)(?:[ \t]+\d+)+"
+        r"(?:[ \t]+[^\d\s][^\r\n]*)?[ \t]*$",
         outputLog, re.MULTILINE)
     if len(terminalRows) != len(rows):
         raise RuntimeError("terminal FLOP rate rows disagree with progress.txt")

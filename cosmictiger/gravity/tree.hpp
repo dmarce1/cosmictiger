@@ -10,8 +10,11 @@
 #define TREE_HPP_
 
 #include <cstdint>
+#include <type_traits>
 
 #include <hpx/serialization/serialization_fwd.hpp>
+#include <hpx/serialization/traits/is_bitwise_serializable.hpp>
+#include <hpx/serialization/traits/is_not_bitwise_serializable.hpp>
 
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
@@ -124,6 +127,16 @@ struct TreeNode {
         arc & depth0;
     }
 };
+
+// Cache lines travel in Vector<TreeNode>. HPX otherwise byte-copies this
+// trivially copyable record and sends mpos as a process-local pointer, bypassing
+// save/load and its reconstruction of the remote multipole in our local arena.
+namespace hpx::traits {
+template <>
+struct is_bitwise_serializable<TreeNode> : std::false_type {};
+template <>
+struct is_not_bitwise_serializable<TreeNode> : std::true_type {};
+}    // namespace hpx::traits
 
 // Only local source nodes can be resolved against this locality's arrays.
 inline FmmSourceView treeSourceView(TreeNode const& node) {

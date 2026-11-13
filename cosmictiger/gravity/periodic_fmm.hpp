@@ -18,7 +18,8 @@ namespace detail {
 // Derived unit-box image distances. For a minimum-image displacement d,
 // R1²=d.d and R2²=R1²+1-2 max(|d_x|,|d_y|,|d_z|).
 // The correction excludes the nearest image selected by the expansion centers.
-// Its opening criterion uses the distance to the second-nearest image.
+// Its opening criterion uses the distance to the second-nearest image and
+// preserves that excluded image throughout the accepted pair of cells.
 // Symbol directory: R1,R2 are the first/second image distances; d is separation.
 CUDA_EXPORT inline bool periodicFmmAccepted(Vector3<float> const& displacement, float sinkRadius,
     float sourceRadius, float inverseTheta, float /* smoothingLength */,
@@ -29,12 +30,13 @@ CUDA_EXPORT inline bool periodicFmmAccepted(Vector3<float> const& displacement, 
     float const nearestSquared = displacement.dot(displacement);
     float const secondSquared = nearestSquared + 1.0f - 2.0f * largest;
     float const opening = radius * inverseTheta;
+    bool const sameImage = largest + radius < .5f;
     bool const separated = opening * opening < secondSquared;
     if (operations != nullptr) {
         // Includes three absolute values and two maxima, each one math result.
-        *operations = 16;
+        *operations = 17;
     }
-    return separated;
+    return sameImage && separated;
 }
 
 // Derived constant-Laplacian contraction, in tree coordinates y=kappa*r:

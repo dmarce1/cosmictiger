@@ -119,7 +119,7 @@ def configurationDefinitions(configuration, bits, degrees):
 
 def sourceSelectionErrors(sources, configuration):
     errors = []
-    collisionlessScenarios = {"scenario.cpp", "cosmology.cpp", "plummer.cpp", "glass.cpp"}
+    collisionlessScenarios = {"scenario.cpp", "cosmology.cpp", "plummer.cpp", "glass.cpp", "benchmark.cpp"}
     for source in sorted(sources):
         if not hasRockstar(configuration) and (
                 ROCKSTAR_SOURCE_PATTERN.fullmatch(source) or source in ROCKSTAR_SOURCES):
@@ -138,7 +138,7 @@ def sourceSelectionErrors(sources, configuration):
             excludedSource = source in {
                 "src/tools/groups2halofunc.cpp", "src/tools/halo_catalog_export.cpp",
                 "src/tools/healpix2silo.cpp", "src/math/fp16.cpp",
-                "src/scenarios/plummer.cpp", "src/scenarios/glass.cpp",
+                "src/scenarios/plummer.cpp", "src/scenarios/glass.cpp", "src/scenarios/benchmark.cpp",
                 "tests/analysis_backends.cpp", "tests/analysis_tools.cpp", "tests/bh.cpp",
                 "tests/compression.cpp", "tests/fp16.cpp", "tests/groups_catalogue.cpp",
                 "tests/halo_catalog_fixture.cpp", "tests/lightcone_cpu.cpp", "tests/lightcone_cuda.cu",

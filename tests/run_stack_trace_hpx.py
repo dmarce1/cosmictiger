@@ -24,9 +24,8 @@ def run_case(args, name, *, ranks=1, crash_locality=None):
     if crash_locality is not None:
         command.append(f"--crash-locality={crash_locality}")
     if ranks > 1:
-        command.extend(["--hpx:ini=hpx.parcel.bootstrap=mpi",
-                        "--hpx:ini=hpx.parcel.mpi.enable=1",
-                        "--hpx:ini=hpx.parcel.tcp.enable=0"])
+        command.append("--hpx:ini=hpx.parcel.bootstrap=mpi")
+        command.extend(args.hpx_argument)
         command = ([args.mpi_exec, args.mpi_numproc_flag, str(ranks)]
                    + args.mpi_preflag + command[:1] + args.mpi_postflag + command[1:])
     environment = os.environ.copy()
@@ -86,6 +85,7 @@ def main():
     parser.add_argument("--mpi-numproc-flag", default="-n")
     parser.add_argument("--mpi-preflag", action="append", default=[])
     parser.add_argument("--mpi-postflag", action="append", default=[])
+    parser.add_argument("--hpx-argument", action="append", default=[])
     parser.add_argument("--mpi-only", action="store_true")
     args = parser.parse_args()
     if args.mpi_only and not args.mpi_exec:

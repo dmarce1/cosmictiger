@@ -511,6 +511,27 @@ TEST(FmmAcceptance, InverseOpeningAngle) {
     EXPECT_EQ(fmmInverseOpeningAngle(0.5f), 2.0f);
 }
 
+TEST(FmmAcceptance, PeriodicImageSelectionPlanes) {
+    // A source centered at .48 with radius .03 has members on both sides of
+    // the nearest-image switch relative to a sink at zero. Ordinary angular
+    // separation accepts it, but its Newtonian/Ewald split is discontinuous.
+    auto const separated =
+        computeFmmAcceptance(.48f * .48f, 0.0f, .03f, .48f * .48f, .45f * .45f, .001f, 2.0f);
+    EXPECT_TRUE(separated.cellCell);
+    EXPECT_FALSE(fmmSinglePeriodicImage({.48f, 0.0f, 0.0f}, 0.0f, .03f));
+    for (int dim = 0; dim < kDimensions; ++dim) {
+        for (float sign : {-1.0f, 1.0f}) {
+            Vector3<float> displacement{};
+            displacement[dim] = sign * .375f;
+            EXPECT_FALSE(fmmSinglePeriodicImage(displacement, .0625f, .0625f));
+            displacement[dim] = sign * .3125f;
+            EXPECT_TRUE(fmmSinglePeriodicImage(displacement, .0625f, .0625f));
+            displacement[dim] = sign * .4375f;
+            EXPECT_FALSE(fmmSinglePeriodicImage(displacement, .03125f, .0625f));
+        }
+    }
+}
+
 TEST(FmmAcceptance, HybridCosts) {
     detail::testHybridCosts();
 }

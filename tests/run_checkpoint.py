@@ -511,11 +511,13 @@ def main():
 
     restart("unsupported_version", unsupportedVersion, expectSuccess=False)
 
-    def retiredParticleMesh(checkpointDir):
+    def retiredMeshGravity(checkpointDir, flag):
         rankFile = checkpointDir / "checkpoint.0.dat"
-        payload = bytearray(rankFile.read_bytes())
+        # No extension or particle bytes remain, so the solver diagnostic proves
+        # the header is rejected before any retired payload can be decoded.
+        payload = bytearray(rankFile.read_bytes()[:len(bytes(Header()))])
         flags = int.from_bytes(payload[12:16], byteorder=sys.byteorder)
-        payload[12:16] = (flags | (1 << 16)).to_bytes(4, byteorder=sys.byteorder)
+        payload[12:16] = (flags | flag).to_bytes(4, byteorder=sys.byteorder)
         rankFile.write_bytes(payload)
         # Keep the manifest valid so this exercises solver compatibility,
         # rather than stopping at the earlier corruption check.
@@ -524,9 +526,12 @@ def main():
         lines[1] = f"0 {len(payload)} {fnv1a64(payload):016x}"
         manifest.write_text("\n".join(lines) + "\n")
 
-    output = restart("retired_pm", retiredParticleMesh, expectSuccess=False)
-    if "Scalar particle-mesh (pm, p3m) checkpoints are no longer supported" not in output:
-        raise RuntimeError("retired PM checkpoint was not rejected before reading its payload")
+    for name, flag in (("retired_pm", 1 << 16), ("retired_pmmm", 1 << 17),
+                       ("retired_pm_interval", 1 << 22), ("retired_mesh_interval", 1 << 23)):
+        output = restart(name, lambda directory, flag=flag: retiredMeshGravity(directory, flag),
+                         expectSuccess=False)
+        if "Mesh-gravity checkpoints are no longer supported" not in output:
+            raise RuntimeError(f"{name} checkpoint was not rejected before reading its payload")
 
     def downgradeToVersionOne(checkpointDir):
         removeManifest(checkpointDir)

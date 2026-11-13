@@ -182,6 +182,33 @@ void verifyTreeNodeArchive(TreeId id) {
         requireFmmTree(actualMultipole[i] == expectedMultipole[i],
             "tree-node multipole did not survive the HPX archive");
     }
+
+    // The remote cache sends vectors, whose optimized serialization path can
+    // bypass a trivially copyable element's own save/load implementation.
+    // Use a nonempty node and the ordinary archive flags so raw mpos transport
+    // cannot hide behind the shared empty-multipole record or disabled fast path.
+    Vector<TreeNode> const expectedLine{expected, expected};
+    bytes.clear();
+    {
+        hpx::serialization::output_archive archive(bytes);
+        archive << expectedLine;
+    }
+    Vector<TreeNode> actualLine;
+    {
+        hpx::serialization::input_archive archive(bytes);
+        archive >> actualLine;
+    }
+    requireFmmTree(actualLine.size() == expectedLine.size(),
+        "tree cache-line size did not survive the HPX archive");
+    for (auto const& received : actualLine) {
+        requireFmmTree(received.mpos != expected.mpos,
+            "tree cache-line archive copied a process-local multipole pointer");
+        treeReadMultipole(received.mpos, actualMultipole);
+        for (int i = 0; i < fmmMultipoleCoefficientCount(kFmmOrder); ++i) {
+            requireFmmTree(actualMultipole[i] == expectedMultipole[i],
+                "tree cache-line multipole did not survive the HPX archive");
+        }
+    }
 }
 
 void verifyRemoteMultipoleStorage() {
