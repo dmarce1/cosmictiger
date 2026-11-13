@@ -150,8 +150,8 @@ std::array<TreeNode, 3> makeTree() {
         // of any far-field or hybrid pair. Every source reaches the PP list.
         for (int dim = 0; dim < kDimensions; ++dim) {
             node.pos[dim] = Position(0.5);
-            node.box.begin[dim] = RangeFixed(0.25);
-            node.box.end[dim] = RangeFixed(0.75);
+            node.box.begin[dim] = Fixed32(0.25);
+            node.box.end[dim] = Fixed32(0.75);
         }
         for (int child = 0; child < kChildCount; ++child) {
             node.children[child].proc = 0;

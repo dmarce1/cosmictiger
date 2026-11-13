@@ -34,7 +34,7 @@ TEST(FmmGeometryFlops, DisplacementPrecisionTracksPeriodicAndShiftedPaths) {
 }
 
 TEST(FmmGeometryFlops, BoxGeometrySeparatesDoubleCoordinatesFromFloatNorms) {
-    Fixed32Range box;
+    FmmBox box;
     Vector3<Position> point;
     for (int dim = 0; dim < kDimensions; ++dim) {
         box.begin[dim] = 0.125;
@@ -45,7 +45,7 @@ TEST(FmmGeometryFlops, BoxGeometrySeparatesDoubleCoordinatesFromFloatNorms) {
     float const periodicValue = fmmSinkBoxDistanceSquared(box, point, {}, &periodic);
     EXPECT_EQ(periodicValue, fmmSinkBoxDistanceSquared(box, point, {}));
     EXPECT_EQ(periodic.singlePrecision, kCountFlops ? 6 : 0);
-    EXPECT_EQ(periodic.doublePrecision, kCountFlops ? 15 : 0);
+    EXPECT_EQ(periodic.doublePrecision, kCountFlops ? 6 : 0);
     FlopCounts bounded{};
     FmmGeometry geometry;
     geometry.meshSize = 4;
@@ -55,7 +55,7 @@ TEST(FmmGeometryFlops, BoxGeometrySeparatesDoubleCoordinatesFromFloatNorms) {
     float const boundedValue = fmmSinkBoxDistanceSquared(box, point, geometry, &bounded);
     EXPECT_EQ(boundedValue, fmmSinkBoxDistanceSquared(box, point, geometry));
     EXPECT_EQ(bounded.singlePrecision, kCountFlops ? 6 : 0);
-    EXPECT_EQ(bounded.doublePrecision, kCountFlops ? (kPositionBits == 64 ? 57 : 39) : 0);
+    EXPECT_EQ(bounded.doublePrecision, kCountFlops ? 15 : 0);
     EXPECT_EQ(bounded.unclassified, 0);
 }
 
@@ -115,14 +115,14 @@ float referenceDifference(Position sink, Position source, int dim, FmmGeometry c
 }
 
 float referenceBox(
-    Fixed32Range const& box, Vector3<Position> const& point, Array<int, kDimensions> const& image) {
+    FmmBox const& box, Vector3<Position> const& point, Array<int, kDimensions> const& image) {
     long double squared = 0;
-    constexpr WideInteger kBoundaryUnit = WideInteger(1) << (kPositionBits - 29);
+    constexpr WideInteger kBoundaryUnit = WideInteger(1) << (kPositionBits - 32);
     for (int dim = 0; dim < kDimensions; ++dim) {
         WideInteger const coordinate =
             WideInteger(point[dim].raw()) + WideInteger(image[dim]) * kPositionUnit;
         WideInteger const lower = WideInteger(box.begin[dim].raw()) * kBoundaryUnit;
-        WideInteger const upper = WideInteger(box.end[dim].raw()) * kBoundaryUnit;
+        WideInteger const upper = lower + WideInteger(box.extentTicks(dim)) * kBoundaryUnit;
         WideInteger const outside =
             std::max(WideInteger(0), std::max(lower - coordinate, coordinate - upper));
         long double const distance = std::ldexp(static_cast<long double>(outside), -kPositionBits);
@@ -155,7 +155,7 @@ void checkDifferences(std::vector<Position> const& sinks, std::vector<Position> 
     }
 }
 
-void checkBoxes(FmmGeometry const& geometry, std::array<Fixed32Range, kSimdFloatSize> const& boxes,
+void checkBoxes(FmmGeometry const& geometry, std::array<FmmBox, kSimdFloatSize> const& boxes,
     std::array<Vector3<Position>, kSimdFloatSize> const& sinks,
     std::array<Vector3<Position>, kSimdFloatSize> const& sources) {
     Range<SimdDouble8> boxPack{};
@@ -163,7 +163,9 @@ void checkBoxes(FmmGeometry const& geometry, std::array<Fixed32Range, kSimdFloat
     for (int lane = 0; lane < kSimdFloatSize; ++lane) {
         for (int dim = 0; dim < kDimensions; ++dim) {
             simdSetLane(boxPack.begin[dim], lane, boxes[lane].begin[dim].toDouble());
-            simdSetLane(boxPack.end[dim], lane, boxes[lane].end[dim].toDouble());
+            simdSetLane(boxPack.end[dim], lane,
+                boxes[lane].begin[dim].toDouble() +
+                    double(boxes[lane].extentTicks(dim)) * Fixed32::kToFloatFactor_);
             simdSetLane(
                 sinkPack[dim], lane, std::bit_cast<SignedPositionInteger>(sinks[lane][dim].raw()));
             simdSetLane(sourcePack[dim], lane,
@@ -282,7 +284,7 @@ TEST(FmmGeometry, BoxImagesAgreeWithExactIntegerReference) {
         geometry.sinkCell[kXi] = 0;
         geometry.sinkCell[kYi] = meshSize / 2;
         geometry.sinkCell[kZi] = meshSize - 1;
-        std::array<Fixed32Range, kSimdFloatSize> boxes;
+        std::array<FmmBox, kSimdFloatSize> boxes;
         std::array<Vector3<Position>, kSimdFloatSize> sinks, sources;
         for (int lane = 0; lane < kSimdFloatSize; ++lane) {
             for (int dim = 0; dim < kDimensions; ++dim) {
@@ -304,7 +306,7 @@ TEST(FmmGeometry, BoxEndpointsKeepSubDoubleSeamDistances) {
         FmmGeometry geometry;
         geometry.meshSize = 3;
         geometry.sinkCell[kXi] = upper ? 2 : 0;
-        std::array<Fixed32Range, kSimdFloatSize> boxes;
+        std::array<FmmBox, kSimdFloatSize> boxes;
         std::array<Vector3<Position>, kSimdFloatSize> sinks, sources;
         for (int lane = 0; lane < kSimdFloatSize; ++lane) {
             for (int dim = 0; dim < kDimensions; ++dim) {
@@ -326,7 +328,7 @@ TEST(FmmGeometry, BoxEndpointsKeepSubDoubleSeamDistances) {
 
 TEST(FmmGeometry, PeriodicBoxContainmentUsesTheWrappedInterval) {
     for (double shift : {-1.0, 0.0, 1.0}) {
-        Fixed32Range box;
+        FmmBox box;
         Vector3<Position> point;
         for (int dim = 0; dim < kDimensions; ++dim) {
             box.begin[dim] = -0.125 + shift;
@@ -340,7 +342,8 @@ TEST(FmmGeometry, PeriodicBoxContainmentUsesTheWrappedInterval) {
         Vector3<SimdPosition> packedPoint;
         for (int dim = 0; dim < kDimensions; ++dim) {
             packedBox.begin[dim] = math::broadcast<SimdDouble8>(box.begin[dim].toDouble());
-            packedBox.end[dim] = math::broadcast<SimdDouble8>(box.end[dim].toDouble());
+            packedBox.end[dim] = math::broadcast<SimdDouble8>(box.begin[dim].toDouble() +
+                double(box.extentTicks(dim)) * Fixed32::kToFloatFactor_);
             packedPoint[dim] = math::broadcast<SimdPosition>(point[dim].raw());
         }
         auto const distances = boxDistanceSquared(packedBox, packedPoint);
@@ -374,7 +377,7 @@ TEST(FmmGeometry, FrozenMembershipUsesCellIdentitiesAfterCentersMove) {
             geometry.frozenMembership = true;
             Vector3<Position> sink, source;
             Vector3<double> expected;
-            Fixed32Range sinkBox, sourceBox;
+            FmmBox sinkBox, sourceBox;
             double sinkDistance = 0;
             double sourceDistance = 0;
             uint64_t sourceKey = 0;

@@ -52,7 +52,7 @@ struct SphTreeIdHash {
 
 /// Test periodic box intersection while recording geometric arithmetic cost.
 inline bool rangeIntersect(
-    Fixed32Range const& a, Fixed32Range const& b, FlopCounter<>* flops = nullptr) {
+    SphBox const& a, SphBox const& b, FlopCounter<>* flops = nullptr) {
     return a.periodicIntersects(b, flops);
 }
 

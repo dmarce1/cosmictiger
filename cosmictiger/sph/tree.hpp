@@ -65,10 +65,10 @@ struct SphTreeNode {
     Pair<int, int> processRange;
     Pair<ParticleInteger> particleRange;
     Pair<ParticleInteger> sinkParticleRange;
-    Fixed32Range innerBox;
-    Fixed32Range outerBox;
-    Fixed32Range box;
-    Fixed32Range driftBox;
+    SphBox innerBox;
+    SphBox outerBox;
+    SphBox box;
+    SphBox driftBox;
     size_t numberOfActiveParticles;
     struct {
         unsigned char depth : 5;
@@ -161,9 +161,9 @@ struct SphTreeNode {
 };
 
 struct SphTreeCreateReturn {
-    Fixed32Range innerBox;
-    Fixed32Range outerBox;
-    Fixed32Range driftBox;
+    SphBox innerBox;
+    SphBox outerBox;
+    SphBox driftBox;
     TreeId id;
     size_t numberOfActiveParticles;
     size_t activeNodes;
@@ -262,7 +262,7 @@ SphTreeNode const* sphTreeGetNode(TreeId);
 void sphTreeSortSphParticlesByParticles();
 void sphTreeSetConverged(TreeId id, bool = true);
 void sphTreeSetNumberOfActiveParticles(TreeId id, ParticleInteger i);
-void sphTreeSetBoxes(TreeId, Fixed32Range const&, Fixed32Range const&);
+void sphTreeSetBoxes(TreeId, SphBox const&, SphBox const&);
 void sphTreeFreeNeighborList();
 int sphTreeAllocateNeighborList(Vector<TreeId> const&);
 TreeId& sphTreeGetNeighbor(int i);

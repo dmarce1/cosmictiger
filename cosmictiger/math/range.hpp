@@ -442,32 +442,32 @@ inline Range<Position> rngdbl2rngfixed32(Range<double> const& other) {
 
 using RangeFixed = Fixed<int, 29>;
 
-struct Fixed32Range : public Range<RangeFixed> {
+struct SphBox : public Range<RangeFixed> {
     /// Default-construct a fixed-coordinate range without assigning its endpoints.
-    Fixed32Range() {}
+    SphBox() {}
     /// Copy both endpoint arrays from the supplied fixed-coordinate box.
     CUDA_EXPORT
-    Fixed32Range& operator=(Fixed32Range const& other) {
+    SphBox& operator=(SphBox const& other) {
         begin = other.begin;
         end = other.end;
         return *this;
     }
     /// Copy both endpoint arrays from the supplied fixed-coordinate box.
     CUDA_EXPORT
-    Fixed32Range& operator=(Fixed32Range&& other) {
+    SphBox& operator=(SphBox&& other) {
         begin = other.begin;
         end = other.end;
         return *this;
     }
     /// Construct a fixed-coordinate box by copying both endpoint arrays.
     CUDA_EXPORT
-    Fixed32Range(Fixed32Range const& other) {
+    SphBox(SphBox const& other) {
         begin = other.begin;
         end = other.end;
     }
     /// Construct a fixed-coordinate box by copying both endpoint arrays.
     CUDA_EXPORT
-    Fixed32Range(Fixed32Range&& other) {
+    SphBox(SphBox&& other) {
         begin = other.begin;
         end = other.end;
     }
@@ -540,7 +540,7 @@ inline float distance(Position b, RangeFixed a) {
 
 /// Return the squared minimum periodic distance from a particle to the box, preserving
 /// fixed-coordinate boundary precision.
-CUDA_EXPORT inline float boxDistanceSquared(Fixed32Range const& box, Vector3<Position> const& x) {
+CUDA_EXPORT inline float boxDistanceSquared(SphBox const& box, Vector3<Position> const& x) {
     float d2 = 0.0f;
     for (int dim = 0; dim < kDimensions; dim++) {
         if (box.end[dim].toDouble() - box.begin[dim].toDouble() >= 1.0) {
@@ -564,7 +564,7 @@ CUDA_EXPORT inline float boxDistanceSquared(Fixed32Range const& box, Vector3<Pos
 /// Test whether the minimum periodic box distance is strictly smaller than the sphere
 /// radius.
 CUDA_EXPORT inline bool boxIntersectsSphere(
-    Fixed32Range const& box, Vector3<Position> const& x, float r) {
+    SphBox const& box, Vector3<Position> const& x, float r) {
     return boxDistanceSquared(box, x) < sqr(r);
 }
 
@@ -577,7 +577,7 @@ inline SimdFloat boxDistanceSquared(Range<SimdDouble8> const& box, Vector3<SimdP
         // comparisons and subtraction so conversion to double cannot erase
         // a particle's low bits at an endpoint.
         return SimdFloat([&](auto lane) {
-            Fixed32Range scalarBox;
+            SphBox scalarBox;
             Vector3<Position> point;
             for (int dim = 0; dim < kDimensions; ++dim) {
                 scalarBox.begin[dim] = box.begin[dim][lane];

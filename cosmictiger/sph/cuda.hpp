@@ -147,7 +147,7 @@ __device__ inline void recordSphGpuFlops(sph_flops::Counter const& flops, SphRed
 template <int blockSize, class Neighbors>
 inline __device__ bool solveSphSmoothingLength(float& h𞁑, float hₘᵢₙ, float hₘₐₓ, float Nₛₑₜ,
     Neighbors const& neighbors, sph_geometry::SpatialVector<Position> const& x𞁑,
-    Vector3<Position> const& paddedX_a, Fixed32Range const& neighborSearchBox,
+    Vector3<Position> const& paddedX_a, SphBox const& neighborSearchBox,
     sph_flops::Counter& flops) {
     int const threadIndex = threadIdx.x;
     int const runtimeBlockSize = blockDim.x;

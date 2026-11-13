@@ -2,8 +2,8 @@
 #pragma once
 
 #include <cosmictiger/core/flops.hpp>
+#include <cosmictiger/gravity/fmm_box.hpp>
 #include <cosmictiger/math/position.hpp>
-#include <cosmictiger/math/range.hpp>
 #include <cosmictiger/math/vector3.hpp>
 
 // Zero meshSize preserves the ordinary FMM nearest-image geometry. A forest
@@ -96,31 +96,30 @@ CUDA_EXPORT inline double fmmCellDifference(
     return fmmShiftedDifference(target, source, image, counts);
 }
 
-/// Subtract a particle from a possibly unwrapped fixed-range boundary with the selected
-/// periodic image offset.
+/// Subtract a particle from an unsigned boundary in the selected periodic image.
 CUDA_EXPORT inline double fmmBoundaryDifference(
-    RangeFixed boundary, Position point, int image, FlopCounts* counts = nullptr) {
-    double const bound = boundary.toDouble();
-    int const whole = int(floor(bound));
-    Position const fraction(bound - whole);
-    // Bound scaling, floor, fractional subtraction, and Position(double).
-#ifdef __CUDA_ARCH__
-    addFmmGeometryFlops(counts, 0, 4);
-#else
-    addFmmGeometryFlops(counts, 0, kPositionBits == 64 ? 7 : 4);
-#endif
-    return fmmShiftedDifference(fraction, point, image - whole, counts);
+    Fixed32 boundary, Position point, int image, FlopCounts* counts = nullptr) {
+    return fmmShiftedDifference(Position(boundary), point, image, counts);
+}
+
+// Restore the box's unwrapped frame around its owning frozen cell. Its
+// midpoint, rather than either endpoint, determines the winding at a seam.
+CUDA_EXPORT inline int fmmBoxWinding(
+    FmmBox const& box, int dim, int cell, int meshSize, FlopCounts* counts = nullptr) {
+    double const center = box.begin[dim].toDouble() + double(box.extentTicks(dim)) * 0x1p-33;
+    addFmmGeometryFlops(counts, 0, 8);
+    return -int(nearbyint(center - (double(cell) + .5) / meshSize));
 }
 
 /// Compute point-to-box distance for explicit image offsets and accumulate geometry
 /// operation counts.
-CUDA_EXPORT inline float fmmBoxDistanceSquared(Fixed32Range const& box,
-    Vector3<Position> const& point, Array<int, kDimensions> const& image,
-    FlopCounts* counts = nullptr) {
+CUDA_EXPORT inline float fmmBoxDistanceSquared(FmmBox const& box, Vector3<Position> const& point,
+    Array<int, kDimensions> const& image, FlopCounts* counts = nullptr) {
     float result = 0;
     for (int dim = 0; dim < kDimensions; ++dim) {
         double const lower = fmmBoundaryDifference(box.begin[dim], point[dim], image[dim], counts);
-        double const upper = fmmBoundaryDifference(box.end[dim], point[dim], image[dim], counts);
+        int const endImage = image[dim] - int(box.full(dim) || box.end[dim] < box.begin[dim]);
+        double const upper = fmmBoundaryDifference(box.end[dim], point[dim], endImage, counts);
         float const delta = float(lower > 0 ? lower : (upper < 0 ? -upper : 0));
         result = fmaf(delta, delta, result);
         addFmmGeometryFlops(counts, 2, 1);    // Float FMA and double-to-float delta.
@@ -130,13 +129,11 @@ CUDA_EXPORT inline float fmmBoxDistanceSquared(Fixed32Range const& box,
 
 /// Account for the conversions and arithmetic used by periodic fixed-box distance
 /// evaluation.
-CUDA_EXPORT inline void countPeriodicBoxDistance(Fixed32Range const& box, FlopCounts* counts) {
+CUDA_EXPORT inline void countPeriodicBoxDistance(FmmBox const& box, FlopCounts* counts) {
     if constexpr (kCountFlops) {
         if (counts != nullptr) {
             for (int dim = 0; dim < kDimensions; ++dim) {
-                // Each endpoint scales to double before the extent comparison.
-                addFmmGeometryFlops(counts, 0, 3);
-                if (box.end[dim].toDouble() - box.begin[dim].toDouble() < 1.0) {
+                if (!box.full(dim)) {
                     // Integer displacement scales in double then narrows for the FMA.
                     addFmmGeometryFlops(counts, 2, 2);
                 }
@@ -170,7 +167,7 @@ CUDA_EXPORT inline float fmmPositionDifference(Position sink, Position source, i
 
 /// Measure a source's distance to the sink box using the same image convention as the FMM
 /// interaction.
-CUDA_EXPORT inline float fmmSinkBoxDistanceSquared(Fixed32Range const& box,
+CUDA_EXPORT inline float fmmSinkBoxDistanceSquared(FmmBox const& box,
     Vector3<Position> const& source, FmmGeometry const& geometry, FlopCounts* counts = nullptr,
     uint64_t sourceKey = ~uint64_t(0)) {
     if (geometry.periodicNear || geometry.meshSize == 0) {
@@ -184,6 +181,8 @@ CUDA_EXPORT inline float fmmSinkBoxDistanceSquared(Fixed32Range const& box,
         if (geometry.frozenMembership) {
             image[dim] += detail::fmmCellWinding(source[dim],
                 detail::fmmCellCoordinate(sourceKey, dim, geometry.meshSize), geometry.meshSize);
+            image[dim] -=
+                detail::fmmBoxWinding(box, dim, geometry.sinkCell[dim], geometry.meshSize, counts);
             detail::addFmmGeometryFlops(counts, 0, 5);
         }
     }
@@ -192,7 +191,7 @@ CUDA_EXPORT inline float fmmSinkBoxDistanceSquared(Fixed32Range const& box,
 
 /// Measure a sink's distance to the source box using the image selected from the source
 /// center.
-CUDA_EXPORT inline float fmmSourceBoxDistanceSquared(Fixed32Range const& box,
+CUDA_EXPORT inline float fmmSourceBoxDistanceSquared(FmmBox const& box,
     Vector3<Position> const& sink, Vector3<Position> const& source, FmmGeometry const& geometry,
     FlopCounts* counts = nullptr, uint64_t sourceKey = ~uint64_t(0)) {
     if (geometry.periodicNear || geometry.meshSize == 0) {
@@ -206,6 +205,9 @@ CUDA_EXPORT inline float fmmSourceBoxDistanceSquared(Fixed32Range const& box,
         if (geometry.frozenMembership) {
             image[dim] +=
                 detail::fmmCellWinding(sink[dim], geometry.sinkCell[dim], geometry.meshSize);
+            image[dim] -= detail::fmmBoxWinding(box, dim,
+                detail::fmmCellCoordinate(sourceKey, dim, geometry.meshSize), geometry.meshSize,
+                counts);
             detail::addFmmGeometryFlops(counts, 0, 5);
         }
     }
@@ -219,14 +221,13 @@ inline SimdFloat fmmPeriodicBoxDistanceSquared(
     Range<SimdDouble8> const& box, Vector3<SimdPosition> const& point, FlopCounts* counts) {
     if constexpr (kPositionBits == 64) {
         return SimdFloat([&](auto lane) {
-            Fixed32Range scalarBox;
+            FmmBox scalarBox;
             Vector3<Position> scalarPoint;
             for (int dim = 0; dim < kDimensions; ++dim) {
-                scalarBox.begin[dim] = box.begin[dim][lane];
-                scalarBox.end[dim] = box.end[dim][lane];
+                scalarBox.setBounds(dim, box.begin[dim][lane], box.end[dim][lane]);
                 scalarPoint[dim].setInteger(static_cast<PositionInteger>(point[dim][lane]));
             }
-            detail::addFmmGeometryFlops(counts, 0, 2 * kDimensions);
+            detail::addFmmGeometryFlops(counts, 0, 5 * kDimensions);
             detail::countPeriodicBoxDistance(scalarBox, counts);
             return boxDistanceSquared(scalarBox, scalarPoint);
         });
@@ -266,14 +267,13 @@ inline SimdFloat fmmSinkBoxDistanceSquared(Range<SimdDouble8> const& box,
         return fmmPeriodicBoxDistanceSquared(box, source, counts);
     }
     return SimdFloat([&](auto lane) {
-        Fixed32Range scalarBox;
+        FmmBox scalarBox;
         Vector3<Position> point;
         for (int dim = 0; dim < kDimensions; ++dim) {
-            scalarBox.begin[dim] = box.begin[dim][lane];
-            scalarBox.end[dim] = box.end[dim][lane];
+            scalarBox.setBounds(dim, box.begin[dim][lane], box.end[dim][lane]);
             point[dim].setInteger(static_cast<PositionInteger>(source[dim][lane]));
         }
-        detail::addFmmGeometryFlops(counts, 0, 2 * kDimensions);
+        detail::addFmmGeometryFlops(counts, 0, 5 * kDimensions);
         return fmmSinkBoxDistanceSquared(
             scalarBox, point, geometry, counts, sourceKeys == nullptr ? 0 : (*sourceKeys)[lane]);
     });
@@ -289,15 +289,14 @@ inline SimdFloat fmmSourceBoxDistanceSquared(Range<SimdDouble8> const& box,
         return fmmPeriodicBoxDistanceSquared(box, sink, counts);
     }
     return SimdFloat([&](auto lane) {
-        Fixed32Range scalarBox;
+        FmmBox scalarBox;
         Vector3<Position> a, b;
         for (int dim = 0; dim < kDimensions; ++dim) {
-            scalarBox.begin[dim] = box.begin[dim][lane];
-            scalarBox.end[dim] = box.end[dim][lane];
+            scalarBox.setBounds(dim, box.begin[dim][lane], box.end[dim][lane]);
             a[dim].setInteger(static_cast<PositionInteger>(sink[dim][lane]));
             b[dim].setInteger(static_cast<PositionInteger>(source[dim][lane]));
         }
-        detail::addFmmGeometryFlops(counts, 0, 2 * kDimensions);
+        detail::addFmmGeometryFlops(counts, 0, 5 * kDimensions);
         return fmmSourceBoxDistanceSquared(
             scalarBox, a, b, geometry, counts, sourceKeys == nullptr ? 0 : (*sourceKeys)[lane]);
     });

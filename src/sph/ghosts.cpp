@@ -40,10 +40,10 @@ inline constexpr int kInterestBoxes = 64;
 
 struct SphGhostInterest {
     int rank = -1;
-    Fixed32Range innerUnion;
-    Fixed32Range outerUnion;
-    Vector<Fixed32Range> innerBoxes;
-    Vector<Fixed32Range> outerBoxes;
+    SphBox innerUnion;
+    SphBox outerUnion;
+    Vector<SphBox> innerBoxes;
+    Vector<SphBox> outerBoxes;
 
     /// Report whether this interest packet contains any inner boxes.
     bool empty() const {
@@ -261,7 +261,7 @@ T const* groupData(GhostBlock const& block, int group) {
 }
 
 /// Expand a box component by component to include another box.
-void growUnion(Fixed32Range& total, Fixed32Range const& box) {
+void growUnion(SphBox& total, SphBox const& box) {
     for (int dim = 0; dim < kDimensions; dim++) {
         total.begin[dim] = std::min(total.begin[dim], box.begin[dim]);
         total.end[dim] = std::max(total.end[dim], box.end[dim]);

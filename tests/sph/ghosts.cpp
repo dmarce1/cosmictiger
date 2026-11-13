@@ -97,8 +97,8 @@ NeighborTable localNeighborTable() {
 // One leaf's identity and stored boxes, for the brute-force reference.
 struct GhostLeafBoxes {
     TreeId id;
-    Fixed32Range innerBox;
-    Fixed32Range outerBox;
+    SphBox innerBox;
+    SphBox outerBox;
 
     template <class Archive>
     void serialize(Archive&& archive, unsigned) {

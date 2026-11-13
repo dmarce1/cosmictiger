@@ -202,9 +202,9 @@ CUDA_EXPORT inline SphGradHEvaluation sphGradHEvaluation(
 // A source can reach any sink in this box through a periodic image. Expanding
 // the unwrapped interval before testing avoids inconsistent endpoint wrapping.
 // x𞁓 → padded source position; h𞁓 → source smoothing length.
-CUDA_EXPORT inline bool sphSupportIntersects(Fixed32Range const& sinkBox,
+CUDA_EXPORT inline bool sphSupportIntersects(SphBox const& sinkBox,
     Vector3<Position> const& x𞁓, float h𞁓, sph_flops::Counter* flops = nullptr) {
-    Fixed32Range expanded = sinkBox;
+    SphBox expanded = sinkBox;
     for (int dim = 0; dim < kDimensions; dim++) {
         expanded.begin[dim] -= RangeFixed(h𞁓);
         expanded.end[dim] += RangeFixed(h𞁓);

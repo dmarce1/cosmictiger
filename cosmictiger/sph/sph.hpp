@@ -23,8 +23,8 @@
 // Reversed unit-box bounds seed min/max accumulation for particle positions
 // in [0, 1) and their expanded supports. These are signed RangeFixed values,
 // not unsigned Fixed32 positions; periodic image shifts remain representable.
-inline Fixed32Range emptySphBounds() {
-    Fixed32Range box;
+inline SphBox emptySphBounds() {
+    SphBox box;
     for (int dim = 0; dim < kDimensions; ++dim) {
         box.begin[dim] = 1.0;
         box.end[dim] = 0.0;
@@ -33,8 +33,8 @@ inline Fixed32Range emptySphBounds() {
 }
 
 struct SphTreeNeighborReturn {
-    Fixed32Range innerBox = emptySphBounds();
-    Fixed32Range outerBox = emptySphBounds();
+    SphBox innerBox = emptySphBounds();
+    SphBox outerBox = emptySphBounds();
     /// Merge neighbor-search inner and outer bounding boxes by coordinatewise union.
     CUDA_EXPORT
     SphTreeNeighborReturn& operator+=(SphTreeNeighborReturn const& other) {

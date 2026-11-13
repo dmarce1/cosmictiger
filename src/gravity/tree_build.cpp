@@ -530,18 +530,9 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
     node.pos = centerPosition;
     node.depth = depth;
     for (int dim = 0; dim < kDimensions; dim++) {
-        node.box.begin[dim] = rbox.begin[dim];
-        node.box.end[dim] = rbox.end[dim];
-        // Stored bounds have fewer fractional bits than particle positions.
-        // Round outward so box-based acceptance cannot exclude an extremum.
-        if (node.box.begin[dim].toDouble() > rbox.begin[dim]) {
-            node.box.begin[dim].raw()--;
-        }
-        if (node.box.end[dim].toDouble() < rbox.end[dim]) {
-            node.box.end[dim].raw()++;
-        }
+        node.box.setBounds(dim, rbox.begin[dim], rbox.end[dim]);
     }
-    flops += 4 * kDimensions;    // RangeFixed bounds: one scaling into fixed and one out.
+    flops += 5 * kDimensions;    // Scale/floor/ceil endpoints and compare the rounded extent.
     bool const global = processRange.second - processRange.first > 1;
     node.leaf = isleaf;
     treeStoreNode(index, node, multi.narrow());

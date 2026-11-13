@@ -63,7 +63,7 @@ void testPositionDifferences() {
 }
 
 void testPeriodicBoxSphere() {
-    Fixed32Range box;
+    SphBox box;
     Range<SimdDouble8> simdBox;
     for (int dim = 0; dim < kDimensions; dim++) {
         box.begin[dim] = dim == kXi ? 0.70 : 0.20;

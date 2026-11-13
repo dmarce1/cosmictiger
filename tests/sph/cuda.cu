@@ -922,7 +922,7 @@ void initializeLattice(Fixture& fixture, int side) {
 }
 
 void testPeriodicSupport() {
-    Fixed32Range box;
+    SphBox box;
     Vector3<Position> source;
     for (int dim = 0; dim < kDimensions; dim++) {
         box.begin[dim] = 0.49;

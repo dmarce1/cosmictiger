@@ -16,7 +16,7 @@
 #include <cuda_runtime.h>
 
 #include <cosmictiger/gravity/fmm_acceptance.hpp>
-#include <cosmictiger/math/range.hpp>
+#include <cosmictiger/gravity/fmm_box.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <tests/cuda_test.hpp>
 
@@ -55,7 +55,7 @@ struct AcceptanceResult {
 };
 
 struct BoxInput {
-    Fixed32Range box;
+    FmmBox box;
     Vector3<Position> point;
 };
 

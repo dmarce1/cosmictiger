@@ -432,7 +432,7 @@ void seedOldSphTreeState(TreeId id) {
     sphTreeSetConverged(id);
     sphTreeSetNumberOfActiveParticles(id, 1000);
     sphTreeSetNeighborRange(id, Pair<int>(123, 456));
-    Fixed32Range staleBox;
+    SphBox staleBox;
     for (int dim = 0; dim < kDimensions; ++dim) {
         staleBox.begin[dim] = 1.5;
         staleBox.end[dim] = 1.75;
@@ -1462,7 +1462,7 @@ HPX_PLAIN_ACTION(driftDistributedSphOctree, DriftDistributedSphOctreeAction);
 // never goes through the distributed neighbor machinery it checks.
 struct DistributedSphLeafRecord {
     TreeId id;
-    Fixed32Range driftBox;
+    SphBox driftBox;
     std::vector<Vector3<double>> positions;
 
     template <class Archive>

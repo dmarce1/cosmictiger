@@ -327,6 +327,7 @@ set(cosmictiger_header_files
     cosmictiger/sph/ghosts.hpp
     cosmictiger/scenarios/sphere.hpp
     cosmictiger/core/tree_id.hpp
+    cosmictiger/gravity/fmm_box.hpp
     cosmictiger/gravity/fmm_geometry.hpp
     cosmictiger/gravity/kick_context.hpp
     cosmictiger/gravity/fmm/cell_tree.hpp

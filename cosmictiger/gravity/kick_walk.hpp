@@ -238,12 +238,13 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
     Range<SimdDouble8> otherBox{};
     for (int dim = 0; dim < kDimensions; dim++) {
         selfPos[dim] = math::broadcast<SimdPosition>(selfPtr->pos[dim].raw());
-        selfBox.begin[dim] = (double) selfPtr->box.begin[dim].raw();
-        selfBox.end[dim] = (double) selfPtr->box.end[dim].raw();
+        selfBox.begin[dim] = double(selfPtr->box.begin[dim].raw());
+        selfBox.end[dim] =
+            double(selfPtr->box.begin[dim].raw()) + double(selfPtr->box.extentTicks(dim));
     }
     for (int dim = 0; dim < kDimensions; dim++) {
-        selfBox.begin[dim] *= RangeFixed::kToFloatFactor_;
-        selfBox.end[dim] *= RangeFixed::kToFloatFactor_;
+        selfBox.begin[dim] *= Fixed32::kToFloatFactor_;
+        selfBox.end[dim] *= Fixed32::kToFloatFactor_;
     }
     for (int dim = 0; dim < kDimensions; dim++) {
         ldx[dim] = params.geometry.frozenMembership ?
@@ -266,7 +267,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
     flops += cosmictiger::gravity::cartesian::kL2LFlops<kLocalDegree> + 5 + (params.doPhi ? 7 : 3);
     // Box scaling stays double; each local displacement scales in double and
     // narrows before the float L2L coordinate scaling. Two reciprocals are float.
-    doubleFlops += (params.geometry.frozenMembership ? 3 : 6) + 6 * kSimdFloatSize;
+    doubleFlops += (params.geometry.frozenMembership ? 3 : 6) + 6 * kSimdFloatSize + kDimensions;
     float const inverseSmoothingLength = 1.0f / params.gravitySmoothingLength;
     ForceVectors forces;
     ParticleInteger const numberOfSelfParticles = selfPtr->numberOfParticles();
@@ -328,12 +329,14 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                     for (int i = 0; i < maxi; i++) {
                         for (int dim = 0; dim < kDimensions; dim++) {
                             simdSetLane(otherBox.begin[dim], i, otherPtrs[i]->box.begin[dim].raw());
-                            simdSetLane(otherBox.end[dim], i, otherPtrs[i]->box.end[dim].raw());
+                            simdSetLane(otherBox.end[dim], i,
+                                double(otherPtrs[i]->box.begin[dim].raw()) +
+                                    double(otherPtrs[i]->box.extentTicks(dim)));
                         }
                     }
                     for (int dim = 0; dim < kDimensions; dim++) {
-                        otherBox.begin[dim] *= RangeFixed::kToFloatFactor_;
-                        otherBox.end[dim] *= RangeFixed::kToFloatFactor_;
+                        otherBox.begin[dim] *= Fixed32::kToFloatFactor_;
+                        otherBox.end[dim] *= Fixed32::kToFloatFactor_;
                     }
                     for (int i = maxi; i < kSimdFloatSize; i++) {
                         for (int dim = 0; dim < kDimensions; dim++) {
@@ -348,7 +351,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                             &geometryFlops, &sourceKeys),
                         smoothingLengthPack, thetainv);
                     flops += kSimdFloatSize * 19;         // Acceptance only.
-                    doubleFlops += 6 * kSimdFloatSize;    // Source box scaling.
+                    doubleFlops += 9 * kSimdFloatSize;    // Source box extent addition and scaling.
                 }
                 for (int i = 0; i < maxi; i++) {
                     bool allowPairCost = true;

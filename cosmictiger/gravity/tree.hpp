@@ -20,7 +20,7 @@
 #include <cosmictiger/gravity/sources.hpp>
 #include <cosmictiger/gravity/tree_source_moments.hpp>
 #include <cosmictiger/math/position.hpp>
-#include <cosmictiger/math/range.hpp>
+#include <cosmictiger/gravity/fmm_box.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
@@ -33,7 +33,7 @@ MultipolePosition* treeAddMultipole(Vector3<Position> const& pos, MultipoleBuffe
 void treeReadMultipole(MultipolePosition const* record, MultipoleBuffer& multipole);
 
 struct TreeNode {
-    Fixed32Range box;
+    FmmBox box;
     Array<TreeId, kChildCount> children;
     Pair<ParticleInteger> particleRange;
     FmmParticleStore sourceStore = FmmParticleStore::Owned;

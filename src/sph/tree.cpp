@@ -159,7 +159,7 @@ double sphTreeVolumeRatio(SphTreeNode const& node, sph_flops::Counter& flops) {
 }
 
 /// Expand a bounding box to include another box component by component.
-void mergeSphBounds(Fixed32Range& target, Fixed32Range const& source) {
+void mergeSphBounds(SphBox& target, SphBox const& source) {
     for (int dim = 0; dim < kDimensions; ++dim) {
         target.begin[dim] = std::min(target.begin[dim], source.begin[dim]);
         target.end[dim] = std::max(target.end[dim], source.end[dim]);
@@ -168,9 +168,9 @@ void mergeSphBounds(Fixed32Range& target, Fixed32Range const& source) {
 
 /// Conservatively expand position bounds over a signed drift interval, accounting for
 /// periodic seams.
-Fixed32Range sweptSphBounds(Fixed32Range const& positions, Vector3<double> const& v_minus,
+SphBox sweptSphBounds(SphBox const& positions, Vector3<double> const& v_minus,
     Vector3<double> const& v_plus, double D) {
-    Fixed32Range result = positions;
+    SphBox result = positions;
     // clang-format off
     /*
      * Derived conservative bound for the implemented linear drift x' = x + v D:
@@ -565,9 +565,9 @@ static SphTreeCreateReturn sphTreeBuild(SphTreeCreateParameters params, size_t k
     size_t leafNodes = 0;
     size_t activeLeafNodes = 0;
     int const index = allocator.allocate();
-    Fixed32Range innerBox;
-    Fixed32Range outerBox;
-    Fixed32Range driftBox;
+    SphBox innerBox;
+    SphBox outerBox;
+    SphBox driftBox;
     if (particleRange.second - particleRange.first > bucketSize) {
         if (depth == SphTreeNode::kMaximumDepth) {
             throw std::out_of_range("SPH octree subdivision would require depth 16");
@@ -1036,7 +1036,7 @@ SphTreeNode const* sphTreeGetNode(TreeId id) {
 }
 
 /// Replace a local node's inner position and outer support bounds.
-void sphTreeSetBoxes(TreeId id, Fixed32Range const& ibox, Fixed32Range const& obox) {
+void sphTreeSetBoxes(TreeId id, SphBox const& ibox, SphBox const& obox) {
     nodes[id.index].outerBox = obox;
     nodes[id.index].innerBox = ibox;
 }

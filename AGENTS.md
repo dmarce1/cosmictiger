@@ -1,3 +1,12 @@
+# Push destinations
+
+User standing rule, November 10, 2026:
+
+- Whenever pushing to the remote repository (`origin` in this checkout), also
+  push the same refs to the `local` remote.
+- Report the outcome for both destinations; if either push fails, state which
+  destination remains out of sync.
+
 # Concurrent implementation and branch coordination
 
 User standing rule, November 2, 2026:
@@ -16,10 +25,10 @@ User standing rule, November 2, 2026:
 
 # War Thunder resource limit
 
-User report, November 9, 2026, about 12:04 America/Chicago:
-**current reported status: OFF** ("War Thunder OFF"). This supersedes the
-November 9 10:40 ON report. The usual aggregate local limit of 12 CPU cores
-applies.
+User report, November 9, 2026, during spherical FMM planning:
+**current reported status: ON** ("war thunder on"). This supersedes the
+November 9 12:04 OFF report. The aggregate shared limit is 6 CPU cores and
+one quarter (25%) of GPU compute capacity.
 
 - While OFF, the usual aggregate local limit of 12 CPU cores applies. The
   War Thunder-specific GPU ceiling is lifted; continue coordinating shared use.
