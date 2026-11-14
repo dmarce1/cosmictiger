@@ -1,5 +1,7 @@
 /* CosmicTiger - geometric source lifetime and kick preflight regressions; BSL-1.0. */
 
+// Test source payload serialization, frozen-generation checks and exchange failure cleanup.
+
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -37,6 +39,7 @@ char sourcePayloadType(int mode, ParticleInteger index) {
 }
 
 void sourcePayloadWireTest() {
+    constexpr int kWirePayloadParticles = 4;
     auto const encode = [](SourceExportView const& view) {
         std::vector<char> bytes;
         hpx::serialization::output_archive archive(bytes);
@@ -48,16 +51,17 @@ void sourcePayloadWireTest() {
     particle.position = {Position(.125), Position(.25), Position(.375)};
     uniform.appendParticle(particle, kStarType);
     auto const oneParticleBytes = encode(uniform);
-    for (int index = 1; index < 4; ++index) {
+    for (int index = 1; index < kWirePayloadParticles; ++index) {
         uniform.appendParticle(particle, kSphType);
     }
     auto const uniformBytes = encode(uniform);
     if (!uniform.particleTypes.empty() || uniform.uniformParticleType != kSphType ||
-        uniformBytes.size() - oneParticleBytes.size() != 3 * 3 * sizeof(Position)) {
+        uniformBytes.size() - oneParticleBytes.size() !=
+            (kWirePayloadParticles - 1) * kDimensions * sizeof(Position)) {
         throw std::runtime_error("Uniform source wire payload is not three positions per particle");
     }
     SourceExportView mixed;
-    for (int index = 0; index < 4; ++index) {
+    for (int index = 0; index < kWirePayloadParticles; ++index) {
         mixed.appendParticle(particle, index % 2 == 0 ? kDarkMatterType : kStarType);
     }
     auto const mixedBytes = encode(mixed);
@@ -72,7 +76,7 @@ void sourcePayloadWireTest() {
         throw std::runtime_error("Source species payload did not survive serialization");
     }
     for (auto const& restoredParticle : restored.particles) {
-        for (int axis = 0; axis < 3; ++axis) {
+        for (int axis = 0; axis < kDimensions; ++axis) {
             if (restoredParticle.position[axis].raw() != particle.position[axis].raw()) {
                 throw std::runtime_error("Source positions changed during wire serialization");
             }
@@ -108,7 +112,7 @@ void initializeSourcePayloadLocal(int mode) {
     ParticleInteger gasIndex = 0;
 #endif
     for (ParticleInteger index = 0; index < particlesOwnedSize(); ++index) {
-        for (int axis = 0; axis < 3; ++axis) {
+        for (int axis = 0; axis < kDimensions; ++axis) {
             particlesPos(axis, index) = double(index + 1 + axis) / 16.0;
         }
         particlesRung(index) = 0;
@@ -128,7 +132,7 @@ HPX_PLAIN_ACTION(initializeSourcePayloadLocal, InitializeSourcePayloadLocalActio
 
 void verifySourcePayloadLocal(Vector<SourceRootDescriptor> roots, int mode) {
     for (ParticleInteger index = 0; index < particlesOwnedSize(); ++index) {
-        auto const original = ParticleInteger(particlesPos(0, index).toDouble() * 16) - 1;
+        auto const original = ParticleInteger(particlesPos(kXi, index).toDouble() * 16) - 1;
         if (particlesType(index) != detail::sourcePayloadType(mode, original)) {
             throw std::runtime_error("Source export changed an owned particle species");
         }
@@ -217,7 +221,8 @@ void geometricSourcePayloadTest() {
                     .get();
             }
             if (mode == 2) {
-                for (int change = 0; change < 3; ++change) {
+                constexpr int kMassConfigurationChanges = 3;
+                for (int change = 0; change < kMassConfigurationChanges; ++change) {
                     auto changed = options;
                     if (change == 0) {
                         changed.hydro.enabled = false;

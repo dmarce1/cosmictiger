@@ -6,6 +6,8 @@
  See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
+// Test tree geometry, leaf limits, multipoles, serialization and arena lifetime invariants.
+
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -48,7 +50,7 @@ void verifyGeometricNode(TreeId id, int depth) {
     long double maximumDistance = 0;
     for (ParticleInteger i = node->particleRange.first; i < node->particleRange.second; ++i) {
         long double squared = 0;
-        for (int axis = 0; axis < 3; ++axis) {
+        for (int axis = 0; axis < kDimensions; ++axis) {
             auto const a = particlesPos(axis, i).raw();
             auto const b = node->pos[axis].raw();
             long double const delta =
@@ -73,7 +75,7 @@ void verifyGeometricNode(TreeId id, int depth) {
                 left->particleRange.second == right->particleRange.first &&
                 right->particleRange.second == node->particleRange.second,
             "geometric children do not partition the parent range");
-        int const axis = kGeometricSplitAxes[depth % 18];
+        int const axis = kGeometricSplitAxes[depth % kGeometricSplitAxes.size()];
         long double childBound = 0;
         for (auto const* child : {left, right}) {
             if (child->numberOfParticles() != 0) {
@@ -110,14 +112,15 @@ void verifyGeometricBuilder() {
     options.gravity.cuda = false;
     options.gravity.smoothingLength = 0.001;
     setOptions(options);
-    constexpr std::array<int, 18> expectedAxes{
-        0, 1, 2, 2, 1, 0, 2, 0, 1, 1, 0, 2, 1, 2, 0, 0, 2, 1};
+    constexpr std::array<int, 18> kExpectedAxes{
+        kXi, kYi, kZi, kZi, kYi, kXi, kZi, kXi, kYi, kYi, kXi, kZi, kYi, kZi, kXi, kXi, kZi, kYi};
     GeometricTreeCell cell{};
-    std::array<double, 3> lower{};
-    std::array<double, 3> upper{1, 1, 1};
-    for (int depth = 0; depth < 18; ++depth) {
-        requireFmmTree(kGeometricSplitAxes[depth] == expectedAxes[depth], "split schedule changed");
-        int const axis = expectedAxes[depth];
+    std::array<double, kDimensions> lower{};
+    std::array<double, kDimensions> upper{1, 1, 1};
+    for (size_t depth = 0; depth < kExpectedAxes.size(); ++depth) {
+        requireFmmTree(
+            kGeometricSplitAxes[depth] == kExpectedAxes[depth], "split schedule changed");
+        int const axis = kExpectedAxes[depth];
         double const midpoint = (lower[axis] + upper[axis]) / 2;
         bool const right = depth % 3 == 1;
         if (right) {
@@ -127,7 +130,7 @@ void verifyGeometricBuilder() {
         }
         cell = geometricTreeChild(cell, right);
         auto const box = geometricTreeBox(cell);
-        for (int dim = 0; dim < 3; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             requireFmmTree(
                 geometricTreeCenter(cell, dim).toDouble() == (lower[dim] + upper[dim]) / 2,
                 "geometric center disagrees with midpoint construction");
@@ -145,7 +148,7 @@ void verifyGeometricBuilder() {
     }
     auto const lastCuts = geometricTreeAxisCuts(kGeometricTreeMaxDepth);
     auto const lastBox = geometricTreeBox(lastCell);
-    for (int axis = 0; axis < 3; ++axis) {
+    for (int axis = 0; axis < kDimensions; ++axis) {
         PositionInteger const expected =
             PositionInteger{0} - (PositionInteger{1} << (kPositionBits - lastCuts[axis] - 1));
         requireFmmTree(geometricTreeCenter(lastCell, axis).raw() == expected,
@@ -155,31 +158,34 @@ void verifyGeometricBuilder() {
     }
     if constexpr (kPositionBits == 64) {
         auto adjacentCell = lastCell;
-        --adjacentCell.coordinate[0];
+        --adjacentCell.coordinate[kXi];
         auto const adjacentBox = geometricTreeBox(adjacentCell);
-        requireFmmTree(adjacentBox.begin[0] == lastBox.begin[0] &&
-                adjacentBox.end[0] == lastBox.end[0] &&
-                geometricTreeCenter(adjacentCell, 0) != geometricTreeCenter(lastCell, 0),
+        requireFmmTree(adjacentBox.begin[kXi] == lastBox.begin[kXi] &&
+                adjacentBox.end[kXi] == lastBox.end[kXi] &&
+                geometricTreeCenter(adjacentCell, kXi) != geometricTreeCenter(lastCell, kXi),
             "sub-Fixed32 cells lost their distinct native identities");
     }
-    particlesResize(8);
-    for (ParticleInteger i = 0; i < 8; ++i) {
-        particlesPos(0, i) = i == 0 ? 0.5 : 0.125 + 0.03125 * i;
-        particlesPos(1, i) = 0.25 + 0.015625 * i;
-        particlesPos(2, i) = 0.375;
+    constexpr ParticleInteger kGeometricFixtureParticles = 8;
+    particlesResize(kGeometricFixtureParticles);
+    for (ParticleInteger i = 0; i < kGeometricFixtureParticles; ++i) {
+        particlesPos(kXi, i) = i == 0 ? 0.5 : 0.125 + 0.03125 * i;
+        particlesPos(kYi, i) = 0.25 + 0.015625 * i;
+        particlesPos(kZi, i) = 0.375;
         particlesRung(i) = char(i % 2);
     }
-    auto result = treeBuildGeometricLocal(TreeCreateParameters(1, 0.5), {0, 8});
+    auto result =
+        treeBuildGeometricLocal(TreeCreateParameters(1, 0.5), {0, kGeometricFixtureParticles});
     verifyGeometricNode(result.root.id, 0);
-    requireFmmTree(
-        result.root.multi[0] == 8.0, "inactive owned sources were omitted from geometric moments");
+    requireFmmTree(result.root.multi[0] == double(kGeometricFixtureParticles),
+        "inactive owned sources were omitted from geometric moments");
     auto const* root = treeGetNode(result.root.id);
-    for (int axis = 0; axis < 3; ++axis) {
+    for (int axis = 0; axis < kDimensions; ++axis) {
         requireFmmTree(root->pos[axis].raw() == Position(0.5).raw() && root->box.full(axis),
             "geometric root is not the unit box");
     }
     SourceMultipoleBuffer direct;
-    treeComputeMultipole<kFmmOrder>(direct, {0, 8}, result.root.pos, fmmSourceView());
+    treeComputeMultipole<kFmmOrder>(
+        direct, {0, kGeometricFixtureParticles}, result.root.pos, fmmSourceView());
     for (int i = 0; i < fmmMultipoleCoefficientCount(kFmmOrder); ++i) {
         requireFmmTree(
             std::abs(direct[i] - result.root.multi[i]) < 1.0e-9 * (1 + std::abs(direct[i])),
@@ -188,12 +194,12 @@ void verifyGeometricBuilder() {
     requireFmmTree(std::abs(direct[1]) + std::abs(direct[2]) + std::abs(direct[3]) > 0,
         "geometric fixture has no dipole");
 
-    for (ParticleInteger i = 0; i < 8; ++i) {
-        for (int axis = 0; axis < 3; ++axis) {
+    for (ParticleInteger i = 0; i < kGeometricFixtureParticles; ++i) {
+        for (int axis = 0; axis < kDimensions; ++axis) {
             particlesPos(axis, i) = 0.375;
         }
     }
-    result = treeBuildGeometricLocal(TreeCreateParameters(0, 0.5), {0, 8});
+    result = treeBuildGeometricLocal(TreeCreateParameters(0, 0.5), {0, kGeometricFixtureParticles});
     requireFmmTree(result.coincidentOverflowLeaves == 1, "coincident overflow was not recorded");
     verifyGeometricNode(result.root.id, 0);
     particlesResize(1);
@@ -202,11 +208,19 @@ void verifyGeometricBuilder() {
         "single source did not reach the required periodic depth");
     verifyGeometricNode(result.root.id, 0);
     particlesResize(2);
-    for (int axis = 0; axis < 3; ++axis) {
+    for (int axis = 0; axis < kDimensions; ++axis) {
         particlesPos(axis, 1) = particlesPos(axis, 0);
     }
-    particlesPos(0, 1).raw() += 1;
+    particlesPos(kXi, 1).raw() += 1;
     options.compute.bucketSize = 2;
+    setOptions(options);
+    result = treeBuildGeometricLocal(TreeCreateParameters(0, 0.5), {0, 2});
+    requireFmmTree(result.coincidentOverflowLeaves == 0 && result.depthOverflowLeaves == 0,
+        "a leaf at the bucket limit was classified as overflow");
+    requireFmmTree(result.root.nodeCount == size_t(2 * result.ewaldDepth + 1),
+        "a leaf at the bucket limit did not stop at the required periodic depth");
+    verifyGeometricNode(result.root.id, 0);
+    options.compute.bucketSize = 1;
     setOptions(options);
     result = treeBuildGeometricLocal(TreeCreateParameters(0, 0.5), {0, 2});
     requireFmmTree(result.depthOverflowLeaves == 1, "depth overflow was not recorded");

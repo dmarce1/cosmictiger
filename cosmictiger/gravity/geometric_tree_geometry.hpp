@@ -1,4 +1,7 @@
 /* CosmicTiger - exact local FMM cell geometry; BSL-1.0. */
+
+// Exact dyadic cell identities, axis schedules, periodic bounds and conservative radii.
+
 #pragma once
 
 #include <algorithm>
@@ -14,13 +17,14 @@
 
 // Coordinates identify dyadic cells independently of the rounded FmmBox.
 // A child at the maximum depth must still have an exactly representable center.
-inline constexpr int kGeometricTreeMaxDepth = std::min(3 * (kPositionBits - 1), kMaxDepth - 1);
+inline constexpr int kGeometricTreeMaxDepth =
+    std::min(kDimensions * (kPositionBits - 1), kMaxDepth - 1);
 inline constexpr std::array<int, 18> kGeometricSplitAxes{
-    0, 1, 2, 2, 1, 0, 2, 0, 1, 1, 0, 2, 1, 2, 0, 0, 2, 1};
+    kXi, kYi, kZi, kZi, kYi, kXi, kZi, kXi, kYi, kYi, kXi, kZi, kYi, kZi, kXi, kXi, kZi, kYi};
 
 struct GeometricTreeCell {
-    std::array<uint64_t, 3> coordinate{};
-    uint16_t depth = 0;
+    std::array<uint64_t, kDimensions> coordinate{};    // Cell index along each axis at this depth.
+    uint16_t depth = 0;    // Number of binary splits from the unit-box root.
 
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
@@ -31,9 +35,10 @@ struct GeometricTreeCell {
     }
 };
 
-inline constexpr std::array<int, 3> geometricTreeAxisCuts(int depth) {
-    std::array<int, 3> cuts{depth / 3, depth / 3, depth / 3};
-    int const base = depth - depth % 3;
+inline constexpr std::array<int, kDimensions> geometricTreeAxisCuts(int depth) {
+    std::array<int, kDimensions> cuts{};
+    cuts.fill(depth / kDimensions);
+    int const base = depth - depth % kDimensions;
     for (int i = base; i < depth; ++i) {
         ++cuts[kGeometricSplitAxes[i % kGeometricSplitAxes.size()]];
     }
@@ -62,7 +67,7 @@ inline Position geometricTreeCenter(GeometricTreeCell const& cell, int axis) {
 inline FmmBox geometricTreeBox(GeometricTreeCell const& cell) {
     FmmBox box{};
     auto const cuts = geometricTreeAxisCuts(cell.depth);
-    for (int axis = 0; axis < 3; ++axis) {
+    for (int axis = 0; axis < kDimensions; ++axis) {
         int const n = cuts[axis];
         uint64_t lower;
         uint64_t upper;
@@ -104,7 +109,7 @@ inline float geometricTreeRadiusLimit(int depth) {
     auto const cuts = geometricTreeAxisCuts(depth);
     long double sum = 0;
     long double const infinity = std::numeric_limits<long double>::infinity();
-    for (int axis = 0; axis < 3; ++axis) {
+    for (int axis = 0; axis < kDimensions; ++axis) {
         long double const square = std::ldexp(1.0L, -2 * (cuts[axis] + 1));
         sum = std::nextafter(sum + square, infinity);
     }

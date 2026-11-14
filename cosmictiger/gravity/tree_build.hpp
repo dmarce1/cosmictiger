@@ -6,6 +6,8 @@
  See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
+// Tree build requests/results, local geometric construction and stable GPU staging storage.
+
 #pragma once
 
 #include <cosmictiger/core/flops.hpp>
@@ -39,10 +41,10 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
 // tree arena. This does not install the resulting root into the distributed solver.
 // It retains the source range's final permutation, preserving suffix membership.
 struct GeometricTreeBuildResult {
-    TreeCreateReturn root;
-    size_t coincidentOverflowLeaves = 0;
-    size_t depthOverflowLeaves = 0;
-    int ewaldDepth = 0;
+    TreeCreateReturn root;    // Root ID, geometry, multipoles and counts, including empty nodes.
+    size_t coincidentOverflowLeaves = 0;    // Overfull leaves with identical source positions.
+    size_t depthOverflowLeaves = 0;    // Leaves above the bucket limit stopped by maximum depth.
+    int ewaldDepth = 0;                // Minimum nonempty-leaf depth required by periodic FMM.
 };
 GeometricTreeBuildResult treeBuildGeometricLocal(
     TreeCreateParameters const& params, Pair<ParticleInteger> particleRange);
@@ -54,11 +56,11 @@ void treeAllocateNodesLocal(size_t capacity);
 // pointers remain unchanged; remote nodes use independent capacity. The owned tree
 // and its multipoles must remain alive until the staging arena is destroyed.
 class TreeStagingArena {
-    TreeNode* nodes_;
-    size_t remoteBegin_;
-    size_t size_;
-    size_t capacity_;
-    bool ownsNodes_;
+    TreeNode* nodes_;       // Contiguous local and imported node records used by this GPU launch.
+    size_t remoteBegin_;    // First imported-node slot; preceding slots preserve local indices.
+    size_t size_;           // End of the staged index range, including any unused local slots.
+    size_t capacity_;       // Total node slots available without moving the storage.
+    bool ownsNodes_;        // True for a separate allocation; false when borrowing the owned arena.
 
 public:
     explicit TreeStagingArena(size_t remoteNodeCount);

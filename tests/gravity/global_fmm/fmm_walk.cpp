@@ -1,4 +1,7 @@
 /* CosmicTiger - global FMM periodic force regression; BSL-1.0. */
+
+// Check legacy/geometric periodic forces against direct sums and exercise source exchange.
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -174,7 +177,7 @@ void fmmWalkTest() {
         std::array<double, 2> previousRms{
             std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity()};
         for (float const theta : {.5f, .25f}) {
-            for (int geometric = 0; geometric < 2; ++geometric) {
+            for (bool const geometric : {false, true}) {
                 auto const built = geometric ? treeCreateGeometric(TreeCreateParameters(0, theta)) :
                                                treeCreate(TreeCreateParameters(0, theta));
                 KickParameters parameters;

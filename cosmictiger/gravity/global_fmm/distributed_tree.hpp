@@ -6,6 +6,8 @@
  See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
+// Distributed FMM tree construction, source selection and geometric-tree lifetime APIs.
+
 #pragma once
 
 #include <cosmictiger/gravity/global_fmm/source_forest.hpp>
@@ -20,7 +22,10 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key = 1,
 // retain their descriptors for a complete-source reference traversal. Builds retain
 // the resulting particle order; AllOwned requires a full particlesCurrentRange(),
 // while CurrentRungRange preserves the nested hierarchical suffix boundaries.
-enum class GeometricSourceSelection { AllOwned, CurrentRungRange };
+enum class GeometricSourceSelection {
+    AllOwned,           // Use every owned particle; requires the current range to contain them all.
+    CurrentRungRange    // Use only the current hierarchical rung's nested particle suffix.
+};
 TreeCreateReturn treeCreateGeometric(TreeCreateParameters params,
     GeometricSourceSelection selection = GeometricSourceSelection::AllOwned, bool exchange = true);
 // exchange=false is for a cold complete-source measurement before explicit exchange.

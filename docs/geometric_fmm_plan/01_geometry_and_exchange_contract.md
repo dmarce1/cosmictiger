@@ -70,8 +70,8 @@ should be resolved with a stated recommendation rather than a sequence of permis
    r = min(Rmax(d), max_nonempty_children_j (|c_j-c|+r_j)). Empty clouds have r=0.
    This adapts Dehnen (2002), equation 9 and its corner cap, to prescribed geometric
    centers. Retain dipole moments: geometric centers are not generally centers of mass.
-5. Use the requested ordinary leaf condition d >= dEwald AND N < bucketSize; the strict
-   inequality is intentional. Empty branches need no forced subdivision. Translate the
+5. Use the ordinary leaf condition d >= dEwald AND N <= bucketSize; a full bucket
+   needs no further subdivision. Empty branches need no forced subdivision. Translate the
    current Ewald condition to the first depth with both
    Rmax(d) < theta/[4(1+theta)] and Rmax(d) < 1/8-h_G/4.
    Handle parameters for which no supported depth satisfies it. The selected depth is
@@ -180,11 +180,11 @@ centers distinct. Never reconstruct a center or subdivision from that rounded bo
 
 For nonempty nodes, the ordinary terminal condition is exactly
 
-    d >= dEwald AND N < bucketSize.
+    d >= dEwald AND N <= bucketSize.
 
 N is the count of all owned gravity sources, not just active sinks; bucketSize must
-be positive. N equal to bucketSize ordinarily subdivides. If the ordinary condition
-fails, additional terminal cases, both requiring d >= dEwald, are:
+be positive. N equal to bucketSize is an ordinary leaf once d >= dEwald. If this
+condition fails, additional terminal cases, both requiring d >= dEwald, are:
 
 - All particles have identical native positions: stop as a coincident overflow leaf.
 - The next prescribed child exceeds dMax or cannot have exact bounds and center:
@@ -477,11 +477,11 @@ on the remote source view being constructed.
   particle records. A nonempty owner far from another rank still sends a coarse
   covering representation; spatial separation is not an empty-rank test.
 
-- **Coincident particles.** Take N=bucketSize=32 at (1/2,1/2,1/2), with the same
+- **Coincident particles.** Take N=32 and bucketSize=31 at (1/2,1/2,1/2), with the same
   θ and h_G as above. Equality at the first x,y,z midpoints selects right children;
   later cuts follow exact coordinate comparisons along one nonempty chain to
-  depth 11. The count does not meet the
-  ordinary strict inequality; it terminates by the coincident exception. At that
+  depth 11. The count exceeds the bucket limit, so the cell terminates by the
+  coincident exception. At that
   depth the fixed center is (17/32,17/32,9/16), giving r=sqrt(6)/32, not zero.
   Retain the nonzero dipole about that center, all 32 source particles, and their
   distinct identities. Cancel only each sink's own primary self contribution.
@@ -497,7 +497,7 @@ guarantees conditional on the stated frozen ownership/coverage and conservative
 arithmetic invariants; they are not numerical-test results or finite-order error bounds.
 
 Source inspection found work that subsequent steps must implement: integer geometric
-identity independent of domain keys; fixed centers/dipoles and strict leaf count;
+identity independent of domain keys; fixed centers/dipoles and the inclusive bucket limit;
 native-precision/outward radius arithmetic preserving descendant-center enclosure;
 overflow/count/arena support; explicit imported terminal kinds; sink deferral for terminals;
 generation-qualified transport and counted reference fallback. Existing `leaf` alone

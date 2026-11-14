@@ -1,4 +1,7 @@
 /* CosmicTiger - static particle FMM benchmark; BSL-1.0. */
+
+// Run static-particle FMM benchmarks and compare demand fetching with source-forest exchange.
+
 #include <algorithm>
 #include <array>
 #include <bit>
@@ -185,11 +188,12 @@ HPX_PLAIN_ACTION(
 HPX_PLAIN_ACTION(scenarios::detail::checkBenchmarkParticles, CheckBenchmarkParticlesAction);
 
 namespace scenarios::detail {
+constexpr int kComparisonComponents = kDimensions + 1;    // Acceleration components plus potential.
 Vector<double> comparisonSnapshot;
 
 void captureComparison() {
     comparisonSnapshot.clear();
-    comparisonSnapshot.reserve(4 * particlesOwnedSize());
+    comparisonSnapshot.reserve(kComparisonComponents * particlesOwnedSize());
     for (ParticleInteger index = 0; index < particlesOwnedSize(); ++index) {
         for (int axis = 0; axis < kDimensions; ++axis) {
             comparisonSnapshot.push_back(particlesGravityAcceleration(axis, index));
@@ -202,17 +206,18 @@ void captureComparison() {
 // also retain the maximum component error normalized by max(1, |reference|).
 std::array<double, 5> checkComparison() {
     checkBenchmarkParticles();
-    if (comparisonSnapshot.size() != 4 * size_t(particlesOwnedSize())) {
+    if (comparisonSnapshot.size() != kComparisonComponents * size_t(particlesOwnedSize())) {
         throw std::runtime_error("Source comparison changed sink count");
     }
     std::array<double, 5> result{};
     for (ParticleInteger index = 0; index < particlesOwnedSize(); ++index) {
-        for (int component = 0; component < 4; ++component) {
-            double const reference = comparisonSnapshot[4 * index + component];
-            double const value = component == 3 ? particlesPot(index) :
-                                                  particlesGravityAcceleration(component, index);
+        for (int component = 0; component < kComparisonComponents; ++component) {
+            double const reference = comparisonSnapshot[kComparisonComponents * index + component];
+            double const value = component == kDimensions ?
+                particlesPot(index) :
+                particlesGravityAcceleration(component, index);
             double const difference = value - reference;
-            size_t const slot = component == 3 ? 2 : 0;
+            size_t const slot = component == kDimensions ? 2 : 0;
             result[slot] += difference * difference;
             result[slot + 1] += reference * reference;
             result[4] =
@@ -366,8 +371,8 @@ void runSourceComparison(size_t caseNumber, size_t count, Options const& options
             if (!referenceFirst) {
                 exchange();
             }
-            for (int walk = 0; walk < 2; ++walk) {
-                bool const reference = (walk == 0) == referenceFirst;
+            for (bool const firstWalk : {true, false}) {
+                bool const reference = firstWalk == referenceFirst;
                 fmmMeasurementPrepareWalk();
                 auto const start = Clock::now();
                 kickSourceForest(parameters, reference);
@@ -407,7 +412,7 @@ void runSourceComparison(size_t caseNumber, size_t count, Options const& options
                 for (auto& future : checked) {
                     future.get();
                 }
-                if (walk == 0) {
+                if (firstWalk) {
                     auto snapshots =
                         ::detail::geometricLaunchAndDrain<void>(hpxSize(), [&](size_t rank) {
                             return hpx::async<CaptureFmmComparisonAction>(hpxLocalities()[rank]);
@@ -422,13 +427,13 @@ void runSourceComparison(size_t caseNumber, size_t count, Options const& options
                         });
                     for (auto& future : checks) {
                         auto const values = future.get();
-                        for (int i = 0; i < 4; ++i) {
+                        for (size_t i = 0; i + 1 < accuracy.size(); ++i) {
                             accuracy[i] += values[i];
                         }
-                        accuracy[4] = std::max(accuracy[4], values[4]);
+                        accuracy.back() = std::max(accuracy.back(), values.back());
                     }
                 }
-                if (walk == 0 && referenceFirst) {
+                if (firstWalk && referenceFirst) {
                     exchange();
                 }
             }

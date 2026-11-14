@@ -6,6 +6,8 @@
  See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
+// Runtime configuration groups, scenario parameters and option serialization.
+
 #pragma once
 
 #include <cstdint>
@@ -295,11 +297,11 @@ struct RayleighTaylorScenario {
 };
 
 struct BenchmarkScenario {
-    std::string testFiles{};
-    std::string openingAngles{};
-    int size{1};
-    int repeats{3};
-    bool compareSourceForest{false};
+    std::string testFiles{};        // Comma-separated input particle-distribution filenames.
+    std::string openingAngles{};    // Comma-separated opening angles in (0,1], one per input file.
+    int size{1};                    // Number of input-distribution tiles along each unit-box axis.
+    int repeats{3};                 // Number of benchmark repetitions per input distribution.
+    bool compareSourceForest{false};    // Compare demand fetching with pre-exchanged source views.
 };
 
 // Options read only by the run.scenario problem of the same name.
@@ -313,23 +315,23 @@ struct Scenario {
 };
 
 struct Options {
-    std::string configuration;
-    Run run;
-    Compute compute;
-    Drift drift;
-    Sort sort;
-    Checkpoint checkpoint;
-    Initial initial;
-    Scenario scenario;
-    Output output;
-    Analysis analysis;
-    Lightcone lightcone;
-    Gravity gravity;
-    Cosmology cosmology;
-    Units units;
-    Hydro hydro;
-    Chemistry chemistry;
-    StarFormation starFormation;
+    std::string configuration;    // Path to the input configuration file.
+    Run run;                      // Scenario selection, integration and run-duration controls.
+    Compute compute;    // Position precision, bucket sizes and tree/cache allocation settings.
+    Drift drift;        // Particle-drift execution controls.
+    Sort sort;          // Particle-sort execution controls.
+    Checkpoint checkpoint;    // Checkpoint output and restart settings.
+    Initial initial;          // Initial particle sampling, species masses and derived sizes.
+    Scenario scenario;        // Parameters specific to each named simulation problem.
+    Output output;            // Output format, directory, units and spatial window.
+    Analysis analysis;        // Diagnostics and catalogue-generation settings.
+    Lightcone lightcone;      // Lightcone recording and analysis controls.
+    Gravity gravity;          // Gravity solver, force accuracy and smoothing settings.
+    Cosmology cosmology;      // Background cosmology and cosmological initial-condition parameters.
+    Units units;              // Physical unit conversions for simulation quantities.
+    Hydro hydro;              // Hydrodynamic solver and gas-evolution settings.
+    Chemistry chemistry;      // Equilibrium cooling and thermal initialization settings.
+    StarFormation starFormation;    // Star-formation and stellar-feedback settings.
 
     /// Archive `run.hierarchicalGravity`, `run.timeIntegrator`, `hydro.enabled`,
     /// `gravity.enabled`, `compute.sphBucketSize`,

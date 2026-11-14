@@ -77,6 +77,22 @@ group includes as standard headers, dependencies, then project headers, with
 blank lines between groups. Do not apply project naming changes to third-party
 code.
 
+# Code documentation and named constants
+
+User standing rule, November 14, 2026:
+
+- When adding or changing structs, classes or enums, put an explanatory inline
+  comment beside each data field and enum value. Explain its meaning, including
+  units, index ranges or stopping conditions where relevant.
+- Use named constants or container sizes for loop bounds instead of unexplained
+  numeric literals. Use `kDimensions` for Cartesian gravity axes and the existing
+  `kXi`, `kYi`, `kZi` constants for axis indices and split schedules. Use the dimension
+  constant for spatial array extents as well. Apply this
+  convention to new or changed code; do not sweep unrelated older code.
+- Begin every source and header file with a brief comment describing its purpose
+  and contents, alongside the existing copyright and license notice. Apply this
+  to new or changed files rather than rewriting unrelated older files.
+
 # Agent handoffs
 
 At the start of future CosmicTiger work, read `handoff/claude2codex.md` if it

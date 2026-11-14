@@ -1,5 +1,7 @@
 /* CosmicTiger - geometric FMM source-forest exchange; BSL-1.0. */
 
+// Certify, exchange and validate source forests; serve imported data and record measurements.
+
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -30,13 +32,13 @@ struct SourceIdHash {
 };
 
 struct ImportedSourceNode {
-    GeometricTreeCell cell;
-    TreeNode node;
-    unsigned char measuredUsed = 0;
+    GeometricTreeCell cell;            // Exact dyadic identity of the owner's source cell.
+    TreeNode node;                     // Imported metadata with multipole storage on this locality.
+    unsigned char measuredUsed = 0;    // Atomic first-use marker for each measured walk.
 };
 struct ImportedSourceParticle {
-    std::array<Position, 3> position;
-    char type;
+    std::array<Position, kDimensions> position;    // Fixed-point coordinates in the unit box.
+    char type;    // Gravity mass class: dark matter or gas (including stars).
 };
 using ImportedNodes = std::unordered_map<TreeId, ImportedSourceNode, SourceIdHash>;
 using ImportedParticles = std::unordered_map<uint64_t, ImportedSourceParticle>;
@@ -209,6 +211,7 @@ bool terminalCertified(TreeNode const& source, SourceRootDescriptor const& desti
         return true;
     }
     auto const& cover = destination.cover;
+    constexpr std::array<int, 3> kNearestImageOffsets{-1, 0, 1};
     long double squaredDistance = 0;
     for (int axis = 0; axis < kDimensions; ++axis) {
         long double const point =
@@ -216,7 +219,7 @@ bool terminalCertified(TreeNode const& source, SourceRootDescriptor const& desti
         long double const begin = cover.begin[axis];
         long double const end = cover.end[axis];
         long double axisDistance = 1;
-        for (int image = -1; image <= 1; ++image) {
+        for (int const image : kNearestImageOffsets) {
             long double const shifted = point + image;
             long double const distance =
                 shifted < begin ? begin - shifted : (shifted > end ? shifted - end : 0);

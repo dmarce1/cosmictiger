@@ -1,4 +1,7 @@
 /* CosmicTiger - GPU source staging arena regression; BSL-1.0. */
+
+// Test GPU staging capacity and owned-arena preservation without launching CUDA.
+
 #include <exception>
 #include <limits>
 #include <stdexcept>
@@ -49,7 +52,8 @@ void geometricStagingCapacityTest() {
         auto const* const ownedMultipole = ownedData[last].mpos;
         detail::requireStagingCapacity(reservedEnd > ownedCapacity,
             "Staging regression did not include allocator block padding");
-        for (int repeat = 0; repeat < 2; ++repeat) {
+        constexpr int kArenaReusePasses = 2;
+        for (int repeat = 0; repeat < kArenaReusePasses; ++repeat) {
             TreeStagingArena staged(2);
             detail::requireStagingCapacity(staged.remoteBegin() == size_t(ownedCapacity),
                 "Staging did not preserve the full occupied local index range");

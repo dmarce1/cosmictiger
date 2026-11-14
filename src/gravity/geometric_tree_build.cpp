@@ -1,5 +1,7 @@
 /* CosmicTiger - staged local geometric FMM tree; BSL-1.0. */
 
+// Build local geometric FMM trees with exact node counts, bounded radii and multipoles.
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -17,14 +19,20 @@ namespace detail {
 // This staged builder is serial: the counting pass both partitions the source
 // range and determines the exact stable-arena capacity, including empty siblings.
 struct GeometricBuildState {
-    int ewaldDepth;
-    int bucketSize;
-    FmmSourceView sources;
-    size_t coincidentLeaves = 0;
-    size_t depthLeaves = 0;
+    int ewaldDepth;                 // Minimum depth of nonempty leaves required by periodic FMM.
+    int bucketSize;                 // Ordinary leaves must contain no more sources than this.
+    FmmSourceView sources;          // Owned source arrays used for geometry and multipoles.
+    size_t coincidentLeaves = 0;    // Leaves above the bucket limit with identical positions.
+    size_t depthLeaves = 0;         // Leaves above the bucket limit stopped by maximum depth.
 };
 
-enum class GeometricTerminal { no, empty, ordinary, coincident, depth };
+enum class GeometricTerminal {
+    no,            // Split further: no stopping condition has been met.
+    empty,         // No sources; an empty leaf is allowed before the required Ewald depth.
+    ordinary,      // Required Ewald depth reached and source count is at or below the bucket limit.
+    coincident,    // Required depth reached; all positions coincide, so splitting cannot help.
+    depth          // Too many sources, but another split would exceed the depth limit.
+};
 
 GeometricTerminal geometricTerminal(
     GeometricTreeCell const& cell, Pair<ParticleInteger> range, GeometricBuildState const& state) {
@@ -35,12 +43,12 @@ GeometricTerminal geometricTerminal(
     if (int(cell.depth) < state.ewaldDepth) {
         return GeometricTerminal::no;
     }
-    if (count < state.bucketSize) {
+    if (count <= state.bucketSize) {
         return GeometricTerminal::ordinary;
     }
     bool coincident = true;
     for (ParticleInteger i = range.first + 1; i < range.second && coincident; ++i) {
-        for (int axis = 0; axis < 3; ++axis) {
+        for (int axis = 0; axis < kDimensions; ++axis) {
             if (state.sources.positions[axis][i].raw() !=
                 state.sources.positions[axis][range.first].raw()) {
                 coincident = false;
@@ -95,7 +103,7 @@ float geometricLeafRadius(
     long double largest = 0;
     for (ParticleInteger i = range.first; i < range.second; ++i) {
         long double squared = 0;
-        for (int axis = 0; axis < 3; ++axis) {
+        for (int axis = 0; axis < kDimensions; ++axis) {
             PositionInteger const a = sources.positions[axis][i].raw();
             PositionInteger const b = center[axis].raw();
             PositionInteger const magnitude = a >= b ? a - b : b - a;
@@ -118,7 +126,7 @@ TreeCreateReturn geometricBuildNode(
     int const index = treeAllocateNode();
     auto const terminal = geometricTerminal(cell, range, state);
     auto const cuts = geometricTreeAxisCuts(cell.depth);
-    for (int axis = 0; axis < 3; ++axis) {
+    for (int axis = 0; axis < kDimensions; ++axis) {
         result.pos[axis] = geometricTreeCenter(cell, axis);
         result.box.begin[axis] = std::ldexp(double(cell.coordinate[axis]), -cuts[axis]);
         result.box.end[axis] = std::ldexp(double(cell.coordinate[axis] + 1), -cuts[axis]);

@@ -15,6 +15,10 @@ import random
 import subprocess
 import sys
 
+DIMENSIONS = 3
+SMALL_PARTICLE_COUNT = 96
+CLUSTERED_PARTICLE_COUNT = 32 ** DIMENSIONS
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -29,13 +33,14 @@ def main():
     generator = random.Random(731924)
     small = root / 'small.txt'
     clustered = root / 'clustered.txt'
-    small.write_text(''.join(' '.join(format(generator.random(), '.17g') for _ in range(3)) + '\n'
-                             for _ in range(96)))
+    small.write_text(''.join(' '.join(format(generator.random(), '.17g')
+                                    for _ in range(DIMENSIONS)) + '\n'
+                             for _ in range(SMALL_PARTICLE_COUNT)))
     with clustered.open('w') as output:
-        for index in range(32 ** 3):
+        for index in range(CLUSTERED_PARTICLE_COUNT):
             center = .25 if index % 2 == 0 else .75
             output.write(' '.join(format((center + generator.gauss(0, .035)) % 1, '.17g')
-                                  for _ in range(3)) + '\n')
+                                  for _ in range(DIMENSIONS)) + '\n')
     repo = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(repo / 'tests'))
     from application_selection import cpu_backend_options

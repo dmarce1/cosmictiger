@@ -6,6 +6,8 @@
  See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
+// Gravity tree nodes, source kinds, multipole serialization and build/traversal metadata.
+
 #ifndef TREE_HPP_
 #define TREE_HPP_
 
@@ -35,26 +37,26 @@
 MultipolePosition* treeAddMultipole(Vector3<Position> const& pos, MultipoleBuffer const& multipole);
 void treeReadMultipole(MultipolePosition const* record, MultipoleBuffer& multipole);
 
-inline constexpr unsigned char kTreeSourceOwned = 0;
-inline constexpr unsigned char kTreeSourceInternal = 1;
-inline constexpr unsigned char kTreeSourceParticleLeaf = 2;
-inline constexpr unsigned char kTreeSourceMultipoleTerminal = 3;
-inline constexpr unsigned char kTreeSourceEmpty = 4;
+inline constexpr unsigned char kTreeSourceOwned = 0;       // Node from an owner's complete tree.
+inline constexpr unsigned char kTreeSourceInternal = 1;    // Imported node with exported children.
+inline constexpr unsigned char kTreeSourceParticleLeaf = 2;    // Imported leaf with particle data.
+inline constexpr unsigned char kTreeSourceMultipoleTerminal = 3;    // Subtree collapsed to moments.
+inline constexpr unsigned char kTreeSourceEmpty = 4;    // Imported node representing no sources.
 
 struct TreeNode {
-    FmmBox box;
-    Array<TreeId, kChildCount> children;
-    Pair<ParticleInteger> particleRange;
-    Pair<int, int> processRange;
-    Vector3<Position> pos;
-    MultipolePosition* mpos;
-    float radius;
+    FmmBox box;    // Periodic spatial bounds enclosing this node's sources.
+    Array<TreeId, kChildCount> children;    // Child IDs; leaves use index -1 for each child.
+    Pair<ParticleInteger> particleRange;    // Half-open owner-local range; single-rank nodes only.
+    Pair<int, int> processRange;    // Half-open range of localities represented by this node.
+    Vector3<Position> pos;      // Expansion center used for geometry and multipole translations.
+    MultipolePosition* mpos;    // Stable arena record containing the center and multipole data.
+    float radius;               // Source-cloud radius about pos, excluding the smoothing support.
     // Imported source meaning remains explicit even when geometry is shared.
-    unsigned char sourceKind = kTreeSourceOwned;
+    unsigned char sourceKind = kTreeSourceOwned;    // One of the kTreeSource* record kinds above.
     struct {
-        unsigned short depth : 14;
-        unsigned short localRoot : 1;
-        unsigned short leaf : 1;
+        unsigned short depth : 14;       // Tree depth; geometric locality roots start at zero.
+        unsigned short localRoot : 1;    // Root of a locality's owned subtree.
+        unsigned short leaf : 1;    // No children to walk, including collapsed imported terminals.
     };
     CUDA_EXPORT
 

@@ -54,7 +54,7 @@ step 3 activates independent locality trees.
    for all nodes, including empty nodes and leaves. Use the box midpoint for both stored
    center and every P2M/M2M expansion origin.
 3. Partition owned particles at the prescribed midpoint. Continue nonempty subdivision
-   until d >= dEwald and N < bucketSize. Apply the contract's coincident-particle and
+   until d >= dEwald and N <= bucketSize. Apply the contract's coincident-particle and
    representability terminal cases; no occupied-extent or equal-count fallback split.
 4. Measure leaf radii about their stored centers, using position arithmetic that preserves
    relevant native fixed-point differences. Aggregate nonempty child radii with

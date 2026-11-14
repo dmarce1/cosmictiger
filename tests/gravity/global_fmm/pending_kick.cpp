@@ -1,5 +1,7 @@
 /* CosmicTiger - pending kick tree-retirement regression; BSL-1.0. */
 
+// Test deferred kick completion and safe tree retirement with retained particle sources.
+
 #include <array>
 #include <cmath>
 #include <exception>
@@ -38,7 +40,7 @@ float pendingKickValue(ParticleInteger originalIndex, int dimension) {
 }
 
 ParticleInteger pendingKickOriginalIndex(ParticleInteger index) {
-    return ParticleInteger(std::lround(16.0 * particlesPos(0, index).toDouble())) - 1;
+    return ParticleInteger(std::lround(16.0 * particlesPos(kXi, index).toDouble())) - 1;
 }
 
 }    // namespace detail
