@@ -209,7 +209,7 @@ struct SphRunParameters {
     float velocityDampingRate;    // Velocity damping used while relaxing the gas sphere.
     /// Initialize SPH pass defaults from the current runtime options.
     SphRunParameters() {
-        auto const opts = getOptions();
+        auto const& opts = getOptions();
         minimumProposedRung = opts.run.minRung;
         minimumSmoothingLength = opts.hydro.minSmoothingLength;
         maximumSmoothingLength = opts.hydro.maxSmoothingLength;

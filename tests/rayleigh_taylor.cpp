@@ -110,6 +110,7 @@ void sphParticlesResize(ParticleInteger count, bool) {
 namespace detail {
 
 void testInitialization(int resolution, ParticleInteger expectedCount, double acceleration) {
+    auto const& opts = getOptions();
     sphParticlesResize(0);
     Options configured{};
     configured.run.gasParticleCount = size_t(resolution) * resolution * resolution;
@@ -123,7 +124,7 @@ void testInitialization(int resolution, ParticleInteger expectedCount, double ac
     requireClose("stage duration", plan.stages.front().duration, 10.0);
     require(plan.stages.front().numberOfSteps == 256, "coarse step count");
     require(sphParticlesSize() == expectedCount, "resolved lattice particle count");
-    double const mass = getOptions().initial.gasMass;
+    double const mass = opts.initial.gasMass;
     ParticleInteger lightCount = 0;
     ParticleInteger heavyCount = 0;
     std::set<std::array<PositionInteger, kDimensions>> occupied;

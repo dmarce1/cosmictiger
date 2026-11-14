@@ -530,10 +530,11 @@ static std::shared_ptr<SphRunWorkspace> collectSphRunWork(SphRunParameters const
 /// Validate the active rung range, apply the configured CFL factor, and constrain backend
 /// selection.
 static SphRunParameters prepareSphRunParameters(SphRunParameters params, bool& cuda) {
+    auto const& opts = getOptions();
     ALWAYS_ASSERT(params.minimumRung >= 0 && params.maximumRung < kMaxRung &&
         params.minimumRung <= params.maximumRung);
-    params.courantFactor = getOptions().hydro.cfl;
-    if (getOptions().hydro.cuda == false) {
+    params.courantFactor = opts.hydro.cfl;
+    if (opts.hydro.cuda == false) {
         cuda = false;
     }
     return params;
@@ -767,7 +768,8 @@ void sphRunStage(SphRunParameters params, bool cuda) {
 /// Consume staged work on the selected backend, deliver pair increments, and reduce pass
 /// diagnostics.
 SphRunReturn sphRunCompute(bool cuda) {
-    if (getOptions().hydro.cuda == false) {
+    auto const& opts = getOptions();
+    if (opts.hydro.cuda == false) {
         cuda = false;
     }
     Vector<hpx::future<SphRunReturn>> children;
@@ -1065,6 +1067,7 @@ void SphRunWorkspace::stage() {
 /// Bind staged source arrays and live sink outputs into the kernel's nonowning run-data
 /// view.
 SphRunData SphRunWorkspace::data() {
+    auto const& opts = getOptions();
     SphRunData runData{};
 
     copySources(runData, [](auto*& destination, auto& source) {
@@ -1089,18 +1092,17 @@ SphRunData SphRunWorkspace::data() {
     runData.sinkGravityAccelerationX = nullptr;
     runData.sinkGravityAccelerationY = nullptr;
     runData.sinkGravityAccelerationZ = nullptr;
-    runData.gravityEffectiveRadius =
-        gravitySofteningEffectiveRadius(getOptions().gravity.smoothingLength);
+    runData.gravityEffectiveRadius = gravitySofteningEffectiveRadius(opts.gravity.smoothingLength);
     addCpuFlops(2, FlopPrecision::Double);
     runData.selfGravityEnabled = false;
 #endif
-    runData.adiabaticIndex = getOptions().hydro.heatCapacityRatio;
+    runData.adiabaticIndex = opts.hydro.heatCapacityRatio;
     runData.numberOfTargetNodes = hostTargetNodeIndices.size();
-    runData.centralAcceleration = getOptions().scenario.disc.centralAcceleration;
-    runData.centralSmoothingLength = getOptions().scenario.disc.centralSmoothingLength;
-    runData.targetNeighborCount = getOptions().hydro.neighborNumber;
-    runData.gasMass = getOptions().initial.gasMass;
-    runData.accelerationTimestepFactor = getOptions().gravity.timestepEta;
+    runData.centralAcceleration = opts.scenario.disc.centralAcceleration;
+    runData.centralSmoothingLength = opts.scenario.disc.centralSmoothingLength;
+    runData.targetNeighborCount = opts.hydro.neighborNumber;
+    runData.gasMass = opts.initial.gasMass;
+    runData.accelerationTimestepFactor = opts.gravity.timestepEta;
 
     return runData;
 }

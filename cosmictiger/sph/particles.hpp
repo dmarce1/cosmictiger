@@ -111,8 +111,9 @@ void sphCheckpointTest();
 
 /// Return the configured uniform gas-particle mass after checking the gas index.
 inline float sphParticlesMass(ParticleInteger index) {
+    auto const& opts = getOptions();
     CHECK_SPH_PART_BOUNDS(index);
-    return float(getOptions().initial.gasMass);
+    return float(opts.initial.gasMass);
 }
 
 /// Read the gas particle's smoothing-solve convergence flag.
@@ -180,16 +181,18 @@ inline float sphParticlesInternalEnergy(ParticleInteger index) {
     if (!sphParticlesEntropyInitialized) {
         return sphParticlesEntropies[index];
     }
+    auto const& opts = getOptions();
     return sph_entropy::storedEnergy(sphParticlesEntropies[index], sphParticlesDensities[index],
-        getOptions().hydro.heatCapacityRatio, sphParticlesThermalScaleFactor);
+        opts.hydro.heatCapacityRatio, sphParticlesThermalScaleFactor);
 }
 
 // Initial conditions supply E before density exists. Later energy writes must convert to A.
 inline void sphParticlesSetInternalEnergy(ParticleInteger index, float energy) {
+    auto const& opts = getOptions();
     CHECK_SPH_PART_BOUNDS(index);
     sphParticlesEntropies[index] = sphParticlesEntropyInitialized ?
         sph_entropy::fromStoredEnergy(energy, sphParticlesDensities[index],
-            getOptions().hydro.heatCapacityRatio, sphParticlesThermalScaleFactor) :
+            opts.hydro.heatCapacityRatio, sphParticlesThermalScaleFactor) :
         energy;
 }
 
@@ -207,7 +210,8 @@ inline float& sphParticlesDensity(ParticleInteger index) {
 /// Compute stored gas pressure from density, internal energy, and the configured adiabatic
 /// index.
 inline float sphParticlesPressure(ParticleInteger index) {
+    auto const& opts = getOptions();
     // Options require hydro.heatCapacityRatio=5/3 whenever chemistry or star formation is enabled.
-    float const ratio = getOptions().hydro.heatCapacityRatio - 1.0f;
+    float const ratio = opts.hydro.heatCapacityRatio - 1.0f;
     return ratio * sphParticlesDensity(index) * sphParticlesInternalEnergy(index);
 }

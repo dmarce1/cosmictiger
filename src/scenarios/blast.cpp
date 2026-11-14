@@ -34,6 +34,7 @@ namespace detail {
     /// Compare sampled gas density with the Sedov reference and write profile/error
     /// diagnostics.
     static void finishBlast(double endTime) {
+        auto const& opts = getOptions();
         FILE* fp = fopen(outputPath("blast.txt").c_str(), "wt");
         double l1 = 0.0, l2 = 0.0, lmax = 0.0;
         double norm1 = 0.0, norm2 = 0.0;
@@ -51,8 +52,7 @@ namespace detail {
             double rmax = sqrt(1.5);
             double d, velocity, p;
             int ndim = kSpatialDimensions;
-            sedov::solution(
-                time, r, rmax, d, velocity, p, ndim, getOptions().hydro.heatCapacityRatio);
+            sedov::solution(time, r, rmax, d, velocity, p, ndim, opts.hydro.heatCapacityRatio);
             double dif = fabs(rho - d);
             norm1 += sample.weight * d;
             norm2 += sample.weight * sqr(d);
@@ -73,8 +73,9 @@ namespace detail {
 /// Initialize a uniform gas lattice with a normalized localized thermal blast and its
 /// output schedule.
 ScenarioPlan initializeBlast() {
+    auto const& options = getOptions();
     double rho0 = 1.0;
-    auto opts = getOptions();
+    auto opts = options;
     auto const layout = particle_count::roundLattice(opts.run.gasParticleCount, 2);
     ParticleInteger const ndim = layout.side;
     ParticleInteger const numberOfParticles = layout.count;
@@ -100,7 +101,7 @@ ScenarioPlan initializeBlast() {
                 double vx = 0.0;
                 double vy = 0.0;
                 double vz = 0.0;
-                double h = sph_geometry::supportRadius(m, rho0, getOptions().hydro.neighborNumber);
+                double h = sph_geometry::supportRadius(m, rho0, options.hydro.neighborNumber);
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
                 sphParticlesPosition(kXi, i) = x;

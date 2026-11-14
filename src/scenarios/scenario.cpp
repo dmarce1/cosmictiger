@@ -29,6 +29,7 @@ namespace detail {
     /// Sample local gas diagnostics with weights representing the full local
     /// population.
     std::vector<DiagnosticSample> localDiagnosticSamples(size_t maximum) {
+        auto const& opts = getOptions();
         size_t const count = sphParticlesSize();
         size_t const samples = std::min(count, maximum);
         std::vector<DiagnosticSample> result;
@@ -43,7 +44,7 @@ namespace detail {
                     value.position[dim] = sphParticlesPositionValue(dim, particle).toDouble();
                 }
                 value.density = sphParticlesDensity(particle);
-                value.pressure = (getOptions().hydro.heatCapacityRatio - 1.0) * value.density *
+                value.pressure = (opts.hydro.heatCapacityRatio - 1.0) * value.density *
                     sphParticlesInternalEnergy(particle);
                 value.weight = double(count) / samples;
                 result.push_back(value);

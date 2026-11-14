@@ -58,10 +58,11 @@ float coolingStoredEnergy(double energy, double scaleFactor) {
 std::vector<gadget4::Result> integrateCoolingBatch(std::vector<gadget4::Input> const& inputs,
     gadget4::Parameters const& parameters,
     std::vector<SphChemistryBatchInput> const& sourceInputs) {
+    auto const& opts = getOptions();
     std::vector<gadget4::Result> results(inputs.size());
     std::string error;
     bool success = true;
-    if (getOptions().chemistry.cuda) {
+    if (opts.chemistry.cuda) {
 #ifdef USE_CUDA
         cudaSetDevice();
 #endif
@@ -357,14 +358,15 @@ std::array<float, 9> sphChemistryOutput(
 HPX_PLAIN_ACTION(sphChemistryPressureIntegral, SphChemistryPressureIntegralAction);
 /// Sum the gas pressure-energy contribution across localities at the supplied scale factor.
 double sphChemistryPressureIntegral(double scaleFactor) {
+    auto const& opts = getOptions();
     std::vector<hpx::future<double>> remote;
     for (auto const& child : hpxChildren()) {
         remote.push_back(hpx::async<SphChemistryPressureIntegralAction>(child, scaleFactor));
     }
     double sum = 0.0;
     for (ParticleInteger index = 0; index < sphParticlesSize(); ++index) {
-        sum += getOptions().initial.gasMass * gadget4::kGammaMinusOne *
-            sphParticlesInternalEnergy(index) / (scaleFactor * scaleFactor);
+        sum += opts.initial.gasMass * gadget4::kGammaMinusOne * sphParticlesInternalEnergy(index) /
+            (scaleFactor * scaleFactor);
     }
     for (auto& future : remote) {
         sum += future.get();

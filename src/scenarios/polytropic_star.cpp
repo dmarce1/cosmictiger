@@ -167,10 +167,11 @@ namespace detail {
 /// Construct relaxed gas shells for the self-gravitating polytrope and schedule damped then
 /// free evolution.
 ScenarioPlan initializePolytropicStar() {
-    ParticleInteger totalNumberOfParticles = getOptions().run.gasParticleCount;
+    auto const& options = getOptions();
+    ParticleInteger totalNumberOfParticles = options.run.gasParticleCount;
     double const r0 = detail::kRadiusScale;
     int const nValue = totalNumberOfParticles;
-    auto opts = getOptions();
+    auto opts = options;
     if (!opts.gravity.enabled) {
         throw std::invalid_argument("The polytropicStar scenario requires gravity.enabled=true");
     }
@@ -236,7 +237,7 @@ ScenarioPlan initializePolytropicStar() {
     solveSphereSurfaceProblem(xValue);
     for (int i = 0; i < xValue.size(); i++) {
         double const d = rho(radius[i] * r0);
-        double h = sph_geometry::supportRadius(m, d, getOptions().hydro.neighborNumber);
+        double h = sph_geometry::supportRadius(m, d, options.hydro.neighborNumber);
         int const nValue = xValue[i][kXi].size();
         for (int l = 0; l < nValue; l++) {
             ParticleInteger const k = sphParticlesSize();

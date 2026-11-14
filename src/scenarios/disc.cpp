@@ -22,14 +22,15 @@ namespace scenarios {
 /// Initialize a cold rotating gas annulus around the configured central acceleration and
 /// set its evolution schedule.
 ScenarioPlan initializeDisc() {
-    ParticleInteger totalNumberOfParticles = getOptions().run.gasParticleCount;
+    auto const& options = getOptions();
+    ParticleInteger totalNumberOfParticles = options.run.gasParticleCount;
     double const innerRadius = 0.2;
     double const outerRadius = 0.3;
     double const rho = totalNumberOfParticles;
     // Keep the disc cold while resolving viscous heating with the relative
     // thermal timestep bound. Specific energy is independent of resolution.
     double const internalEnergy = 1.0e-4;
-    auto opts = getOptions();
+    auto opts = options;
     if (!(opts.scenario.disc.centralAcceleration > 0.0)) {
         throw std::invalid_argument(
             "The disc scenario requires scenario.disc.centralAcceleration > 0");
@@ -37,7 +38,7 @@ ScenarioPlan initializeDisc() {
     opts.initial.gasMass = 1.0;
     setOptions(opts);
     double const m = opts.initial.gasMass;
-    double h = sph_geometry::supportRadius(m, rho, getOptions().hydro.neighborNumber);
+    double h = sph_geometry::supportRadius(m, rho, options.hydro.neighborNumber);
     int i = 0;
     int const nz = 3;
     // A complete six-plane annular lattice is the valid resolution unit.

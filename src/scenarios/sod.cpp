@@ -76,7 +76,8 @@ namespace detail {
 /// Initialize periodic left/right Sod states with equal-mass lattice sampling and a fixed
 /// output schedule.
 ScenarioPlan initializeSod() {
-    ParticleInteger totalNumberOfParticles = getOptions().run.gasParticleCount;
+    auto const& options = getOptions();
+    ParticleInteger totalNumberOfParticles = options.run.gasParticleCount;
     double rho0 = 0.125;
     double rho1 = 1.0;
 
@@ -106,7 +107,7 @@ ScenarioPlan initializeSod() {
     double dx = 0.5 / leftDim;
     double dy = kSpatialDimensions == 2 ? 1.0 / leftTransverseSide : dx;
     ParticleInteger i = 0;
-    auto opts = getOptions();
+    auto opts = options;
     opts.run.gasParticleCount = totalNumberOfParticles;
     opts.initial.gasMass = rho1 * 0.5 / numberOfLeftParticles;
     double const m = opts.initial.gasMass;
@@ -117,9 +118,9 @@ ScenarioPlan initializeSod() {
     sod.rhor = rho0;
     sod.pl = p1;
     sod.pr = p0;
-    sod.gamma = getOptions().hydro.heatCapacityRatio;
+    sod.gamma = options.hydro.heatCapacityRatio;
     constexpr float kEta = 0.0;
-    double const ne = getOptions().hydro.neighborNumber;
+    double const ne = options.hydro.neighborNumber;
     terminal::detailPrint(
         "Sod dimensions are %i and %i rho0 %e rho1 %e\n", 2 * rightDim, 2 * leftDim, rho0, rho1);
     for (int ix = 0; ix < leftDim; ix++) {
@@ -129,7 +130,7 @@ ScenarioPlan initializeSod() {
                 double y = iy * dy;
                 double z = (iz) *dx;
 
-                double h = sph_geometry::supportRadius(m, rho1, getOptions().hydro.neighborNumber);
+                double h = sph_geometry::supportRadius(m, rho1, options.hydro.neighborNumber);
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
                 sphParticlesPosition(kXi, i) = x + rand1() * dx * kEta;
@@ -150,7 +151,7 @@ ScenarioPlan initializeSod() {
                 }
                 sphParticlesRung(i) = 0;
                 sphParticlesSetInternalEnergy(
-                    i, p1 / (getOptions().hydro.heatCapacityRatio - 1.0) / rho1);
+                    i, p1 / (options.hydro.heatCapacityRatio - 1.0) / rho1);
                 i++;
                 x = (ix + 0.5) * dx;
                 y = (iy + 0.5) * dy;
@@ -175,7 +176,7 @@ ScenarioPlan initializeSod() {
                 }
                 sphParticlesRung(i) = 0;
                 sphParticlesSetInternalEnergy(
-                    i, p1 / (getOptions().hydro.heatCapacityRatio - 1.0) / rho1);
+                    i, p1 / (options.hydro.heatCapacityRatio - 1.0) / rho1);
                 i++;
             }
         }
@@ -190,7 +191,7 @@ ScenarioPlan initializeSod() {
                 double y = iy * dy;
                 double z = (iz) *dx;
 
-                double h = sph_geometry::supportRadius(m, rho0, getOptions().hydro.neighborNumber);
+                double h = sph_geometry::supportRadius(m, rho0, options.hydro.neighborNumber);
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
                 sphParticlesPosition(kXi, i) = x + rand1() * dx * kEta;
@@ -212,7 +213,7 @@ ScenarioPlan initializeSod() {
 
                 sphParticlesRung(i) = 0;
                 sphParticlesSetInternalEnergy(
-                    i, p0 / (getOptions().hydro.heatCapacityRatio - 1.0) / rho0);
+                    i, p0 / (options.hydro.heatCapacityRatio - 1.0) / rho0);
 
                 i++;
                 x = (ix + 0.5) * dx;
@@ -239,7 +240,7 @@ ScenarioPlan initializeSod() {
 
                 sphParticlesRung(i) = 0;
                 sphParticlesSetInternalEnergy(
-                    i, p0 / (getOptions().hydro.heatCapacityRatio - 1.0) / rho0);
+                    i, p0 / (options.hydro.heatCapacityRatio - 1.0) / rho0);
 
                 i++;
             }

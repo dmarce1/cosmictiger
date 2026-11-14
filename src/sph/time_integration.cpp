@@ -179,6 +179,7 @@ SphRungBalanceReturn sphFinishRungCandidates(bool publish) {
 /// Iterate neighbor rung closure to a bounded fixed point and clean up candidate state on
 /// failure.
 SphRungBalanceReturn sphBalanceRungs(TreeId root, float scaleFactor, bool cuda) {
+    auto const& opts = getOptions();
     ALWAYS_ASSERT(hpxRank() == 0 && sphTreeAllValid());
     SphTreeNeighborParameters neighbors;
     neighbors.operation = SphNeighborOperation::RefreshBounds;
@@ -197,7 +198,7 @@ SphRungBalanceReturn sphBalanceRungs(TreeId root, float scaleFactor, bool cuda) 
         parameters.baseTimestep = 1.0f;
         parameters.scaleFactor = scaleFactor;
         parameters.expansionRate = 0.0f;
-        parameters.courantFactor = getOptions().hydro.cfl;
+        parameters.courantFactor = opts.hydro.cfl;
         // Locally derived graph closure:
         //   r_i* = max_j (r_j^0 - dist(i,j), 0).
         // r_j^0 -> caller proposal; dist -> touching-kernel graph distance.
@@ -274,6 +275,7 @@ size_t sphMidpointTargetCount(int exactRung) {
 /// Choose next gas rungs from hydro bounds and allowed coarsening, returning the global
 /// maximum.
 int sphParticlesSelectMidpointRungs(int minimumRung) {
+    auto const& opts = getOptions();
     ALWAYS_ASSERT(sphMidpointEnabled() && minimumRung >= 0);
     Vector<hpx::future<int>> children;
     for (auto const& child : sphCollectiveChildren()) {
@@ -284,7 +286,7 @@ int sphParticlesSelectMidpointRungs(int minimumRung) {
         auto& rung = sphParticlesRung(gas);
         if (rung >= minimumRung) {
             int const nextRung = std::max(
-                {minimumRung, int(rung) - 1, sphParticlesHydroRung(gas), getOptions().run.minRung});
+                {minimumRung, int(rung) - 1, sphParticlesHydroRung(gas), opts.run.minRung});
             ALWAYS_ASSERT(nextRung >= 0 && nextRung < kMaxRung);
             rung = nextRung;
         }

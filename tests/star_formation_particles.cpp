@@ -32,11 +32,12 @@ float fixtureElectronFraction(int rank, int originalGasIndex) {
 }
 
 void requireFixtureChemistry(ParticleInteger gasIndex, int rank, int originalGasIndex) {
+    auto const& opts = getOptions();
     auto const expected = fixtureElectronFraction(rank, originalGasIndex);
     requireStarParticles(sphParticlesElectronFractions[gasIndex] == expected,
         "combined persistence changed the GADGET-4 electron guess");
     auto const thermal = sph_entropy::prepareStoredEnergy(float(2 + originalGasIndex),
-        float(3 + originalGasIndex), getOptions().hydro.heatCapacityRatio, 1.0);
+        float(3 + originalGasIndex), opts.hydro.heatCapacityRatio, 1.0);
     requireStarParticles(sphParticlesEntropyInitialized &&
             sphParticlesEntropies[gasIndex] == thermal.entropy &&
             sphParticlesProposedRung(gasIndex) == 3 + originalGasIndex,
@@ -182,8 +183,9 @@ namespace detail {
 }    // namespace detail
 
 void starFormationParticlesTest() {
-    detail::requireStarParticles(getOptions().starFormation.enabled && getOptions().hydro.enabled &&
-            getOptions().chemistry.enabled && !getOptions().starFormation.cuda,
+    auto const& opts = getOptions();
+    detail::requireStarParticles(opts.starFormation.enabled && opts.hydro.enabled &&
+            opts.chemistry.enabled && !opts.starFormation.cuda,
         "fixture requires CPU SPH star formation with particle chemistry");
     for (bool const gas : {false, true}) {
         size_t const stride = domainsMigrationRecordBytes(gas);

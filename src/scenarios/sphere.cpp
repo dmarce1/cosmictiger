@@ -202,7 +202,8 @@ void solveSphereSurfaceProblemCpu(Vector<Array<Vector<float>, kDimensions>>& pos
 /// backend.
 void solveSphereSurfaceProblem(Vector<Array<Vector<float>, kDimensions>>& positions) {
 #ifdef USE_CUDA
-    if (getOptions().initial.cuda) {
+    auto const& opts = getOptions();
+    if (opts.initial.cuda) {
         solveSphereSurfaceProblemCuda(positions);
         return;
     }

@@ -12,13 +12,14 @@ namespace scenarios {
 /// Initialize the expanding background, validate its requested trajectory, and generate
 /// cosmological particles.
 void initializeCosmology(DriverParameters& state) {
-    state.a = 1.0 / (1.0 + getOptions().cosmology.startRedshift);
+    auto const& opts = getOptions();
+    state.a = 1.0 / (1.0 + opts.cosmology.startRedshift);
     state.adot = cosmosDadt(state.a);
     state.tauMax = cosmology::configuredDuration(state.a);
     // Validate the whole requested trajectory before generating particles.
     cosmology::simulationBackground(state.tauMax);
     profile::checkForInterrupt();
-    initialize(getOptions().cosmology.startRedshift);
+    initialize(opts.cosmology.startRedshift);
 }
 
 }    // namespace scenarios

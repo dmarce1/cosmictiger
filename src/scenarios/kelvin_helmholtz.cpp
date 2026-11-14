@@ -31,6 +31,7 @@ namespace detail {
     /// Solve initial density on rank zero, then set gas energies to the requested
     /// uniform pressure.
     void initializeKelvinHelmholtzThermodynamics(float P) {
+        auto const& opts = getOptions();
         // All scenario particles are still on rank zero. The tree may sort gas
         // records, but does not migrate them; assign energies only after this pass.
         SphTreeCreateParameters treeParameters;
@@ -66,7 +67,7 @@ namespace detail {
             neighbors.operation = SphNeighborOperation::RefreshBounds;
             sphTreeNeighbor(neighbors, root, Vector<TreeId>{}).get();
         }
-        float const γ_minus_1 = getOptions().hydro.heatCapacityRatio - 1.0f;
+        float const γ_minus_1 = opts.hydro.heatCapacityRatio - 1.0f;
         for (ParticleInteger particle = 0; particle < sphParticlesSize(); ++particle) {
             // Derived ideal-gas conversion, using the EOS in sphParticlesPressure:
             // P = (γ − 1) ρ u  =>  u = P / [(γ − 1) ρ].

@@ -20,7 +20,8 @@ namespace scenarios {
 
 /// Sample a reproducible Plummer realization in opposite position/velocity pairs.
 void initializePlummerParticles() {
-    auto const numberOfParticles = getOptions().initial.numberOfParticles;
+    auto const& options = getOptions();
+    auto const numberOfParticles = options.initial.numberOfParticles;
     particlesResize(numberOfParticles);
     // Runtime and profiling libraries may reseed the process-global C RNG.
     // An owned generator keeps this initial realization reproducible.
@@ -35,7 +36,7 @@ void initializePlummerParticles() {
     for (ParticleInteger i = 0; i < numberOfParticles; i += 2) {
         // Invert M(<r)=r^3/(1+r^2)^(3/2), conditioned on staying inside
         // the periodic box. This avoids a numerical integral's finite plateau.
-        double const scale = getOptions().scenario.plummer.radius;
+        double const scale = options.scenario.plummer.radius;
         double const maximumMass = std::pow(1.0 + 4.0 * scale * scale, -1.5);
         double const massFraction = sampleUniform() * maximumMass;
         double const r = scale / std::sqrt(std::expm1(-2.0 / 3.0 * std::log(massFraction)));
@@ -53,8 +54,8 @@ void initializePlummerParticles() {
         double x = x0 + r * nx;
         double y = y0 + r * ny;
         double z = z0 + r * nz;
-        double velocity = sqrt(getOptions().gravity.gm * numberOfParticles /
-            sqrt(sqr(getOptions().scenario.plummer.radius) + sqr(r)) / 2);
+        double velocity = sqrt(options.gravity.gm * numberOfParticles /
+            sqrt(sqr(options.scenario.plummer.radius) + sqr(r)) / 2);
         do {
             nx = 2.0 * sampleUniform() - 1.0;
             ny = 2.0 * sampleUniform() - 1.0;

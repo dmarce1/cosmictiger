@@ -65,7 +65,8 @@ float sfStoredEnergy(double energy) {
             .value());
 }
 double sfStep() {
-    return 1.e11 / (kSfScale * getOptions().units.timeSeconds);
+    auto const& opts = getOptions();
+    return 1.e11 / (kSfScale * opts.units.timeSeconds);
 }
 void initializeSfFixture() {
     particlesResize(3);
@@ -175,6 +176,7 @@ void alterSfFixture(int operation) {
     }
 }
 std::vector<SfRecord> sfSourceReference() {
+    auto const& opts = getOptions();
     auto parameters = starFormationParameters(kSfScale);
     parameters.explicitTimestep = sfStep();
     std::vector<SfRecord> result;
@@ -189,7 +191,7 @@ std::vector<SfRecord> sfSourceReference() {
         requireSf(output.status == 0, "scalar source reference failed");
         SfRecord record;
         auto const prepared = sph_entropy::prepareStoredEnergy(
-            output.energy, input.density, getOptions().hydro.heatCapacityRatio, kSfScale);
+            output.energy, input.density, opts.hydro.heatCapacityRatio, kSfScale);
         record.energy = std::bit_cast<uint32_t>(prepared.storedEnergy);
         record.entropy = std::bit_cast<uint32_t>(prepared.entropy);
         record.electrons = std::bit_cast<uint32_t>(output.electronFraction);
@@ -230,10 +232,11 @@ SfSnapshot sfCollect() {
 }
 
 void sfLedger(SfSnapshot const& before, SfSnapshot const& after, double heating) {
+    auto const& opts = getOptions();
     double expected = 0.0;
     for (size_t rank = 0; rank < before.size(); ++rank) {
         for (size_t particle = 0; particle < 3; ++particle) {
-            expected -= getOptions().initial.gasMass *
+            expected -= opts.initial.gasMass *
                 (double(std::bit_cast<float>(after[rank][particle].energy)) -
                     double(std::bit_cast<float>(before[rank][particle].energy))) /
                 kSfScale;
@@ -244,8 +247,9 @@ void sfLedger(SfSnapshot const& before, SfSnapshot const& after, double heating)
 }    // namespace detail
 
 void starFormationTest() {
-    detail::requireSf(getOptions().starFormation.enabled && getOptions().chemistry.enabled,
-        "fixture requires cooling and SF");
+    auto const& opts = getOptions();
+    detail::requireSf(
+        opts.starFormation.enabled && opts.chemistry.enabled, "fixture requires cooling and SF");
     detail::sfAll<InitializeSfFixtureAction>();
     particlesInitializeStarFormationIds();
     auto const initial = detail::sfCollect<SfSnapshotAction>();

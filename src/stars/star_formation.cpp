@@ -112,7 +112,8 @@ std::vector<Output> run(
     Operation operation, std::vector<Input> const& inputs, Parameters const& parameters) {
     std::vector<Output> outputs(inputs.size());
 #ifdef USE_CUDA
-    if (getOptions().starFormation.cuda) {
+    auto const& opts = getOptions();
+    if (opts.starFormation.cuda) {
         cudaSetDevice();
         try {
             star_formation_backend::runCuda(
@@ -156,6 +157,7 @@ std::vector<Pending> pending;
 /// committing live state.
 StarFormationUpdate stage(std::vector<ParticleInteger> const& gasIndices,
     std::vector<Input> const& inputs, std::vector<Output> const& outputs, double scaleFactor) {
+    auto const& opts = getOptions();
     if (!sphParticlesEntropyInitialized || sphParticlesThermalScaleFactor != scaleFactor) {
         throw std::logic_error("Star formation requires endpoint density and canonical entropy");
     }
@@ -175,11 +177,11 @@ StarFormationUpdate stage(std::vector<ParticleInteger> const& gasIndices,
         }
         // Validate even a converting particle before any rank may commit.
         auto const original = sph_entropy::prepareStoredEnergy(
-            input.energy, input.density, getOptions().hydro.heatCapacityRatio, scaleFactor);
+            input.energy, input.density, opts.hydro.heatCapacityRatio, scaleFactor);
         (void) original;
         if (!output.convert) {
             auto const prepared = sph_entropy::prepareStoredEnergy(
-                output.energy, input.density, getOptions().hydro.heatCapacityRatio, scaleFactor);
+                output.energy, input.density, opts.hydro.heatCapacityRatio, scaleFactor);
             entropy = prepared.entropy;
             output.energy = prepared.storedEnergy;
         }
@@ -187,8 +189,8 @@ StarFormationUpdate stage(std::vector<ParticleInteger> const& gasIndices,
         // ΔQ = −m (Eₒᵤₜ − Eᵢₙ)/a, E = a²u.
         // m -> gas mass; Eₒᵤₜ -> output energy; Eᵢₙ -> input energy;
         // a -> scale factor. Use the actual representable committed entropy.
-        output.value = -getOptions().initial.gasMass *
-            (double(output.energy) - double(input.energy)) / scaleFactor;
+        output.value =
+            -opts.initial.gasMass * (double(output.energy) - double(input.energy)) / scaleFactor;
         result.heating += output.value;
         result.converted += output.convert;
         staged.push_back({sphParticlesParticleIndex(gasIndices[index]), output, entropy});
@@ -201,8 +203,9 @@ StarFormationUpdate stage(std::vector<ParticleInteger> const& gasIndices,
 /// Derive deterministic random bits from particle identity, event, stream, and the
 /// configured seed.
 uint64_t starFormationRandomBits(uint64_t identity, uint64_t event, uint64_t stream) {
+    auto const& opts = getOptions();
     return star_formation_backend::detail::mix(
-        star_formation_backend::detail::mix(identity ^ getOptions().starFormation.seed) ^
+        star_formation_backend::detail::mix(identity ^ opts.starFormation.seed) ^
         star_formation_backend::detail::mix(event + UINT64_C(0x9e3779b97f4a7c15)) ^
         star_formation_backend::detail::mix(stream + UINT64_C(0x632be59bd9b4e019)));
 }
@@ -425,14 +428,15 @@ HPX_PLAIN_ACTION(starFormationPressureIntegral, StarFormationPressureIntegralAct
 /// Reduce the gas thermal pressure-energy contribution across localities at the supplied
 /// scale.
 double starFormationPressureIntegral(double scaleFactor) {
+    auto const& opts = getOptions();
     std::vector<hpx::future<double>> remote;
     for (auto const& child : hpxChildren()) {
         remote.push_back(hpx::async<StarFormationPressureIntegralAction>(child, scaleFactor));
     }
     double sum = 0.0;
     for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
-        sum += getOptions().initial.gasMass * gadget4::kGammaMinusOne *
-            sphParticlesInternalEnergy(gas) / (scaleFactor * scaleFactor);
+        sum += opts.initial.gasMass * gadget4::kGammaMinusOne * sphParticlesInternalEnergy(gas) /
+            (scaleFactor * scaleFactor);
     }
     for (auto& future : remote) {
         sum += future.get();

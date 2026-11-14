@@ -53,6 +53,7 @@ void requireSourceTiming(bool condition, char const* message) {
 }
 
 void initializeSourceTiming() {
+    auto const& opts = getOptions();
     sphParticlesFree();
     ParticleInteger const begin = kSourceParticleCount * hpxRank() / hpxSize();
     ParticleInteger const end = kSourceParticleCount * (hpxRank() + 1) / hpxSize();
@@ -71,9 +72,9 @@ void initializeSourceTiming() {
         source = {};
         source.id = uint64_t(ordinal) + 1;
         sphParticlesParticleIndex(particle) = particle;
-        sphParticlesDensity(particle) = getOptions().initial.gasMass * kSourceParticleCount;
+        sphParticlesDensity(particle) = opts.initial.gasMass * kSourceParticleCount;
         sphParticlesSetInternalEnergy(particle, storedEnergy);
-        sphParticlesSmoothingLength(particle) = getOptions().hydro.minSmoothingLength;
+        sphParticlesSmoothingLength(particle) = opts.hydro.minSmoothingLength;
         sphParticlesElectronFractions[particle] = 1.0f;
         sphParticlesSetProposedRung(particle, particlesRung(particle));
         sphParticlesBulkViscosityCoefficients[particle] = 0.25f + 0.0625f * (ordinal % 4);
@@ -164,6 +165,7 @@ std::vector<SourceTimingRecord> collectSourceTiming() {
 void verifySourceTiming(std::vector<SourceTimingRecord> const& before,
     std::vector<SourceTimingRecord> const& after, int minimumRung, double baseTimestep,
     double explicitTimestep, uint64_t convertedIdentity) {
+    auto const& opts = getOptions();
     std::array<double, kDimensions> momentumBefore{}, momentumAfter{};
     bool const comoving = starFormationParameters(kSourceScale).cooling.comoving;
     for (size_t index = 0; index < before.size(); ++index) {
@@ -176,9 +178,9 @@ void verifySourceTiming(std::vector<SourceTimingRecord> const& before,
         bool const selected = previous.type == kSphType && previous.rung >= minimumRung;
         double const duration =
             explicitTimestep >= 0.0 ? explicitTimestep : std::ldexp(baseTimestep, -previous.rung);
-        double const expectedElapsed = selected ? previous.elapsedPhysicalTime +
-                kSourceScale * duration * getOptions().units.timeSeconds :
-                                                  previous.elapsedPhysicalTime;
+        double const expectedElapsed = selected ?
+            previous.elapsedPhysicalTime + kSourceScale * duration * opts.units.timeSeconds :
+            previous.elapsedPhysicalTime;
         requireSourceTiming(current.eventCounter == previous.eventCounter + uint64_t(selected) &&
                 current.elapsedPhysicalTime == expectedElapsed,
             "source did not consume exactly one completed old-rung interval");

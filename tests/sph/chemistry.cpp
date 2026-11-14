@@ -38,8 +38,9 @@ using ChemistryLocalSnapshot = std::vector<ChemistryRecord>;
 using ChemistrySnapshot = std::vector<ChemistryLocalSnapshot>;
 
 double chemistryTestTimestep() {
+    auto const& opts = getOptions();
     // Rung three completes 1e11 physical seconds.
-    return 8.0e11 / (kChemistryTestScale * getOptions().units.timeSeconds);
+    return 8.0e11 / (kChemistryTestScale * opts.units.timeSeconds);
 }
 void requireChemistry(bool condition, char const* message) {
     if (!condition) {
@@ -123,7 +124,8 @@ void rejectDuplicateCoolingTargets() {
     requireChemistry(before == chemistryFixtureSnapshot(), "duplicate source changed gas state");
 }
 void checkThermalProjection() {
-    double const gamma = getOptions().hydro.heatCapacityRatio;
+    auto const& opts = getOptions();
+    double const gamma = opts.hydro.heatCapacityRatio;
     auto const prepared = sph_entropy::prepareStoredEnergy(3.0f, 7.0f, gamma, kChemistryTestScale);
     double const expectedEntropy = (gamma - 1.0) * 3.0 * std::pow(7.0, 1.0 - gamma);
     requireChemistry(std::abs(double(prepared.entropy) - expectedEntropy) <
@@ -175,6 +177,7 @@ ChemistrySnapshot chemistrySnapshot() {
 }
 void requireCompletedSource(ChemistrySnapshot const& before, ChemistrySnapshot const& after,
     double heating, size_t firstParticle) {
+    auto const& opts = getOptions();
     double expectedHeating = 0.0;
     for (size_t rank = 0; rank < before.size(); ++rank) {
         requireChemistry(std::equal(before[rank].begin(), before[rank].begin() + firstParticle,
@@ -194,14 +197,14 @@ void requireCompletedSource(ChemistrySnapshot const& before, ChemistrySnapshot c
             float const newEnergy = std::bit_cast<float>(newRecord.energyBits);
             double const density = std::bit_cast<float>(newRecord.densityBits);
             double const entropy = std::bit_cast<float>(newRecord.entropyBits);
-            double const gamma = getOptions().hydro.heatCapacityRatio;
+            double const gamma = opts.hydro.heatCapacityRatio;
             double const expectedEntropy =
                 (gamma - 1.0) * double(newEnergy) * std::pow(density, 1.0 - gamma);
             requireChemistry(std::abs(entropy - expectedEntropy) <=
                     4.0 * std::numeric_limits<float>::epsilon() * expectedEntropy,
                 "committed source energy and entropy are inconsistent");
-            expectedHeating -= getOptions().initial.gasMass * (double(newEnergy) - oldEnergy) /
-                kChemistryTestScale;
+            expectedHeating -=
+                opts.initial.gasMass * (double(newEnergy) - oldEnergy) / kChemistryTestScale;
         }
     }
     requireChemistry(

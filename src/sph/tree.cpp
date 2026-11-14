@@ -320,7 +320,8 @@ long long sphTreeNodesSize() {
 
 /// Reserve another block of gas-tree node indices, failing if the arena is exhausted.
 void SphTreeAllocator::reset() {
-    int const treeCacheLineSize = getOptions().compute.treeCacheLineSize;
+    auto const& opts = getOptions();
+    int const treeCacheLineSize = opts.compute.treeCacheLineSize;
     next_ = (nextId += treeCacheLineSize);
     last_ = std::min(next_ + treeCacheLineSize, (int) nodes.size());
     if (next_ >= nodes.size()) {
@@ -409,9 +410,10 @@ hpx::future<SphTreeCreateReturn> sphTreeCreateFork(SphTreeCreateParameters param
 
 /// Prepare reusable gas-tree arenas and reset allocator blocks throughout the SPH topology.
 static void sphTreeAllocateNodes() {
+    auto const& opts = getOptions();
     sphTreeInvalidate();
-    int const treeCacheLineSize = getOptions().compute.treeCacheLineSize;
-    int const bucketSize = getOptions().compute.sphBucketSize;
+    int const treeCacheLineSize = opts.compute.treeCacheLineSize;
+    int const bucketSize = opts.compute.sphBucketSize;
     Vector<hpx::future<void>> futs;
     for (auto const& c : sphCollectiveChildren()) {
         futs.push_back(hpx::async<SphTreeAllocateNodesAction>(c));
@@ -528,7 +530,8 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
 static SphTreeCreateReturn sphTreeBuild(SphTreeCreateParameters params, size_t key,
     Pair<int, int> processRange, Pair<ParticleInteger> particleRange, Range<double> box, int depth,
     bool localRoot) {
-    int const bucketSize = getOptions().compute.sphBucketSize;
+    auto const& opts = getOptions();
+    int const bucketSize = opts.compute.sphBucketSize;
     SphTreeCreateReturn rc;
     if (depth < 0 || depth > SphTreeNode::kMaximumDepth) {
         throw std::out_of_range("SPH tree depth must be between 0 and 15");

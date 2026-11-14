@@ -49,6 +49,7 @@ HPX_PLAIN_ACTION(sphParticlesPrepareThermodynamics, SphParticlesPrepareThermodyn
 /// Publish the thermal scale and optionally convert initial gas energy to persistent
 /// entropy across localities.
 void sphParticlesPrepareThermodynamics(double scaleFactor, bool initializeEntropy) {
+    auto const& opts = getOptions();
     ALWAYS_ASSERT(scaleFactor > 0.0);
     Vector<hpx::future<void>> children;
     for (auto const& child : sphCollectiveChildren()) {
@@ -60,7 +61,7 @@ void sphParticlesPrepareThermodynamics(double scaleFactor, bool initializeEntrop
         for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
             ALWAYS_ASSERT(sphParticlesDensity(gas) > 0.0f && sphParticlesEntropies[gas] > 0.0f);
             sphParticlesEntropies[gas] = sph_entropy::fromStoredEnergy(sphParticlesEntropies[gas],
-                sphParticlesDensity(gas), getOptions().hydro.heatCapacityRatio, scaleFactor);
+                sphParticlesDensity(gas), opts.hydro.heatCapacityRatio, scaleFactor);
         }
         sphParticlesEntropyInitialized = true;
     }
@@ -148,6 +149,7 @@ void sphParticlesArrayResize(T*& ptr, ParticleInteger newCapacity) {
 /// Resize enabled gas arrays, invalidate stale geometry, and optionally create
 /// corresponding base particles.
 void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticles) {
+    auto const& opts = getOptions();
     if (particleCount != size) {
         sphTreeInvalidate();
     }
@@ -166,7 +168,7 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
         sphParticlesArrayResize(sphParticlesEntropies, newCapacity);
         sphParticlesArrayResize(sphParticlesSmoothingLengths, newCapacity);
         sphParticlesArrayResize(sphParticlesParticleIndices, newCapacity);
-        if (getOptions().chemistry.enabled) {
+        if (opts.chemistry.enabled) {
             sphParticlesArrayResize(sphParticlesElectronFractions, newCapacity);
         }
         capacity = newCapacity;
@@ -182,7 +184,7 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
         ParticleInteger const slot = previousSize + i;
         sphParticlesEntropies[slot] = 0.0f;
         sphParticlesSmoothingLengths[slot] = 0.0f;
-        if (getOptions().chemistry.enabled) {
+        if (opts.chemistry.enabled) {
             sphParticlesElectronFractions[slot] = 1.0f;
         }
         sphParticlesParticleIndices[slot] = kNoParticleIndex;
@@ -191,8 +193,7 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
         sphParticlesGradHCorrections[slot] = unbuiltGradHCorrection;
         sphParticlesFlags[slot] = {};
         sphParticlesSetProposedRung(slot, 0);
-        sphParticlesBulkViscosityCoefficients[slot] =
-            getOptions().hydro.minimumBulkViscosityCoefficient;
+        sphParticlesBulkViscosityCoefficients[slot] = opts.hydro.minimumBulkViscosityCoefficient;
         if (resizeGravityParticles) {
             particlesCatIndex(offset + i) = previousSize + i;
             particlesType(offset + i) = kSphType;
@@ -395,6 +396,7 @@ uint32_t sphCheckpointVersion() {
 /// Validate and restore persistent gas state, leaving derived tree and force data to be
 /// rebuilt.
 void sphParticlesLoad(FILE* fp) {
+    auto const& opts = getOptions();
     sphTreeInvalidate();
     uint32_t header[7];
     ParticleInteger savedCount;
@@ -441,7 +443,7 @@ void sphParticlesLoad(FILE* fp) {
             throw std::runtime_error("Invalid SPH viscosity coefficient in checkpoint");
         }
     }
-    if (getOptions().chemistry.enabled) {
+    if (opts.chemistry.enabled) {
         for (ParticleInteger index = 0; index < sphParticlesSize(); ++index) {
             float electronFraction;
             FREAD(&electronFraction, sizeof(float), 1, fp);
@@ -455,6 +457,7 @@ void sphParticlesLoad(FILE* fp) {
 
 /// Write the versioned persistent gas arrays and thermal context to the checkpoint stream.
 void sphParticlesSave(FILE* fp) {
+    auto const& opts = getOptions();
     uint32_t header[7] = {0x43545350U, detail::sphCheckpointVersion(), sizeof(ParticleInteger),
         sizeof(float), 0U, kSpatialDimensions, sizeof(float)};
     ParticleInteger count = sphParticlesSize();
@@ -473,7 +476,7 @@ void sphParticlesSave(FILE* fp) {
     for (ParticleInteger index = 0; index < sphParticlesSize(); ++index) {
         FWRITE(&sphParticlesBulkViscosityCoefficients[index].bits, sizeof(uint16_t), 1, fp);
     }
-    if (getOptions().chemistry.enabled) {
+    if (opts.chemistry.enabled) {
         for (ParticleInteger index = 0; index < sphParticlesSize(); ++index) {
             float const electronFraction = sphParticlesElectronFractions[index];
             FWRITE(&electronFraction, sizeof(float), 1, fp);
@@ -484,6 +487,7 @@ void sphParticlesSave(FILE* fp) {
 /// Exercise packed gas flags and checkpoint round trips while restoring the original
 /// particle state.
 void sphCheckpointTest() {
+    auto const& opts = getOptions();
     // Every valid combination roundtrips and each setter preserves the other fields.
     for (int encoded = 0; encoded < 256; ++encoded) {
         SphParticleFlags flags;
@@ -531,7 +535,7 @@ void sphCheckpointTest() {
         }
     }
     float originalElectronFraction{1.0f};
-    bool const testChemistry = getOptions().chemistry.enabled && sphParticlesSize() != 0;
+    bool const testChemistry = opts.chemistry.enabled && sphParticlesSize() != 0;
     if (testChemistry) {
         originalElectronFraction = sphParticlesElectronFractions[0];
         sphParticlesElectronFractions[0] = 1.0e-25f;

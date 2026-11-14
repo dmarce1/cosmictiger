@@ -92,7 +92,8 @@ namespace detail {
 
     // Sound speed squared from G: c² = 8πGρ₀/k², so 4πGρ₀ = c²k²/2.
     double jeansSoundSpeedSquared() {
-        double const gm = getOptions().gravity.gm;
+        auto const& opts = getOptions();
+        double const gm = opts.gravity.gm;
         if (!(gm > 0.0) || !std::isfinite(gm)) {
             throw std::invalid_argument("The jeansWave scenario needs a positive gravity.gm");
         }
@@ -102,6 +103,7 @@ namespace detail {
     /// Reduce Fourier modes and compare the measured Jeans-wave frequency and amplitude
     /// with the reference.
     void finishJeansWave(double time) {
+        auto const& opts = getOptions();
         JeansModes modes;
         std::vector<hpx::future<JeansModes>> futures;
         for (auto const& locality : hpxLocalities()) {
@@ -117,11 +119,11 @@ namespace detail {
         double const A = kJeansAmplitude;
         double const c2 = jeansSoundSpeedSquared();
         double const omega_s = std::sqrt(c2) * k;
-        double const omega_J = std::sqrt(
-            c2 * sqr(k) - 4.0 * std::numbers::pi * getOptions().gravity.gm * kJeansDensity);
+        double const omega_J =
+            std::sqrt(c2 * sqr(k) - 4.0 * std::numbers::pi * opts.gravity.gm * kJeansDensity);
         double const V = 2.0 * modes.velocity / modes.count;
         double const D = 2.0 * modes.density / modes.count;
-        double const expected = getOptions().gravity.enabled ? omega_J : omega_s;
+        double const expected = opts.gravity.enabled ? omega_J : omega_s;
         double omega_fit = expected;
         for (int iteration = 0; iteration < 64; ++iteration) {
             double phase = std::atan2(-k * V / omega_fit, -D);
@@ -136,8 +138,8 @@ namespace detail {
         std::cout << std::format("Jeans wave: gravity={} time={:e} velocity_mode={:e} "
                                  "density_mode={:e} omega_fit={:e} omega_jeans={:e} "
                                  "omega_sound={:e} amplitude={:e} relative_error={:e}\n",
-                         getOptions().gravity.enabled ? "T" : "F", time, V, D, omega_fit, omega_J,
-                         omega_s, amplitude, error)
+                         opts.gravity.enabled ? "T" : "F", time, V, D, omega_fit, omega_J, omega_s,
+                         amplitude, error)
                   << std::flush;
     }
 

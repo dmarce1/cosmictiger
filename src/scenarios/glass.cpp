@@ -14,14 +14,15 @@ namespace scenarios {
 
 /// Create random single-locality particles for a fixed-background glass relaxation.
 void initializeGlass(DriverParameters& state) {
+    auto const& options = getOptions();
     if (hpxSize() != 1) {
         throw std::invalid_argument("Glass generation requires one HPX locality");
     }
-    if (getOptions().initial.closePack) {
+    if (options.initial.closePack) {
         throw std::invalid_argument("Glass generation does not support initial.closePack; the file "
                                     "stores side^3 particles");
     }
-    auto const count = getOptions().initial.numberOfParticles;
+    auto const count = options.initial.numberOfParticles;
     particlesResize(count);
     for (ParticleInteger i = 0; i < count; i++) {
         for (int dim = 0; dim < kDimensions; dim++) {
@@ -38,7 +39,8 @@ void initializeGlass(DriverParameters& state) {
 /// Validate the cubic particle count and write fixed-point glass positions in
 /// dimension-major order.
 void saveGlass() {
-    int const side = getOptions().initial.latticeSide;
+    auto const& opts = getOptions();
+    int const side = opts.initial.latticeSide;
     if (uint64_t(particlesSize()) != uint64_t(side) * side * side) {
         throw std::logic_error("Glass particle count does not match its lattice dimensions");
     }

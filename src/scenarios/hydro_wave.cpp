@@ -22,9 +22,10 @@ namespace scenarios {
 /// Initialize a periodic gas wave on the configured lattice and return its fixed evolution
 /// schedule.
 ScenarioPlan initializeHydroWave() {
+    auto const& options = getOptions();
     double rho = 1.0;
     double p0 = 0.845154255;
-    auto opts = getOptions();
+    auto opts = options;
     ParticleInteger const ndim = particle_count::roundLattice(opts.run.gasParticleCount).side;
     ParticleInteger const numberOfParticles = particle_count::spatialPower(ndim);
     opts.run.gasParticleCount = numberOfParticles;
@@ -39,8 +40,8 @@ ScenarioPlan initializeHydroWave() {
                 double x = (ix + 0.5) * dx;
                 double y = (iy + 0.5) * dx;
                 double z = (iz + 0.5) * dx;
-                double eint = p0 / rho / (getOptions().hydro.heatCapacityRatio - 1);
-                double h = sph_geometry::supportRadius(m, rho, getOptions().hydro.neighborNumber);
+                double eint = p0 / rho / (options.hydro.heatCapacityRatio - 1);
+                double h = sph_geometry::supportRadius(m, rho, options.hydro.neighborNumber);
 
                 if (ix == ndim / 2) {
                     x += 0.99 * dx;

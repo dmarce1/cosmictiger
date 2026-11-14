@@ -167,8 +167,9 @@ void initializeSphTreeParticles(ParticleInteger count, int generation) {
 }
 
 int expectedSphSplitMask(SphTreeNode const& node) {
+    auto const& opts = getOptions();
     auto const count = node.numberOfParticles();
-    auto const bucket = getOptions().compute.sphBucketSize;
+    auto const bucket = opts.compute.sphBucketSize;
     int const dimensions = count > 4 * bucket ? 3 : count > 2 * bucket ? 2 : 1;
     std::array<int, kDimensions> axes{0, 1, 2};
     std::stable_sort(axes.begin(), axes.end(), [&](int first, int second) {
@@ -276,6 +277,7 @@ struct SphTreeSummary {
 };
 
 SphTreeSummary verifySphTreeNode(TreeId id, int depth, std::set<int>& leaves) {
+    auto const& opts = getOptions();
     auto const& node = *sphTreeGetNode(id);
     requireSphTree(id.proc == hpxRank(), "single-locality tree contains a remote node");
     requireSphTree(node.depth == depth && node.localRoot == (depth == 0),
@@ -342,7 +344,7 @@ SphTreeSummary verifySphTreeNode(TreeId id, int depth, std::set<int>& leaves) {
     }
 
     SphTreeSummary summary{1, activeParticles != 0 ? size_t(1) : size_t(0), 0, 0};
-    requireSphTree(node.leaf == (node.numberOfParticles() <= getOptions().compute.sphBucketSize),
+    requireSphTree(node.leaf == (node.numberOfParticles() <= opts.compute.sphBucketSize),
         "leaf state does not match the rebuilt population");
     if (node.leaf) {
         requireSphTree(leaves.insert(id.index).second, "tree visits the same leaf twice");
