@@ -368,7 +368,7 @@ class SourceIdentityTests(unittest.TestCase):
 
 
 class VariationalCudaTests(unittest.TestCase):
-    def run_mock_matrix(self, busy, cuda_status):
+    def run_mock_matrix(self, busy, cuda_status, comparison_only=False):
         def execute(spec, base, launcher):
             return {'name': spec.name, 'stem': spec.stem, 'backend': spec.backend,
                 'localities': spec.localities, 'integrator': spec.integrator,
@@ -382,9 +382,11 @@ class VariationalCudaTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             argv = ['run_variational_sph', '/fake/app', directory, '--quick', '--cuda', '--jobs=1']
+            if comparison_only:
+                argv.append('--comparison-only')
             with patch.object(run_variational_sph.sys, 'argv', argv), \
                     patch.object(run_variational_sph, 'compiled_algorithms',
-                                 return_value={'integrator': ['traditional']}), \
+                                 return_value={'integrator': ['hierarchical']}), \
                     patch.object(run_variational_sph, 'gpuBusyWithOurJobs', return_value=busy), \
                     patch.object(run_variational_sph, 'execute', side_effect=execute), \
                     patch.object(run_variational_sph.subprocess, 'run',
@@ -395,18 +397,21 @@ class VariationalCudaTests(unittest.TestCase):
         return status, checks
 
     def test_cuda_skip_before_launch_and_after_backend_probe(self):
-        for busy, gpu_status in (('CUDA explicitly disabled', 'ok'), (None, 'skipped')):
-            with self.subTest(busy=busy, gpu_status=gpu_status):
-                status, checks = self.run_mock_matrix(busy, gpu_status)
+        for comparison_only, (busy, gpu_status) in itertools.product(
+                (False, True), (('CUDA explicitly disabled', 'ok'), (None, 'skipped'))):
+            with self.subTest(busy=busy, gpu_status=gpu_status, comparison_only=comparison_only):
+                status, checks = self.run_mock_matrix(busy, gpu_status, comparison_only)
                 self.assertEqual(status, 77)
                 self.assertTrue(any(row['status'] == 'SKIP' and 'cuda' in row['name']
                                     for row in checks))
                 self.assertFalse(any(row['status'] == 'FAIL' for row in checks))
 
     def test_cuda_failure_remains_failure(self):
-        status, checks = self.run_mock_matrix(None, 'abort')
-        self.assertEqual(status, 1)
-        self.assertTrue(any(row['status'] == 'FAIL' and 'cuda' in row['name'] for row in checks))
+        for comparison_only in (False, True):
+            with self.subTest(comparison_only=comparison_only):
+                status, checks = self.run_mock_matrix(None, 'abort', comparison_only)
+                self.assertEqual(status, 1)
+                self.assertTrue(any(row['status'] == 'FAIL' and 'cuda' in row['name'] for row in checks))
 
     def test_only_explicit_missing_cuda_diagnostics_skip(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -442,7 +447,7 @@ class OptimizedRunnerTests(unittest.TestCase):
         # except tuple is evaluated then, so stale module names can turn a
         # passing regression into a failing command after all checks complete.
         directory = Path(__file__).resolve().parent
-        for name in ('run_checkpoint', 'run_gadget4_cooling', 'run_global_integrator',
+        for name in ('run_checkpoint', 'run_gadget4_cooling',
                      'run_gravity_error', 'run_mpi_launcher', 'run_star_formation',
                      'run_star_formation_ids',
                      'camb_reference', 'compare_native_recombination'):
@@ -462,7 +467,7 @@ class OptimizedRunnerTests(unittest.TestCase):
 
     def test_regression_checks_are_not_python_assert_statements(self):
         directory = Path(__file__).resolve().parent
-        for name in ('run_global_integrator.py', 'run_mpi_launcher.py', 'run_checkpoint.py',
+        for name in ('run_mpi_launcher.py', 'run_checkpoint.py',
                      'run_star_formation.py', 'run_gadget4_cooling.py'):
             tree = ast.parse((directory / name).read_text())
             with self.subTest(name=name):

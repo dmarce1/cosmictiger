@@ -6,9 +6,9 @@
 
 """Validate variational SPH in the application.
 
-The driver runs Sod, Sedov blast, and hydroWave with every hydro-capable integrator,
+The driver runs Sod, Sedov blast, and hydroWave with hierarchical midpoint SPH,
 a CFL-halving check, and small gravity-free SPH cosmologies (expanding background
-only; PMMM has no SPH coupling yet) for two adiabatic indices. Optional
+only) for two adiabatic indices. Optional
 runs compare two localities and CUDA against CPU. Every run uses a fresh directory
 under workdir, and any failed run or accuracy check produces a nonzero exit status.
 Chemistry and star-formation evolution and restart coverage lives in
@@ -34,7 +34,7 @@ from application_selection import (application_arguments, application_options, c
 
 kRoot = Path(__file__).resolve().parents[1]
 kConfigurations = kRoot / "configurations"
-kHydroIntegrators = ("traditional", "global")
+kHydroIntegrators = ("hierarchical",)
 kRunTimeout = 300
 kCosmologyTimeout = 240
 # Shared by every scenario run: text diagnostics only, no checkpoint before the end.
@@ -54,7 +54,7 @@ class RunSpec:
     """One application process: a scenario, backend, integrator, and size."""
 
     def __init__(self, name, stem, executable, *, backend="cpu", localities=1,
-                 integrator="traditional", resolution=16,
+                 integrator="hierarchical", resolution=16,
                  overrides=None, kind="fixed", rawCommand=None,
                  timeout=kRunTimeout):
         self.name = name
@@ -438,9 +438,13 @@ def main():
     parser.add_argument("--hpx-argument", action="append", default=[])
     parser.add_argument("--quick", action="store_true",
                         help="8^3 runs with a single integrator, suitable for CTest")
+    parser.add_argument("--comparison-only", action="store_true",
+                        help="run only the CPU references and MPI/CUDA comparisons requested")
     parser.add_argument("--jobs", type=int, choices=(1, 2), default=2,
                         help="concurrent single-locality CPU processes (2 threads each)")
     args = parser.parse_args()
+    if args.comparison_only and not (args.mpi_exec or args.cuda):
+        parser.error("--comparison-only requires --mpi-exec or --cuda")
     executable = args.executable.resolve()
     cudaExecutable = (args.cuda_executable or args.executable).resolve()
     base = args.workdir.resolve()
@@ -455,6 +459,11 @@ def main():
     sodSize = 8 if args.quick else 16
     blastSizes = (8,) if args.quick else (8, 16)
     waveSizes = (8,) if args.quick else (8, 16)
+    checkCpuSod = not args.comparison_only or args.cuda
+    if args.comparison_only:
+        blastSizes = ()
+        if not args.cuda:
+            waveSizes = (8,)
     defaultCfl = readDefaultCfl("sod")
 
     cpuSpecs = []
@@ -465,9 +474,10 @@ def main():
         keys[name] = key
 
     for integrator in matrixIntegrators:
-        addCpu(f"sod_n{sodSize}_{integrator}", "sod",
-               ("sod", "cpu", sodSize, integrator),
-               integrator=integrator, resolution=sodSize)
+        if checkCpuSod:
+            addCpu(f"sod_n{sodSize}_{integrator}", "sod",
+                   ("sod", "cpu", sodSize, integrator),
+                   integrator=integrator, resolution=sodSize)
         for size in blastSizes:
             addCpu(f"blast_n{size}_{integrator}", "blast",
                    ("blast", "cpu", size, integrator),
@@ -476,35 +486,34 @@ def main():
             addCpu(f"hydroWave_n{size}_{integrator}", "hydro_wave",
                    ("hydroWave", "cpu", size, integrator),
                    integrator=integrator, resolution=size)
-    # One coarse interval lets the Courant limit, not the coarse cadence, set every
-    # global step, so halving hydro.cfl halves the actual timestep.
-    refinementStems = [("sod", "sod", sodSize)]
-    if not args.quick:
+    # One coarse interval lets the Courant limit choose the rung. Halving cfl
+    # refines that dyadic clock; it need not exactly double the evolved step count.
+    refinementStems = [] if args.comparison_only else [("sod", "sod", sodSize)]
+    if not args.quick and not args.comparison_only:
         refinementStems.append(("hydroWave", "hydro_wave", 16))
-    if "global" in integrators:
-        for label, stem, size in refinementStems:
-            for factor, tag in ((1.0, "cfl1"), (0.5, "cfl0.5")):
-                addCpu(f"refine_{label}_n{size}_{tag}", stem,
-                       ("refine", label, size, tag),
-                       integrator="global", resolution=size,
-                       overrides={"run.numberOfOutputs": "2",
-                                  "hydro.cfl": repr(defaultCfl * factor)})
-    cosmologyCases = ["5/3"] if args.quick else ["5/3", "7/5"]
+    for label, stem, size in refinementStems:
+        for factor, tag in ((1.0, "cfl1"), (0.5, "cfl0.5")):
+            addCpu(f"refine_{label}_n{size}_{tag}", stem,
+                   ("refine", label, size, tag),
+                   integrator=integrators[0], resolution=size,
+                   overrides={"run.numberOfOutputs": "2",
+                              "hydro.cfl": repr(defaultCfl * factor)})
+    cosmologyCases = ([] if args.comparison_only else
+                      ["5/3"] if args.quick else ["5/3", "7/5"])
     gammas = {"5/3": repr(5.0 / 3.0), "7/5": repr(7.0 / 5.0)}
     for gamma in cosmologyCases:
         # Many short coarse intervals put a diagnostic row on every iteration.
         addCpu(f"cosmology_n8_gamma{gamma.replace('/', '_')}", "cosmology",
                ("cosmology", gamma), integrator=integrators[0],
                resolution=8, kind="cosmology", timeout=kCosmologyTimeout,
-               # SPH has no self-gravity coupling in the PMMM solver, so the gas
-               # evolves on the expanding background alone until that returns.
+               # Isolate adiabatic gas evolution on the expanding background.
                overrides={"gravity.enabled": "false",
                           "chemistry.enabled": "false", "starFormation.enabled": "false",
                           "hydro.heatCapacityRatio": gammas[gamma], "run.numberOfOutputs": "2049",
                           "run.maxIterations": "5"})
 
     mpiSpecs = []
-    waveIntegrator = "traditional" if "traditional" in integrators else integrators[0]
+    waveIntegrator = integrators[0]
     if args.mpi_exec:
         mpiSpecs.append(RunSpec(f"mpi_hydroWave_n8_{waveIntegrator}", "hydro_wave",
                                 executable, localities=2,
@@ -520,13 +529,12 @@ def main():
         if cudaSkip is None and not cudaIntegrators:
             cudaSkip = "no common compiled hydro integrator for the CUDA comparison"
         if cudaSkip is None:
-            if "traditional" in cudaIntegrators:
-                name = f"cuda_sod_n{sodSize}_traditional"
-                cudaSpecs.append(RunSpec(name, "sod", cudaExecutable, backend="cuda",
-                                         integrator="traditional",
-                                         resolution=sodSize))
-                keys[name] = ("sod", "cuda", sodSize, "traditional")
             for integrator in cudaIntegrators:
+                name = f"cuda_sod_n{sodSize}_{integrator}"
+                cudaSpecs.append(RunSpec(name, "sod", cudaExecutable, backend="cuda",
+                                         integrator=integrator,
+                                         resolution=sodSize))
+                keys[name] = ("sod", "cuda", sodSize, integrator)
                 for size in waveSizes:
                     name = f"cuda_hydroWave_n{size}_{integrator}"
                     cudaSpecs.append(RunSpec(name, "hydro_wave", cudaExecutable,
@@ -570,12 +578,13 @@ def main():
     results = {keys[name]: result for name, result in resultsByName.items()}
     validation = Validation()
     for integrator in matrixIntegrators:
-        checkSod(validation, results, ("sod", "cpu", sodSize, integrator),
-                 f"sod n{sodSize} {integrator} cpu L1")
-        result = results.get(("sod", "cpu", sodSize, integrator))
-        if ok(result) and abs(result["maxEnergyError"]) >= 1.e-2:
-            validation.add(f"sod n{sodSize} {integrator} energy", "FAIL",
-                           f"max|dE|={result['maxEnergyError']:.3e} (>=1e-2)")
+        if checkCpuSod:
+            checkSod(validation, results, ("sod", "cpu", sodSize, integrator),
+                     f"sod n{sodSize} {integrator} cpu L1")
+            result = results.get(("sod", "cpu", sodSize, integrator))
+            if ok(result) and abs(result["maxEnergyError"]) >= 1.e-2:
+                validation.add(f"sod n{sodSize} {integrator} energy", "FAIL",
+                               f"max|dE|={result['maxEnergyError']:.3e} (>=1e-2)")
         for size in blastSizes:
             checkEnergy(validation, results, ("blast", "cpu", size, integrator),
                         f"blast n{size} {integrator} cpu energy")
@@ -583,30 +592,29 @@ def main():
             checkEnergy(validation, results, ("hydroWave", "cpu", size, integrator),
                         f"hydroWave n{size} {integrator} cpu energy")
 
-    if "global" in integrators:
-        for label, _, size in refinementStems:
-            coarse = results.get(("refine", label, size, "cfl1"))
-            fine = results.get(("refine", label, size, "cfl0.5"))
-            name = f"cfl refinement {label} n{size} global"
-            if not ok(coarse) or not ok(fine):
-                validation.add(name, "FAIL", f"cfl {describe(coarse)}; "
-                                             f"cfl/2 {describe(fine)}")
-                continue
-            ratio = (abs(fine["finalEnergyError"]) / abs(coarse["finalEnergyError"])
-                     if coarse["finalEnergyError"] != 0.0 else math.inf)
-            spatial = (f"; L1 cfl={coarse['l1']:.4e} cfl/2={fine['l1']:.4e}"
-                       if "l1" in coarse else "")
-            # The requirement applies to the variational Sod case; the others inform.
-            required = label == "sod"
-            status = ("PASS" if ratio <= 1.5 else "FAIL") if required else "INFO"
-            validation.add(name, status,
-                           f"steps {coarse['steps']}->{fine['steps']}; dE_final "
-                           f"{coarse['finalEnergyError']:.3e}->{fine['finalEnergyError']:.3e} "
-                           f"(ratio {ratio:.3f}{', <=1.5' if required else ''}); max|dE| "
-                           f"{coarse['maxEnergyError']:.3e}->{fine['maxEnergyError']:.3e}"
-                           + spatial)
-    else:
-        validation.add("cfl refinement", "SKIP", "global integrator not compiled")
+    for label, _, size in refinementStems:
+        coarse = results.get(("refine", label, size, "cfl1"))
+        fine = results.get(("refine", label, size, "cfl0.5"))
+        name = f"cfl refinement {label} n{size} {integrators[0]}"
+        if not ok(coarse) or not ok(fine):
+            validation.add(name, "FAIL", f"cfl {describe(coarse)}; "
+                                         f"cfl/2 {describe(fine)}")
+            continue
+        ratio = (abs(fine["finalEnergyError"]) / abs(coarse["finalEnergyError"])
+                 if coarse["finalEnergyError"] != 0.0 else
+                 0.0 if fine["finalEnergyError"] == 0.0 else math.inf)
+        spatial = (f"; L1 cfl={coarse['l1']:.4e} cfl/2={fine['l1']:.4e}"
+                   if "l1" in coarse else "")
+        # The requirement applies to the variational Sod case; the others inform.
+        required = label == "sod"
+        refined = fine["steps"] >= coarse["steps"]
+        status = ("PASS" if ratio <= 1.5 and refined else "FAIL") if required else "INFO"
+        validation.add(name, status,
+                       f"steps {coarse['steps']}->{fine['steps']}; dE_final "
+                       f"{coarse['finalEnergyError']:.3e}->{fine['finalEnergyError']:.3e} "
+                       f"(ratio {ratio:.3f}{', <=1.5' if required else ''}); max|dE| "
+                       f"{coarse['maxEnergyError']:.3e}->{fine['maxEnergyError']:.3e}"
+                       + spatial)
 
     for gamma in cosmologyCases:
         result = results.get(("cosmology", gamma))
@@ -660,15 +668,16 @@ def main():
                            f"all-row max |diff|/(K+U)={rowMaximum:.2e}; max|dE| cuda="
                            f"{gpu['maxEnergyError']:.3e} cpu={cpu['maxEnergyError']:.3e}; "
                            f"wall cuda={gpu['wall']:.1f}s cpu={cpu['wall']:.1f}s" + l1)
-        key = ("sod", "cuda", sodSize, "traditional")
-        if key in results and ok(results[key]):
-            result = results[key]
-            if result["l1"] >= 0.25 or result["maxEnergyError"] >= 1.e-2:
-                validation.add(f"cuda sod n{sodSize} traditional accuracy",
-                               "FAIL", f"L1={result['l1']:.4e} "
-                                       f"max|dE|={result['maxEnergyError']:.3e}")
-        if key in results and results[key]["status"] != "skipped":
-            checkSod(validation, results, key, f"sod n{sodSize} traditional cuda L1")
+        for integrator in cudaIntegrators:
+            key = ("sod", "cuda", sodSize, integrator)
+            if key in results and ok(results[key]):
+                result = results[key]
+                if result["l1"] >= 0.25 or result["maxEnergyError"] >= 1.e-2:
+                    validation.add(f"cuda sod n{sodSize} {integrator} accuracy",
+                                   "FAIL", f"L1={result['l1']:.4e} "
+                                   f"max|dE|={result['maxEnergyError']:.3e}")
+            if key in results and results[key]["status"] != "skipped":
+                checkSod(validation, results, key, f"sod n{sodSize} {integrator} cuda L1")
     else:
         validation.add("cuda", "SKIP", "no --cuda")
 

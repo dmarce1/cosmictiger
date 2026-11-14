@@ -12,7 +12,7 @@ reference is the same scenario on a single locality, where every neighbor is loc
 case then runs on 2, 3 and 4 localities. The particle pairs within each support are the
 same, but the leaves, their order and the staging order differ, so float summation order
 differs. The same particles must exist; positions, velocities and the gas state must agree
-to roundoff.
+to roundoff for pure hydro, with a separate velocity bound for approximate FMM gravity.
 """
 
 import argparse
@@ -156,15 +156,19 @@ def main():
         "sod": {"run.scenario": "sod", "run.numberOfOutputs": 9, "run.maxIterations": 6,
                 "run.darkMatterParticleCount": 2048, "run.gasParticleCount": 2048},
     }
-    # SPH couples to PMMM self-gravity only on the hierarchical integrator, which needs gravity.
+    # Include the coupled FMM/ghost path when gravity is compiled.
     preset = Path(__file__).resolve().parents[1] / "configurations" / "jeans_wave.ini"
+    # 8^3 particles still populate many 16-particle SPH leaves on every locality.
+    # Tighten the force accuracy so decomposition-dependent FMM errors stay within
+    # the existing coupling tolerance; the separate Jeans test checks dispersion.
     gravity_scenarios = {
         "jeans": {"configuration": preset, "gravity.enabled": "true",
-                  "run.gasParticleCount": 4096, "run.maxIterations": 6},
+                  "run.gasParticleCount": 512, "run.maxIterations": 6,
+                  "gravity.openingAngle": 0.15},
     }
-    # PMMM needs a power-of-two locality count, and its tree approximation depends on the
-    # decomposition: velocities differ by about 5e-5 of their scale between any two counts.
-    gravity_ranks = [ranks for ranks in args.ranks or [2, 4] if ranks & (ranks - 1) == 0]
+    # FMM supports arbitrary locality counts. Its approximate force also changes
+    # with decomposition, so retain a separate velocity tolerance for this case.
+    gravity_ranks = args.ranks or [2, 3, 4]
     gravity_tolerances = {"velocity": 5.0e-4}
 
     def run(directory, options, integrator, ranks):
@@ -180,7 +184,7 @@ def main():
 
     evidence = {}
     for integrator in integrators:
-        cases = dict(scenarios, **gravity_scenarios) if "pmmm" in available["far"] else scenarios
+        cases = dict(scenarios, **gravity_scenarios) if "fmm" in available["far"] else scenarios
         for name, options in cases.items():
             iteration = options["run.maxIterations"]
             label = f"{integrator}_{name}"
@@ -196,14 +200,18 @@ def main():
                 output = run(directory, options, integrator, ranks)
                 require("SPH midpoint:" in output, f"{label}: no midpoint hydro event")
                 counters = GHOSTS.search(output)
-                require(counters and int(counters[2]) > 0 and int(counters[7]) > 0,
+                require(counters and all(int(counters[index]) > 0 for index in (2, 3, 4, 7)),
                         f"{label}: the run pushed no ghost fields")
+                distributed = states(directory, iteration, ranks)
+                gas_counts = [state.gas_count for state in distributed]
+                require(all(count > 0 for count in gas_counts),
+                        f"{label}: a locality owns no gas particles")
                 evidence[label + "_ghosts"] = {
                     "syncs": int(counters[1]), "refreshes": int(counters[2]),
                     "leaves": int(counters[3]), "particles": int(counters[4]),
                     "field_bytes": int(counters[7]), "needed_field_bytes": int(counters[8]),
-                    "all_field_bytes": int(counters[9])}
-                worst = compare(label, reference, states(directory, iteration, ranks),
+                    "all_field_bytes": int(counters[9]), "gas_counts": gas_counts}
+                worst = compare(label, reference, distributed,
                                 gravity_tolerances if gravity else {})
                 evidence[label] = worst
                 print(f"{label}: " + ", ".join(

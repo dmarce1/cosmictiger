@@ -1481,6 +1481,7 @@ std::vector<double> exactSupports(Fixture const& fixture) {
     return supports;
 }
 
+template <bool computeAcceleration = true>
 VariationalReference variationalReference(
     Fixture const& fixture, std::vector<double> const& support) {
     auto const& data = fixture.data_;
@@ -1493,7 +1494,9 @@ VariationalReference variationalReference(
     result.density.resize(count);
     result.weightedSupportCorrection.resize(count);
     result.residual.resize(count);
-    result.acceleration.assign(count, {});
+    if constexpr (computeAcceleration) {
+        result.acceleration.assign(count, {});
+    }
     result.energyRate.assign(count, 0.0);
     std::vector<double> pressureFactor(count);
     auto const gradient = [&](double radius, double smoothingLength) {
@@ -1544,18 +1547,20 @@ VariationalReference variationalReference(
             double const radius = std::sqrt(separation[0] * separation[0] +
                 separation[1] * separation[1] + separation[2] * separation[2]);
             double const gradientI = gradient(radius, support[i]);
-            double const gradientJ = gradient(radius, support[j]);
             double const coefficientIJ =
                 pressureFactor[i] * (mass - result.weightedSupportCorrection[i]);
-            double const coefficientJI =
-                pressureFactor[j] * (mass - result.weightedSupportCorrection[j]);
             double const velocityDotSeparation =
                 (data.sourceVelocityX[sourceI] - data.sourceVelocityX[sourceJ]) * separation[0] +
                 (data.sourceVelocityY[sourceI] - data.sourceVelocityY[sourceJ]) * separation[1] +
                 (data.sourceVelocityZ[sourceI] - data.sourceVelocityZ[sourceJ]) * separation[2];
-            for (int dim = 0; dim < kDimensions; dim++) {
-                result.acceleration[i][dim] -= inverseScaleFactor *
-                    (coefficientIJ * gradientI + coefficientJI * gradientJ) * separation[dim];
+            if constexpr (computeAcceleration) {
+                double const gradientJ = gradient(radius, support[j]);
+                double const coefficientJI =
+                    pressureFactor[j] * (mass - result.weightedSupportCorrection[j]);
+                for (int dim = 0; dim < kDimensions; dim++) {
+                    result.acceleration[i][dim] -= inverseScaleFactor *
+                        (coefficientIJ * gradientI + coefficientJI * gradientJ) * separation[dim];
+                }
             }
             result.energyRate[i] +=
                 inverseScaleFactor * coefficientIJ * gradientI * velocityDotSeparation;
@@ -1887,7 +1892,8 @@ public:
         for (int i = 0; i < fixture_.count_; i++) {
             supports[i] = data.sourceSmoothingLength[fixture_.sourceIndex(i)];
         }
-        auto const reference = variationalReference(fixture_, supports);
+        // Acceleration comes from the production kick; only the reference work is needed.
+        auto const reference = variationalReference<false>(fixture_, supports);
         for (int i = 0; i < fixture_.count_; i++) {
             auto const a = fixture_.kickAcceleration(i);
             acceleration_[i] = {a[kXi], a[kYi], a[kZi]};
@@ -2126,20 +2132,23 @@ void testCosmologicalExpansion() {
                     std::abs(stepper.storedEnergy() - initialEnergy - stepper.expansionWork_));
             }
             residuals[k] /= std::max(kinetic, std::abs(stepper.expansionWork_));
-            // A uniform lattice follows E proportional to a^(5 - 3 gamma).
-            Fixture uniform(kSide * kSide * kSide);
-
-            initializeSoundWave(uniform, kSide, 0.0, gamma);
-            GlobalStepper background(uniform, true, 1.0);
-            double const initialInternal = background.energy_[0];
-            for (int step = 0; step < steps[k]; step++) {
-                background.step(1.0 / steps[k]);
+            std::printf("variational EdS expansion gamma %.4f, %d steps: energy residual %.3e",
+                gamma, steps[k], residuals[k]);
+            // A uniform lattice follows E proportional to a^(5 - 3 gamma). For gamma = 5/3,
+            // only the finest run is checked because the expansion coefficient is zero.
+            if (gamma != 5.0 / 3.0 || k == 2) {
+                Fixture uniform(kSide * kSide * kSide);
+                initializeSoundWave(uniform, kSide, 0.0, gamma);
+                GlobalStepper background(uniform, true, 1.0);
+                double const initialInternal = background.energy_[0];
+                for (int step = 0; step < steps[k]; step++) {
+                    background.step(1.0 / steps[k]);
+                }
+                double const expected = initialInternal * std::pow(4.0, 5.0 - 3.0 * gamma);
+                uniformErrors[k] = std::abs(background.energy_[0] / expected - 1.0);
+                std::printf(", uniform E error %.3e", uniformErrors[k]);
             }
-            double const expected = initialInternal * std::pow(4.0, 5.0 - 3.0 * gamma);
-            uniformErrors[k] = std::abs(background.energy_[0] / expected - 1.0);
-            std::printf("variational EdS expansion gamma %.4f, %d steps: energy residual %.3e, "
-                        "uniform E error %.3e\n",
-                gamma, steps[k], residuals[k], uniformErrors[k]);
+            std::printf("\n");
         }
         for (int k = 1; k < 3; k++) {
             require(residuals[k] < 0.35 * residuals[k - 1] || residuals[k] < 1.0e-6,

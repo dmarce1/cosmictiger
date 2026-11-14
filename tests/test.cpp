@@ -210,43 +210,6 @@ static void domainTest() {
     tm.reset();
 }
 
-void bhTest() {
-    /*	int N = 100000;
-     int M = 10;
-     vector<array<float, NDIM>> x(N);
-     vector<array<float, NDIM>> y(M);
-     for (int i = 0; i < N; i++) {
-     for (int dim = 0; dim < NDIM; dim++) {
-     x[i][dim] = rand1();
-     }
-     }
-     for (int i = 0; i < M; i++) {
-     for (int dim = 0; dim < NDIM; dim++) {
-     y[i][dim] = rand1();
-     }
-     }
-     auto x0 = x;
-     //	auto phi0 = direct_evaluate(x0);
-     x0 = x;
-     timer tm1, tm2;
-     tm1.start();
-     auto phi1 = bh_evaluate_points(y, x0, false);
-     tm1.stop();
-     x0 = x;
-     tm2.start();
-
-     auto phi2 = bh_evaluate_points(y, x0, true);
-     tm2.stop();
-
-     double err_tot = 0.0;
-     for (int i = 0; i < phi1.size(); i++) {
-     double err = fabs((phi1[i] - phi2[i]) / phi1[i]);
-
-     err_tot += err;
-     }
-     */
-}
-
 #if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_STAR_FORMATION
 void starFormationTest();
 void sphSourceTimingTest();
@@ -321,7 +284,6 @@ ApplicationTest const applicationTests[] = {
     {"fft1", fft1Test},
     {"fft2", fft2Test},
 #endif
-    {"bh", bhTest},
 };
 
 }    // namespace detail

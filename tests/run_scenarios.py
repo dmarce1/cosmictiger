@@ -5,6 +5,7 @@
 """Exercise first-class scenario dispatch, solver selection, and output isolation."""
 
 import argparse
+import configparser
 import math
 import os
 from pathlib import Path
@@ -15,7 +16,7 @@ import subprocess
 import sys
 
 from application_selection import cpu_backend_options
-from run_checkpoint import checkManifest, hydro_particle_payload
+from run_checkpoint import checkManifest, check_velocity_roundoff_restart, hydro_particle_payload
 
 
 SCENARIOS = (
@@ -39,6 +40,10 @@ COSMOLOGY_PRESETS = (
     "critical",
     "lcdm_ten_ages",
 )
+
+# These have dedicated benchmark coverage or local cosmology settings; the full
+# option suite validates their INI files without evolving their production inputs.
+OTHER_PRESETS = ("benchmark", "lcdm_present")
 
 
 def run_process(command, directory, success=True):
@@ -104,8 +109,8 @@ def main():
                ]
     expected_files = {stem + ".ini" for stem, *_ in SCENARIOS}
     expected_files.update(stem + ".ini" for stem in COSMOLOGY_PRESETS)
-    actual_files = {path.name for path in (root / "configurations").glob("*.ini")
-                    if path.name != "lcdm_present.ini"}
+    expected_files.update(stem + ".ini" for stem in OTHER_PRESETS)
+    actual_files = {path.name for path in (root / "configurations").glob("*.ini")}
     if actual_files != expected_files:
         raise RuntimeError(f"scenario configuration inventory differs: "
                            f"{sorted(actual_files ^ expected_files)}")
@@ -120,12 +125,14 @@ def main():
     def exercise(stem, scenario, gravity, hydro, chemistry, name=None, overrides=None,
                  relative_output=None, silo=True):
         directory = prepare(name or scenario)
-        # SPH with PMMM self-gravity runs only on the hierarchical ladder.
         scenario_command = command
+        preset = root / "configurations" / (stem + ".ini")
+        ini = configparser.ConfigParser(interpolation=None, inline_comment_prefixes=("#",))
+        ini.read(preset)
         # Cosmology derives its initial power and thermal history internally.
         # Every generated product must remain under output.directory.
         options = {
-            "configuration": str(root / "configurations" / (stem + ".ini")),
+            "configuration": str(preset),
             # Solver-dispatch assertions below inspect detailed phase messages.
             "run.verbose": "true",
             **cpu_backend_options(),
@@ -140,6 +147,11 @@ def main():
         if args.without_chemistry:
             options["chemistry.enabled"] = "false"
             chemistry = False
+        selected_output = Path(options.get("output.directory", ini["output"]["directory"]))
+        if selected_output.is_absolute() or ".." in selected_output.parts:
+            raise RuntimeError(f"scenario fixture output escapes its working directory: {selected_output}")
+        if relative_output is not None and selected_output != Path(relative_output):
+            raise RuntimeError("scenario fixture output differs from its expected override")
         output = run_process(scenario_command + [f"--{key}={value}" for key, value in options.items()],
                              directory)
         if setting(output, "run.scenario") != scenario:
@@ -147,7 +159,7 @@ def main():
         for key, enabled in (("gravity.enabled", gravity), ("hydro.enabled", hydro),
                              ("chemistry.enabled", chemistry)):
             check_bool(output, key, enabled)
-        destination = directory / (relative_output or f"output/{scenario}")
+        destination = directory / selected_output
         if not destination.is_dir():
             raise RuntimeError(f"missing scenario output directory {destination}")
         snapshots = list(destination.glob("view.*.silo"))
@@ -177,7 +189,7 @@ def main():
         # writes these files in CWD; simulation products must still stay inside
         # the selected output directory.
         allowed = {"run.log", "apex_profiles.csv", "apex_tasktree.csv",
-                   Path(relative_output or "output").parts[0]}
+                   selected_output.parts[0]}
         unexpected = {path.name for path in directory.iterdir()
                       if not re.fullmatch(r"cosmictiger\.profile\.[0-9]+\.txt", path.name)} - allowed
         if unexpected:
@@ -185,24 +197,21 @@ def main():
         print(f"{name or scenario}: solver selection, finite diagnostics, and output containment passed")
         return directory, destination, options
 
-    def expect_retired_integrator_rejection(stem, scenario):
-        # Integrator selection is retired, including for self-gravitating gas.
-        directory = prepare(scenario + "_traditional")
-        output = run_process(command + [f"--configuration={root / 'configurations' / (stem + '.ini')}",
-                                        "--run.maxIterations=0", "--run.timeIntegrator=traditional", *[f"--{key}={value}" for key, value in
-                                                                   cpu_backend_options().items()]],
-                             directory, success=False)
-        if "unrecognized option" not in output or "run.timeIntegrator" not in output:
-            raise RuntimeError(f"{scenario}: retired integrator selector was accepted")
-        print(f"{scenario}: retired traditional integrator selector rejected")
-
     results = {}
+    build_dimension = None
     for case in SCENARIOS:
         stem, scenario, gravity, hydro, chemistry = case
-        if gravity and hydro:
-            expect_retired_integrator_rejection(stem, scenario)
-        results[scenario] = exercise(*case, overrides={"initial.closePack": "true", "run.gasParticleCount": str(4 * 8**3)}
-                                     if scenario == "gresho" else None)
+        overrides = {}
+        if scenario == "gresho":
+            overrides = {"initial.closePack": "true", "run.gasParticleCount": str(4 * 8**3)}
+        elif scenario == "kelvinHelmholtz" and build_dimension != 2:
+            # The example selects CEV/E for 2D. The dispatch fixture needs a
+            # uniform 3D packing; dedicated packing tests cover that selection.
+            overrides["scenario.kelvinHelmholz.packing"] = "CV/C"
+        results[scenario] = exercise(*case, overrides=overrides)
+        if build_dimension is None:
+            build_dimension = int(setting((results[scenario][0] / "run.log").read_text(),
+                                          "build.dimensionCount"))
 
     gresho_log = (results["gresho"][0] / "run.log").read_text()
     if int(setting(gresho_log, "Initialized particles")) != 4 * 8**3:
@@ -245,12 +254,15 @@ def main():
                   gravity=False)
     if (hydro_particle_payload(reference_output / "checkpoint.2", 512) !=
             hydro_particle_payload(restart_output / "checkpoint.2", 512)):
-        raise RuntimeError("fixed-time restart changed physical particle or SPH predictor state")
+        # Rebuilding the tree can reorder conservative float pair reductions.
+        # Match the checkpoint suite's field bounds and exact discrete state.
+        check_velocity_roundoff_restart(reference_output / "checkpoint.2",
+                                        restart_output / "checkpoint.2")
     reference_clock = (reference_output / "progress.txt").read_text().splitlines()[-1].split()
     restarted_clock = (restart_output / "progress.txt").read_text().splitlines()[-1].split()
     if reference_clock != restarted_clock:
         raise RuntimeError("fixed-time restart changed the step, clock, or timestep rung")
-    print("hydroWave: restarted particle state and physical clock match uninterrupted evolution")
+    print("hydroWave: restarted particle state matches within float roundoff; physical clock is exact")
 
     rejected_directory = prepare("cross_scenario_restart")
     rejected_output = rejected_directory / "output/hydroWave"

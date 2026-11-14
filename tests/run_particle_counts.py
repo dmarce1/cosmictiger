@@ -33,7 +33,7 @@ def main():
             "run.darkMatterParticleCount": dark_matter,
             "run.gasParticleCount": gas, "initial.closePack": str(close_pack).lower(),
             "hydro.enabled": str(gas != 0).lower(), "hydro.neighborNumber": 42,
-            # SPH has no self-gravity coupling in the PMMM solver.
+            # Count and mass-fraction checks need no gas self-gravity.
             "gravity.enabled": str(gas == 0).lower(), "scenario.disc.centralAcceleration": 1 if scenario == "disc" else 0,
             "cosmology.sigma8": 0, "analysis.groups": "false", "analysis.views": "false",
             "analysis.power": "false", "analysis.tracers": "false", "lightcone.enabled": "false",
@@ -41,7 +41,7 @@ def main():
             "chemistry.enabled": "false", "starFormation.enabled": "false",
         })
         command = [str(executable), "--hpx:threads=2", "--hpx:bind=none"]
-        command += application_arguments(executable, integrator="traditional", hydro=gas != 0)
+        command += application_arguments(executable, integrator="hierarchical", hydro=gas != 0)
         command += [f"--{key}={value}" for key, value in options.items()]
         result = subprocess.run(command, cwd=directory, env=environment, text=True,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=120)

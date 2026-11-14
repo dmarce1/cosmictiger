@@ -1330,10 +1330,10 @@ mapSize = 8
             enabled_options = [option for option in metadata_options
                                if not option.startswith("--hydro.enabled=")]
             # Check the preset's hydro, cooling and star formation switches
-            # independently of gravity and its force-error sampling.
+            # independently of gravity, its opening schedule and force-error sampling.
             enabled = run(f"enabled_physics_{case_name}", enabled_options +
                           [f"--configuration={path}", "--gravity.enabled=false",
-                           "--gravity.errorInterval=0"] + runtime_overrides)
+                           "--gravity.openingSchedule=none", "--gravity.errorInterval=0"] + runtime_overrides)
             for section in ("hydro", "chemistry", "starFormation"):
                 key = section + ".enabled"
                 expected = "T" if ini.getboolean(section, "enabled") else "F"

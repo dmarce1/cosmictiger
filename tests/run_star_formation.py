@@ -124,7 +124,7 @@ def main():
     parser.add_argument("workdir", type=Path)
     parser.add_argument("--fixtures-only", action="store_true")
     parser.add_argument("--skip-fixtures", action="store_true")
-    parser.add_argument("--time-integrator", choices=("traditional", "hierarchical", "global"))
+    parser.add_argument("--time-integrator", choices=("hierarchical",))
     parser.add_argument("--cuda", action="store_true")
     parser.add_argument("--mpi-exec")
     parser.add_argument("--mpi-numproc-flag", default="-n")
@@ -136,9 +136,8 @@ def main():
     base = args.workdir.resolve()
     base.mkdir(parents=True, exist_ok=True)
     available = compiled_algorithms(str(executable))
-    # SPH has no self-gravity coupling in the PMMM solver: gas runs are gravity
-    # free, so hierarchical (gravity-only) integration is excluded.
-    integrators = [value for value in ("traditional", "global")
+    # The sole hierarchical scheme supports gravity-free midpoint SPH sources.
+    integrators = [value for value in ("hierarchical",)
                    if value in available["integrator"] and
                    (args.time_integrator is None or value == args.time_integrator)]
     if not integrators:

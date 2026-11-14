@@ -2,8 +2,8 @@
 # Registration stays alongside the target definitions; discovery runs later in
 # its own CMake directory so GoogleTest uses the intended metadata directory.
 function(cosmictiger_add_gtest)
-    cmake_parse_arguments(PARSE_ARGV 0 test "HPX_MAIN" "NAME;TARGET;WORKING_DIRECTORY;ENVIRONMENT"
-        "ARGS;PROPERTIES;LABELS")
+    cmake_parse_arguments(PARSE_ARGV 0 test "HPX_MAIN;GROUPED" "NAME;TARGET;WORKING_DIRECTORY;ENVIRONMENT"
+        "ARGS;PROPERTIES;LABELS;CASE_PROCESSORS")
     if(test_HPX_MAIN)
         target_link_libraries(${test_TARGET} PRIVATE GTest::gtest)
     else()
@@ -13,7 +13,7 @@ function(cosmictiger_add_gtest)
         set(test_WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/tests/work/${test_TARGET}")
         file(MAKE_DIRECTORY "${test_WORKING_DIRECTORY}")
     endif()
-    foreach(field IN ITEMS NAME ARGS PROPERTIES LABELS WORKING_DIRECTORY)
+    foreach(field IN ITEMS NAME ARGS PROPERTIES LABELS WORKING_DIRECTORY GROUPED CASE_PROCESSORS)
         set_property(TARGET ${test_TARGET} PROPERTY COSMICTIGER_TEST_${field} "${test_${field}}")
     endforeach()
     if(DEFINED test_ENVIRONMENT)

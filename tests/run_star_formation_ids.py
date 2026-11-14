@@ -81,7 +81,7 @@ def main():
     selections = application_arguments(executable, hydro=True)
     common = [str(executable), '--hpx:threads=1', '--hpx:bind=none', *selections,
         '--run.scenario=cosmology', '--run.endTime=0.0001', '--run.numberOfOutputs=17',
-        '--run.maxIterations=1', '--run.darkMatterParticleCount=512', '--run.gasParticleCount=512', '--scenario.cosmology.useGlass=false',
+        '--run.maxIterations=1', '--scenario.cosmology.useGlass=false',
         '--cosmology.sigma8=0', '--gravity.enabled=false', '--hydro.enabled=true',
         '--chemistry.enabled=true', '--starFormation.enabled=true',
         '--chemistry.initializationTemperature=10000', '--gravity.cuda=false',
@@ -91,10 +91,14 @@ def main():
     evidence = []
     for close_pack in (False, True):
         label = 'close_pack' if close_pack else 'lattice'
+        # Keep eight cells per axis; close packing has two sites per cell.
+        particle_count = 1024 if close_pack else 512
         states = []
         for ranks in (1, 2):
             directory = prepare(base, f'{label}_{ranks}')
-            command = [*common, f'--initial.closePack={str(close_pack).lower()}']
+            command = [*common, f'--initial.closePack={str(close_pack).lower()}',
+                f'--run.darkMatterParticleCount={particle_count}',
+                f'--run.gasParticleCount={particle_count}']
             if ranks == 2:
                 command = [args.mpi_exec, args.mpi_numproc_flag, '2', *args.mpi_preflag,
                     command[0], *args.mpi_postflag, *command[1:], '--hpx:localities=2',

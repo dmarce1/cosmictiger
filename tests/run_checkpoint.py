@@ -291,34 +291,13 @@ def checkViscosityRestarts(executable, baseWorkdir):
                 raise RuntimeError(f"{name}/{label} lacked a viscosity compatibility diagnostic")
         print(f"{name}: velocity-roundoff restart, exact committed state, and "
               f"viscosity compatibility passed; maximum errors={restart_errors}")
+        if model == "evolving":
+            checkRetiredSphLayouts(baseWorkdir, options, checkpoint)
 
 
-def checkVariationalPressureRestart(executable, baseWorkdir):
-    """Restart variational SPH and reject retired pressure and viscosity layouts.
-
-    Rebuilt grad-H corrections must preserve every nonvelocity payload byte.
-    Tiny velocity residuals may reflect conservative pair reduction ordering.
-    """
-    configuration = Path(__file__).resolve().parents[1] / "configurations/hydro_wave.ini"
-    options = [str(executable), f"--configuration={configuration}", "--hpx:threads=2",
-               "--hpx:bind=none", "--run.darkMatterParticleCount=512", "--run.gasParticleCount=512",
-               *[f"--{key}={value}" for key, value in cpu_backend_options().items()],
-               "--run.endTime=0.00001", "--checkpoint.intervalSeconds=0",
-               "--output.directory=.", "--output.silo=false", "--analysis.views=false",
-               "--analysis.power=false", "--analysis.groups=false", "--lightcone.enabled=false"]
+def checkRetiredSphLayouts(baseWorkdir, options, checkpoint):
+    """Mutate copies of the already-validated evolving-viscosity restart fixture."""
     name = "variational_pressure"
-    reference = prepareCase(baseWorkdir, name)
-    runSimulation(options + ["--run.maxIterations=2"], reference, "run.log")
-    checkpoint = reference / "checkpoint.1"
-    if not checkpoint.is_dir():
-        raise RuntimeError(f"{name} did not save a completed first step")
-    resumed = prepareCase(baseWorkdir, name + "_restart", checkpoint)
-    output = runSimulation(options + ["--run.maxIterations=1", "--checkpoint.readIndex=1"],
-                           resumed, "restart.log")
-    if "Done reading checkpoint" not in output:
-        raise RuntimeError(f"{name} did not load the checkpoint")
-    restart_errors = check_velocity_roundoff_restart(
-        reference / "checkpoint.2", resumed / "checkpoint.2")
 
     def rejectRetired(label, alter, diagnostic):
         directory = prepareCase(baseWorkdir, f"{name}_reject_{label}", checkpoint)
@@ -350,8 +329,7 @@ def checkVariationalPressureRestart(executable, baseWorkdir):
                   "Checkpoint SPH pressure operator (monaghan) is no longer supported")
     rejectRetired("viscosity", lambda physics_code: physics_code & ~(1 << 25),
                   "Checkpoint uses the retired SPH viscosity layout")
-    print(f"{name}: velocity-roundoff restart and retired-layout rejection passed; "
-          f"maximum errors={restart_errors}")
+    print(f"{name}: retired pressure and viscosity layouts rejected")
 
 
 def main():
@@ -371,7 +349,6 @@ def main():
 
     if args.viscosity_only:
         checkViscosityRestarts(executable, baseWorkdir)
-        checkVariationalPressureRestart(executable, baseWorkdir)
         return 0
 
     options = [str(executable), "--hpx:threads=2", "--hpx:bind=none",
@@ -548,7 +525,6 @@ def main():
           "scenario manifest v2, restart, corruption rejection, and labelled version 1 decoding passed")
     if not args.without_sph:
         checkViscosityRestarts(executable, baseWorkdir)
-        checkVariationalPressureRestart(executable, baseWorkdir)
     return 0
 
 

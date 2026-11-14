@@ -91,16 +91,17 @@ void testConvergence(ZeroOrderUniverse const& universe) {
         require(ordinary[0].deltaCdm < 0.0 && ordinary[1].deltaCdm < ordinary[0].deltaCdm &&
                 ordinary[1].deltaBaryon < ordinary[0].deltaBaryon,
             "Growing matter mode");
+        // CAMB 1.6.5, massless Neff=3.046, h=.6732, Ob=.049389, Oc=.26503,
+        // T=2.7255K, Y=.2454006, no reionization, eta convention reversed.
+        // This broad regression catches sign/unit mistakes; the full independent
+        // accuracy campaign uses native recombination and tests/camb_reference.py.
+        if (k == 0.1) {
+            close(ordinary[0].deltaCdm, -428.45904541015625, 0.002, "CAMB early CDM transfer");
+            close(ordinary[0].deltaBaryon, -363.6638488769531, 0.002, "CAMB early baryon transfer");
+            close(ordinary[1].deltaCdm, -16327.255859375, 0.002, "CAMB present CDM transfer");
+            close(ordinary[1].deltaBaryon, -16252.814453125, 0.002, "CAMB present baryon transfer");
+        }
     }
-    // CAMB 1.6.5, massless Neff=3.046, h=.6732, Ob=.049389, Oc=.26503,
-    // T=2.7255K, Y=.2454006, no reionization, eta convention reversed.
-    // This broad regression catches sign/unit mistakes; the full independent
-    // accuracy campaign uses native recombination and tests/camb_reference.py.
-    auto const transfer = solveBoltzmannTransfers(universe, 0.1, {0.02, 1.0});
-    close(transfer[0].deltaCdm, -428.45904541015625, 0.002, "CAMB early CDM transfer");
-    close(transfer[0].deltaBaryon, -363.6638488769531, 0.002, "CAMB early baryon transfer");
-    close(transfer[1].deltaCdm, -16327.255859375, 0.002, "CAMB present CDM transfer");
-    close(transfer[1].deltaBaryon, -16252.814453125, 0.002, "CAMB present baryon transfer");
 }
 
 void testInvalidInput(ZeroOrderUniverse universe) {

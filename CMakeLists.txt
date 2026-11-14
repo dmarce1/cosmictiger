@@ -597,7 +597,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             COMMAND phase_profiler_${profile_mode}_test
                 ${PROJECT_BINARY_DIR}/phase_profiler_${profile_mode}.txt)
         set_tests_properties(phase_profiler_${profile_mode} PROPERTIES
-            TIMEOUT 10 PROCESSORS 1 LABELS "profiler;cpu")
+            TIMEOUT 10 PROCESSORS 4 LABELS "profiler;cpu")
     endforeach()
     if(COSMICTIGER_WITH_CUDA)
         foreach(profile_mode IN ITEMS enabled disabled)
@@ -869,7 +869,8 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
         add_test(NAME particle_count_application COMMAND ${Python3_EXECUTABLE}
             ${PROJECT_SOURCE_DIR}/tests/run_particle_counts.py $<TARGET_FILE:cosmictiger>
             ${PROJECT_BINARY_DIR}/tests/particle_count_application)
-        set_tests_properties(particle_count_application PROPERTIES RUN_SERIAL TRUE TIMEOUT 900 PROCESSORS 2)
+        set_tests_properties(particle_count_application PROPERTIES TIMEOUT 900 PROCESSORS 2
+            ENVIRONMENT "OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1;MKL_NUM_THREADS=1")
     endif()
     add_executable(particle_count_test tests/particle_count.cpp)
     target_include_directories(particle_count_test PRIVATE ${PROJECT_SOURCE_DIR})
@@ -913,12 +914,17 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
     target_include_directories(flops_test PRIVATE ${PROJECT_SOURCE_DIR})
     cosmictiger_add_gtest(NAME flops TARGET flops_test HPX_MAIN
         ARGS --hpx:threads=2 --hpx:bind=none
-        PROPERTIES TIMEOUT 30 PROCESSORS 6)
+        PROPERTIES TIMEOUT 30 PROCESSORS 2
+        CASE_PROCESSORS Flops.ConcurrentAndDistributedAggregation=6)
     if(cosmictiger_mpi_three_ranks)
+        set(flops_mpi_workdir "${PROJECT_BINARY_DIR}/tests/work/flops_mpi")
+        file(MAKE_DIRECTORY "${flops_mpi_workdir}")
         add_test(NAME flops_mpi COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 3
             ${MPIEXEC_PREFLAGS} $<TARGET_FILE:flops_test> ${MPIEXEC_POSTFLAGS}
-            --hpx:threads=2 --hpx:bind=none --hpx:localities=3)
-        set_tests_properties(flops_mpi PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE PROCESSORS 10)
+            --hpx:threads=1 --hpx:bind=none --hpx:localities=3)
+        set_tests_properties(flops_mpi PROPERTIES TIMEOUT 60 PROCESSORS 5
+            WORKING_DIRECTORY "${flops_mpi_workdir}" LABELS "flops;cpu;mpi"
+            ENVIRONMENT "OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1;MKL_NUM_THREADS=1")
     endif()
     if(COSMICTIGER_WITH_CUDA)
         add_executable(flops_cuda_test tests/flops_cuda.cu src/core/flops.cu)
@@ -1334,7 +1340,8 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
         cosmictiger_add_gtest(NAME boltzmann TARGET boltzmann_test
             PROPERTIES TIMEOUT 120)
         if(COSMICTIGER_WITH_GRAVITY)
-            foreach(boltzmann_two_lpt IN ITEMS false true)
+            # smoke_dm_cpu covers explicit first-order initialization below.
+            foreach(boltzmann_two_lpt IN ITEMS true)
                 set(boltzmann_smoke boltzmann_initialization_${boltzmann_two_lpt}_cpu)
                 add_test(NAME ${boltzmann_smoke} COMMAND ${Python3_EXECUTABLE}
                     ${PROJECT_SOURCE_DIR}/tests/run_smoke.py dm_cpu $<TARGET_FILE:cosmictiger>
@@ -1442,6 +1449,9 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                 ${cosmictiger_test_integrator_args})
                 set_tests_properties(${halo_mode}_${halo_backend} PROPERTIES
                     WORKING_DIRECTORY "${halo_workdir}" TIMEOUT 180 PROCESSORS 2)
+                if(halo_backend STREQUAL "cuda")
+                    set_tests_properties(${halo_mode}_${halo_backend} PROPERTIES RESOURCE_LOCK cuda)
+                endif()
             endforeach()
         endforeach()
         if(COSMICTIGER_WITH_SPH)
@@ -1491,7 +1501,8 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
         add_test(NAME scenarios COMMAND ${Python3_EXECUTABLE}
             ${PROJECT_SOURCE_DIR}/tests/run_scenarios.py $<TARGET_FILE:cosmictiger>
             ${PROJECT_BINARY_DIR}/tests/scenarios ${cosmictiger_chemistry_test_args})
-        set_tests_properties(scenarios PROPERTIES RUN_SERIAL TRUE TIMEOUT 1200 PROCESSORS 2)
+        set_tests_properties(scenarios PROPERTIES TIMEOUT 1200 PROCESSORS 2
+            ENVIRONMENT "OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1;MKL_NUM_THREADS=1")
     endif()
 
     set(cosmictiger_sph_test_args)
@@ -1513,19 +1524,10 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             ${cosmictiger_options_capability_args}
             ${cosmictiger_rockstar_test_args}
 
---order ${cosmictiger_default_fmm_order}
-            --time-integrator ${cosmictiger_default_integrator})
-        # run_options.py overlaps four two-thread cosmictiger launches.
-        set_tests_properties(grouped_options PROPERTIES RUN_SERIAL TRUE TIMEOUT 600 PROCESSORS 8)
-        add_test(NAME hydro_methods COMMAND ${Python3_EXECUTABLE}
-            ${PROJECT_SOURCE_DIR}/tests/run_options.py $<TARGET_FILE:cosmictiger>
-            ${PROJECT_BINARY_DIR}/tests/hydro_methods ${cosmictiger_sph_test_args}
-            ${cosmictiger_options_capability_args}
-            ${cosmictiger_rockstar_test_args}
-
---order ${cosmictiger_default_fmm_order}
-            --time-integrator ${cosmictiger_default_integrator} --hydro-methods-only)
-        set_tests_properties(hydro_methods PROPERTIES RUN_SERIAL TRUE TIMEOUT 120 PROCESSORS 2
+            --order ${cosmictiger_default_fmm_order}
+            --time-integrator ${cosmictiger_default_integrator} --concurrent-cases=3)
+        # The full option suite includes every hydro-method check.
+        set_tests_properties(grouped_options PROPERTIES TIMEOUT 600 PROCESSORS 6
             LABELS "build;cpu")
     endif()
 
@@ -1612,7 +1614,8 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             --hpx:threads=2 --hpx:bind=none
                 ${cosmictiger_test_integrator_args})
         set_tests_properties(units_output PROPERTIES
-            WORKING_DIRECTORY "${units_output_workdir}" RUN_SERIAL TRUE TIMEOUT 120)
+            WORKING_DIRECTORY "${units_output_workdir}" TIMEOUT 120 PROCESSORS 2
+            ENVIRONMENT "OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1;MKL_NUM_THREADS=1")
         # Keep the existing cases on the default bounds and cover constant alpha (equal bounds).
         set(units_workdir "${PROJECT_BINARY_DIR}/tests/units_output_none")
         file(MAKE_DIRECTORY "${units_workdir}")
@@ -1623,7 +1626,8 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             --hpx:threads=2 --hpx:bind=none
             ${cosmictiger_test_integrator_args})
         set_tests_properties(units_output_none PROPERTIES
-            WORKING_DIRECTORY "${units_workdir}" RUN_SERIAL TRUE TIMEOUT 120 PROCESSORS 2)
+            WORKING_DIRECTORY "${units_workdir}" TIMEOUT 120 PROCESSORS 2
+            ENVIRONMENT "OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1;MKL_NUM_THREADS=1")
 
         set(distributed_output_workdir "${PROJECT_BINARY_DIR}/tests/distributed_output")
         file(MAKE_DIRECTORY "${distributed_output_workdir}")
@@ -1632,7 +1636,8 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             --hpx:threads=2 --hpx:bind=none
                 ${cosmictiger_test_integrator_args})
         set_tests_properties(distributed_output PROPERTIES WORKING_DIRECTORY "${distributed_output_workdir}"
-            RUN_SERIAL TRUE TIMEOUT 120 PROCESSORS 2)
+            TIMEOUT 120 PROCESSORS 2
+            ENVIRONMENT "OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1;MKL_NUM_THREADS=1")
     endif()
 
     add_executable(radial_kernel_test tests/radial_kernel.cpp)
@@ -1899,9 +1904,10 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
         if(COMPILER_SUPPORTS_MARCH_NATIVE)
             target_compile_options(sph_cpu_test PRIVATE -march=native)
         endif()
-        # The compensated accumulation regression exercises four concurrent CPU writers.
+        # Only compensated accumulation needs four concurrent CPU writers.
         cosmictiger_add_gtest(NAME sph_cpu TARGET sph_cpu_test
-            PROPERTIES TIMEOUT 120 PROCESSORS 4)
+            PROPERTIES TIMEOUT 120 PROCESSORS 1
+            CASE_PROCESSORS SphCpuTest.CompensatedFloatPairAccumulation=4)
 
     endif()
 
@@ -1988,7 +1994,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             src/gravity/reference_table.cpp)
         target_include_directories(gravity_reference_table_test PRIVATE ${PROJECT_SOURCE_DIR})
         target_compile_options(gravity_reference_table_test PRIVATE -fno-fast-math -ffp-contract=off)
-        cosmictiger_add_gtest(NAME gravity_reference_table TARGET gravity_reference_table_test
+        cosmictiger_add_gtest(NAME gravity_reference_table TARGET gravity_reference_table_test GROUPED
             PROPERTIES TIMEOUT 60)
 
         if(COSMICTIGER_WITH_CUDA)
@@ -2135,14 +2141,16 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                 ${PROJECT_SOURCE_DIR}/tests/run_sph_rebuild_fraction.py $<TARGET_FILE:cosmictiger>
                 ${PROJECT_BINARY_DIR}/tests/sph_rebuild_fraction_application)
             set_tests_properties(sph_rebuild_fraction_application PROPERTIES
-                RUN_SERIAL TRUE TIMEOUT 600 PROCESSORS 2 LABELS "integration;sph;gravity;octree;options")
+                TIMEOUT 600 PROCESSORS 2 LABELS "integration;sph;gravity;octree;options"
+                ENVIRONMENT "OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1;MKL_NUM_THREADS=1")
         endif()
         if(COSMICTIGER_WITH_SPH)
             add_test(NAME sph_octree_application COMMAND ${Python3_EXECUTABLE}
                 ${PROJECT_SOURCE_DIR}/tests/run_sph_octree.py $<TARGET_FILE:cosmictiger>
                 ${PROJECT_BINARY_DIR}/tests/sph_octree_application)
             set_tests_properties(sph_octree_application PROPERTIES
-                RUN_SERIAL TRUE TIMEOUT 600 PROCESSORS 2 LABELS "integration;sph;gravity;octree")
+                TIMEOUT 600 PROCESSORS 2 LABELS "integration;sph;gravity;octree"
+                ENVIRONMENT "OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1;MKL_NUM_THREADS=1")
             if(COSMICTIGER_WITH_CUDA)
                 add_test(NAME sph_octree_application_cuda COMMAND ${Python3_EXECUTABLE}
                     ${PROJECT_SOURCE_DIR}/tests/run_sph_octree.py $<TARGET_FILE:cosmictiger>
@@ -2156,7 +2164,8 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                     ${PROJECT_BINARY_DIR}/tests/sph_octree_application_mpi
                     ${cosmictiger_python_mpi_args})
                 set_tests_properties(sph_octree_application_mpi PROPERTIES
-                    RUN_SERIAL TRUE TIMEOUT 600 PROCESSORS 4 LABELS "integration;sph;gravity;octree;mpi")
+                    TIMEOUT 600 PROCESSORS 4 LABELS "integration;sph;gravity;octree;mpi"
+                    ENVIRONMENT "OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1;MKL_NUM_THREADS=1")
             endif()
         endif()
         if(COSMICTIGER_WITH_SPH)
@@ -2183,6 +2192,10 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                 LABELS "sph;cpu;hpx")
             if(cosmictiger_mpi_tests)
                 foreach(parent_tree_ranks IN ITEMS 2 3 4)
+                    if((parent_tree_ranks EQUAL 3 AND NOT cosmictiger_mpi_three_ranks) OR
+                            (parent_tree_ranks EQUAL 4 AND NOT cosmictiger_mpi_four_ranks))
+                        continue()
+                    endif()
                     set(parent_tree_name sph_parent_tree_mpi${parent_tree_ranks})
                     set(parent_tree_workdir "${PROJECT_BINARY_DIR}/tests/${parent_tree_name}")
                     file(MAKE_DIRECTORY "${parent_tree_workdir}")
@@ -2204,13 +2217,19 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             if(COSMICTIGER_WITH_GRAVITY AND
                     COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                 set(jeans_wave_mpi_args)
-                set(jeans_wave_processors 8)
+                set(jeans_wave_processors 6)
                 if(cosmictiger_mpi_tests)
                     set(jeans_wave_mpi_args ${cosmictiger_python_mpi_args})
+                    if(cosmictiger_mpi_four_ranks)
+                        list(APPEND jeans_wave_mpi_args --mpi-ranks 2 4)
+                    else()
+                        list(APPEND jeans_wave_mpi_args --mpi-ranks 2)
+                    endif()
                 endif()
                 add_test(NAME sph_jeans_wave COMMAND ${Python3_EXECUTABLE}
                     ${PROJECT_SOURCE_DIR}/tests/run_jeans_wave.py $<TARGET_FILE:cosmictiger>
-                    ${PROJECT_BINARY_DIR}/tests/sph_jeans_wave ${jeans_wave_mpi_args})
+                    ${PROJECT_BINARY_DIR}/tests/sph_jeans_wave
+                    --threads=${jeans_wave_processors} ${jeans_wave_mpi_args})
                 set_tests_properties(sph_jeans_wave PROPERTIES
                     TIMEOUT 1500 PROCESSORS ${jeans_wave_processors}
                     LABELS "integration;sph;gravity;hierarchical;mpi")
@@ -2219,12 +2238,23 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             endif()
             # Distributed SPH evolution on ghost leaves against one locality.
             if(cosmictiger_mpi_tests)
+                set(sph_ghosts_mpi_ranks --ranks=2)
+                set(sph_ghosts_mpi_processors 2)
+                if(cosmictiger_mpi_three_ranks)
+                    list(APPEND sph_ghosts_mpi_ranks --ranks=3)
+                    set(sph_ghosts_mpi_processors 3)
+                endif()
+                if(cosmictiger_mpi_four_ranks)
+                    list(APPEND sph_ghosts_mpi_ranks --ranks=4)
+                    set(sph_ghosts_mpi_processors 4)
+                endif()
                 add_test(NAME sph_ghosts_application_mpi COMMAND ${Python3_EXECUTABLE}
                     ${PROJECT_SOURCE_DIR}/tests/run_sph_ghosts.py $<TARGET_FILE:cosmictiger>
                     ${PROJECT_BINARY_DIR}/tests/sph_ghosts_application_mpi
-                    ${cosmictiger_python_mpi_args})
+                    ${cosmictiger_python_mpi_args} ${sph_ghosts_mpi_ranks})
                 set_tests_properties(sph_ghosts_application_mpi PROPERTIES
-                    TIMEOUT 1500 PROCESSORS 4 LABELS "integration;sph;octree;mpi")
+                    TIMEOUT 1500 PROCESSORS ${sph_ghosts_mpi_processors}
+                    LABELS "integration;sph;octree;mpi")
             endif()
             # Ghost leaves (M2): the local ghost walk equals the global fetch walk.
             set(sph_ghosts_workdir "${PROJECT_BINARY_DIR}/tests/sph_ghosts")
@@ -2238,6 +2268,10 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                 LABELS "sph;cpu;hpx")
             if(cosmictiger_mpi_tests)
                 foreach(ghost_ranks IN ITEMS 2 3 4)
+                    if((ghost_ranks EQUAL 3 AND NOT cosmictiger_mpi_three_ranks) OR
+                            (ghost_ranks EQUAL 4 AND NOT cosmictiger_mpi_four_ranks))
+                        continue()
+                    endif()
                     set(ghost_name sph_ghosts_mpi${ghost_ranks})
                     set(ghost_workdir "${PROJECT_BINARY_DIR}/tests/${ghost_name}")
                     file(MAKE_DIRECTORY "${ghost_workdir}")
@@ -2335,7 +2369,8 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                     --gravity.cuda=false --hydro.cuda=false --drift.cuda=false --hpx:threads=2 --hpx:bind=none --hpx:localities=2
                 ${cosmictiger_test_integrator_args})
                 set_tests_properties(distributed_output_mpi PROPERTIES
-                    WORKING_DIRECTORY "${distributed_output_mpi_workdir}" RUN_SERIAL TRUE TIMEOUT 180 PROCESSORS 4)
+                    WORKING_DIRECTORY "${distributed_output_mpi_workdir}" TIMEOUT 180 PROCESSORS 4
+                    ENVIRONMENT "OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1;MKL_NUM_THREADS=1")
             endif()
             if(COSMICTIGER_WITH_SPH)
                 set(units_mpi_workdir "${PROJECT_BINARY_DIR}/tests/units_output_mpi")
@@ -2346,7 +2381,8 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                     --gravity.cuda=false --hydro.cuda=false --drift.cuda=false --hpx:threads=2 --hpx:bind=none --hpx:localities=2
                 ${cosmictiger_test_integrator_args})
                 set_tests_properties(units_output_mpi PROPERTIES
-                    WORKING_DIRECTORY "${units_mpi_workdir}" RUN_SERIAL TRUE TIMEOUT 120)
+                    WORKING_DIRECTORY "${units_mpi_workdir}" TIMEOUT 120 PROCESSORS 4
+                    ENVIRONMENT "OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1;MKL_NUM_THREADS=1")
                 if(COSMICTIGER_WITH_CUDA)
                 add_test(NAME smoke_sph_mpi COMMAND ${Python3_EXECUTABLE}
                     ${PROJECT_SOURCE_DIR}/tests/run_smoke.py sph_mpi
@@ -2358,7 +2394,8 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                     ${PROJECT_SOURCE_DIR}/tests/run_smoke.py sph_mpi
                     $<TARGET_FILE:cosmictiger>
                     ${PROJECT_BINARY_DIR}/tests/smoke_sph_cpu_mpi --mpi-exec=${MPIEXEC_EXECUTABLE} --cpu)
-                set_tests_properties(smoke_sph_cpu_mpi PROPERTIES RUN_SERIAL TRUE TIMEOUT 260)
+                set_tests_properties(smoke_sph_cpu_mpi PROPERTIES TIMEOUT 260 PROCESSORS 4
+                    ENVIRONMENT "OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1;MKL_NUM_THREADS=1")
             endif()
         endif()
         foreach(smoke_mode IN ITEMS sod sph sph_analysis)
@@ -2372,7 +2409,9 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                 ${PROJECT_SOURCE_DIR}/tests/run_smoke.py ${smoke_mode}
                 $<TARGET_FILE:cosmictiger>
                 ${PROJECT_BINARY_DIR}/tests/smoke_${smoke_mode}_cpu --cpu)
-            set_tests_properties(smoke_${smoke_mode}_cpu PROPERTIES RUN_SERIAL TRUE TIMEOUT 500)
+            set_tests_properties(smoke_${smoke_mode}_cpu PROPERTIES TIMEOUT 500 PROCESSORS 2
+                LABELS "integration;cpu;sph"
+                ENVIRONMENT "OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1;MKL_NUM_THREADS=1")
         endforeach()
         # Variational SPH in Sod, blast and hydroWave, plus CFL refinement. These
         # ideal-gas cases must remain registered when equilibrium cooling is disabled.
@@ -2395,6 +2434,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                 endif()
                 if(NOT backend STREQUAL "cpu")
                     string(APPEND variational_test "_${backend}")
+                    list(APPEND variational_backend_args --comparison-only)
                 endif()
                 add_test(NAME ${variational_test} COMMAND ${Python3_EXECUTABLE}
                     ${PROJECT_SOURCE_DIR}/tests/run_variational_sph.py $<TARGET_FILE:cosmictiger>
@@ -2412,17 +2452,27 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                     NOT smoke_mode MATCHES "^dm_")
                 continue()
             endif()
+            set(smoke_options)
+            if(smoke_mode STREQUAL "dm_cpu")
+                set(smoke_options --extra-option=--scenario.cosmology.twoLpt=false)
+            endif()
             add_test(NAME smoke_${smoke_mode} COMMAND ${Python3_EXECUTABLE}
                 ${PROJECT_SOURCE_DIR}/tests/run_smoke.py ${smoke_mode}
                 $<TARGET_FILE:cosmictiger>
-                ${PROJECT_BINARY_DIR}/tests/smoke_${smoke_mode})
+                ${PROJECT_BINARY_DIR}/tests/smoke_${smoke_mode} ${smoke_options})
             set_tests_properties(smoke_${smoke_mode} PROPERTIES RUN_SERIAL TRUE TIMEOUT 500)
+            if(smoke_mode STREQUAL "dm_cpu")
+                set_tests_properties(smoke_${smoke_mode} PROPERTIES RUN_SERIAL FALSE PROCESSORS 2
+                    LABELS "integration;cpu;gravity"
+                    ENVIRONMENT "OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1;MKL_NUM_THREADS=1")
+            endif()
         endforeach()
         add_test(NAME smoke_dm_min_rung COMMAND ${Python3_EXECUTABLE}
             ${PROJECT_SOURCE_DIR}/tests/run_smoke.py dm_cpu
             $<TARGET_FILE:cosmictiger>
             ${PROJECT_BINARY_DIR}/tests/smoke_dm_min_rung --minimum-rung=10)
-        set_tests_properties(smoke_dm_min_rung PROPERTIES RUN_SERIAL TRUE TIMEOUT 500)
+        set_tests_properties(smoke_dm_min_rung PROPERTIES TIMEOUT 500 PROCESSORS 2
+            ENVIRONMENT "OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1;MKL_NUM_THREADS=1")
         if(COSMICTIGER_WITH_GRAVITY)
             add_test(NAME checkpoint_integrity COMMAND ${Python3_EXECUTABLE}
                 ${PROJECT_SOURCE_DIR}/tests/run_checkpoint.py
@@ -2443,7 +2493,8 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             ${position_selection_args} --position-type ${COSMICTIGER_POSITION_TYPE}
             --time-integrator ${cosmictiger_default_integrator}
             --order ${cosmictiger_default_fmm_order})
-        set_tests_properties(position_selection PROPERTIES RUN_SERIAL TRUE TIMEOUT 600 PROCESSORS 2)
+        set_tests_properties(position_selection PROPERTIES TIMEOUT 600 PROCESSORS 2
+            ENVIRONMENT "OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1;MKL_NUM_THREADS=1")
     endif()
 
 endif()
@@ -2511,7 +2562,7 @@ if(BUILD_TESTING AND COSMICTIGER_WITH_GRAVITY)
             --hpx:threads=2 --hpx:bind=none)
         set_tests_properties(${regression}_cpu PROPERTIES TIMEOUT 300 PROCESSORS 2
             WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/tests/${regression}_cpu" LABELS "fmm;cpu")
-        if(MPIEXEC_EXECUTABLE)
+        if(cosmictiger_mpi_tests)
             file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/tests/${regression}_mpi")
             add_test(NAME ${regression}_mpi COMMAND ${MPIEXEC_EXECUTABLE}
                 ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} $<TARGET_FILE:cosmictiger>
@@ -2532,8 +2583,8 @@ if(BUILD_TESTING AND COSMICTIGER_ENABLE_GRAVITY AND COSMICTIGER_WITH_CUDA)
         --hydro.enabled=false --gravity.cuda=true --hydro.cuda=false --drift.cuda=false
         --hpx:threads=2 --hpx:bind=none)
     set_tests_properties(fmmWalk_cuda PROPERTIES TIMEOUT 300 PROCESSORS 2
-        WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/tests/fmmWalk_cuda" LABELS "fmm;cuda")
-    if(MPIEXEC_EXECUTABLE)
+        WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/tests/fmmWalk_cuda" RESOURCE_LOCK cuda LABELS "fmm;cuda")
+    if(cosmictiger_mpi_tests)
         file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/tests/fmmWalk_cuda_mpi")
         add_test(NAME fmmWalk_cuda_mpi COMMAND ${MPIEXEC_EXECUTABLE}
             ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} $<TARGET_FILE:cosmictiger>
@@ -2542,7 +2593,7 @@ if(BUILD_TESTING AND COSMICTIGER_ENABLE_GRAVITY AND COSMICTIGER_WITH_CUDA)
             --hpx:threads=1 --hpx:bind=none --hpx:localities=2
             ${cosmictiger_mpi_transport_args})
         set_tests_properties(fmmWalk_cuda_mpi PROPERTIES TIMEOUT 300 PROCESSORS 2
-            WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/tests/fmmWalk_cuda_mpi" LABELS "fmm;cuda;mpi")
+            WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/tests/fmmWalk_cuda_mpi" RESOURCE_LOCK cuda LABELS "fmm;cuda;mpi")
     endif()
 endif()
 
@@ -2551,5 +2602,19 @@ if(BUILD_TESTING AND COSMICTIGER_WITH_GRAVITY)
         ${PROJECT_SOURCE_DIR}/tests/run_benchmark.py $<TARGET_FILE:cosmictiger>
         ${PROJECT_BINARY_DIR}/tests/benchmark_cpu)
     set_tests_properties(benchmark_cpu PROPERTIES TIMEOUT 300 PROCESSORS 2
-        RUN_SERIAL TRUE LABELS "fmm;scenarios;cpu")
+        LABELS "fmm;scenarios;cpu"
+        ENVIRONMENT "OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1;MKL_NUM_THREADS=1")
 endif()
+
+# Helper --help invocations inherit the Python runner's directory and may write
+# APEX reports before the individual simulation working directories are selected.
+foreach(parallel_test IN ITEMS particle_count_application scenarios grouped_options
+        sph_rebuild_fraction_application sph_octree_application sph_octree_application_mpi
+        smoke_sph_cpu_mpi smoke_sod_cpu smoke_sph_cpu smoke_sph_analysis_cpu
+        smoke_dm_cpu smoke_dm_min_rung position_selection benchmark_cpu)
+    if(TEST ${parallel_test})
+        set(parallel_workdir "${PROJECT_BINARY_DIR}/tests/work/${parallel_test}")
+        file(MAKE_DIRECTORY "${parallel_workdir}")
+        set_tests_properties(${parallel_test} PROPERTIES WORKING_DIRECTORY "${parallel_workdir}")
+    endif()
+endforeach()

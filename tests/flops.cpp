@@ -95,13 +95,18 @@ TEST(Flops, FloatingConversionsCountAtHigherPrecision) {
 
 TEST(Flops, ConcurrentAndDistributedAggregation) {
     auto const localities = hpx::find_all_localities();
+    // Three MPI localities each own an HPX worker. Keep two additional native
+    // workers there; the standalone case still exercises four concurrent writers.
+    // Both paths perform the same total number of counter updates.
+    int const workerCount = localities.size() > 1 ? 2 : 4;
+    constexpr int kTotalIterations = 40000;
     for (int pass = 0; pass < 2; ++pass) {
         resetFlops();
         ASSERT_EQ(readFlops(), 0);
         std::vector<std::thread> workers;
-        for (int thread = 0; thread < 4; ++thread) {
-            workers.emplace_back([]() {
-                for (int i = 0; i < 10000; ++i) {
+        for (int thread = 0; thread < workerCount; ++thread) {
+            workers.emplace_back([workerCount]() {
+                for (int i = 0; i < kTotalIterations / workerCount; ++i) {
                     addCpuFlops(1234567, FlopPrecision::Single);
                     addCpuFlops(2468, FlopPrecision::Single);
                     addCpuFlops(913, FlopPrecision::Double);
@@ -115,10 +120,10 @@ TEST(Flops, ConcurrentAndDistributedAggregation) {
             hpx::async<ContributeFlopsAction>(locality).get();
         }
         FlopCounts expected;
-        expected.singlePrecision = FlopCount(4) * 10000 * (1234567 + 2468) +
+        expected.singlePrecision = FlopCount(kTotalIterations) * (1234567 + 2468) +
             localities.size() * ((FlopCount(1) << 54) + (FlopCount(1) << 53) + 12);
         expected.doublePrecision =
-            FlopCount(4) * 10000 * 913 + localities.size() * ((FlopCount(1) << 55) + 11);
+            FlopCount(kTotalIterations) * 913 + localities.size() * ((FlopCount(1) << 55) + 11);
         expected.unclassified = 0;
         auto const actual = readFlopCounts();
         EXPECT_EQ(actual.singlePrecision, expected.singlePrecision);

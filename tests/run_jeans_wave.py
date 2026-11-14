@@ -5,14 +5,13 @@
 #  Distributed under the Boost Software License, Version 1.0.
 #  See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
 
-"""Validate SPH coupled to PMMM self-gravity with the linear Jeans wave.
+"""Validate SPH coupled to FMM self-gravity with the linear Jeans wave.
 
 The jeansWave scenario sets 4πGρ₀ = c²k²/2, so a standing wave oscillates at
 ω_J = ck/√2 instead of the sound frequency ck. The run uses the hierarchical
-integrator, the only one that couples gas to PMMM. On one locality the measured
-frequency must be near ω_J and far from ck; on 2 and 4 localities (PMMM, ghost
-leaves and the gas coupling distributed) it must equal the one-locality value to
-float roundoff.
+integrator. On one locality the measured frequency must be near ω_J and far from
+ck; on 2 and 4 localities (FMM, ghost leaves and the gas coupling distributed) it
+must agree with the one-locality value within the distributed frequency tolerance.
 """
 
 import argparse
@@ -41,8 +40,13 @@ def main():
     parser.add_argument("--mpi-preflag", action="append", default=[])
     parser.add_argument("--mpi-postflag", action="append", default=[])
     parser.add_argument("--hpx-argument", action="append", default=[])
-    parser.add_argument("--threads", type=int, default=8)
+    parser.add_argument("--threads", type=int, default=6,
+                        help="Total HPX worker budget across all localities")
+    parser.add_argument("--mpi-ranks", type=int, nargs="+", choices=(2, 4), default=(2, 4),
+                        help="Distributed rank counts supported by the launcher")
     args = parser.parse_args()
+    if args.threads < 1 or (args.mpi_exec and args.threads < max(args.mpi_ranks)):
+        parser.error("--threads must provide at least one worker per requested locality")
     executable = args.executable.resolve()
     root = args.workdir.resolve()
     root.mkdir(parents=True, exist_ok=True)
@@ -81,7 +85,7 @@ def main():
     require(abs(single["omega"] - single["jeans"]) < 0.25 * abs(single["sound"] - single["jeans"]),
             "the frequency is not closer to the Jeans value than to the sound value")
     if args.mpi_exec:
-        for ranks in (2, 4):
+        for ranks in args.mpi_ranks:
             result = run(ranks)
             evidence[f"ranks_{ranks}"] = result
             difference = abs(result["omega"] - single["omega"]) / single["omega"]
@@ -92,7 +96,7 @@ def main():
     for label, result in evidence.items():
         print(f"{label}: omega={result['omega']:.9e} jeans={result['jeans']:.9e} "
               f"sound={result['sound']:.9e} error={result['error']:.4f}", flush=True)
-    print("SPH Jeans wave matches the PMMM dispersion relation", flush=True)
+    print("SPH Jeans wave matches the self-gravitating dispersion relation", flush=True)
 
 
 if __name__ == "__main__":

@@ -84,7 +84,7 @@ def check_checkpoint(directory, iteration, scenario, ranks):
             "checkpoint scenario metadata differs from the interrupted simulation")
 
 
-def check_profiles(directory, ranks, profile_disabled):
+def check_profiles(directory, ranks, profile_disabled, scenario):
     expected_ranks = {str(rank) for rank in range(ranks)}
     with (directory / "apex" / "apex_profiles.csv").open(newline="") as stream:
         rows = list(csv.DictReader(stream))
@@ -102,8 +102,9 @@ def check_profiles(directory, ranks, profile_disabled):
         text = phase_profile.read_text()
         require(text.startswith("Profile:") and re.search(r"^Total\s", text, re.MULTILINE),
                 f"phase profile is incomplete: {phase_profile}")
-        require(re.search(r"^(kick|pmmmKick|hydro)\s+\d+\s", text, re.MULTILINE),
-                f"phase profile lost the force phases: {phase_profile}")
+        force_phase = {"plummer": "kick", "hydroWave": "hydro.force.midpoint"}[scenario]
+        require(re.search(rf"^{re.escape(force_phase)}\s+\d+\s", text, re.MULTILINE),
+                f"phase profile lost the {force_phase} force phase: {phase_profile}")
 
 
 def run_regression(args, directory):
@@ -200,7 +201,7 @@ def run_regression(args, directory):
         require(rows[-1][1] < END_TIME if args.scenario == "hydroWave" else
                 rows[-1][5] < STEP_COUNT, "simulation reached its end before interruption")
         check_checkpoint(simulation / f"checkpoint.{iteration}", iteration, args.scenario, ranks)
-        check_profiles(directory, ranks, args.profile_disabled)
+        check_profiles(directory, ranks, args.profile_disabled, args.scenario)
     except Exception as exception:
         raise RuntimeError(f"{exception}\nSimulation output:\n{output[-16000:]}") from exception
     recipient = "outer MPI wrapper" if args.mpi_wrapper else f"application rank {target_rank}"

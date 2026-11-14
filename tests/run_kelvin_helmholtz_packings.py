@@ -118,7 +118,7 @@ def main():
               f'uniform bulk SPH densities {means[0]:.7g}, {means[1]:.7g}', flush=True)
         if index == 0:
             log = (directory / 'run.log').read_text()
-            assert re.search(r'^initial\.plummer\.radius\s*:\s*2\.0+e-02', log, re.M)
+            assert re.search(r'^scenario\.plummer\.radius\s*:\s*2\.0+e-02', log, re.M)
             # Re-read the selected layout and the extended Options serialization on restart.
             restarted = subprocess.run(common + [f'--run.gasParticleCount={count}',
                 f'--scenario.kelvinHelmholz.packing={pair}', '--checkpoint.readIndex=1'],
