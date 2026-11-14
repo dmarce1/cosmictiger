@@ -260,6 +260,7 @@ Vector<GroupInteger> groupsExist(Vector<GroupInteger> grps) {
 /// Write distributed group catalogues and host-history sidecars, publishing completion only
 /// after successful writes.
 std::pair<size_t, size_t> groupsSave(int number, double scale, double time) {
+    auto const& opts = getOptions();
     if (hpxRank() == 0) {
         std::cout << "Writing group database\n" << std::flush;
         std::filesystem::create_directories(outputPath("groups." + std::to_string(number)));
@@ -273,7 +274,7 @@ std::pair<size_t, size_t> groupsSave(int number, double scale, double time) {
                 std::format("Unable to open {} for writing", fname.c_str()));
         }
         GroupHeader header;
-        header.boxLength = getOptions().units.lengthCm / constants::kMpcToCm;
+        header.boxLength = opts.units.lengthCm / constants::kMpcToCm;
         header.time = time;
         header.number = number;
         header.scale = scale;
@@ -409,6 +410,7 @@ void groupsReduce(double scaleFactor) {
     for (int proc = 0; proc < numberOfThreads; ++proc) {
         futures.push_back(hpx::async(hpx::annotated_function(
             [proc, numberOfThreads, &mutex, scaleFactor]() {
+                auto const& opts = getOptions();
                 std::unordered_map<int, Vector<Pair<ParticleInteger, GroupInteger>>> assignments;
                 for (int bin = proc; bin < kGroupTableSize; bin += numberOfThreads) {
                     for (auto const& candidate : groupData[bin]) {
@@ -421,7 +423,7 @@ void groupsReduce(double scaleFactor) {
                         for (auto const& particle : particles) {
                             tags[particle.rank][particle.index] = kNoParticleGroup;
                         }
-                        if (particles.size() >= getOptions().analysis.minGroupSize) {
+                        if (particles.size() >= opts.analysis.minGroupSize) {
                             auto const halos = rockstarFindSubgroups(particles, scaleFactor);
                             size_t const haloCount = rockstarCatalogueSize(halos.size());
                             Vector3<double> origin;
@@ -513,6 +515,7 @@ Vector<HaloAperture> groupsGatherApertures() {
 
 /// Sum gas and star masses within each supplied periodic halo aperture across localities.
 Vector<Pair<double>> groupsSumBaryons(Vector<HaloAperture> apertures) {
+    auto const& opts = getOptions();
     Vector<hpx::future<Vector<Pair<double>>>> futures;
     for (auto const& child : hpxChildren()) {
         futures.push_back(hpx::async<GroupsSumBaryonsAction>(child, apertures));
@@ -525,7 +528,7 @@ Vector<Pair<double>> groupsSumBaryons(Vector<HaloAperture> apertures) {
     for (auto const& aperture : apertures) {
         maxRadius = std::max(maxRadius, aperture.radius);
     }
-    if (getOptions().hydro.enabled && maxRadius > 0.0) {
+    if (opts.hydro.enabled && maxRadius > 0.0) {
         // Bucket halo centres on a periodic grid whose cells are at least one
         // maximum radius wide, so a particle's 27 neighbouring cells hold every
         // aperture that can contain it. Fewer than three cells per dimension
@@ -616,12 +619,13 @@ Vector<Pair<double>> groupsSumBaryons(Vector<HaloAperture> apertures) {
 /// Install aperture gas/star masses in catalogue records and group entries using their
 /// respective mass units.
 void groupsInstallBaryons(Vector<Pair<double>> masses) {
+    auto const& opts = getOptions();
     ALWAYS_ASSERT(masses.size() == haloApertures.size());
     ALWAYS_ASSERT(rockstarRecords.size() == haloApertures.size());
     ALWAYS_ASSERT(groups.size() == haloApertures.size());
     // Records are in solar masses/h like mvir; GroupEntry masses are solar masses.
     double const recordConversion = rockstarMassConversion();
-    double const entryConversion = getOptions().units.massG / constants::kM0;
+    double const entryConversion = opts.units.massG / constants::kM0;
     for (size_t i = 0; i < masses.size(); ++i) {
         rockstarRecords[i].mGas = masses[i].first * recordConversion;
         rockstarRecords[i].mStar = masses[i].second * recordConversion;
@@ -633,10 +637,11 @@ void groupsInstallBaryons(Vector<Pair<double>> masses) {
 /// Gather halo apertures, measure inclusive baryon masses, and return results to catalogue
 /// owners.
 void groupsMeasureBaryons() {
+    auto const& opts = getOptions();
     // SOAP-style aperture masses (Mondal et al. 2025, MNRAS 543, 1339): every
     // gas and star particle within rvir counts, bound or not, while the FOF,
     // 6D linking and unbinding above stay dark-matter-only.
-    if (!getOptions().hydro.enabled) {
+    if (!opts.hydro.enabled) {
         return;
     }
     ALWAYS_ASSERT(hpxRank() == 0);

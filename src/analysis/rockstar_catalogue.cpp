@@ -182,6 +182,7 @@ void coreVelocity(Subgroup& group, DeviceVector<RockstarParticle> const& particl
 /// Evaluate softened self-potentials for a halo particle set using the selected Barnes-Hut
 /// backend.
 DeviceVector<float> potentials(DeviceVector<RockstarParticle> const& particles) {
+    auto const& opts = getOptions();
     DeviceVector<Vector3<float>> positions;
     for (auto const& particle : particles) {
         Vector3<float> position;
@@ -190,8 +191,7 @@ DeviceVector<float> potentials(DeviceVector<RockstarParticle> const& particles) 
         }
         positions.pushBack(position);
     }
-    return bhEvaluatePotential(
-        positions, getOptions().analysis.groupsCuda && particles.size() > 4096);
+    return bhEvaluatePotential(positions, opts.analysis.groupsCuda && particles.size() > 4096);
 }
 
 /// Compute subgroup kinetic energy about its bulk velocity and pair-counted physical
@@ -339,8 +339,9 @@ void internalHierarchy(Vector<Subgroup>& groups) {
 /// Measure inclusive spherical-overdensity masses/radii and update core velocities for each
 /// subgroup.
 void measureMasses(Vector<Subgroup>& groups, double scale) {
+    auto const& opts = getOptions();
     auto const density = haloOverdensity(scale);
-    double const mean = darkMatterReferenceCount(getOptions());
+    double const mean = darkMatterReferenceCount(opts);
     for (size_t i = 0; i < groups.size(); ++i) {
         auto particles = rockstarGatherParticles(groups, i);
         auto const radii = sortedRadii(particles, groups[i]);
@@ -429,6 +430,7 @@ DeviceVector<RockstarParticle> rockstarGatherParticles(Vector<Subgroup> const& g
 /// Update subgroup center, velocity, dispersions, profile scales, and dynamical radius.
 void rockstarUpdateStatistics(
     Subgroup& group, float positionFactor, float velocityFactor, float scale) {
+    auto const& opts = getOptions();
     if (group.parts.empty()) {
         return;
     }
@@ -459,7 +461,7 @@ void rockstarUpdateStatistics(
     group.vzb = velocity[2];
     auto const density = detail::haloOverdensity(scale);
     auto const radii = detail::sortedRadii(group.parts, group, positionFactor);
-    double const numberDensity = darkMatterReferenceCount(getOptions()) * density.virialMeanMatter;
+    double const numberDensity = darkMatterReferenceCount(opts) * density.virialMeanMatter;
     auto const virial = rockstar::sphericalOverdensity(radii, numberDensity);
     double const radius = virial.count ?
         virial.radius :
@@ -482,17 +484,17 @@ void rockstarUpdateStatistics(
     double circular = 0.0;
     for (size_t i = 0; i < radii.size(); ++i) {
         if (radii[i] > 0.0) {
-            circular = std::max(
-                circular, std::sqrt(getOptions().gravity.gm * (i + 1) / (scale * radii[i])));
+            circular =
+                std::max(circular, std::sqrt(opts.gravity.gm * (i + 1) / (scale * radii[i])));
         }
     }
     group.vcircMax = circular * velocityFactor;
     // Behroozi, Wechsler & Wu (2013), Sec. III.3, Eq. (4), expressed in our comoving
     // coordinate units.
-    group.rDyn = std::max(1.e-15,
-                     circular /
-                         std::sqrt(detail::kFourPiOverThree * getOptions().gravity.gm *
-                             numberDensity / scale)) *
+    group.rDyn =
+        std::max(1.e-15,
+            circular /
+                std::sqrt(detail::kFourPiOverThree * opts.gravity.gm * numberDensity / scale)) *
         positionFactor;
 }
 
@@ -703,18 +705,20 @@ size_t rockstarCatalogueSize(size_t count) {
 
 /// Return the conversion from stored particle mass to solar masses per h for halo records.
 double rockstarMassConversion() {
-    auto const units = units::scalesFromOptions(getOptions());
-    return (units.massScale() * getOptions().cosmology.hubble / units::kSolarMass).value();
+    auto const& opts = getOptions();
+    auto const units = units::scalesFromOptions(opts);
+    return (units.massScale() * opts.cosmology.hubble / units::kSolarMass).value();
 }
 
 /// Measure and encode a halo's catalogue properties with the requested inclusive membership
 /// convention.
 RockstarRecord rockstarMakeRecord(Vector<Subgroup> const& groups, int index, float scale,
     Vector3<double> const& origin, bool inclusive, bool periodic, double* virialRadius) {
+    auto const& opts = getOptions();
     Subgroup const& group = groups[index];
     auto candidates = inclusive ? rockstarGatherParticles(groups, index) : group.parts;
     auto const density = detail::haloOverdensity(scale);
-    double const mean = darkMatterReferenceCount(getOptions());
+    double const mean = darkMatterReferenceCount(opts);
     auto const allRadii = detail::sortedRadii(candidates, group);
     auto const virial = rockstar::sphericalOverdensity(allRadii, mean * density.virialMeanMatter);
     auto const so200 =
@@ -766,7 +770,7 @@ RockstarRecord rockstarMakeRecord(Vector<Subgroup> const& groups, int index, flo
             ++end;
         }
         if (radii[i] > 0.0) {
-            double const speed = std::sqrt(getOptions().gravity.gm * end / (scale * radii[i]));
+            double const speed = std::sqrt(opts.gravity.gm * end / (scale * radii[i]));
             if (speed > circular) {
                 circular = speed;
                 circularRadius = radii[i];
@@ -794,10 +798,10 @@ RockstarRecord rockstarMakeRecord(Vector<Subgroup> const& groups, int index, flo
         detail::shape(detail::withinRadius(group.parts, group, virial.radius), group);
     auto const shape500 =
         detail::shape(detail::withinRadius(group.parts, group, so500.radius), group);
-    auto const units = units::scalesFromOptions(getOptions());
+    auto const units = units::scalesFromOptions(opts);
     double const massConversion = rockstarMassConversion();
     double const positionConversion =
-        (units.lengthScale() * getOptions().cosmology.hubble / units::kMegaparsec).value();
+        (units.lengthScale() * opts.cosmology.hubble / units::kMegaparsec).value();
     double const lengthConversion = 1000.0 * positionConversion;
     double const velocityConversion =
         (units.velocityScale() / units::Velocity::from_value(1.e5)).value();
@@ -806,7 +810,7 @@ RockstarRecord rockstarMakeRecord(Vector<Subgroup> const& groups, int index, flo
     double const angularMagnitude =
         std::sqrt(angular[0] * angular[0] + angular[1] * angular[1] + angular[2] * angular[2]);
     double const mass = virial.count;
-    double const gm = getOptions().gravity.gm;
+    double const gm = opts.gravity.gm;
     RockstarRecord record{};
     ALWAYS_ASSERT(index >= 0 && index < 32768);
     record.id.haloId = index;
@@ -894,18 +898,19 @@ RockstarRecord rockstarMakeRecord(Vector<Subgroup> const& groups, int index, flo
 /// membership counts.
 GroupEntry rockstarMakeGroupEntry(
     Vector<Subgroup> const& groups, int index, float scale, Vector3<double> const& origin) {
+    auto const& opts = getOptions();
     auto const& group = groups[index];
     auto const allParticles = rockstarGatherParticles(groups, index);
     auto const candidates = detail::sortedRadii(allParticles, group);
     auto const density = detail::haloOverdensity(scale);
     auto const virial = rockstar::sphericalOverdensity(
-        candidates, darkMatterReferenceCount(getOptions()) * density.virialMeanMatter);
+        candidates, darkMatterReferenceCount(opts) * density.virialMeanMatter);
     auto const particles = detail::withinRadius(allParticles, group, virial.radius);
     auto const radii = detail::sortedRadii(particles, group);
     auto const bulk = detail::bulkVelocity(particles);
     GroupEntry entry{};
     entry.id = group.catalogueId;
-    entry.mass = particles.size() * getOptions().units.massG / constants::kM0;
+    entry.mass = particles.size() * opts.units.massG / constants::kM0;
     entry.incomplete = false;
     Subgroup measured;
     detail::energies(measured, particles, scale);

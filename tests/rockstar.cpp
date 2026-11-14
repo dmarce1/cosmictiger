@@ -159,6 +159,7 @@ void requireRockstarRecordEqual(
 
 void checkRockstarCatalogueRoundtrip(
     RockstarRecord const* records, size_t count, std::string const& context) {
+    auto const& opts = getOptions();
     // The version 2 native-layout offsets are retained; version 3 appends the
     // baryon aperture masses after the last half field.
     static_assert(sizeof(RockstarRecord) == 136);
@@ -196,7 +197,7 @@ void checkRockstarCatalogueRoundtrip(
             context + ": duplicate format metadata key " + key);
     }
     requireRockstar(format.eof() && !format.bad(), context + ": unreadable format metadata");
-    auto const& cosmology = getOptions().cosmology;
+    auto const& cosmology = opts.cosmology;
     bool const flatFit = cosmology.omegaK == 0.0 && cosmology.omegaLambda >= 0.0;
     bool const openFit = cosmology.omegaK > 0.0 && cosmology.omegaLambda == 0.0;
     std::string const virialDefinition = flatFit ? "bryan_norman_flat" :
@@ -519,7 +520,8 @@ void checkRockstarHierarchyAndHistory() {
 }
 
 void checkRockstarMajorMerger() {
-    float const offset = 0.125f * getOptions().gravity.smoothingLength;
+    auto const& opts = getOptions();
+    float const offset = 0.125f * opts.gravity.smoothingLength;
     Vector<Subgroup> groups;
     groups.push_back(rockstarTestGroup(36, -offset, 1, 0.0f));
     groups.push_back(rockstarTestGroup(12, offset, 2, 0.0f));
@@ -745,6 +747,7 @@ std::vector<int> rockstarCanonicalPartition(DeviceVector<RockstarParticle> const
 }
 
 void checkRockstarCudaConnectivity() {
+    auto const& opts = getOptions();
     // Run once per backend, keeping allocation and dispatch modes fixed until
     // every fixture buffer has been destroyed.
     constexpr int kLeaves = 65;
@@ -791,7 +794,7 @@ void checkRockstarCudaConnectivity() {
     // In each leaf, both lane-zero anchors (indices 0 and 32) are isolated.
     // The old kernel fragmented every real component in all other lanes.
     int nextId = 1;
-    if (!getOptions().analysis.groupsCuda) {
+    if (!opts.analysis.groupsCuda) {
         auto cpuParticles = particles;
         DeviceVector<RockstarTree> cpuTrees;
         rockstarFormTree(cpuTrees, cpuParticles);
@@ -842,6 +845,7 @@ Vector<ParticleData> makeRockstarSnapshot(int count, bool planar) {
 }
 
 void checkRockstarFinderDegeneracies() {
+    auto const& opts = getOptions();
     for (int count : {20, 130, 4097}) {
         auto const particles = makeRockstarSnapshot(count, count == 20);
         auto const groups = rockstarFindSubgroups(particles, 1.0f);
@@ -856,7 +860,7 @@ void checkRockstarFinderDegeneracies() {
         requireRockstar(retained.size() == size_t(count),
             "planar/coincident/cold CPU finder lost particles, N=" + std::to_string(count));
     }
-    requireRockstar(!getOptions().analysis.groupsCuda, "large CPU regression enabled CUDA");
+    requireRockstar(!opts.analysis.groupsCuda, "large CPU regression enabled CUDA");
 }
 
 void checkRockstarRecordInvariance() {
@@ -918,6 +922,7 @@ void checkRockstarRecordInvariance() {
 }
 
 void checkRockstarLightconeEpoch() {
+    auto const& opts = getOptions();
     Vector<LightconeEntry> particles(30);
     for (auto& particle : particles) {
         // These test units have H0 approximately 100. A radius of 0.02
@@ -927,7 +932,7 @@ void checkRockstarLightconeEpoch() {
         particle.vx = particle.vy = particle.vz = 0.0f;
         particle.pix = 0;
     }
-    double const initialScale = 1.0 / (1.0 + getOptions().cosmology.startRedshift);
+    double const initialScale = 1.0 / (1.0 + opts.cosmology.startRedshift);
     double const tauMax = particles[0].x.toDouble() + cosmosConformalTime(initialScale, 0.5);
     auto const records = rockstarFindSubgroups(particles, tauMax);
     requireRockstar(records.size() == 1, "lightcone coincident halo disappeared");
@@ -938,7 +943,7 @@ void checkRockstarLightconeEpoch() {
         "lightcone halo properties must use its emission epoch");
     checkRockstarCatalogueRoundtrip(records.data(), records.size(), "lightcone catalogue");
 
-    auto const original = getOptions();
+    auto const original = opts;
     for (double const curvature : {-0.1, 0.1, std::numeric_limits<double>::quiet_NaN()}) {
         auto unsupported = original;
         unsupported.cosmology.omegaK = curvature;
@@ -950,7 +955,7 @@ void checkRockstarLightconeEpoch() {
                 std::string::npos;
         }
         requireRockstar(rejected, "setOptions must reject unsupported curvature");
-        requireRockstar(getOptions().cosmology.omegaK == original.cosmology.omegaK,
+        requireRockstar(opts.cosmology.omegaK == original.cosmology.omegaK,
             "rejected curvature must not replace the active options");
     }
     auto contracting = original;

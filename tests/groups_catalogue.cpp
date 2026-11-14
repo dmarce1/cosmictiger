@@ -82,6 +82,7 @@ bool catalogueClose(double actual, double expected, double tolerance) {
 // brute-force sums; the caller supplies the total over every rank.
 void catalogueRequireBaryonMasses(
     Vector<Pair<double>> const& enclosed, std::function<void(bool, char const*)> const& require) {
+    auto const& opts = getOptions();
     auto const& records = detail::groupsLocalRecords();
     auto const& entries = detail::groupsLocalEntries();
     auto const& apertures = detail::groupsLocalApertures();
@@ -89,7 +90,7 @@ void catalogueRequireBaryonMasses(
             enclosed.size() == records.size(),
         "Halo apertures, records and entries are not aligned");
     double const recordConversion = rockstarMassConversion();
-    double const entryConversion = getOptions().units.massG / constants::kM0;
+    double const entryConversion = opts.units.massG / constants::kM0;
     for (size_t i = 0; i < records.size(); ++i) {
         require(catalogueClose(records[i].mGas, enclosed[i].first * recordConversion, 2.0e-6) &&
                 catalogueClose(records[i].mStar, enclosed[i].second * recordConversion, 2.0e-6),
@@ -103,6 +104,7 @@ void catalogueRequireBaryonMasses(
 }    // namespace
 
 void groupsCatalogueTest() {
+    auto const& opts = getOptions();
     if (hpxSize() != 1) {
         throw std::runtime_error("groupsCatalogue test requires one locality");
     }
@@ -111,9 +113,9 @@ void groupsCatalogueTest() {
             throw std::runtime_error(message);
         }
     };
-    require(getOptions().analysis.minGroupSize <= 128,
+    require(opts.analysis.minGroupSize <= 128,
         "groupsCatalogue test requires analysis.minGroupSize<=128");
-    require(getOptions().analysis.groups,
+    require(opts.analysis.groups,
         "groupsCatalogue test requires analysis.groups=true for persistent particle tags");
     auto const originalDirectory = std::filesystem::current_path();
     auto const stamp = std::chrono::steady_clock::now().time_since_epoch().count();
@@ -130,13 +132,13 @@ void groupsCatalogueTest() {
         constexpr int kStarInside = 6;
         constexpr int kStarOutside = 4;
         constexpr int kBaryonCount = kGasInside + kGasOutside + kStarInside + kStarOutside;
-        bool const hydro = getOptions().hydro.enabled;
+        bool const hydro = opts.hydro.enabled;
         int const totalCount = kParticleCount + (hydro ? kBaryonCount : 0);
         particlesResize(totalCount);
         std::mt19937 generator(141018);
         std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
-        float const support = getOptions().gravity.smoothingLength;
-        float const speed = 0.03f * std::sqrt(getOptions().gravity.gm / support);
+        float const support = opts.gravity.smoothingLength;
+        float const speed = 0.03f * std::sqrt(opts.gravity.gm / support);
         for (int i = 0; i < totalCount; ++i) {
             int const baryon = i - kParticleCount;
             bool const outside = (baryon >= kGasInside && baryon < kGasInside + kGasOutside) ||
@@ -218,11 +220,11 @@ void groupsCatalogueTest() {
                 for (int i = kParticleCount; i < totalCount; ++i) {
                     gasTotal += particlesType(i) == kSphType ? particlesMass(i) : 0.0;
                 }
-                double const entryConversion = getOptions().units.massG / constants::kM0;
+                double const entryConversion = opts.units.massG / constants::kM0;
                 // The rescaled dark-matter masses are integer particle counts;
                 // any admixture of the fractional gas mass would break that.
                 for (int k = 1; hydro && k <= kBaryonCount; ++k) {
-                    double const admixture = k * getOptions().initial.gasMass;
+                    double const admixture = k * opts.initial.gasMass;
                     require(std::abs(admixture - std::round(admixture)) > 1.0e-3,
                         "Fixture gas mass cannot discriminate counted baryons");
                 }
@@ -396,7 +398,8 @@ constexpr int kDistributedBaryonCount =
 Vector<GroupInteger> distributedPreviousTags;
 
 int distributedLocalTotal() {
-    return kDistributedLocalCount + (getOptions().hydro.enabled ? kDistributedBaryonCount : 0);
+    auto const& opts = getOptions();
+    return kDistributedLocalCount + (opts.hydro.enabled ? kDistributedBaryonCount : 0);
 }
 
 // Global particle identity (particlesGroupInit) of a local index on a rank.
@@ -423,13 +426,14 @@ void groupsCatalogueTestDirectory(std::string directory) {
 HPX_PLAIN_ACTION(groupsCatalogueTestDirectory, GroupsCatalogueTestDirectoryAction);
 
 void groupsCatalogueDistributedSetup(std::string directory) {
+    auto const& opts = getOptions();
     std::filesystem::current_path(directory);
     int const total = distributedLocalTotal();
     particlesResize(total);
     std::mt19937 generator(141018 + hpxRank());
     std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
-    float const support = getOptions().gravity.smoothingLength;
-    float const speed = 0.03f * std::sqrt(getOptions().gravity.gm / support);
+    float const support = opts.gravity.smoothingLength;
+    float const speed = 0.03f * std::sqrt(opts.gravity.gm / support);
     for (int i = 0; i < total; ++i) {
         int const baryon = i - kDistributedLocalCount;
         int type = kDarkMatterType;
@@ -449,7 +453,7 @@ void groupsCatalogueDistributedSetup(std::string directory) {
             particlesVel(dim, i) = speed * distribution(generator);
         }
         particlesLastgroup(i) = kNoParticleGroup;
-        if (getOptions().hydro.enabled) {
+        if (opts.hydro.enabled) {
             particlesType(i) = type;
         }
     }
@@ -572,7 +576,8 @@ HPX_PLAIN_ACTION(
 // Rank 0: every catalogued halo's baryon masses equal the brute-force sums over
 // both ranks, and with hydro enabled both ranks contributed to each halo.
 void groupsCatalogueDistributedCheckBaryons() {
-    bool const hydro = getOptions().hydro.enabled;
+    auto const& opts = getOptions();
+    bool const hydro = opts.hydro.enabled;
     Vector<DistributedHaloBaryons> halos;
     for (auto const& locality : hpxLocalities()) {
         auto const local = hpx::async<GroupsCatalogueDistributedHalosAction>(locality).get();
@@ -597,7 +602,7 @@ void groupsCatalogueDistributedCheckBaryons() {
         }
     }
     double const recordConversion = rockstarMassConversion();
-    double const entryConversion = getOptions().units.massG / constants::kM0;
+    double const entryConversion = opts.units.massG / constants::kM0;
     for (size_t i = 0; i < halos.size(); ++i) {
         requireDistributedCatalogue(
             catalogueClose(halos[i].recordGas, enclosed[i].first * recordConversion, 2.0e-6) &&
@@ -678,10 +683,10 @@ HPX_PLAIN_ACTION(
     groupsCatalogueDistributedCheckHistory, GroupsCatalogueDistributedCheckHistoryAction);
 
 void groupsCatalogueDistributedTest() {
+    auto const& opts = getOptions();
     requireDistributedCatalogue(
         hpxSize() == 2, "groupsCatalogueDistributed test requires exactly two localities");
-    requireDistributedCatalogue(
-        getOptions().analysis.groups && getOptions().analysis.minGroupSize <= 128,
+    requireDistributedCatalogue(opts.analysis.groups && opts.analysis.minGroupSize <= 128,
         "Distributed catalogue fixture requires groups enabled and minimum group size <=128");
     auto const originalDirectory = std::filesystem::current_path();
     auto const stamp = std::chrono::steady_clock::now().time_since_epoch().count();
@@ -855,8 +860,8 @@ void groupsCatalogueDistributedTest() {
         std::filesystem::remove_all(directory);
         std::cout << std::format("Two-locality snapshot catalogue, remote membership, {:s} and "
                                  "temporal history tests passed\n",
-                         getOptions().hydro.enabled ? "two-rank gas/stellar aperture masses" :
-                                                      "zero baryon masses")
+                         opts.hydro.enabled ? "two-rank gas/stellar aperture masses" :
+                                              "zero baryon masses")
                   << std::flush;
     } catch (...) {
         restoreDirectories();

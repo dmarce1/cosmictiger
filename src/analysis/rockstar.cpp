@@ -223,6 +223,7 @@ int rockstarFormTree(DeviceVector<RockstarTree>& trees, DeviceVector<RockstarPar
 // Eq. (1) metric.
 float rockstarFindLinkLen(DeviceVector<RockstarTree>& trees, DeviceVector<RockstarParticle>& parts,
     int treeRoot, float ff, bool gpu) {
+    auto const& opts = getOptions();
     if (parts.size() < 2) {
         return 0.0f;
     }
@@ -257,7 +258,7 @@ float rockstarFindLinkLen(DeviceVector<RockstarTree>& trees, DeviceVector<Rockst
         for (auto& p : parts) {
             p.minDist2 = std::numeric_limits<float>::max();
         }
-        gpu = getOptions().analysis.groupsCuda && parts.size() > 4 * 1024;
+        gpu = opts.analysis.groupsCuda && parts.size() > 4 * 1024;
 #ifdef USE_CUDA
         if (gpu) {
             DeviceVector<int> leaves;
@@ -297,12 +298,13 @@ float rockstarFindLinkLen(DeviceVector<RockstarTree>& trees, DeviceVector<Rockst
 /// selected backend.
 void rockstarFindAllLinkLens(
     DeviceVector<RockstarTree>& trees, DeviceVector<RockstarParticle>& parts, int treeRoot) {
+    auto const& opts = getOptions();
     for (auto& p : parts) {
         p.minDist2 = std::numeric_limits<float>::max();
     }
-    double maximumLinkingLength = getOptions().lightcone.linkingLength *
-        pow(darkMatterReferenceCount(getOptions()), -1.0 / kDimensions);
-    bool gpu = getOptions().analysis.groupsCuda && parts.size() > 4 * 1024;
+    double maximumLinkingLength =
+        opts.lightcone.linkingLength * pow(darkMatterReferenceCount(opts), -1.0 / kDimensions);
+    bool gpu = opts.analysis.groupsCuda && parts.size() > 4 * 1024;
 #ifdef USE_CUDA
     if (gpu) {
         DeviceVector<int> leaves;
@@ -437,6 +439,7 @@ size_t rockstarFindSubgroups(DeviceVector<RockstarTree>& trees,
 /// convergence.
 void rockstarFindSubgroups(DeviceVector<RockstarTree>& trees, DeviceVector<RockstarParticle>& parts,
     float linkingLength, int& nextId, bool gpu) {
+    auto const& opts = getOptions();
     Timer tm;
     tm.start();
     for (int i = 0; i < parts.size(); i++) {
@@ -446,7 +449,7 @@ void rockstarFindSubgroups(DeviceVector<RockstarTree>& trees, DeviceVector<Rocks
         trees[i].active = true;
     }
     int cnt;
-    gpu = getOptions().analysis.groupsCuda && parts.size() > 4 * 1024;
+    gpu = opts.analysis.groupsCuda && parts.size() > 4 * 1024;
 #ifdef USE_CUDA
     if (gpu) {
         DeviceVector<int> leaves;
@@ -752,6 +755,7 @@ Vector<Subgroup> rockstarSeeds(DeviceVector<RockstarParticle> parts, int& nextId
 /// Convert a periodic FoF particle group into phase-space records and find its halo
 /// hierarchy.
 Vector<Subgroup> rockstarFindSubgroups(Vector<ParticleData> const& parts, float scale) {
+    auto const& opts = getOptions();
     if (parts.size() < kRockstarMinGroup) {
         return {};
     }
@@ -770,12 +774,12 @@ Vector<Subgroup> rockstarFindSubgroups(Vector<ParticleData> const& parts, float 
         particles.pushBack(particle);
     }
     int nextId = 1;
-    return rockstarSeeds(
-        std::move(particles), nextId, 1.0f, 1.0f, scale, getOptions().analysis.groupsCuda);
+    return rockstarSeeds(std::move(particles), nextId, 1.0f, 1.0f, scale, opts.analysis.groupsCuda);
 }
 
 /// Find halos in lightcone particles and encode records at each halo's observation scale.
 Vector<RockstarRecord> rockstarFindSubgroups(Vector<LightconeEntry> const& input, double tauMax) {
+    auto const& opts = getOptions();
     Vector<RockstarRecord> records;
     if (input.size() < kRockstarMinGroup) {
         return records;
@@ -803,8 +807,8 @@ Vector<RockstarRecord> rockstarFindSubgroups(Vector<LightconeEntry> const& input
         particles.pushBack(particle);
     }
     int nextId = 1;
-    auto groups = rockstarSeeds(
-        std::move(particles), nextId, 1.0f, 1.0f, scale, getOptions().analysis.groupsCuda);
+    auto groups =
+        rockstarSeeds(std::move(particles), nextId, 1.0f, 1.0f, scale, opts.analysis.groupsCuda);
     size_t const haloCount = rockstarCatalogueSize(groups.size());
     for (size_t i = 0; i < haloCount; ++i) {
         if (groups[i].massVir >= kRockstarMinGroup) {

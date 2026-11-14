@@ -18,6 +18,7 @@
 
 /// Deposit folded particle density on CUDA and return the completed mesh-box contribution.
 Vector<float> accumulateDensityCuda(int m, int ndim, Range<int64_t> intbox) {
+    auto const& opts = getOptions();
     constexpr int kBlockSize = 256;
     int numberOfBlocks;
     auto const n3 = intbox.volume();
@@ -28,7 +29,7 @@ Vector<float> accumulateDensityCuda(int m, int ndim, Range<int64_t> intbox) {
     float* devRho;
     std::unique_ptr<float, decltype(&cudaRelease)> massOwner(nullptr, cudaRelease);
     float* masses = nullptr;
-    if (getOptions().hydro.enabled) {
+    if (opts.hydro.enabled) {
         massOwner.reset(static_cast<float*>(cudaAllocate(particlesSize() * sizeof(float))));
         masses = massOwner.get();
         for (ParticleInteger i = 0; i < particlesSize(); i++) {

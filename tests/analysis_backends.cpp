@@ -27,9 +27,10 @@
 PowerSpectrumT powerSpectrumFromTransform();
 
 void analysisSetIndependentFourierModes() {
+    auto const& opts = getOptions();
     auto const box = fft3dComplexRange();
     auto& values = fft3dComplexVector();
-    int const n = getOptions().initial.fourierSize;
+    int const n = opts.initial.fourierSize;
     double const filter = cloudFilter(2.0 * std::numbers::pi / n);
     Array<int64_t, kDimensions> index;
     for (index[0] = box.begin[0]; index[0] < box.end[0]; ++index[0]) {
@@ -147,8 +148,9 @@ Vector<LightconeParticle> analysisLightconeFixture(int nside) {
 // With hydro the fixture mirrors the cosmological lattice: one gas particle per
 // dark-matter site, offset by half a spacing, carrying the complementary mass.
 void analysisPowerSetup(bool perturb) {
-    bool const hydro = getOptions().hydro.enabled;
-    int const side = getOptions().initial.latticeSide;
+    auto const& opts = getOptions();
+    bool const hydro = opts.hydro.enabled;
+    int const side = opts.initial.latticeSide;
     int const count = side * side * side;
     int const begin = hpxRank() * count / hpxSize();
     int const end = (hpxRank() + 1) * count / hpxSize();
@@ -184,7 +186,8 @@ double analysisParticleMass() {
 HPX_PLAIN_ACTION(analysisParticleMass, AnalysisParticleMassAction);
 
 double analysisDensityMass(int fold) {
-    int const side = getOptions().initial.fourierSize;
+    auto const& opts = getOptions();
+    int const side = opts.initial.fourierSize;
     Range<int64_t> box;
     for (int dim = 0; dim < kDimensions; ++dim) {
         box.begin[dim] = kCloudMin;
@@ -200,7 +203,8 @@ double analysisDensityMass(int fold) {
 HPX_PLAIN_ACTION(analysisDensityMass, AnalysisDensityMassAction);
 
 void analysisAddLightconeParticles(Vector<LightconeParticle> particles) {
-    std::filesystem::create_directories(getOptions().lightcone.directory);
+    auto const& opts = getOptions();
+    std::filesystem::create_directories(opts.lightcone.directory);
     lcAddParticles(std::move(particles));
 }
 HPX_PLAIN_ACTION(analysisAddLightconeParticles, AnalysisAddLightconeParticlesAction);
@@ -248,8 +252,9 @@ void analysisDistributeLightcone(Vector<LightconeParticle> const& particles) {
 }
 
 void analysisFindLightconeGroups(double tau) {
-    double const linkingLength = getOptions().lightcone.linkingLength *
-        std::pow(getOptions().initial.numberOfParticles, -1.0 / kDimensions);
+    auto const& opts = getOptions();
+    double const linkingLength =
+        opts.lightcone.linkingLength * std::pow(opts.initial.numberOfParticles, -1.0 / kDimensions);
     lcBuffer2homes();
     lcParticleBoundaries1();
     lcFormTrees(tau, linkingLength);
@@ -280,11 +285,12 @@ void analysisCheckComponent(Vector<LightconeParticle> const& particles, int begi
 }
 
 void analysisWriteLightconeCatalogue(int epoch, double tau) {
-    double const linkingLength = getOptions().lightcone.linkingLength *
-        std::pow(getOptions().initial.numberOfParticles, -1.0 / kDimensions);
+    auto const& opts = getOptions();
+    double const linkingLength =
+        opts.lightcone.linkingLength * std::pow(opts.initial.numberOfParticles, -1.0 / kDimensions);
     lcParts2groups(1.0, linkingLength, epoch);
     for (int rank = 0; rank < hpxSize(); ++rank) {
-        auto const path = std::filesystem::path(getOptions().lightcone.directory) /
+        auto const path = std::filesystem::path(opts.lightcone.directory) /
             ("lc.groups." + std::to_string(epoch) + "." + std::to_string(rank));
         requireAnalysis(std::filesystem::exists(path) && std::filesystem::file_size(path) == 0,
             "Lightcone small-group filtering did not write the expected empty catalogue");
@@ -293,9 +299,10 @@ void analysisWriteLightconeCatalogue(int epoch, double tau) {
 }
 
 double analysisMapTotal(int epoch) {
+    auto const& opts = getOptions();
     double total = 0.0;
     for (int rank = 0; rank < hpxSize(); ++rank) {
-        auto const path = std::filesystem::path(getOptions().lightcone.directory) /
+        auto const path = std::filesystem::path(opts.lightcone.directory) /
             ("lc.healpix." + std::to_string(epoch) + "." + std::to_string(rank));
         auto const closeFile = [](FILE* stream) { std::fclose(stream); };
         std::unique_ptr<FILE, decltype(closeFile)> file(std::fopen(path.c_str(), "rb"), closeFile);
@@ -316,7 +323,8 @@ double analysisMapTotal(int epoch) {
 // Only dark matter reaches the lightcone halo-finder buffer, while every
 // species reaches the HEALPix map weighted by its mass.
 void analysisCheckSpeciesLightcone(int epoch) {
-    T_Healpix_Base<int> pixels(getOptions().lightcone.mapSize, NEST, SET_NSIDE);
+    auto const& opts = getOptions();
+    T_Healpix_Base<int> pixels(opts.lightcone.mapSize, NEST, SET_NSIDE);
     std::vector<std::vector<LightconeEntry>> entries(1);
     double expectedWeight = 0.0;
     constexpr int kDarkMatterCount = 3;
@@ -335,8 +343,7 @@ void analysisCheckSpeciesLightcone(int epoch) {
         direction.z = 0.0;
         entry.pix = pixels.vec2pix(direction);
         entry.type = darkMatter ? kDarkMatterType : kSphType;
-        double const mass =
-            darkMatter ? getOptions().initial.darkMatterMass : getOptions().initial.gasMass;
+        double const mass = darkMatter ? opts.initial.darkMatterMass : opts.initial.gasMass;
         expectedWeight += mass / (radius * radius);
         entries[0].push_back(entry);
     }
@@ -353,11 +360,11 @@ void analysisCheckSpeciesLightcone(int epoch) {
 }    // namespace detail
 
 void analysisBackendsTest() {
+    auto const& opts = getOptions();
     using detail::requireAnalysis;
     requireAnalysis(!cudaEnabled(), "analysisBackends requires every module CUDA option false");
     detail::analysisCheckHostContainers();
-    requireAnalysis(
-        getOptions().initial.latticeSide == 8 && !getOptions().initial.closePack && hpxSize() <= 2,
+    requireAnalysis(opts.initial.latticeSide == 8 && !opts.initial.closePack && hpxSize() <= 2,
         "analysisBackends requires an 8-cubed lattice and at most two localities");
     for (auto const& locality : hpxLocalities()) {
         hpx::async<AnalysisPowerSetupAction>(locality, false).get();
@@ -403,7 +410,7 @@ void analysisBackendsTest() {
     }
     requireAnalysis(totalPower > 1.0e-3, "CPU power did not detect a perturbed density field");
 
-    fft3dInit(getOptions().initial.fourierSize);
+    fft3dInit(opts.initial.fourierSize);
     for (auto const& locality : hpxLocalities()) {
         hpx::async<AnalysisSetIndependentFourierModesAction>(locality).get();
     }
@@ -447,7 +454,7 @@ void analysisBackendsTest() {
     requireAnalysis(detail::analysisGatherLightcone().empty(),
         "Empty lightcone flush retained stale particles");
     detail::analysisWriteLightconeCatalogue(2, 1.0);
-    if (getOptions().hydro.enabled) {
+    if (opts.hydro.enabled) {
         detail::analysisCheckSpeciesLightcone(3);
     }
     std::cout << std::format(

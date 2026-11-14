@@ -95,7 +95,8 @@ void compareBhPoints(char const* label, BhPositions const& sources, BhPositions 
 
 #ifdef USE_CUDA
 void verifyBhCudaWorkspaceReuse() {
-    float const support = getOptions().gravity.smoothingLength;
+    auto const& opts = getOptions();
+    float const support = opts.gravity.smoothingLength;
     BhPositions positions(2 * kBhBucketSize);
     for (int i = 0; i < positions.size(); ++i) {
         positions[i] = bhPosition(0.1f * support * i, 0.0f, 0.0f);
@@ -123,7 +124,7 @@ void verifyBhCudaWorkspaceReuse() {
     sinkBuckets[0] = 1;
     sinkBuckets[1] = 2;
     auto const potentials = bhEvaluatePotentialGpu(nodes, positions, sinkBuckets,
-        kBhMaximumRelativePotentialError, support, getOptions().gravity.gm, 1);
+        kBhMaximumRelativePotentialError, support, opts.gravity.gm, 1);
     for (int i = 0; i < positions.size(); ++i) {
         requireBhClose("CUDA workspace reused across self-potential buckets", potentials[i],
             directBhPotential(positions[i], positions, i, false), 3.e-5);

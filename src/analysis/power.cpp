@@ -43,10 +43,11 @@ HPX_PLAIN_ACTION(powerSpectrumBinDeviation, PowerSpectrumBinDeviationAction);
 /// Bin the current density transform and return mean power, wavenumber, and sampling-error
 /// estimates.
 PowerSpectrumT powerSpectrumFromTransform() {
+    auto const& opts = getOptions();
     Vector<float> kbins;
     double const boxSize =
-        (units::scalesFromOptions(getOptions()).lengthScale() / units::kMegaparsec).value();
-    int const nfour = getOptions().initial.fourierSize;
+        (units::scalesFromOptions(opts).lengthScale() / units::kMegaparsec).value();
+    int const nfour = opts.initial.fourierSize;
     double const ns = std::max(nfour / 8.0, 64.0);
     double const kmin = 0.999999;
     double const kmax = nfour / 2.0;
@@ -121,13 +122,14 @@ static int searchKbins(Vector<float> kbins, double k, int binmin, int binmax) {
 /// Reduce Fourier-mode counts, powers, and wavenumber sums across the distributed
 /// transform.
 static PowerSpectrumReturn powerSpectrumBin(Vector<float> const& kbins) {
+    auto const& opts = getOptions();
     Vector<hpx::future<PowerSpectrumReturn>> futs;
     for (auto c : hpxChildren()) {
         futs.push_back(hpx::async<PowerSpectrumBinAction>(c, kbins));
     }
-    int64_t const n = getOptions().initial.fourierSize;
+    int64_t const n = opts.initial.fourierSize;
     float const boxSize =
-        (units::scalesFromOptions(getOptions()).lengthScale() / units::kMegaparsec).value();
+        (units::scalesFromOptions(opts).lengthScale() / units::kMegaparsec).value();
     auto const box = fft3dComplexRange();
     Vector<ComplexFloat>& yValue = fft3dComplexVector();
     Array<int64_t, kDimensions> iValue;
@@ -198,13 +200,14 @@ static PowerSpectrumReturn powerSpectrumBin(Vector<float> const& kbins) {
 /// Accumulate squared deviations from the previously measured mean power in each bin.
 static PowerSpectrumReturn powerSpectrumBinDeviation(
     PowerSpectrumReturn rc, Vector<float> const& kbins) {
+    auto const& opts = getOptions();
     Vector<hpx::future<PowerSpectrumReturn>> futs;
     for (auto c : hpxChildren()) {
         futs.push_back(hpx::async<PowerSpectrumBinDeviationAction>(c, rc, kbins));
     }
-    int64_t const n = getOptions().initial.fourierSize;
+    int64_t const n = opts.initial.fourierSize;
     float const boxSize =
-        (units::scalesFromOptions(getOptions()).lengthScale() / units::kMegaparsec).value();
+        (units::scalesFromOptions(opts).lengthScale() / units::kMegaparsec).value();
     auto const box = fft3dComplexRange();
     Vector<ComplexFloat>& yValue = fft3dComplexVector();
     Array<int64_t, kDimensions> iValue;
@@ -255,7 +258,8 @@ static PowerSpectrumReturn powerSpectrumBinDeviation(
 /// Build a folded density contrast, transform it, measure its spectrum, and release FFT
 /// scratch storage.
 PowerSpectrumT powerSpectrumCompute(int m) {
-    int const n = getOptions().initial.fourierSize;
+    auto const& opts = getOptions();
+    int const n = opts.initial.fourierSize;
     {
         profile::ScopedPhase profilePhase("powerSpectrum.fftSetup");
         fft3dInit(n, -1.0f);
@@ -282,13 +286,14 @@ PowerSpectrumT powerSpectrumCompute(int m) {
 /// Pack optional species masses and deposit local particles into the requested folded CPU
 /// density box.
 Vector<float> accumulateDensityCpu(int fold, int gridSize, Range<int64_t> box) {
+    auto const& opts = getOptions();
     Vector<float> density(box.volume(), 0.0f);
     size_t const particleCount = particlesSize();
     if (particleCount == 0) {
         return density;
     }
     Vector<float> masses;
-    if (getOptions().hydro.enabled) {
+    if (opts.hydro.enabled) {
         masses.resize(particleCount);
         for (size_t index = 0; index < particleCount; index++) {
             masses[index] = particlesMass(index);
@@ -303,12 +308,13 @@ Vector<float> accumulateDensityCpu(int fold, int gridSize, Range<int64_t> box) {
 /// Deposit folded particle density in bounded boxes and accumulate it into the distributed
 /// FFT grid.
 static void computeDensityFolded(int m) {
+    auto const& opts = getOptions();
     Vector<hpx::future<void>> futs1;
     for (auto c : hpxChildren()) {
         futs1.push_back(hpx::async<ComputeDensityFoldedAction>(c, m));
     }
-    size_t const ndim = getOptions().initial.fourierSize;
-    size_t const numberOfParticles = getOptions().initial.numberOfParticles;
+    size_t const ndim = opts.initial.fourierSize;
+    size_t const numberOfParticles = opts.initial.numberOfParticles;
     size_t const particlesPerRank = numberOfParticles / hpxSize();
     size_t nper = ndim;
     while (nper > 1 && sqr(nper) * nper > particlesPerRank) {
@@ -326,7 +332,7 @@ static void computeDensityFolded(int m) {
                 intbox.end[kZi] = std::min(l + nper, ndim) + kCloudMax;
                 Vector<float> rho;
 #ifdef USE_CUDA
-                if (getOptions().analysis.powerCuda) {
+                if (opts.analysis.powerCuda) {
                     rho = accumulateDensityCuda(m, ndim, intbox);
                 } else
 #endif

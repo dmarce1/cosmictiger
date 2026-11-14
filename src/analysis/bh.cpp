@@ -117,8 +117,9 @@ void bhCreateTree(DeviceVector<BhTreeNode>& nodes, DeviceVector<int>& sinkBucket
 /// buckets.
 void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& sinkBuckets,
     DeviceVector<float>& phi, DeviceVector<Vector3<float>>& parts, float relativeError) {
-    float const h = getOptions().gravity.smoothingLength;
-    float const gm = getOptions().gravity.gm;
+    auto const& opts = getOptions();
+    float const h = opts.gravity.smoothingLength;
+    float const gm = opts.gravity.gm;
     float const hinv = 1.0 / h;
     float const h2 = h * h;
     SimdFloat const tiny = math::broadcast<SimdFloat>(1e-20);
@@ -224,8 +225,9 @@ void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& si
 /// Evaluate the softened Barnes-Hut potential at one arbitrary sink position.
 void bhTreeEvaluatePoint(DeviceVector<BhTreeNode> const& nodes, Vector3<float> pt, float& phi,
     DeviceVector<Vector3<float>>& parts, float relativeError) {
-    float const h = getOptions().gravity.smoothingLength;
-    float const gm = getOptions().gravity.gm;
+    auto const& opts = getOptions();
+    float const h = opts.gravity.smoothingLength;
+    float const gm = opts.gravity.gm;
     float const hinv = 1.0f / h;
     float const h2 = h * h;
     SimdFloat const tiny = math::broadcast<SimdFloat>(1e-20);
@@ -314,7 +316,8 @@ void bhTreeEvaluatePoint(DeviceVector<BhTreeNode> const& nodes, Vector3<float> p
 /// Build a temporary halo tree, evaluate source-particle potentials, and restore original
 /// particle order.
 DeviceVector<float> bhEvaluatePotential(DeviceVector<Vector3<float>>& positions, bool gpu) {
-    gpu = gpu && usesCuda(getOptions());
+    auto const& opts = getOptions();
+    gpu = gpu && usesCuda(opts);
 #ifndef USE_CUDA
     gpu = false;
 #endif
@@ -354,9 +357,8 @@ DeviceVector<float> bhEvaluatePotential(DeviceVector<Vector3<float>>& positions,
 #ifdef USE_CUDA
         Timer tm1;
         tm1.start();
-        pot =
-            bhEvaluatePotentialGpu(nodes, positions, sinkBuckets, kBhMaximumRelativePotentialError,
-                getOptions().gravity.smoothingLength, getOptions().gravity.gm);
+        pot = bhEvaluatePotentialGpu(nodes, positions, sinkBuckets,
+            kBhMaximumRelativePotentialError, opts.gravity.smoothingLength, opts.gravity.gm);
         tm1.stop();
 
 #endif
@@ -372,7 +374,8 @@ DeviceVector<float> bhEvaluatePotential(DeviceVector<Vector3<float>>& positions,
 /// positions.
 DeviceVector<float> bhEvaluatePoints(
     DeviceVector<Vector3<float>>& y, DeviceVector<Vector3<float>>& positions, bool gpu) {
-    gpu = gpu && usesCuda(getOptions());
+    auto const& opts = getOptions();
+    gpu = gpu && usesCuda(opts);
 #ifndef USE_CUDA
     gpu = false;
 #endif
@@ -409,7 +412,7 @@ DeviceVector<float> bhEvaluatePoints(
     if (gpu) {
 #ifdef USE_CUDA
         pot = bhEvaluatePotentialPointsGpu(nodes, positions, y, kBhMaximumRelativePotentialError,
-            getOptions().gravity.smoothingLength, getOptions().gravity.gm);
+            opts.gravity.smoothingLength, opts.gravity.gm);
 #endif
     } else {
         for (int i = 0; i < y.size(); i++) {

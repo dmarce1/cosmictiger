@@ -141,7 +141,8 @@ hpx::future<GroupTreeReturn> groupTreeCreateFork(size_t key, Pair<int, int> proc
 /// Build the distributed spatial group tree and return its root and particle bounds.
 GroupTreeReturn groupTreeCreate(size_t key, Pair<int, int> processRange,
     Pair<ParticleInteger> particleRange, GroupRange box, int depth, bool localRoot) {
-    int const treeCacheLineSize = getOptions().compute.treeCacheLineSize;
+    auto const& opts = getOptions();
+    int const treeCacheLineSize = opts.compute.treeCacheLineSize;
     if (depth >= kMaxDepth) {
         throw std::length_error("Maximum depth exceeded");
     }
@@ -167,7 +168,7 @@ GroupTreeReturn groupTreeCreate(size_t key, Pair<int, int> processRange,
 #if COSMICTIGER_WITH_SPH
         // The partition moved gas particles; repair their reverse links now
         // rather than relying on the next domain exchange to do it.
-        if (getOptions().hydro.enabled) {
+        if (opts.hydro.enabled) {
             particlesResolveWithSphParticles();
         }
 #endif
@@ -255,7 +256,8 @@ void groupTreeSetActive(TreeId id, bool b) {
 
 /// Reserve the next group-tree allocator block and fail if the node arena is exhausted.
 void GroupTreeAllocator::reset() {
-    int const treeCacheLineSize = getOptions().compute.treeCacheLineSize;
+    auto const& opts = getOptions();
+    int const treeCacheLineSize = opts.compute.treeCacheLineSize;
     next_ = (nextId += treeCacheLineSize);
     last_ = std::min(next_ + treeCacheLineSize, (int) nodes.size());
     if (next_ >= nodes.size()) {
@@ -324,7 +326,8 @@ GroupTreeNode const* groupTreeGetNode(TreeId id) {
 
 /// Read a shared remote node cache line, refreshing activity flags for the current epoch.
 static GroupTreeNode const* groupTreeCacheRead(TreeId id) {
-    int const lineSize = getOptions().compute.treeCacheLineSize;
+    auto const& opts = getOptions();
+    int const lineSize = opts.compute.treeCacheLineSize;
     TreeId lineId;
     GroupTreeNode const* ptr;
     lineId.proc = id.proc;
@@ -389,7 +392,8 @@ static GroupTreeNode const* groupTreeCacheRead(TreeId id) {
 
 /// Pack a bounded local node cache line for remote retrieval.
 static Vector<GroupTreeNode> groupTreeFetchCacheLine(int index) {
-    int const lineSize = getOptions().compute.treeCacheLineSize;
+    auto const& opts = getOptions();
+    int const lineSize = opts.compute.treeCacheLineSize;
     Vector<GroupTreeNode> line;
     line.reserve(lineSize);
     ALWAYS_ASSERT(index >= 0 && size_t(index) < nodes.size());
@@ -403,7 +407,8 @@ static Vector<GroupTreeNode> groupTreeFetchCacheLine(int index) {
 
 /// Pack only the previous-pass activity flags for a cached node line.
 static Vector<unsigned> groupTreeRefreshCacheLine(int index) {
-    int const lineSize = getOptions().compute.treeCacheLineSize;
+    auto const& opts = getOptions();
+    int const lineSize = opts.compute.treeCacheLineSize;
     Vector<unsigned> line;
     line.reserve(lineSize);
     ALWAYS_ASSERT(index >= 0 && size_t(index) < nodes.size());
@@ -417,7 +422,8 @@ static Vector<unsigned> groupTreeRefreshCacheLine(int index) {
 
 /// Snapshot node activity and advance remote-cache epochs across the locality tree.
 void groupTreeIncCacheEpoch() {
-    ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
+    auto const& opts = getOptions();
+    ParticleInteger const lineSize = opts.compute.particleCacheLineSize;
     Vector<hpx::future<void>> futs;
     auto const children = hpxChildren();
     for (auto const& c : children) {

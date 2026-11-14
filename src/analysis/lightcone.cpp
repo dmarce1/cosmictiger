@@ -122,6 +122,7 @@ namespace detail {
 // weighted by its mass; with hydro off the dark-matter mass is one.
 template <class EntryLists>
 size_t lcAddParticleEntries(EntryLists const& entries) {
+    auto const& opts = getOptions();
     int const start = particleBuffer.size();
     Vector<size_t> counts(entries.size() + 1);
     size_t count = 0;
@@ -136,7 +137,7 @@ size_t lcAddParticleEntries(EntryLists const& entries) {
     int const numberOfThreads = hpxHardwareConcurrency();
     Vector<hpx::future<void>> futs;
     std::atomic<int> index(0);
-    size_t const npix = sqr((size_t) getOptions().lightcone.mapSize) * 12;
+    size_t const npix = sqr((size_t) opts.lightcone.mapSize) * 12;
     if (counts.back()) {
         auto const background = cosmology::simulationBackground(tauMax);
         futs.reserve(numberOfThreads);
@@ -183,8 +184,8 @@ size_t lcAddParticleEntries(EntryLists const& entries) {
     }
     // Different entry lists can contribute to the same pixel. Accumulate
     // after the workers finish so both CPU and CUDA lists avoid shared writes.
-    double const darkMatterMass = getOptions().initial.darkMatterMass;
-    double const gasMass = getOptions().initial.gasMass;
+    double const darkMatterMass = opts.initial.darkMatterMass;
+    double const gasMass = opts.initial.gasMass;
     for (size_t listIndex = 0; listIndex < entries.size(); listIndex++) {
         auto const& entryList = entries[listIndex];
         for (size_t entryIndex = 0; entryIndex < entryList.size(); entryIndex++) {
@@ -193,7 +194,7 @@ size_t lcAddParticleEntries(EntryLists const& entries) {
                 sqrtf(sqr(entry.x.toDouble(), entry.y.toDouble(), entry.z.toDouble()));
             ALWAYS_ASSERT(entry.pix >= 0 && size_t(entry.pix) < npix);
             double const mass = entry.type == kDarkMatterType ? darkMatterMass : gasMass;
-            epochMap.add(entry.pix, mass / sqr(radius), getOptions().lightcone.mapSize);
+            epochMap.add(entry.pix, mass / sqr(radius), opts.lightcone.mapSize);
         }
     }
     return 0;
@@ -219,6 +220,7 @@ int lcNside() {
 /// Write buffered particles, group counters, epoch, and the accumulated HEALPix map to a
 /// checkpoint.
 void lcSave(FILE* fp) {
+    auto const& opts = getOptions();
     size_t const sz = particleBuffer.size();
     size_t const mapExtension = std::numeric_limits<size_t>::max();
     FWRITE(&sz, sizeof(size_t), 1, fp);
@@ -226,12 +228,13 @@ void lcSave(FILE* fp) {
     FWRITE(&epoch, sizeof(int), 1, fp);
     FWRITE(&mapExtension, sizeof(size_t), 1, fp);
     FWRITE(&groupIdCounter, sizeof(LightconeGroup), 1, fp);
-    epochMap.save(fp, getOptions().lightcone.mapSize);
+    epochMap.save(fp, opts.lightcone.mapSize);
 }
 
 /// Restore lightcone buffers and epoch state, handling legacy checkpoints without an
 /// accumulated map.
 void lcLoad(FILE* fp) {
+    auto const& opts = getOptions();
     size_t sz;
     FREAD(&sz, sizeof(size_t), 1, fp);
     particleBuffer.resize(sz);
@@ -241,7 +244,7 @@ void lcLoad(FILE* fp) {
     FREAD(&groupIdCounter, sizeof(LightconeGroup), 1, fp);
     epochMap.clear();
     if (sz == std::numeric_limits<size_t>::max()) {
-        epochMap.load(fp, getOptions().lightcone.mapSize);
+        epochMap.load(fp, opts.lightcone.mapSize);
     } else {
         std::cout << "Legacy lightcone checkpoint has no accumulated HEALPix map; "
                      "this epoch's pre-checkpoint contributions are unavailable.\n"
@@ -252,6 +255,7 @@ void lcLoad(FILE* fp) {
 /// Reduce the largest buffered count; rank zero decides whether it exceeds the flush
 /// threshold.
 size_t lcTimeToFlush(double tau, double requestedTauMax) {
+    auto const& opts = getOptions();
     Vector<hpx::future<size_t>> futs;
     for (auto const& c : hpxChildren()) {
         futs.push_back(hpx::async<LcTimeToFlushAction>(c, tau, requestedTauMax));
@@ -262,7 +266,7 @@ size_t lcTimeToFlush(double tau, double requestedTauMax) {
     }
     if (hpxRank() == 0) {
         tauMax = requestedTauMax;
-        size_t const particlesPerRank = darkMatterReferenceCount(getOptions()) / hpxSize();
+        size_t const particlesPerRank = darkMatterReferenceCount(opts) / hpxSize();
         /*		double factor = 1.0 / 8.0;
          double tm = tau / tau_max * 64;
          if (tm > 63.0) {
@@ -281,6 +285,7 @@ size_t lcTimeToFlush(double tau, double requestedTauMax) {
 /// Finalize buffered lightcone groups, write compressed/catalogue output and the epoch map,
 /// then advance the epoch.
 void lcParts2groups(double a, double linkingLength, int ti) {
+    auto const& opts = getOptions();
     Vector<hpx::future<void>> futs;
     for (auto const& c : hpxChildren()) {
         futs.push_back(hpx::async<LcParts2groupsAction>(c, a, linkingLength, ti));
@@ -354,21 +359,21 @@ void lcParts2groups(double a, double linkingLength, int ti) {
             "analysis.lightcone.findSubgroups")));
     }
     hpx::wait_all(futs.begin(), futs.end());
-    std::string filename = getOptions().lightcone.directory + "/lc.groups." +
-        std::to_string(epoch) + "." + std::to_string(hpxRank());
+    std::string filename = opts.lightcone.directory + "/lc.groups." + std::to_string(epoch) + "." +
+        std::to_string(hpxRank());
     for (auto& future : futs) {
         // Encoding failures in a worker must prevent catalogue publication.
         future.get();
     }
     rockstarWriteCatalogue(filename, recs.data(), recs.size());
-    std::string const mapFilename = getOptions().lightcone.directory + "/lc.healpix." +
+    std::string const mapFilename = opts.lightcone.directory + "/lc.healpix." +
         std::to_string(epoch) + "." + std::to_string(hpxRank());
     UniqueFile mapFile(fopen(mapFilename.c_str(), "wb"));
     if (!mapFile) {
         throw std::ios_base::failure(
             std::format("Unable to open {} for writing", mapFilename.c_str()));
     }
-    epochMap.writeMap(mapFile.get(), getOptions().lightcone.mapSize);
+    epochMap.writeMap(mapFile.get(), opts.lightcone.mapSize);
     if (fclose(mapFile.release()) != 0) {
         throw std::ios_base::failure(std::format("Unable to close {}", mapFilename.c_str()));
     }
@@ -646,14 +651,15 @@ void lcFindNeighborsLocal(
 
 /// Construct neighbor lists for owned pixels using their adjacent HEALPix pixel trees.
 size_t lcFindNeighbors() {
+    auto const& opts = getOptions();
     auto& treeMap = *treeMapPtr;
     Vector<hpx::future<void>> futs;
     for (auto const& c : hpxChildren()) {
         futs.push_back(hpx::async<LcFindNeighborsAction>(c));
     }
     size_t rc = 0;
-    double const linkingLength = getOptions().lightcone.linkingLength *
-        pow(darkMatterReferenceCount(getOptions()), -1.0 / kDimensions);
+    double const linkingLength =
+        opts.lightcone.linkingLength * pow(darkMatterReferenceCount(opts), -1.0 / kDimensions);
     for (int pix = myPixRange.first; pix < myPixRange.second; pix++) {
         futs.push_back(hpx::async(hpx::annotated_function(
             [pix, linkingLength, &treeMap]() {
@@ -678,18 +684,19 @@ size_t lcFindNeighbors() {
 /// Run one distributed CPU or CUDA label-propagation pass and return its changed-leaf
 /// count.
 size_t lcFindGroups() {
+    auto const& opts = getOptions();
     auto& treeMap = *treeMapPtr;
     Vector<hpx::future<size_t>> futs;
     for (auto const& c : hpxChildren()) {
         futs.push_back(hpx::async<LcFindGroupsAction>(c));
     }
     size_t rc = 0;
-    double const linkingLength = getOptions().lightcone.linkingLength *
-        pow(darkMatterReferenceCount(getOptions()), -1.0 / kDimensions);
+    double const linkingLength =
+        opts.lightcone.linkingLength * pow(darkMatterReferenceCount(opts), -1.0 / kDimensions);
     prepareLightconeGroupIteration(leafNodes, treeMap, myPixRange);
 
 #ifdef USE_CUDA
-    if (getOptions().lightcone.cuda) {
+    if (opts.lightcone.cuda) {
         rc = cudaLightcone(leafNodes, particleMapPtr, treeMapPtr, &groupIdCounter, linkingLength,
             hpxRank(), hpxSize());
     } else {
@@ -928,13 +935,14 @@ static Vector<int> pixNeighbors(int pix) {
 /// Choose a power-of-two pixel resolution constrained by available workers and the current
 /// shell/linking scale.
 static int computeNside(double tau) {
+    auto const& opts = getOptions();
     double nside = std::sqrt(8.0 * hpxHardwareConcurrency() * hpxSize() / 12.0);
     // lcInit is repeated immediately before a flush, so this is the shell
     // inner radius in the same box units as the linking length.
     double const w0 = std::max(tauMax - tau, 0.0);
     nside = std::min(nside,
-        (pow(darkMatterReferenceCount(getOptions()), 1.0 / kDimensions) * std::sqrt(3) /
-            getOptions().lightcone.linkingLength / 2.0 * w0));
+        (pow(darkMatterReferenceCount(opts), 1.0 / kDimensions) * std::sqrt(3) /
+            opts.lightcone.linkingLength / 2.0 * w0));
     int result = 1;
     while (result < nside) {
         result *= 2;
@@ -953,10 +961,11 @@ void lcInit(double tau, double requestedTauMax) {
 /// Initialize per-locality pixel storage, boundary ownership, and the immutable background
 /// trajectory.
 static void lcInitDecomposition(double tau, double requestedTauMax, int nside) {
+    auto const& opts = getOptions();
     // Construct once on every locality, including after restart; repeated flushes
     // retain the same immutable dense trajectory.
     cosmology::simulationBackground(requestedTauMax);
-    std::filesystem::create_directories(getOptions().lightcone.directory);
+    std::filesystem::create_directories(opts.lightcone.directory);
     Vector<hpx::future<void>> futs;
     for (auto const& c : hpxChildren()) {
         futs.push_back(hpx::async<LcInitAction>(c, tau, requestedTauMax, nside));
