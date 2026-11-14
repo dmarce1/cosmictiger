@@ -3,6 +3,7 @@
   "max_local_degree": 6,
   "independent_m2l_ratios": false,
   "quadrupole_trace": true,
+  "dipole_free": false,
   "description": "Static emitted arithmetic counts. Conventional FMA=2; weighted FMA=1. Distance geometry is evaluated inside direct kernels and excluded from DAG counts.",
   "kernels": [
     {

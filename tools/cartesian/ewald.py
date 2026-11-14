@@ -18,7 +18,7 @@ def half(alpha):
     return product(*(range(n // 2 + 1) for n in alpha))
 
 
-def generate(minDegree, maxDegree, algebra, quadrupoleTrace=True):
+def generate(minDegree, maxDegree, algebra, quadrupoleTrace=True, dipoleFree=False):
     if minDegree != maxDegree:
         raise ValueError('Cartesian Ewald emission requires one build degree')
     p = minDegree
@@ -134,7 +134,8 @@ def generate(minDegree, maxDegree, algebra, quadrupoleTrace=True):
     green += ['}', '}']
 
     g = algebra.Dag()
-    source = {a: g.symbol(f'M[{algebra.index(a)}]') for n in range(p) for a in algebra.indices(n)}
+    source = {a: value for n in range(p)
+              for a, value in algebra.sourceComponents(g, 'M', n, False, dipoleFree).items()}
     deriv = {a: g.symbol(f'G[{algebra.index(a)}]') for a in indices}
     localIndices = list(indices)
     if quadrupoleTrace:

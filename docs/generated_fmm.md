@@ -12,6 +12,31 @@ Degree d uses source degree d-1 and internal FMM order d+1. Runtime order
 selection is removed. Checkpoints retain the internal order for compatibility
 validation. A different degree requires another build.
 
+`COSMICTIGER_DIPOLE_FREE=ON` selects center-of-mass tree multipoles and generates
+P2M/M2M kernels without rank-one output and M2M/M2L/M2P/periodic M2L kernels
+without source dipole terms. The default is `OFF`, retaining geometric center
+selection and general kernels. Local expansions still retain their rank-one
+coefficients, which represent the field gradient. Coefficient storage and
+checkpoint layouts stay unchanged; the three source dipole slots remain zero
+when constructing a dipole-free tree. External kernel callers must initialize
+their accumulators and supply multipoles centered at their centers of mass.
+
+Leaves compute mass-weighted centers from native fixed-point differences;
+parents combine child masses and centers. A double-precision residual travels
+with each tree-build return so fixed-point center rounding does not accumulate
+up the tree. Radii enclose particles about the stored center and round outward
+when narrowed to float. Centers are limited by the selected fixed32/fixed64
+position grid; the corresponding residual physical dipole is omitted, rather
+than exactly representable at arbitrary mass-weighted coordinates. M2M also
+omits the dipole of an individual translated child; its accumulated result is
+valid as a source at the parent center of mass.
+
+The generator exposes the same choice as `--dipole-free` / `--no-dipole-free`.
+Builds own their generated mode, reported by `cartesian::kDipoleFree` and the
+`dipole_free` field in `operation_counts.json`. Reconfiguring a build in either
+direction regenerates its kernels. The checked-in references use the default
+mode.
+
 Generated build declarations live under `generated_fmm/cosmictiger/gravity/kernels`
 and take precedence over the checked-in default-degree reference headers.
 Build implementations live under `generated_fmm/src/gravity/kernels`.

@@ -66,7 +66,7 @@ def p2l(A,P,quadrupoleTrace=True):
     return finish(A,g,outputs,signature,'P2L',P)
 
 
-def m2p(A,P,quadrupoleTrace=True):
+def m2p(A,P,quadrupoleTrace=True,dipoleFree=False):
     g=A.Dag()
     invr=g.symbol('iR')
     u=[g.mul(g.symbol(x), invr) for x in ('dx','dy','dz')]
@@ -74,7 +74,7 @@ def m2p(A,P,quadrupoleTrace=True):
     weight=g.one; scalar=[]; radial=[]; vector=[[] for _ in range(A.NDIM)]
     for n in range(P+1):
         if n: weight=g.scale(g.mul(weight,invr),2*n-1)
-        M=A.sourceComponents(g, 'M', n, quadrupoleTrace)
+        M=A.sourceComponents(g, 'M', n, quadrupoleTrace, dipoleFree)
         if n==0:
             value=M[(0,0,0)]
         else:
@@ -104,7 +104,7 @@ def m2p(A,P,quadrupoleTrace=True):
     return finish(A,g,outputs,signature,'M2P',P)
 
 
-def p2m(A, order, quadrupoleTrace=True):
+def p2m(A, order, quadrupoleTrace=True, dipoleFree=False):
     """Store raw rank two when enabled and STF higher-rank particle moments."""
     g = A.Dag()
     displacement = [g.symbol(name) for name in ('dx', 'dy', 'dz')]
@@ -119,6 +119,11 @@ def p2m(A, order, quadrupoleTrace=True):
                 mass, A.horner(g, polynomial, displacement))
     if quadrupoleTrace and order >= 2:
         outputs['M.zz'] = g.mul(mass, g.mul(displacement[2], displacement[2]))
+    if dipoleFree:
+        # Build the full DAG first so higher ranks retain shared mass-coordinate
+        # products; only the emitted rank-one accumulations are removed.
+        for alpha in A.indices(1):
+            outputs.pop(f'M[{A.index(alpha)}]')
     signature = f'''template <class Real> CUDA_EXPORT void P2M(
     Multipole<Real, {order+2}>& M, Real mass, Vector3<Real> const& distance) {{
     Real const dx = distance[0];
@@ -168,12 +173,13 @@ def l2p(A, order, quadrupoleTrace=True):
     return finish(A, g, outputs, signature, 'L2P', order)
 
 
-def generateParticles(minOrder,maxOrder,algebra,quadrupoleTrace=True):
+def generateParticles(minOrder,maxOrder,algebra,quadrupoleTrace=True,dipoleFree=False):
     code=[]
     stats=[]
     for operation, args in [(p2m, (minOrder,)), (p2l, (maxOrder,)),
                             (m2p, (minOrder,)), (l2p, (maxOrder,))]:
-        text, counts = operation(algebra, *args, quadrupoleTrace)
+        options = (dipoleFree,) if operation in (p2m, m2p) else ()
+        text, counts = operation(algebra, *args, quadrupoleTrace, *options)
         code.append(text)
         stats.append(counts)
     return code,stats

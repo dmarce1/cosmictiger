@@ -505,14 +505,27 @@ endif()
 file(GLOB_RECURSE cosmictiger_fmm_generator_sources CONFIGURE_DEPENDS
     ${PROJECT_SOURCE_DIR}/tools/cartesian/*.py
     ${PROJECT_SOURCE_DIR}/tools/fmm/*.py)
+if(COSMICTIGER_DIPOLE_FREE)
+    set(cosmictiger_fmm_dipole_flag --dipole-free)
+else()
+    set(cosmictiger_fmm_dipole_flag --no-dipole-free)
+endif()
+# Reconfigure in either direction must regenerate kernels with Make as well as Ninja.
+file(GENERATE OUTPUT ${COSMICTIGER_GENERATED_INCLUDE_DIR}/generation_config.txt
+    CONTENT "${COSMICTIGER_EXPANSION_DEGREE};${COSMICTIGER_DIPOLE_FREE}\n")
 add_custom_command(OUTPUT ${COSMICTIGER_GENERATED_FMM_FILES}
     COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/generate_fmm.py
         --output-dir ${COSMICTIGER_GENERATED_FMM_DIR}
         --source-dir ${COSMICTIGER_GENERATED_FMM_SOURCE_DIR}
         --instrumentation-dir ${COSMICTIGER_GENERATED_FMM_INSTRUMENTATION_DIR}
         --degree ${COSMICTIGER_EXPANSION_DEGREE}
+        ${cosmictiger_fmm_dipole_flag}
+    # The generator preserves identical files. Mark all outputs complete so Make
+    # does not regenerate unchanged local operators for every consumer target.
+    COMMAND ${CMAKE_COMMAND} -E touch_nocreate ${COSMICTIGER_GENERATED_FMM_FILES}
     DEPENDS ${PROJECT_SOURCE_DIR}/tools/generate_fmm.py
         ${cosmictiger_fmm_generator_sources}
+        ${COSMICTIGER_GENERATED_INCLUDE_DIR}/generation_config.txt
         ${PROJECT_SOURCE_DIR}/tools/cartesian/generated_notice.txt
         ${PROJECT_SOURCE_DIR}/.clang-format
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
@@ -1687,7 +1700,8 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             --output-dir ${COSMICTIGER_GENERATED_FMM_DIR}
             --source-dir ${COSMICTIGER_GENERATED_FMM_SOURCE_DIR}
             --instrumentation-dir ${COSMICTIGER_GENERATED_FMM_INSTRUMENTATION_DIR}
-            --degree ${COSMICTIGER_EXPANSION_DEGREE})
+            --degree ${COSMICTIGER_EXPANSION_DEGREE}
+            ${cosmictiger_fmm_dipole_flag})
         set_tests_properties(generated_fmm_current PROPERTIES
             TIMEOUT 180 PROCESSORS 1 LABELS "fmm;generator")
         add_test(NAME generated_fmm_constants COMMAND ${Python3_EXECUTABLE}
