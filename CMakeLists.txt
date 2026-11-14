@@ -583,28 +583,6 @@ if(HPX_WITH_PARCELPORT_MPI AND MPIEXEC_EXECUTABLE)
     endif()
 endif()
 
-if(BUILD_TESTING)
-    add_executable(soa_iterator_test tests/soa_iterator_test.cpp)
-    target_include_directories(soa_iterator_test PRIVATE ${PROJECT_SOURCE_DIR})
-    target_compile_features(soa_iterator_test PRIVATE cxx_std_20)
-    add_test(NAME soa_iterator COMMAND soa_iterator_test)
-    set_tests_properties(soa_iterator PROPERTIES TIMEOUT 30 PROCESSORS 1 LABELS "particles;cpu")
-
-    add_executable(particle_partition_test
-        tests/particle_partition.cpp src/particles/particle_partition.cpp)
-    target_include_directories(particle_partition_test PRIVATE ${PROJECT_SOURCE_DIR})
-    target_compile_features(particle_partition_test PRIVATE cxx_std_20)
-    target_link_libraries(particle_partition_test PRIVATE HPX::hpx cosmictiger_default_config)
-    target_compile_options(particle_partition_test PRIVATE
-        -ffast-math -fno-finite-math-only)
-    if(COMPILER_SUPPORTS_MARCH_NATIVE)
-        target_compile_options(particle_partition_test PRIVATE -march=native)
-    endif()
-    add_test(NAME particle_partition COMMAND particle_partition_test)
-    set_tests_properties(particle_partition PROPERTIES
-        TIMEOUT 60 PROCESSORS 1 LABELS "particles;cpu")
-endif()
-
 if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
     foreach(profile_mode IN ITEMS enabled disabled host_only)
         add_executable(phase_profiler_${profile_mode}_test

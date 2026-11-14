@@ -1530,6 +1530,29 @@ ParticleInteger particlesSort(Pair<ParticleInteger> rng, double xm, int xdim) {
     return particlesPartition(rng, Position(xm), xdim);
 }
 
+/// Partition particles in place around a stored coordinate while keeping all particle
+/// fields aligned.
+ParticleInteger particlesPartition(Pair<ParticleInteger> rng, Position xmid, int xdim) {
+    ParticleInteger begin = rng.first;
+    ParticleInteger end = rng.second;
+    ParticleInteger lo = begin;
+    ParticleInteger hi = end;
+    auto& xptrDim = particlesX[xdim];
+    while (lo < hi) {
+        if (xptrDim[lo] >= xmid) {
+            while (lo != hi) {
+                hi--;
+                if (xptrDim[hi] < xmid) {
+                    particlesSwap(hi, lo);
+                    break;
+                }
+            }
+        }
+        lo++;
+    }
+    return hi;
+}
+
 /// Return the active suffix selected by the current rung traversal.
 Pair<ParticleInteger, ParticleInteger> particlesCurrentRange() {
     Pair<ParticleInteger, ParticleInteger> rc;
