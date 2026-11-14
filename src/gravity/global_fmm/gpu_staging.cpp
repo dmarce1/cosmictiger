@@ -7,6 +7,7 @@
  */
 
 #include <algorithm>
+#include <exception>
 #include <memory>
 #include <mutex>
 #include <set>
@@ -17,7 +18,10 @@
 #include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/gravity/global_fmm/execution.hpp>
 #include <cosmictiger/gravity/global_fmm/gpu_staging.hpp>
+#include <cosmictiger/gravity/global_fmm/measurement.hpp>
+#include <cosmictiger/gravity/global_fmm/source_forest.hpp>
 #include <cosmictiger/gravity/kick_workspace.hpp>
+#include <cosmictiger/gravity/tree_build.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
@@ -56,8 +60,8 @@ bool mortonCompare(Vector3<Position> a, Vector3<Position> b) {
 KickReturn globalFmmStageGpu(KickParameters params, Vector<KickWorkitem> workitems,
     std::unordered_set<TreeId, KickWorkspaceTreeIdHash> const& treeIds, detail::FmmForceOutput) {
 #ifdef USE_CUDA
+    FmmMeasurementScope measurementTimer(FmmMeasurementPhase::GpuStaging);
     cudaSetDevice();
-    auto const treeNodesRemoteBegin = treeNodesNextIndex();
     if (workitems.size() == 0) {
         kickSetRc(KickReturn());
         return KickReturn();
@@ -88,6 +92,7 @@ KickReturn globalFmmStageGpu(KickParameters params, Vector<KickWorkitem> workite
     Vector<Vector<TreeId>> idsByDepth(kMaxDepth);
     int numberOfThreads = hpxSize() == 1 ? 1 : std::max(1, (int) hpxHardwareConcurrency() / 2);
     futs1.reserve(numberOfThreads);
+    std::exception_ptr groupingFailure;
     try {
         for (int proc = 0; proc < numberOfThreads; proc++) {
             futs1.push_back(hpx::async(
@@ -107,13 +112,19 @@ KickReturn globalFmmStageGpu(KickParameters params, Vector<KickWorkitem> workite
                     .share());
         }
         hpx::wait_all(futs1.begin(), futs1.end());
+        for (auto& future : futs1) {
+            future.get();
+        }
     } catch (...) {
+        groupingFailure = std::current_exception();
+    }
+    if (groupingFailure) {
         for (auto& future : futs1) {
             if (future.valid()) {
                 future.wait();
             }
         }
-        throw;
+        std::rethrow_exception(groupingFailure);
     }
     gpuPhase.next(profile::WorkPhase::KickGpuCollectSources);
     struct ParticleRequest {
@@ -136,11 +147,13 @@ KickReturn globalFmmStageGpu(KickParameters params, Vector<KickWorkitem> workite
     size_t const maximumParticlesPerRequest = 64 * 1024 * 1024;
     Vector<hpx::future<Vector<TreeId>>> futs0;
     Vector<TreeId> trees;
-    TreeNode* treeNodes = treeData();
+    std::unique_ptr<TreeStagingArena> stagedTree;
+    TreeNode* treeNodes = nullptr;
     std::function<void(int, ParticleInteger)> adjustParticleReferences;
     hpx::future<void> sortFuture;
     futs0.reserve(numberOfThreads);
     futs2.reserve(std::max(numberOfThreads, int(hpxHardwareConcurrency())));
+    std::exception_ptr stagingFailure;
     try {
         for (int depth = 0; depth < kMaxDepth; depth++) {
             auto const& ids = idsByDepth[depth];
@@ -156,7 +169,7 @@ KickReturn globalFmmStageGpu(KickParameters params, Vector<KickWorkitem> workite
                                 TreeNode const* node = treeGetNode(ids[i]);
                                 addTreeNode(trees, ids[i]);
                                 int const rank = node->processRange.first;
-                                if (rank != hpxRank()) {
+                                if (rank != hpxRank() && node->numberOfParticles() != 0) {
                                     auto const range = node->particleRange;
                                     auto const thisCount = range.second - range.first;
                                     GlobalParticleRange gpr;
@@ -204,29 +217,62 @@ KickReturn globalFmmStageGpu(KickParameters params, Vector<KickWorkitem> workite
             futs0.resize(0);
         }
         gpuPhase.next(profile::WorkPhase::KickGpuRemap);
+        size_t const remoteNodeCount = std::count_if(
+            trees.begin(), trees.end(), [](TreeId id) { return id.proc != hpxRank(); });
+        stagedTree = std::make_unique<TreeStagingArena>(remoteNodeCount);
+        treeNodes = stagedTree->data();
+        auto const treeNodesRemoteBegin = stagedTree->remoteBegin();
         for (int i = 0; i < trees.size(); i++) {
             if (trees[i].proc != hpxRank()) {
-                treeMap[trees[i]] = treeAddRemote(*treeGetNode(trees[i]));
+                treeMap[trees[i]] = stagedTree->appendRemote(*treeGetNode(trees[i]));
             }
         }
+        auto const treeNodesRemoteEnd = stagedTree->size();
         futs1.resize(0);
         numberOfThreads = std::max(1, (int) hpxHardwareConcurrency());
         futs1.reserve(particleRequests.size());
+        // Continuations copy this closure: it leaves scope before failure cleanup
+        // drains them, while its referenced particleMap remains alive there.
+        auto const stageImported = [&particleMap](
+                                       int rank, Vector<Pair<ParticleInteger>> const& ranges) {
+            auto const& opts = getOptions();
+            for (auto const& range : ranges) {
+                GlobalParticleRange const globalRange{rank, range};
+                auto const localRange = particleMap.at(globalRange);
+                TreeNode source{};
+                source.processRange = {rank, rank + 1};
+                source.particleRange = range;
+                if (!treeSourceForestReadParticleRange(source, &particlesPos(kXi, localRange.first),
+                        &particlesPos(kYi, localRange.first), &particlesPos(kZi, localRange.first),
+                        opts.hydro.enabled ? &particlesType(localRange.first) : nullptr, nullptr,
+                        0)) {
+                    return false;
+                }
+            }
+            return true;
+        };
         for (auto i = particleRequests.begin(); i != particleRequests.end(); i++) {
             int const rank = i->first;
             // Retain the predecessor if continuation attachment throws. A plain
             // future::then invalidates its input even on that exception path.
             hpx::shared_future<void> fut = hpx::make_ready_future().share();
+            std::exception_ptr continuationFailure;
             try {
                 for (int j = 0; j < i->second.data.size(); j++) {
                     size_t const count = i->second.data[j].size();
                     if (count) {
                         fut = fut.then(hpx::annotated_function(
-                                           [rank, count, &particleMap, i, j](
+                                           [rank, count, &particleMap, stageImported, i, j](
                                                hpx::shared_future<void> fut) {
                                                auto const& opts = getOptions();
                                                fut.get();
                                                auto const& ranges = i->second.data[j];
+                                               if (treeSourceForestImportsEnabled()) {
+                                                   if (stageImported(rank, ranges)) {
+                                                       return;
+                                                   }
+                                                   treeSourceForestCountFallback();
+                                               }
                                                auto const data = particlesGet(rank, ranges).get();
                                                ParticleInteger index = 0;
                                                for (int k = 0; k < ranges.size(); k++) {
@@ -269,17 +315,21 @@ KickReturn globalFmmStageGpu(KickParameters params, Vector<KickWorkitem> workite
                 }
                 futs1.push_back(std::move(fut));
             } catch (...) {
+                continuationFailure = std::current_exception();
+            }
+            if (continuationFailure) {
                 if (fut.valid()) {
                     fut.wait();
                 }
-                throw;
+                std::rethrow_exception(continuationFailure);
             }
         }
         for (int proc = 0; proc < numberOfThreads; proc++) {
             futs2.push_back(hpx::async(HPX_PRIORITY_HI,
                 hpx::annotated_function(
-                    [proc, numberOfThreads, &treeMap, &treeNodes, treeNodesRemoteBegin]() {
-                        for (int i = treeNodesRemoteBegin + proc; i < treeNodesNextIndex();
+                    [proc, numberOfThreads, &treeMap, &treeNodes, treeNodesRemoteBegin,
+                        treeNodesRemoteEnd]() {
+                        for (size_t i = treeNodesRemoteBegin + proc; i < treeNodesRemoteEnd;
                             i += numberOfThreads) {
                             if (treeNodes[i].children[kLeftChild].index != -1) {
                                 ASSERT(treeMap.find(treeNodes[i].children[kLeftChild]) !=
@@ -296,6 +346,9 @@ KickReturn globalFmmStageGpu(KickParameters params, Vector<KickWorkitem> workite
                     "gravity.gpuStage.remapTreeNodes")));
         }
         hpx::wait_all(futs2.begin(), futs2.end());
+        for (auto& future : futs2) {
+            future.get();
+        }
         futs2.resize(0);
         adjustParticleReferences = [&adjustParticleReferences, &treeNodes](
                                        int index, ParticleInteger offset) -> void {
@@ -354,6 +407,9 @@ KickReturn globalFmmStageGpu(KickParameters params, Vector<KickWorkitem> workite
                     "gravity.gpuStage.remapWorkitems")));
         }
         hpx::wait_all(futs2.begin(), futs2.end());
+        for (auto& future : futs2) {
+            future.get();
+        }
         futs2.resize(0);
         gpuPhase.next(profile::WorkPhase::KickGpuSortFetchWait);
         sortFuture = hpx::sort(annotatedParallelPolicy("gravity.gpuStage.sortWorkitems"),
@@ -363,11 +419,18 @@ KickReturn globalFmmStageGpu(KickParameters params, Vector<KickWorkitem> workite
             });
         hpx::wait_all(futs3.begin(), futs3.end());
         hpx::wait_all(futs1.begin(), futs1.end());
+        for (auto& future : futs3) {
+            future.get();
+        }
+        for (auto& future : futs1) {
+            future.get();
+        }
         sortFuture.get();
         gpuPhase.next(profile::WorkPhase::KickGpuMemoryAdvice);
-        tree2Gpu();
+        stagedTree->adviseGpu();
         particlesMemadviseGpu();
         gpuPhase.stop();
+        measurementTimer.stop();
         auto const kr = cudaExecuteKicks(params, &particlesPos(kXi, 0), &particlesPos(kYi, 0),
             &particlesPos(kZi, 0), treeNodes, std::move(workitems), {});
         profile::ScopedWork cleanupPhase(profile::WorkPhase::KickGpuCleanup, profileEnabled);
@@ -376,27 +439,28 @@ KickReturn globalFmmStageGpu(KickParameters params, Vector<KickWorkitem> workite
         kickSetRc(kr);
         return kr;
     } catch (...) {
-        gpuPhase.stop();
-        profile::ScopedWork cleanupPhase(profile::WorkPhase::KickGpuCleanup, profileEnabled);
-        // All referents of these tasks are still in scope. Waiting on valid
-        // futures joins work without rethrowing the task's stored exception.
-        auto const join = [](auto& futures) {
-            for (auto& future : futures) {
-                if (future.valid()) {
-                    future.wait();
-                }
-            }
-        };
-        join(futs0);
-        join(futs1);
-        join(futs2);
-        join(futs3);
-        if (sortFuture.valid()) {
-            sortFuture.wait();
-        }
-        particlesResize(originalParticleCount);
-        throw;
+        stagingFailure = std::current_exception();
     }
+    gpuPhase.stop();
+    profile::ScopedWork cleanupPhase(profile::WorkPhase::KickGpuCleanup, profileEnabled);
+    // All referents remain alive. Wait outside the catch handler because HPX
+    // may resume this task on a different native thread after suspension.
+    auto const join = [](auto& futures) {
+        for (auto& future : futures) {
+            if (future.valid()) {
+                future.wait();
+            }
+        }
+    };
+    join(futs0);
+    join(futs1);
+    join(futs2);
+    join(futs3);
+    if (sortFuture.valid()) {
+        sortFuture.wait();
+    }
+    particlesResize(originalParticleCount);
+    std::rethrow_exception(stagingFailure);
 #else
     throw std::runtime_error("GPU gravity requested in a build without CUDA");
     return {};

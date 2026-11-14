@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <format>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -23,9 +24,11 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/gravity/fmm_types.hpp>
+#include <cosmictiger/gravity/geometric_tree_geometry.hpp>
 #include <cosmictiger/gravity/global_fmm/distributed_tree.hpp>
 #include <cosmictiger/gravity/tree.hpp>
 #include <cosmictiger/gravity/tree_build.hpp>
+#include <cosmictiger/gravity/tree_multipole.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/particles.hpp>
@@ -37,6 +40,181 @@ void requireFmmTree(bool condition, char const* message) {
     if (!condition) {
         throw std::runtime_error(std::string("FMM tree regression: ") + message);
     }
+}
+
+void verifyGeometricNode(TreeId id, int depth) {
+    auto const* node = treeGetNode(id);
+    requireFmmTree(node->depth == depth, "geometric node depth mismatch");
+    long double maximumDistance = 0;
+    for (ParticleInteger i = node->particleRange.first; i < node->particleRange.second; ++i) {
+        long double squared = 0;
+        for (int axis = 0; axis < 3; ++axis) {
+            auto const a = particlesPos(axis, i).raw();
+            auto const b = node->pos[axis].raw();
+            long double const delta =
+                std::ldexp(static_cast<long double>(a >= b ? a - b : b - a), -kPositionBits);
+            squared += delta * delta;
+        }
+        maximumDistance = std::max(maximumDistance, std::sqrt(squared));
+        requireFmmTree(
+            maximumDistance <= node->radius, "geometric radius does not enclose a source");
+    }
+    if (node->numberOfParticles() == 0) {
+        requireFmmTree(node->leaf && node->radius == 0, "empty geometric node is not terminal");
+    } else if (node->leaf) {
+        float const upper =
+            std::nextafter(float(maximumDistance), std::numeric_limits<float>::infinity());
+        requireFmmTree(node->radius <= upper, "geometric leaf radius is not measured tightly");
+    }
+    if (!node->leaf) {
+        auto const* left = treeGetNode(node->children[kLeftChild]);
+        auto const* right = treeGetNode(node->children[kRightChild]);
+        requireFmmTree(left->particleRange.first == node->particleRange.first &&
+                left->particleRange.second == right->particleRange.first &&
+                right->particleRange.second == node->particleRange.second,
+            "geometric children do not partition the parent range");
+        int const axis = kGeometricSplitAxes[depth % 18];
+        long double childBound = 0;
+        for (auto const* child : {left, right}) {
+            if (child->numberOfParticles() != 0) {
+                auto const a = child->pos[axis].raw();
+                auto const b = node->pos[axis].raw();
+                long double const offset =
+                    std::ldexp(static_cast<long double>(a >= b ? a - b : b - a), -kPositionBits);
+                childBound = std::max(childBound, offset + child->radius);
+            }
+        }
+        long double const factor =
+            depth % 3 == 0 ? std::sqrt(3.0L) / 2 : (depth % 3 == 1 ? 0.75L : std::sqrt(6.0L) / 4);
+        long double const expectedRadius = std::min(childBound, std::ldexp(factor, -depth / 3));
+        requireFmmTree(node->radius >= expectedRadius &&
+                node->radius <=
+                    std::nextafter(float(expectedRadius), std::numeric_limits<float>::infinity()),
+            "geometric parent radius differs from the capped child recurrence");
+        for (ParticleInteger i = left->particleRange.first; i < left->particleRange.second; ++i) {
+            requireFmmTree(particlesPos(axis, i).raw() < node->pos[axis].raw(),
+                "left particle is not below the split");
+        }
+        for (ParticleInteger i = right->particleRange.first; i < right->particleRange.second; ++i) {
+            requireFmmTree(particlesPos(axis, i).raw() >= node->pos[axis].raw(),
+                "right particle is below the split");
+        }
+        verifyGeometricNode(node->children[kLeftChild], depth + 1);
+        verifyGeometricNode(node->children[kRightChild], depth + 1);
+    }
+}
+
+void verifyGeometricBuilder() {
+    auto options = getOptions();
+    options.compute.bucketSize = 4;
+    options.gravity.cuda = false;
+    options.gravity.smoothingLength = 0.001;
+    setOptions(options);
+    constexpr std::array<int, 18> expectedAxes{
+        0, 1, 2, 2, 1, 0, 2, 0, 1, 1, 0, 2, 1, 2, 0, 0, 2, 1};
+    GeometricTreeCell cell{};
+    std::array<double, 3> lower{};
+    std::array<double, 3> upper{1, 1, 1};
+    for (int depth = 0; depth < 18; ++depth) {
+        requireFmmTree(kGeometricSplitAxes[depth] == expectedAxes[depth], "split schedule changed");
+        int const axis = expectedAxes[depth];
+        double const midpoint = (lower[axis] + upper[axis]) / 2;
+        bool const right = depth % 3 == 1;
+        if (right) {
+            lower[axis] = midpoint;
+        } else {
+            upper[axis] = midpoint;
+        }
+        cell = geometricTreeChild(cell, right);
+        auto const box = geometricTreeBox(cell);
+        for (int dim = 0; dim < 3; ++dim) {
+            requireFmmTree(
+                geometricTreeCenter(cell, dim).toDouble() == (lower[dim] + upper[dim]) / 2,
+                "geometric center disagrees with midpoint construction");
+            if (!box.full(dim)) {
+                requireFmmTree(box.begin[dim].toDouble() == lower[dim] &&
+                        (upper[dim] == 1 ? box.end[dim].raw() == 0 :
+                                           box.end[dim].toDouble() == upper[dim]),
+                    "geometric box disagrees with midpoint construction");
+            }
+        }
+    }
+    GeometricTreeCell lastCell{};
+    for (int depth = 0; depth < kGeometricTreeMaxDepth; ++depth) {
+        lastCell = geometricTreeChild(lastCell, true);
+    }
+    auto const lastCuts = geometricTreeAxisCuts(kGeometricTreeMaxDepth);
+    auto const lastBox = geometricTreeBox(lastCell);
+    for (int axis = 0; axis < 3; ++axis) {
+        PositionInteger const expected =
+            PositionInteger{0} - (PositionInteger{1} << (kPositionBits - lastCuts[axis] - 1));
+        requireFmmTree(geometricTreeCenter(lastCell, axis).raw() == expected,
+            "deep geometric center lost fixed-point bits");
+        requireFmmTree(lastBox.end[axis].raw() == 0 && lastBox.extentTicks(axis) >= 1,
+            "deep geometric box does not cover the seam-side cell");
+    }
+    if constexpr (kPositionBits == 64) {
+        auto adjacentCell = lastCell;
+        --adjacentCell.coordinate[0];
+        auto const adjacentBox = geometricTreeBox(adjacentCell);
+        requireFmmTree(adjacentBox.begin[0] == lastBox.begin[0] &&
+                adjacentBox.end[0] == lastBox.end[0] &&
+                geometricTreeCenter(adjacentCell, 0) != geometricTreeCenter(lastCell, 0),
+            "sub-Fixed32 cells lost their distinct native identities");
+    }
+    particlesResize(8);
+    for (ParticleInteger i = 0; i < 8; ++i) {
+        particlesPos(0, i) = i == 0 ? 0.5 : 0.125 + 0.03125 * i;
+        particlesPos(1, i) = 0.25 + 0.015625 * i;
+        particlesPos(2, i) = 0.375;
+        particlesRung(i) = char(i % 2);
+    }
+    auto result = treeBuildGeometricLocal(TreeCreateParameters(1, 0.5), {0, 8});
+    verifyGeometricNode(result.root.id, 0);
+    requireFmmTree(
+        result.root.multi[0] == 8.0, "inactive owned sources were omitted from geometric moments");
+    auto const* root = treeGetNode(result.root.id);
+    for (int axis = 0; axis < 3; ++axis) {
+        requireFmmTree(root->pos[axis].raw() == Position(0.5).raw() && root->box.full(axis),
+            "geometric root is not the unit box");
+    }
+    SourceMultipoleBuffer direct;
+    treeComputeMultipole<kFmmOrder>(direct, {0, 8}, result.root.pos, fmmSourceView());
+    for (int i = 0; i < fmmMultipoleCoefficientCount(kFmmOrder); ++i) {
+        requireFmmTree(
+            std::abs(direct[i] - result.root.multi[i]) < 1.0e-9 * (1 + std::abs(direct[i])),
+            "geometric upward moments differ from direct P2M");
+    }
+    requireFmmTree(std::abs(direct[1]) + std::abs(direct[2]) + std::abs(direct[3]) > 0,
+        "geometric fixture has no dipole");
+
+    for (ParticleInteger i = 0; i < 8; ++i) {
+        for (int axis = 0; axis < 3; ++axis) {
+            particlesPos(axis, i) = 0.375;
+        }
+    }
+    result = treeBuildGeometricLocal(TreeCreateParameters(0, 0.5), {0, 8});
+    requireFmmTree(result.coincidentOverflowLeaves == 1, "coincident overflow was not recorded");
+    verifyGeometricNode(result.root.id, 0);
+    particlesResize(1);
+    result = treeBuildGeometricLocal(TreeCreateParameters(0, 0.5), {0, 1});
+    requireFmmTree(result.root.nodeCount > 1 && result.root.multi[0] > 0,
+        "single source did not reach the required periodic depth");
+    verifyGeometricNode(result.root.id, 0);
+    particlesResize(2);
+    for (int axis = 0; axis < 3; ++axis) {
+        particlesPos(axis, 1) = particlesPos(axis, 0);
+    }
+    particlesPos(0, 1).raw() += 1;
+    options.compute.bucketSize = 2;
+    setOptions(options);
+    result = treeBuildGeometricLocal(TreeCreateParameters(0, 0.5), {0, 2});
+    requireFmmTree(result.depthOverflowLeaves == 1, "depth overflow was not recorded");
+    verifyGeometricNode(result.root.id, 0);
+    particlesResize(0);
+    result = treeBuildGeometricLocal(TreeCreateParameters(0, 0.5), {0, 0});
+    requireFmmTree(
+        result.root.nodeCount == 1 && result.root.radius == 0, "empty geometric root is incorrect");
 }
 
 Vector3<Position> fmmTreePosition(int rank, int particle) {
@@ -370,6 +548,9 @@ void fmmTreeTest() {
     auto const empty = treeCreate(TreeCreateParameters(0, 0.5));
     detail::verifyTreeGeometry(empty.id, true);
     treeDestroy(true);
+    if (hpxSize() == 1) {
+        detail::verifyGeometricBuilder();
+    }
     std::cout << std::format("FMM tree regression passed ({:d} localities)\n", hpxSize())
               << std::flush;
 }

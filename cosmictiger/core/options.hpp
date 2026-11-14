@@ -299,6 +299,7 @@ struct BenchmarkScenario {
     std::string openingAngles{};
     int size{1};
     int repeats{3};
+    bool compareSourceForest{false};
 };
 
 // Options read only by the run.scenario problem of the same name.
@@ -498,6 +499,7 @@ struct Options {
         arc & scenario.benchmark.openingAngles;
         arc & scenario.benchmark.size;
         arc & scenario.benchmark.repeats;
+        arc & scenario.benchmark.compareSourceForest;
     }
 };
 

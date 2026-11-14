@@ -439,6 +439,14 @@ set_source_files_properties(src/gravity/error_cuda.cu PROPERTIES COMPILE_OPTIONS
 set_source_files_properties(src/particles/domain.cpp PROPERTIES
     COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
 
+# Geometric tree radii and Ewald thresholds rely on outward rounding.
+set_source_files_properties(src/gravity/geometric_tree_build.cpp PROPERTIES
+    COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
+set_source_files_properties(src/gravity/global_fmm/geometric_distributed_tree.cpp PROPERTIES
+    COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
+set_source_files_properties(src/gravity/global_fmm/source_forest.cpp PROPERTIES
+    COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
+
 # Each build owns one generated operator set. Distinct degree builds can coexist.
 set(COSMICTIGER_GENERATED_INCLUDE_DIR ${PROJECT_BINARY_DIR}/generated_fmm)
 set(COSMICTIGER_GENERATED_FMM_DIR ${COSMICTIGER_GENERATED_INCLUDE_DIR}/cosmictiger/gravity/kernels)
@@ -2574,6 +2582,17 @@ if(BUILD_TESTING AND COSMICTIGER_WITH_GRAVITY)
                 WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/tests/${regression}_mpi" LABELS "fmm;mpi")
         endif()
     endforeach()
+    if(cosmictiger_mpi_three_ranks)
+        file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/tests/fmmWalk_mpi_3")
+        add_test(NAME fmmWalk_mpi_3 COMMAND ${MPIEXEC_EXECUTABLE}
+            ${MPIEXEC_NUMPROC_FLAG} 3 ${MPIEXEC_PREFLAGS} $<TARGET_FILE:cosmictiger>
+            ${MPIEXEC_POSTFLAGS} --run.test=fmmWalk --run.darkMatterParticleCount=512
+            --hydro.enabled=false --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
+            --hpx:threads=1 --hpx:bind=none --hpx:localities=3
+            ${cosmictiger_mpi_transport_args})
+        set_tests_properties(fmmWalk_mpi_3 PROPERTIES TIMEOUT 300 PROCESSORS 3
+            WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/tests/fmmWalk_mpi_3" LABELS "fmm;mpi")
+    endif()
 endif()
 
 if(BUILD_TESTING AND COSMICTIGER_ENABLE_GRAVITY AND COSMICTIGER_WITH_CUDA)
@@ -2594,6 +2613,17 @@ if(BUILD_TESTING AND COSMICTIGER_ENABLE_GRAVITY AND COSMICTIGER_WITH_CUDA)
             ${cosmictiger_mpi_transport_args})
         set_tests_properties(fmmWalk_cuda_mpi PROPERTIES TIMEOUT 300 PROCESSORS 2
             WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/tests/fmmWalk_cuda_mpi" RESOURCE_LOCK cuda LABELS "fmm;cuda;mpi")
+    endif()
+    if(cosmictiger_mpi_three_ranks)
+        file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/tests/fmmWalk_cuda_mpi_3")
+        add_test(NAME fmmWalk_cuda_mpi_3 COMMAND ${MPIEXEC_EXECUTABLE}
+            ${MPIEXEC_NUMPROC_FLAG} 3 ${MPIEXEC_PREFLAGS} $<TARGET_FILE:cosmictiger>
+            ${MPIEXEC_POSTFLAGS} --run.test=fmmWalk --run.darkMatterParticleCount=512
+            --hydro.enabled=false --gravity.cuda=true --hydro.cuda=false --drift.cuda=false
+            --hpx:threads=1 --hpx:bind=none --hpx:localities=3
+            ${cosmictiger_mpi_transport_args})
+        set_tests_properties(fmmWalk_cuda_mpi_3 PROPERTIES TIMEOUT 300 PROCESSORS 3
+            WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/tests/fmmWalk_cuda_mpi_3" RESOURCE_LOCK cuda LABELS "fmm;cuda;mpi")
     endif()
 endif()
 

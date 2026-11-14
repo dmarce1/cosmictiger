@@ -94,7 +94,7 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
         float g2;
         int rung;
         sinkIndex = sinkFirst + i;
-        if (!params.forceOnly && !params.htime && rungs[sinkIndex] < params.minRung) {
+        if (!params.forceOnly && rungs[sinkIndex] < params.minRung) {
             continue;
         }
         ASSERT(sinkIndex >= 0);

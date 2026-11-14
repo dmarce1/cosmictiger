@@ -65,6 +65,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/gravity/fmm_acceptance.hpp>
+#include <cosmictiger/gravity/global_fmm/source_forest.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/kernels/cartesian_tracefree_operators.hpp>
 #include <cosmictiger/gravity/kick_interaction_counts.hpp>
@@ -342,6 +343,17 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                     doubleFlops += 9 * kSimdFloatSize;    // Source box extent addition and scaling.
                 }
                 for (int i = 0; i < maxi; i++) {
+                    if (otherPtrs[i]->sourceKind == kTreeSourceMultipoleTerminal) {
+                        if (bool(acceptance.cellCell[i])) {
+                            cclist.push_back(checklist[ci + i]);
+                        } else if (selfPtr->leaf) {
+                            treeSourceForestMaterialize(checklist[ci + i]);
+                            nextlist.push_back(checklist[ci + i]);
+                        } else {
+                            leaflist.push_back(checklist[ci + i]);
+                        }
+                        continue;
+                    }
                     auto const interaction = selectFmmInteraction(bool(acceptance.cellCell[i]),
                         bool(acceptance.particleCell[i]), bool(acceptance.cellParticle[i]),
                         selfPtr->leaf, bool(otherLeaf[i]), selfPtr->radius, otherPtrs[i]->radius,

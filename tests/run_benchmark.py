@@ -1,5 +1,6 @@
 """Exercise static FMM benchmark input, tiling, pairing and timing/count reporting."""
 import argparse
+import csv
 import math
 import os
 from pathlib import Path
@@ -99,8 +100,10 @@ def main():
             elif section == 'summary' and len(fields) == 4 and fields[0][0].isdigit():
                 summary = list(map(float, fields))
         assert len(timings) == 2 and solve_flops is not None and solve_flops > 0
-        assert tree_nodes is not None and tree_nodes > 1 and tree_nodes % 2 == 1
-        assert tree_leaves is not None and tree_nodes == 2 * tree_leaves - 1
+        root_count = 2 if args.mpi else 1
+        assert tree_nodes is not None and tree_nodes > root_count
+        assert tree_nodes % 2 == root_count % 2
+        assert tree_leaves is not None and tree_nodes == 2 * tree_leaves - root_count
         assert math.isclose(particles_per_leaf, int(population[1]) / tree_leaves, abs_tol=0.005)
         assert average is not None and len(average) == 5
         for timing in timings:
@@ -125,6 +128,7 @@ def main():
         assert int(row['tree_nodes']) == tree_nodes and int(row['leaves']) == tree_leaves
         assert int(row['flops']) == solve_flops and int(row['repeats']) == 2
         assert int(row['bucket_size']) == 8 and row['backend'] == 'cpu'
+        assert int(row['threads']) == (1 if args.mpi else 2)
         assert math.isclose(float(row['theta']), (0.4, 0.7)[index], rel_tol=1e-7)
         assert math.isclose(float(row['mean_s']), average[3], rel_tol=1e-3, abs_tol=1e-6)
     result_files = [root / 'paired' / f'bench.{case}.dat' for case in (1, 2)]
@@ -135,6 +139,24 @@ def main():
         assert current.startswith(previous[path]), path
         appended = current[len(previous[path]):].splitlines()
         assert len(appended) == 1 and not appended[0].startswith('#'), path
+    # Exercise the opt-in comparison without expanding the timed experiment.
+    run('source_comparison', {'benchmark.compareSourceForest': 'true',
+                             'benchmark.size': 1, 'benchmark.repeats': 1})
+    for case in (1, 2):
+        directory = root / 'source_comparison'
+        with (directory / f'fmm_measurement.{case}.pairs.csv').open() as source:
+            comparisons = list(csv.DictReader(source))
+        assert len(comparisons) >= 1
+        assert int(comparisons[-1]['total_worker_threads']) == 2
+        assert float(comparisons[-1]['max_scaled_error']) <= 2e-5
+        assert float(comparisons[-1]['direct_acceleration_relative_l2']) >= 0
+        with (directory / f'fmm_measurement.{case}.ranks.csv').open() as source:
+            measurements = list(csv.DictReader(source))
+        assert len(measurements) == len(comparisons) * 2 * (2 if args.mpi else 1)
+        assert all(int(row['fallbacks']) == 0 for row in measurements)
+        with (directory / f'fmm_measurement.{case}.peers.csv').open() as source:
+            peer_rows = list(csv.DictReader(source))
+        assert len(peer_rows) == len(comparisons) * (4 if args.mpi else 0)
     if not args.mpi:
         for name, changes, expected in (
             ('zero_size', {'benchmark.size': 0}, 'must be at least 1'),

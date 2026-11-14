@@ -1,5 +1,6 @@
 /* CosmicTiger - global FMM periodic force regression; BSL-1.0. */
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <format>
 #include <iostream>
@@ -12,6 +13,7 @@
 #include <cosmictiger/gravity/global_fmm/distributed_tree.hpp>
 #include <cosmictiger/gravity/global_fmm/execution.hpp>
 #include <cosmictiger/gravity/tree.hpp>
+#include <cosmictiger/gravity/tree_build.hpp>
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/particles.hpp>
@@ -44,9 +46,12 @@ Vector3<Position> forcePosition(int index, bool imageBoundary) {
 }
 }    // namespace detail
 
-void initializeGlobalForceTest(bool imageBoundary) {
-    int const begin = detail::kForceParticles * hpxRank() / hpxSize();
-    int const end = detail::kForceParticles * (hpxRank() + 1) / hpxSize();
+void initializeGlobalForceTest(bool imageBoundary, bool emptyLast) {
+    int const owners = emptyLast ? hpxSize() - 1 : hpxSize();
+    int const begin = hpxRank() == owners ? detail::kForceParticles :
+                                            detail::kForceParticles * hpxRank() / owners;
+    int const end = hpxRank() == owners ? detail::kForceParticles :
+                                          detail::kForceParticles * (hpxRank() + 1) / owners;
     particlesResize(end - begin);
     for (int i = begin; i < end; ++i) {
         auto const position = detail::forcePosition(i, imageBoundary);
@@ -92,6 +97,57 @@ Array<double, 3> verifyGlobalForceTest(bool imageBoundary) {
 }
 HPX_PLAIN_ACTION(verifyGlobalForceTest, VerifyGlobalForceTestAction);
 
+Vector<double> captureGlobalForceTest() {
+    Vector<double> values;
+    values.reserve(4 * particlesOwnedSize());
+    for (ParticleInteger index = 0; index < particlesOwnedSize(); ++index) {
+        for (int axis = 0; axis < kDimensions; ++axis) {
+            values.push_back(particlesGravityAcceleration(axis, index));
+        }
+        values.push_back(particlesPot(index));
+    }
+    return values;
+}
+HPX_PLAIN_ACTION(captureGlobalForceTest, CaptureGlobalForceTestAction);
+
+Vector<Vector<double>> captureGlobalForces() {
+    Vector<Vector<double>> values;
+    for (auto const& locality : hpxLocalities()) {
+        values.push_back(hpx::async<CaptureGlobalForceTestAction>(locality).get());
+    }
+    return values;
+}
+
+void compareGlobalForces(
+    Vector<Vector<double>> const& reference, Vector<Vector<double>> const& imported) {
+    if (reference.size() != imported.size()) {
+        throw std::runtime_error("Geometric reference locality count changed");
+    }
+    for (size_t rank = 0; rank < reference.size(); ++rank) {
+        if (reference[rank].size() != imported[rank].size()) {
+            throw std::runtime_error("Geometric source walk changed owned sink count");
+        }
+        for (size_t index = 0; index < reference[rank].size(); ++index) {
+            double const bound = 2.0e-5 * std::max(1.0, std::abs(reference[rank][index]));
+            if (!(std::abs(reference[rank][index] - imported[rank][index]) <= bound)) {
+                throw std::runtime_error(std::format(
+                    "Geometric import differs from complete-source reference at rank {} value {}",
+                    rank, index));
+            }
+        }
+    }
+}
+
+uint64_t geometricFallbackLocal() {
+    return treeSourceForestFallbackCount();
+}
+HPX_PLAIN_ACTION(geometricFallbackLocal, GeometricFallbackLocalAction);
+
+void geometricHierarchicalSourcesTest();
+void geometricPendingKickTest();
+void geometricStagingCapacityTest();
+void geometricExchangeGuardsTest();
+
 void fmmWalkTest() {
     auto options = getOptions();
     options.hydro.enabled = false;
@@ -106,7 +162,7 @@ void fmmWalkTest() {
         Vector<hpx::future<void>> initialization;
         for (auto const& locality : hpxLocalities()) {
             initialization.push_back(
-                hpx::async<InitializeGlobalForceTestAction>(locality, imageBoundary));
+                hpx::async<InitializeGlobalForceTestAction>(locality, imageBoundary, false));
         }
         for (auto& future : initialization) {
             future.get();
@@ -115,54 +171,130 @@ void fmmWalkTest() {
         domainsRebound();
         domainsBegin(0);
         domainsEnd();
-        double previousRms = std::numeric_limits<double>::infinity();
+        std::array<double, 2> previousRms{
+            std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity()};
         for (float const theta : {.5f, .25f}) {
-            auto const built = treeCreate(TreeCreateParameters(0, theta));
-            KickParameters parameters;
-            parameters.htime = true;
-            parameters.theta = theta;
-            parameters.minRung = 0;
-            parameters.t0 = 1.0f;
-            parameters.gm = 1.0f;
-            parameters.eta = options.gravity.timestepEta;
-            parameters.gravitySmoothingLength = options.gravity.smoothingLength;
-            parameters.saveForce = true;
-            parameters.firstCall = true;
-            parameters.gpu = options.gravity.cuda;
-            parameters.nodeLoad = 1.0f;
-            parameters.ascending = parameters.descending = false;
-            parameters.top = true;
-            parameters.doPhi = true;
-            ExpansionBuffer local;
-            local.zero();
-            Vector3<Position> center{};
-            Vector<TreeId> checks{built.id};
-            kick(parameters, local, center, built.id, {}, checks, nullptr);
-            Array<double, 3> sums{};
-            for (auto const& locality : hpxLocalities()) {
-                auto const part =
-                    hpx::async<VerifyGlobalForceTestAction>(locality, imageBoundary).get();
-                sums[0] += part[0];
-                sums[1] += part[1];
-                sums[2] = std::max(sums[2], part[2]);
+            for (int geometric = 0; geometric < 2; ++geometric) {
+                auto const built = geometric ? treeCreateGeometric(TreeCreateParameters(0, theta)) :
+                                               treeCreate(TreeCreateParameters(0, theta));
+                KickParameters parameters;
+                parameters.htime = true;
+                parameters.theta = theta;
+                parameters.minRung = 0;
+                parameters.t0 = 1.0f;
+                parameters.gm = 1.0f;
+                parameters.eta = options.gravity.timestepEta;
+                parameters.gravitySmoothingLength = options.gravity.smoothingLength;
+                parameters.saveForce = true;
+                parameters.firstCall = true;
+                parameters.gpu = options.gravity.cuda;
+                parameters.nodeLoad = 1.0f;
+                parameters.ascending = parameters.descending = false;
+                parameters.top = true;
+                parameters.doPhi = true;
+                ExpansionBuffer local;
+                local.zero();
+                Vector3<Position> center{};
+                Vector<TreeId> checks{built.id};
+                if (geometric) {
+                    kickSourceForest(parameters, true);
+                    auto const reference = captureGlobalForces();
+                    kickSourceForest(parameters);
+                    compareGlobalForces(reference, captureGlobalForces());
+                    for (auto const& locality : hpxLocalities()) {
+                        if (hpx::async<GeometricFallbackLocalAction>(locality).get() != 0) {
+                            throw std::runtime_error(
+                                "Geometric source export required a reference fallback");
+                        }
+                    }
+                } else {
+                    kick(parameters, local, center, built.id, {}, checks, nullptr);
+                }
+                Array<double, 3> sums{};
+                for (auto const& locality : hpxLocalities()) {
+                    auto const part =
+                        hpx::async<VerifyGlobalForceTestAction>(locality, imageBoundary).get();
+                    sums[0] += part[0];
+                    sums[1] += part[1];
+                    sums[2] = std::max(sums[2], part[2]);
+                }
+                double const rms = std::sqrt(sums[0] / sums[1]);
+                std::cout
+                    << std::format(
+                           "Global FMM {} {} theta={} relative RMS={} max={} ({} localities)\n",
+                           geometric ? "geometric" : "legacy",
+                           imageBoundary ? "image boundary" : "uneven points", theta, rms, sums[2],
+                           hpxSize())
+                    << std::flush;
+                // The first omitted multipole scales with theta to the potential degree.
+                // Keep a float-roundoff floor and require the tighter walk to converge.
+                double const bound = std::max(1.0e-5, std::pow(double(theta), kFmmOrder - 1));
+                passed = passed && rms < bound && sums[2] < 10 * bound &&
+                    rms < .5 * previousRms[geometric] + 1.0e-5;
+                previousRms[geometric] = rms;
+                if (geometric) {
+                    treeRetireGeometric(true);
+                } else {
+                    treeDestroy(true);
+                }
+                particlesCacheFree();
             }
-            double const rms = std::sqrt(sums[0] / sums[1]);
-            std::cout << std::format(
-                             "Global FMM {} theta={} relative RMS={} max={} ({} localities)\n",
-                             imageBoundary ? "image boundary" : "uneven points", theta, rms,
-                             sums[2], hpxSize())
-                      << std::flush;
-            // The first omitted multipole scales with theta to the potential degree.
-            // Keep a float-roundoff floor and require the tighter walk to converge.
-            double const bound = std::max(1.0e-5, std::pow(double(theta), kFmmOrder - 1));
-            passed =
-                passed && rms < bound && sums[2] < 10 * bound && rms < .5 * previousRms + 1.0e-5;
-            previousRms = rms;
-            treeDestroy(true);
-            particlesCacheFree();
         }
+    }
+    if (hpxSize() > 1) {
+        Vector<hpx::future<void>> initialization;
+        for (auto const& locality : hpxLocalities()) {
+            initialization.push_back(
+                hpx::async<InitializeGlobalForceTestAction>(locality, false, true));
+        }
+        for (auto& future : initialization) {
+            future.get();
+        }
+        particlesSortByRung(0);
+        treeCreateGeometric(TreeCreateParameters(0, .5f));
+        auto const& roots = treeGeometricRoots();
+        ParticleInteger totalSources = 0;
+        for (auto const& root : roots) {
+            totalSources += root.sourceCount;
+        }
+        if (roots.back().sourceCount != 0 || totalSources != detail::kForceParticles) {
+            throw std::runtime_error("Empty-rank geometric source descriptors are incorrect");
+        }
+        KickParameters parameters;
+        parameters.htime = true;
+        parameters.theta = .5f;
+        parameters.minRung = 0;
+        parameters.t0 = 1.0f;
+        parameters.gm = 1.0f;
+        parameters.eta = options.gravity.timestepEta;
+        parameters.gravitySmoothingLength = options.gravity.smoothingLength;
+        parameters.saveForce = true;
+        parameters.firstCall = true;
+        parameters.gpu = options.gravity.cuda;
+        parameters.nodeLoad = 1.0f;
+        parameters.top = true;
+        parameters.doPhi = true;
+        kickSourceForest(parameters, true);
+        auto const reference = captureGlobalForces();
+        kickSourceForest(parameters);
+        compareGlobalForces(reference, captureGlobalForces());
+        for (auto const& locality : hpxLocalities()) {
+            if (hpx::async<GeometricFallbackLocalAction>(locality).get() != 0) {
+                throw std::runtime_error("Empty-rank source export used a reference fallback");
+            }
+            auto const part = hpx::async<VerifyGlobalForceTestAction>(locality, false).get();
+            double const bound = std::pow(.5, kFmmOrder - 1);
+            passed = passed && std::sqrt(part[0] / std::max(part[1], 1.0e-30)) < bound &&
+                part[2] < 10 * bound;
+        }
+        treeRetireGeometric(true);
+        particlesCacheFree();
     }
     if (!passed) {
         throw std::runtime_error("Global FMM disagrees with independent periodic direct force");
     }
+    geometricHierarchicalSourcesTest();
+    geometricPendingKickTest();
+    geometricStagingCapacityTest();
+    geometricExchangeGuardsTest();
 }

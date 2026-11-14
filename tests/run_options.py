@@ -164,7 +164,7 @@ def main():
                      "scenario.cosmology.twoLpt", "scenario.plummer.radius",
                      "scenario.kelvinHelmholz.packing"})
     benchmark_keys = {"benchmark.testFiles", "benchmark.openingAngles",
-                      "benchmark.size", "benchmark.repeats"}
+                      "benchmark.size", "benchmark.repeats", "benchmark.compareSourceForest"}
     required.update(benchmark_keys)
     required.update(cuda_keys)
     required.update({"cosmology.omegaLambda", "cosmology.startRedshift", "lightcone.enabled"})

@@ -506,6 +506,7 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"benchmark.openingAngles", options.scenario.benchmark.openingAngles},
         {"benchmark.size", options.scenario.benchmark.size},
         {"benchmark.repeats", options.scenario.benchmark.repeats},
+        {"benchmark.compareSourceForest", options.scenario.benchmark.compareSourceForest},
         {"initial.closePack", options.initial.closePack},
         {"scenario.cosmology.twoLpt", options.scenario.cosmology.twoLpt},
         {"scenario.kelvinHelmholz.packing", options.scenario.kelvinHelmholz.packing},
@@ -763,7 +764,10 @@ bool processOptions(int argc, char* argv[]) {
         po::value<int>(&opts.scenario.benchmark.size)->default_value(1),
         "tile each distribution n by n by n times inside the unit box; n >= 1")("benchmark.repeats",
         po::value<int>(&opts.scenario.benchmark.repeats)->default_value(3),
-        "number of timed tree builds and FMM solves per distribution; at least 1");
+        "number of timed tree builds and FMM solves per distribution; at least 1")(
+        "benchmark.compareSourceForest",
+        po::value<bool>(&opts.scenario.benchmark.compareSourceForest)->default_value(false),
+        "compare cold complete-source and exported walks on each identical frozen tree");
 
     po::options_description plummerScenarioOpts("Plummer scenario");
     plummerScenarioOpts.add_options()("scenario.plummer.radius",
@@ -1914,7 +1918,7 @@ bool processOptions(int argc, char* argv[]) {
                          opts.units.massG / constants::kM0)
                   << std::flush;
         std::cout << std::format("{:<38s}: {:d} localities, {:d} worker threads here\n", "Runtime",
-                         hpxSize(), size_t(hpx::get_num_worker_threads()))
+                         hpxSize(), size_t(hpx::get_os_thread_count()))
                   << std::flush;
         std::cout << "\n  Internal diagnostics: --run.verbose=true\n" << std::flush;
         detail::displayOptions = terminal::verbose();

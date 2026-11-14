@@ -10,3 +10,6 @@
 
 void treeEnableRemoteCache();
 void treeResetRemoteCache();
+
+// Clear demand-read caches without retiring the source forest. All readers joined.
+void treeClearRemoteCache();

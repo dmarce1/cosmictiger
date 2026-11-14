@@ -7,6 +7,9 @@
 #ifndef __CUDACC__
 KickReturn kick(KickParameters, ExpansionBuffer, Vector3<Position>, TreeId, Vector<TreeId>,
     Vector<TreeId>, std::shared_ptr<KickWorkspace>);
+// Coordinate one owned-sink walk per locality. The reference mode uses the
+// complete demand-fetched source trees from the same frozen generation.
+KickReturn kickSourceForest(KickParameters, bool reference = false);
 #endif
 void kickSetRc(KickReturn result);
 void kickClearBuffers();

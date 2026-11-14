@@ -17,7 +17,9 @@
 #include <hpx/threading_base/annotated_function.hpp>
 
 #include <cosmictiger/core/safe_io.hpp>
+#include <cosmictiger/gravity/global_fmm/measurement.hpp>
 #include <cosmictiger/gravity/global_fmm/remote_cache.hpp>
+#include <cosmictiger/gravity/global_fmm/source_forest.hpp>
 #include <cosmictiger/gravity/tree_build.hpp>
 
 constexpr bool kVerbose = true;
@@ -70,9 +72,14 @@ static void resetLastCacheEntries() {
 
 static TreeNode const* treeCacheRead(TreeId id);
 
-void treeResetRemoteCache() {
+void treeClearRemoteCache() {
     treeCache = decltype(treeCache)();
     resetLastCacheEntries();
+}
+
+void treeResetRemoteCache() {
+    treeClearRemoteCache();
+    treeSourceForestReset();
 }
 
 void treeEnableRemoteCache() {
@@ -80,6 +87,12 @@ void treeEnableRemoteCache() {
 }
 
 static TreeNode const* treeCacheRead(TreeId id) {
+    if (auto const* imported = treeSourceForestImportedNode(id)) {
+        return imported;
+    }
+    if (treeSourceForestImportsEnabled()) {
+        treeSourceForestCountFallback();
+    }
     auto const& opts = getOptions();
     int const lineSize = opts.compute.treeCacheLineSize;
     TreeId lineId;
@@ -114,9 +127,15 @@ static TreeNode const* treeCacheRead(TreeId id) {
                         [promise, lineId]() {
                             try {
                                 treeRecordRemoteFetch();
-                                promise->set_value(hpx::async<TreeFetchCacheLineAction>(
+                                auto data = hpx::async<TreeFetchCacheLineAction>(
                                     hpxLocalities()[lineId.proc], lineId.index)
-                                        .get());
+                                                .get();
+                                if (fmmMeasurementEnabled) {
+                                    fmmMeasureDemand(lineId.proc, fmmSerializedBytes(lineId.index),
+                                        fmmSerializedBytes(data),
+                                        data.capacity() * sizeof(TreeNode));
+                                }
+                                promise->set_value(std::move(data));
                             } catch (...) {
                                 promise->set_exception(std::current_exception());
                             }

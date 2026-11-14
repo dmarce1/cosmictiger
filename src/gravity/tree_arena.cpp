@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cstddef>
+#include <exception>
 #include <format>
 #include <iostream>
 #include <limits>
@@ -342,6 +343,74 @@ long long treeNodesNextIndex() {
     return nextId + treeAllocLineSize;
 }
 
+TreeStagingArena::TreeStagingArena(size_t remoteNodeCount)
+  : nodes_(nullptr)
+  , remoteBegin_(std::min(size_t(treeNodesNextIndex()), nodesSize))
+  , size_(remoteBegin_)
+  , capacity_(remoteBegin_)
+  , ownsNodes_(remoteNodeCount != 0) {
+    // The last allocator block may extend past the exact owned-node capacity.
+    // Only indices inside that capacity can be populated and require copying.
+    if (remoteNodeCount > size_t(std::numeric_limits<int>::max()) - remoteBegin_ ||
+        remoteNodeCount > std::numeric_limits<size_t>::max() / sizeof(TreeNode) - remoteBegin_) {
+        throw std::overflow_error("Staged tree exceeds its index or allocation range");
+    }
+    capacity_ += remoteNodeCount;
+    if (!ownsNodes_) {
+        nodes_ = nodes;
+        return;
+    }
+    nodes_ = static_cast<TreeNode*>(allocateManagedMemory(capacity_ * sizeof(TreeNode)));
+    for (size_t index = 0; index < remoteBegin_; ++index) {
+        if (populatedNodes[index]) {
+            nodes_[index] = nodes[index];
+        }
+    }
+}
+
+TreeStagingArena::~TreeStagingArena() {
+    if (ownsNodes_) {
+        freeManagedMemory(nodes_);
+    }
+}
+
+TreeNode* TreeStagingArena::data() const {
+    return nodes_;
+}
+
+size_t TreeStagingArena::remoteBegin() const {
+    return remoteBegin_;
+}
+
+size_t TreeStagingArena::size() const {
+    return size_;
+}
+
+size_t TreeStagingArena::appendRemote(TreeNode const& node) {
+    if (size_ == capacity_) {
+        throw std::length_error("Staged tree remote capacity exhausted");
+    }
+    nodes_[size_] = node;
+    return size_++;
+}
+
+void TreeStagingArena::adviseGpu() const {
+    if (!ownsNodes_) {
+        tree2Gpu();
+        return;
+    }
+#ifdef USE_CUDA
+    if (!getOptions().gravity.cuda) {
+        throw std::invalid_argument("GPU tree access requires gravity.cuda=true");
+    }
+    cudaSetDevice();
+    CUDA_WARN(cudaAdviseMemory(
+        nodes_, size_ * sizeof(TreeNode), cudaMemAdviseSetReadMostly, cudaGetDevice()));
+#else
+    throw std::invalid_argument("GPU tree access requested in a build without CUDA");
+#endif
+}
+
 namespace detail {
 static TreeNode const* (*remoteReader)(TreeId) = nullptr;
 static void (*remoteReset)() = nullptr;
@@ -436,11 +505,29 @@ HPX_PLAIN_ACTION(treeDestroy, TreeDestroyAction);
 void treeDestroy(bool freeTree) {
     Vector<hpx::future<void>> futs;
     auto const children = hpxChildren();
-    for (auto const& c : children) {
-        futs.push_back(hpx::async<TreeDestroyAction>(c, freeTree));
+    futs.reserve(children.size());
+    std::exception_ptr failure;
+    try {
+        for (auto const& c : children) {
+            futs.push_back(hpx::async<TreeDestroyAction>(c, freeTree));
+        }
+        treeResetLocal();
+        for (auto& future : futs) {
+            future.get();
+        }
+    } catch (...) {
+        failure = std::current_exception();
     }
-    treeResetLocal();
-    hpx::wait_all(futs.begin(), futs.end());
+    if (failure) {
+        // Waiting may migrate the HPX task, so leave the native catch handler
+        // before suspending and preserve the exception explicitly.
+        for (auto& future : futs) {
+            if (future.valid()) {
+                future.wait();
+            }
+        }
+        std::rethrow_exception(failure);
+    }
 }
 
 /// Return a local node or obtain a remote node through the registered solver adapter.
@@ -482,4 +569,8 @@ uint64_t treeRemoteFetchCount() {
 /// Increment the process-local remote tree-fetch counter.
 void treeRecordRemoteFetch() {
     remoteTreeFetchCount.fetch_add(1, std::memory_order_relaxed);
+}
+
+size_t treeRemoteMultipoleBytes() {
+    return remoteMultipoleChunks.size() * kRemoteMultipoleChunkSize * multipoleStride;
 }

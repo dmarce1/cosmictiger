@@ -35,6 +35,12 @@
 MultipolePosition* treeAddMultipole(Vector3<Position> const& pos, MultipoleBuffer const& multipole);
 void treeReadMultipole(MultipolePosition const* record, MultipoleBuffer& multipole);
 
+inline constexpr unsigned char kTreeSourceOwned = 0;
+inline constexpr unsigned char kTreeSourceInternal = 1;
+inline constexpr unsigned char kTreeSourceParticleLeaf = 2;
+inline constexpr unsigned char kTreeSourceMultipoleTerminal = 3;
+inline constexpr unsigned char kTreeSourceEmpty = 4;
+
 struct TreeNode {
     FmmBox box;
     Array<TreeId, kChildCount> children;
@@ -43,6 +49,8 @@ struct TreeNode {
     Vector3<Position> pos;
     MultipolePosition* mpos;
     float radius;
+    // Imported source meaning remains explicit even when geometry is shared.
+    unsigned char sourceKind = kTreeSourceOwned;
     struct {
         unsigned short depth : 14;
         unsigned short localRoot : 1;
@@ -86,6 +94,7 @@ struct TreeNode {
         arc & processRange;
         arc & particleRange;
         arc & radius;
+        arc & sourceKind;
         int localRoot0;
         int leaf0;
         int depth0;
@@ -110,6 +119,7 @@ struct TreeNode {
         arc & processRange;
         arc & particleRange;
         arc & radius;
+        arc & sourceKind;
         int localRoot0;
         int leaf0;
         int depth0;
