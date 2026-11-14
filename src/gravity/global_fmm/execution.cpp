@@ -164,12 +164,13 @@ hpx::future<KickReturn> kickFork(KickParameters params, ExpansionBuffer const& l
 
 KickReturn kick(KickParameters params, ExpansionBuffer l, Vector3<Position> pos, TreeId self,
     Vector<TreeId> direct, Vector<TreeId> periodic, std::shared_ptr<KickWorkspace> workspace) {
+    auto const& opts = getOptions();
 #if COSMICTIGER_PROFILE
     bool const coordinator = params.profileCoordinator && self.proc == 0 && self.index == 0 &&
         !params.forceOnly && hpxRank() == 0 && treeGetNode(self)->depth == 0;
     profile::ScopedPhase phase("kick.walk", coordinator);
 #endif
-    params.openLargerCell = getOptions().gravity.openLargerCell;
+    params.openLargerCell = opts.gravity.openLargerCell;
     gravitySetRemoteSourceReader(globalFmmReadSourcePositions);
     KickContext context;
     context.fork = kickFork;

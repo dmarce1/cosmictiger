@@ -47,7 +47,8 @@ struct TreeId {
 struct TreeIdHash {
     /// Map a remote node cache line and its locality to a combined cache key.
     inline size_t operator()(TreeId id) const {
-        int const lineSize = getOptions().compute.treeCacheLineSize;
+        auto const& opts = getOptions();
+        int const lineSize = opts.compute.treeCacheLineSize;
         int const i = id.index / lineSize;
         return i * (hpxSize() - 1) + ((id.proc < hpxRank()) ? id.proc : id.proc - 1);
     }

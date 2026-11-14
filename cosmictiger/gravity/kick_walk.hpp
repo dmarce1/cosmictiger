@@ -135,6 +135,7 @@ template <int order>
 KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> pos, TreeId self,
     Vector<TreeId> dchecklist, Vector<TreeId> echecklist,
     std::shared_ptr<KickWorkspace> cudaWorkspace, KickContext const& context) {
+    auto const& opts = getOptions();
     using Expansion = cosmictiger::gravity::cartesian::Expansion<float>;
     ALWAYS_ASSERT(!params.deferHydroOpening || (!params.forceOnly && gravityGasOpeningDeferred()));
     auto* deferredGasOpening = params.deferHydroOpening ? gravityDeferredGasOpeningData() : nullptr;
@@ -169,7 +170,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
     }
     bool threadLeft = true;
 #ifdef USE_CUDA
-    if (getOptions().gravity.cuda && params.gpu) {
+    if (opts.gravity.cuda && params.gpu) {
         if (params.gpu && cudaWorkspace == nullptr && selfPtr->isLocal()) {
             cudaWorkspace = std::make_shared<KickWorkspace>(
                 params, selfPtr->numberOfParticles(), context.gpuExecutor);
@@ -181,7 +182,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
         int const blockCount = kickFineBlockCount(rangeParticles);
         maximumGpuParticles = std::min((size_t) maximumGpuParticles,
             (size_t) std::max(
-                rangeParticles / blockCount, (ParticleInteger) getOptions().compute.bucketSize));
+                rangeParticles / blockCount, (ParticleInteger) opts.compute.bucketSize));
         if (params.gpu && selfPtr->numberOfParticles() <= maximumGpuParticles &&
             selfPtr->isLocal() && detail::kickSourcesAreSingleRank(dchecklist) &&
             detail::kickSourcesAreSingleRank(echecklist)) {
@@ -211,9 +212,8 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
     float const smoothingLength = params.gravitySmoothingLength;
     float const Gm = params.gm;
     float const eta = params.eta;
-    bool const saveAcceleration =
-        params.saveForce || saveParticleAcceleration(getOptions().analysis);
-    bool const savePotential = params.saveForce || saveParticlePotential(getOptions().analysis);
+    bool const saveAcceleration = params.saveForce || saveParticleAcceleration(opts.analysis);
+    bool const savePotential = params.saveForce || saveParticlePotential(opts.analysis);
     auto workspace = detail::kickAcquireLists();
     Vector<TreeId>& nextlist = workspace.nextlist;
     Vector<TreeId>& cclist = workspace.cclist;
@@ -471,7 +471,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                     float const mass = particlesMass(i);
                     double const oldKinetic = 0.5 * mass * sqr(vx, vy, vz);
 #if COSMICTIGER_WITH_SPH
-                    bool const gas = getOptions().hydro.enabled && particlesType(i) == kSphType;
+                    bool const gas = opts.hydro.enabled && particlesType(i) == kSphType;
 #else
                     bool const gas = false;
 #endif
@@ -583,7 +583,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                 } else {
                     float const mass = particlesMass(i);
 #if COSMICTIGER_WITH_SPH
-                    bool const gas = getOptions().hydro.enabled && particlesType(i) == kSphType;
+                    bool const gas = opts.hydro.enabled && particlesType(i) == kSphType;
 #else
                     bool const gas = false;
 #endif

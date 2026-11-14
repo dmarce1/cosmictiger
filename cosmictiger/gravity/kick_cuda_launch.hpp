@@ -214,6 +214,7 @@ inline int kickSharedBudget(KickDeviceResources const& resources, int residency)
 template <int order>
 bool kickBuildLayout(Gravity const& gravity, bool massPlane, int residency, int budget,
     CudaKickArenaLayout& layout) {
+    auto const& opts = getOptions();
     layout = CudaKickArenaLayout{};
     layout.order = order;
     layout.residency = residency;
@@ -242,7 +243,7 @@ bool kickBuildLayout(Gravity const& gravity, bool massPlane, int residency, int 
     // The runtime bucket bounds a leaf; the shared budget bounds a sink tile.
     // Clamp before rounding or computing bytes so a large bucket cannot
     // overflow layout arithmetic. Source staging can reduce the tile further.
-    int const bucket = getOptions().compute.bucketSize;
+    int const bucket = opts.compute.bucketSize;
     int const maximumSinkCapacity =
         kickRoundDown(arenaBudget / (4 * int(sizeof(float))), kWarpSize);
     bool const sinkAuto = gravity.cudaKickSinkTile == 0;
@@ -337,8 +338,9 @@ bool kickBuildLayout(Gravity const& gravity, bool massPlane, int residency, int 
 /// occupancy limits.
 template <int order>
 CudaKickArenaLayout kickSelectLayout() {
-    auto const& gravity = getOptions().gravity;
-    bool const massPlane = getOptions().hydro.enabled;
+    auto const& opts = getOptions();
+    auto const& gravity = opts.gravity;
+    bool const massPlane = opts.hydro.enabled;
     auto const resources = kickDeviceResources<order>();
     int const registerLimit = kickRegisterResidencyLimit(resources);
     int residency = gravity.cudaKickResidency > 0 ?
@@ -408,6 +410,7 @@ template <int order>
 KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position* devY,
     Position* devZ, TreeNode* devTreeNodes, Vector<KickWorkitem> workitems,
     detail::FmmForceOutput output, float const* sourceMasses) {
+    auto const& opts = getOptions();
     using Parameters = CudaKickParameters<order>;
 #if COSMICTIGER_PROFILE
     bool const profileEnabled = hpxRank() == 0;
@@ -535,9 +538,9 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
     data.gravitySampleIndices = kparams.forceOnly ? nullptr : particlesGravitySampleIndices;
     data.gravitySampleAccelerations =
         kparams.forceOnly ? nullptr : particlesGravitySampleAccelerations;
-    data.sph = COSMICTIGER_WITH_SPH && getOptions().hydro.enabled;
-    data.darkMatterMass = getOptions().initial.darkMatterMass;
-    data.sphMass = getOptions().initial.gasMass;
+    data.sph = COSMICTIGER_WITH_SPH && opts.hydro.enabled;
+    data.darkMatterMass = opts.initial.darkMatterMass;
+    data.sphMass = opts.initial.gasMass;
     data.sourceMasses = sourceMasses;
     data.type = data.sph ? &particlesType(0) : nullptr;
 #if COSMICTIGER_WITH_SPH
@@ -554,10 +557,8 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
         data.gz = output.acceleration[kZi];
         data.pot = output.potential;
     } else {
-        bool const saveAcceleration =
-            kparams.saveForce || saveParticleAcceleration(getOptions().analysis);
-        bool const savePotential =
-            kparams.saveForce || saveParticlePotential(getOptions().analysis);
+        bool const saveAcceleration = kparams.saveForce || saveParticleAcceleration(opts.analysis);
+        bool const savePotential = kparams.saveForce || saveParticlePotential(opts.analysis);
         data.gx = saveAcceleration ? &particlesGravityAcceleration(kXi, 0) : nullptr;
         data.gy = saveAcceleration ? &particlesGravityAcceleration(kYi, 0) : nullptr;
         data.gz = saveAcceleration ? &particlesGravityAcceleration(kZi, 0) : nullptr;

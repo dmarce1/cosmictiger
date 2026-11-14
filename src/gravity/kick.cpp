@@ -247,7 +247,8 @@ void gravityBeginDeferredGasOpening() {
     }
     try {
 #if COSMICTIGER_WITH_SPH
-        ALWAYS_ASSERT(sphMidpointEnabled() && !usesGlobalIntegration(getOptions().run));
+        auto const& opts = getOptions();
+        ALWAYS_ASSERT(sphMidpointEnabled() && !usesGlobalIntegration(opts.run));
         size_t const count = sphParticlesSize();
         auto* increments = count == 0 ?
             nullptr :

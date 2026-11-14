@@ -224,6 +224,7 @@ KickReturn globalFmmStageGpu(KickParameters params, Vector<KickWorkitem> workite
                         fut = fut.then(hpx::annotated_function(
                                            [rank, count, &particleMap, i, j](
                                                hpx::shared_future<void> fut) {
+                                               auto const& opts = getOptions();
                                                fut.get();
                                                auto const& ranges = i->second.data[j];
                                                auto const data = particlesGet(rank, ranges).get();
@@ -245,7 +246,7 @@ KickReturn globalFmmStageGpu(KickParameters params, Vector<KickWorkitem> workite
                                                            &data[sz * dim + index],
                                                            numberOfParticles * sizeof(Position));
                                                    }
-                                                   if (getOptions().hydro.enabled) {
+                                                   if (opts.hydro.enabled) {
                                                        Vector<Position> x(numberOfParticles),
                                                            y(numberOfParticles),
                                                            z(numberOfParticles);

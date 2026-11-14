@@ -68,6 +68,7 @@ static hpx::future<TreeCreateReturn> treeCreateFork(TreeBuildRequest request, bo
 
 TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, int> processRange,
     Pair<ParticleInteger> particleRange, Range<double> box, int depth, bool localRoot) {
+    auto const& opts = getOptions();
     bool const coordinator = depth == 0 && hpxRank() == 0;
     if (depth == 0) {
         profile::ScopedPhase phase("treeCreate.allocate", coordinator);
@@ -85,7 +86,7 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
     boxR = sqrt(boxR);
     bool const distanceSatisfied = boxR < 0.25 * (params.theta / (1.0 + params.theta));
     bool const ewaldSatisfied =
-        distanceSatisfied && boxR < 0.125 - 0.25 * getOptions().gravity.smoothingLength;
+        distanceSatisfied && boxR < 0.125 - 0.25 * opts.gravity.smoothingLength;
     policy.extraSubdivision = !ewaldSatisfied && particleRange.second > particleRange.first;
     // Box extents/accumulation and opening arithmetic are double. The
     // float radius accumulator widens and narrows in each dimension.
@@ -112,7 +113,7 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
     }();
 #if COSMICTIGER_WITH_SPH
     // Hierarchical swaps maintain inverse gas indices without scanning slow rungs.
-    if (localRoot && getOptions().hydro.enabled && !usesHierarchicalIntegration(getOptions().run)) {
+    if (localRoot && opts.hydro.enabled && !usesHierarchicalIntegration(opts.run)) {
         particlesResolveWithSphParticles();
     }
 #endif

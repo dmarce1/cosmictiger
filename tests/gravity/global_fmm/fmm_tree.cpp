@@ -210,6 +210,7 @@ void verifyTreeNodeArchive(TreeId id) {
 }
 
 void verifyRemoteMultipoleStorage() {
+    auto const& opts = getOptions();
     // Grow past a remote chunk, then reserve fresh local allocator lines. A
     // remote record must survive both operations without sharing local slots.
     constexpr size_t kCount = 4101;
@@ -225,7 +226,7 @@ void verifyRemoteMultipoleStorage() {
     }
     TreeNode node{};
     multipole.zero();
-    size_t const localCount = 2 * size_t(getOptions().compute.treeAllocLineSize) + kCount;
+    size_t const localCount = 2 * size_t(opts.compute.treeAllocLineSize) + kCount;
     for (size_t index = 0; index < localCount; ++index) {
         treeStoreNode(treeAllocateNode(), node, multipole);
     }

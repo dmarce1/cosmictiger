@@ -35,6 +35,7 @@ constexpr FlopCount treePositionConversionExtraFlops(double coordinate) {
 
 /// Construct a global FMM node and its children using the distributed dispatch policy.
 TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& policy) {
+    auto const& opts = getOptions();
     auto params = request.params;
     auto const key = request.key;
     auto const processRange = request.processRange;
@@ -46,7 +47,7 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
     FlopCounter<FlopCount> flops = 0;    // Double box/center arithmetic.
     FlopCounter<FlopCount> singleFlops = 0;
     FlopCounter<FlopCounts> multipoleFlops;
-    int bucketSize = getOptions().compute.bucketSize;
+    int bucketSize = opts.compute.bucketSize;
     TreeCreateReturn rc;
     if (depth >= kMaxDepth) {
         throw std::length_error("Maximum depth exceeded");
@@ -223,7 +224,7 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
         // Global nodes have no rank-local particle range to rescan.
         bool const canRescan = processRange.second - processRange.first == 1 &&
             processRange.first == hpxRank() && particleRange.first >= 0 && numberOfParticles > 0 &&
-            numberOfParticles <= 64LL * getOptions().compute.bucketSize;
+            numberOfParticles <= 64LL * opts.compute.bucketSize;
         flops += canRescan ? 1 : 0;
         if (canRescan && (rbox.end[xdim] - rbox.begin[xdim] <= 0.5)) {
             tried1 = true;

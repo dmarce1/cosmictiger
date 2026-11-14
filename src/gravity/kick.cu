@@ -56,7 +56,8 @@ CudaKickArenaLayout const& kickArenaLayout() {
 // gravity.cudaKickHandoffBlocks pins it for experiments. The CPU walk calls
 // this at every node, so the device query is cached.
 int kickBlockCount(ParticleInteger particles) {
-    int const handoff = getOptions().gravity.cudaKickHandoffBlocks;
+    auto const& opts = getOptions();
+    int const handoff = opts.gravity.cudaKickHandoffBlocks;
     if (handoff > 0) {
         return handoff;
     }
@@ -74,7 +75,8 @@ int kickBlockCount(ParticleInteger particles) {
 // gravity.cudaKickFineHandoffBlocks sets it; zero, or a count below
 // kickBlockCount, leaves every node at kickBlockCount. It is off by default.
 int kickFineBlockCount(ParticleInteger particles) {
-    return std::max(kickBlockCount(particles), getOptions().gravity.cudaKickFineHandoffBlocks);
+    auto const& opts = getOptions();
+    return std::max(kickBlockCount(particles), opts.gravity.cudaKickFineHandoffBlocks);
 }
 
 // The CUDA operators are order templates in gravity_cuda.hpp; this unit owns

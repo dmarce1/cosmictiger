@@ -80,7 +80,8 @@ void treeEnableRemoteCache() {
 }
 
 static TreeNode const* treeCacheRead(TreeId id) {
-    int const lineSize = getOptions().compute.treeCacheLineSize;
+    auto const& opts = getOptions();
+    int const lineSize = opts.compute.treeCacheLineSize;
     TreeId lineId;
     TreeNode const* ptr;
     lineId.proc = id.proc;
@@ -136,8 +137,9 @@ static TreeNode const* treeCacheRead(TreeId id) {
 }
 
 static Vector<TreeNode> treeFetchCacheLine(int index) {
+    auto const& opts = getOptions();
     size_t const nodesSize = treeNodesSize();
-    int const lineSize = getOptions().compute.treeCacheLineSize;
+    int const lineSize = opts.compute.treeCacheLineSize;
     ALWAYS_ASSERT(index >= 0 && size_t(index) < nodesSize);
     Vector<TreeNode> line;
     line.reserve(lineSize);

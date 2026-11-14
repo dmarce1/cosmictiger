@@ -86,15 +86,16 @@ Vector<GravityErrorSample> gravityErrorSelect(
 /// Compute this locality's direct periodic reference contribution at the sampled sink
 /// positions.
 Vector<GravityErrorAcceleration> gravityErrorDirect(Vector<GravityErrorSample> const& samples) {
+    auto const& opts = getOptions();
     Vector<GravityErrorAcceleration> result(samples.size());
     if (samples.empty() || particlesSize() == 0) {
         return result;
     }
     auto const& correctionTable = gravityReferenceCorrectionTable();
-    double const smoothingLength = getOptions().gravity.smoothingLength;
-    double const gm = getOptions().gravity.gm;
+    double const smoothingLength = opts.gravity.smoothingLength;
+    double const gm = opts.gravity.gm;
 #ifdef USE_CUDA
-    if (getOptions().gravity.errorCuda) {
+    if (opts.gravity.errorCuda) {
         std::vector<GravityErrorPosition> positions(samples.size());
         for (size_t slot = 0; slot < samples.size(); ++slot) {
             for (int dim = 0; dim < kDimensions; ++dim) {
@@ -183,7 +184,8 @@ HPX_PLAIN_ACTION(detail::gravityErrorCollect, GravityErrorCollectAction);
 /// Choose distributed sample particles and compute their direct reference accelerations
 /// before the solve.
 void gravityErrorBegin() {
-    if (getOptions().gravity.errorInterval <= 0) {
+    auto const& opts = getOptions();
+    if (opts.gravity.errorInterval <= 0) {
         return;
     }
     if (!detail::gravityErrorReference.empty()) {
@@ -198,8 +200,7 @@ void gravityErrorBegin() {
     for (size_t rank = 0; rank < localities.size(); ++rank) {
         offsets[rank + 1] = offsets[rank] + counts[rank].get();
     }
-    size_t const sampleCount =
-        std::min(offsets.back(), size_t(getOptions().gravity.errorSampleSize));
+    size_t const sampleCount = std::min(offsets.back(), size_t(opts.gravity.errorSampleSize));
     if (sampleCount == 0) {
         return;
     }
@@ -216,7 +217,7 @@ void gravityErrorBegin() {
     }
     std::cout << std::format("Computing direct gravity reference for {:d} of {:d} particles using "
                              "{:s} Ewald table\n",
-                     sampleCount, offsets.back(), getOptions().gravity.errorCuda ? "CUDA" : "CPU")
+                     sampleCount, offsets.back(), opts.gravity.errorCuda ? "CUDA" : "CPU")
               << std::flush;
     Vector<hpx::future<Vector<detail::GravityErrorAcceleration>>> references;
     for (auto const& locality : localities) {

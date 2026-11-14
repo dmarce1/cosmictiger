@@ -9,9 +9,10 @@
 
 /// Return a non-owning view of the local particle arrays.
 FmmSourceView fmmSourceView() {
+    auto const& opts = getOptions();
     FmmSourceView view;
     view.positions = particlesX;
-    view.types = getOptions().hydro.enabled ? particlesTy : nullptr;
+    view.types = opts.hydro.enabled ? particlesTy : nullptr;
     view.count = particlesSize();
     return view;
 }

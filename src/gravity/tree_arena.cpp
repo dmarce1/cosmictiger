@@ -162,7 +162,8 @@ void treeReadMultipole(MultipolePosition const* record, MultipoleBuffer& multipo
 
 /// Reserve the next allocator block from the shared node arena, failing on exhaustion.
 void TreeAllocator::reset() {
-    int const treeAllocLineSize = getOptions().compute.treeAllocLineSize;
+    auto const& opts = getOptions();
+    int const treeAllocLineSize = opts.compute.treeAllocLineSize;
     next_ = (nextId += treeAllocLineSize);
     last_ = std::min(next_ + treeAllocLineSize, (int) nodesSize);
     if (next_ >= nodesSize) {
@@ -216,7 +217,8 @@ TreeCreateParameters::TreeCreateParameters(int minimumRung, double openingAngle)
 
 /// Store a remote node copy in the arena and mark its slot populated.
 size_t treeAddRemote(TreeNode const& remote) {
-    int const treeAllocLineSize = getOptions().compute.treeAllocLineSize;
+    auto const& opts = getOptions();
+    int const treeAllocLineSize = opts.compute.treeAllocLineSize;
     if (nextId + treeAllocLineSize >= nodesSize) {
         std::cout << "TREE ALLOCATION EXCEEDED\n" << std::flush;
         abort();
@@ -239,7 +241,8 @@ static bool setCpu = false;
 void tree2Cpu() {
     if (!setCpu) {
 #ifdef USE_CUDA
-        if (setGpu && getOptions().gravity.cuda) {
+        auto const& opts = getOptions();
+        if (setGpu && opts.gravity.cuda) {
             cudaSetDevice();
             CUDA_WARN(cudaAdviseMemory(nodes, nodesSize * sizeof(TreeNode),
                 cudaMemAdviseUnsetReadMostly, cudaGetDevice()));
@@ -253,7 +256,8 @@ void tree2Cpu() {
 /// Apply GPU read-mostly advice to the node arena after checking the selected backend.
 void tree2Gpu() {
 #ifdef USE_CUDA
-    if (!getOptions().gravity.cuda) {
+    auto const& opts = getOptions();
+    if (!opts.gravity.cuda) {
         throw std::invalid_argument("GPU tree access requires gravity.cuda=true");
     }
     if (!setGpu) {
@@ -270,16 +274,18 @@ void tree2Gpu() {
 
 /// Estimate node capacity from source count and bucket size with overflow protection.
 size_t treeNodeCapacity(size_t sourceParticleCount) {
+    auto const& opts = getOptions();
     size_t const multiplier = kTreeNodeAllocationSize;
     if (sourceParticleCount > std::numeric_limits<size_t>::max() / multiplier) {
         throw std::overflow_error("Tree arena capacity overflows size_t");
     }
-    return multiplier * sourceParticleCount / getOptions().compute.bucketSize;
+    return multiplier * sourceParticleCount / opts.compute.bucketSize;
 }
 
 /// Allocate or reuse node and multipole arenas and reset registered allocator blocks.
 void treeAllocateNodesLocal(size_t capacity) {
-    int const treeAllocLineSize = getOptions().compute.treeAllocLineSize;
+    auto const& opts = getOptions();
+    int const treeAllocLineSize = opts.compute.treeAllocLineSize;
     auto const multiply = [](size_t first, size_t second) {
         if (second != 0 && first > std::numeric_limits<size_t>::max() / second) {
             throw std::overflow_error("Tree arena capacity overflows size_t");
@@ -331,7 +337,8 @@ void treeAllocateNodesLocal(size_t capacity) {
 
 /// Return the next shared node index including the allocator block reservation offset.
 long long treeNodesNextIndex() {
-    int const treeAllocLineSize = getOptions().compute.treeAllocLineSize;
+    auto const& opts = getOptions();
+    int const treeAllocLineSize = opts.compute.treeAllocLineSize;
     return nextId + treeAllocLineSize;
 }
 

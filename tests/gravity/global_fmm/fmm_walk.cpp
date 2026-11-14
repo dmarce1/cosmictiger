@@ -60,6 +60,7 @@ void initializeGlobalForceTest(bool imageBoundary) {
 HPX_PLAIN_ACTION(initializeGlobalForceTest, InitializeGlobalForceTestAction);
 
 Array<double, 3> verifyGlobalForceTest(bool imageBoundary) {
+    auto const& opts = getOptions();
     Array<double, 3> sums{};
     for (ParticleInteger i = 0; i < particlesOwnedSize(); ++i) {
         Vector3<double> reference{};
@@ -69,8 +70,8 @@ Array<double, 3> verifyGlobalForceTest(bool imageBoundary) {
             for (int dim = 0; dim < kDimensions; ++dim) {
                 displacement[dim] = doubleDistance(particlesPos(dim, i), position[dim]);
             }
-            reference += detail::directGravityReference(displacement,
-                selectedGravityKernel<double>(), getOptions().gravity.smoothingLength);
+            reference += detail::directGravityReference(
+                displacement, selectedGravityKernel<double>(), opts.gravity.smoothingLength);
         }
         double error = 0.0;
         for (int dim = 0; dim < kDimensions; ++dim) {
