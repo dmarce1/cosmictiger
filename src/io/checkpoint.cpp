@@ -301,7 +301,8 @@ void writeCheckpointScenario(fs::path const& directory) {
 /// Require scenario metadata to match the requested run and reject malformed or trailing
 /// content.
 void validateCheckpointScenario(fs::path const& directory) {
-    if (!getOptions().run.test.empty()) {
+    auto const& opts = getOptions();
+    if (!opts.run.test.empty()) {
         return;
     }
     auto const path = directory / "scenario.meta";
@@ -318,8 +319,8 @@ void validateCheckpointScenario(fs::path const& directory) {
     int gravity = -1;
     double endTime = -1.0;
     if (!(file >> label >> version >> scenario >> endTime >> gravity) ||
-        label != "COSMICTIGER_SCENARIO" || version != 1 || scenario != getOptions().run.scenario ||
-        endTime != getOptions().run.endTime || gravity != int(getOptions().gravity.enabled)) {
+        label != "COSMICTIGER_SCENARIO" || version != 1 || scenario != opts.run.scenario ||
+        endTime != opts.run.endTime || gravity != int(opts.gravity.enabled)) {
         throw std::runtime_error(std::format("Checkpoint scenario, run.endTime or gravity.enabled "
                                              "differs from the requested run: {}",
             path.c_str()));
@@ -334,6 +335,7 @@ void validateCheckpointScenario(fs::path const& directory) {
 /// Write and synchronize payload sizes/checksums and scenario metadata for a completed
 /// checkpoint set.
 void writeCheckpointManifest(fs::path const& directory, int iteration) {
+    auto const& opts = getOptions();
     fs::path const path = directory / "checkpoint.meta";
     CheckpointFile file(fopen(path.c_str(), "wb"));
     if (!file) {
@@ -341,7 +343,7 @@ void writeCheckpointManifest(fs::path const& directory, int iteration) {
             std::format("Unable to create checkpoint manifest {}", path.c_str()));
     }
     auto const manifestVersion =
-        getOptions().run.test.empty() ? kScenarioManifestVersion : kCheckpointManifestVersion;
+        opts.run.test.empty() ? kScenarioManifestVersion : kCheckpointManifestVersion;
     if (fprintf(file.get(), "COSMICTIGER_CHECKPOINT %u %u %i %i\n", manifestVersion,
             kCheckpointVersion, iteration, hpxSize()) < 0) {
         throw std::ios_base::failure(
@@ -376,6 +378,7 @@ void writeCheckpointManifest(fs::path const& directory, int iteration) {
 /// Validate checkpoint presence, scenario compatibility, rank files, and available manifest
 /// integrity checks.
 void validateCheckpointDirectory(fs::path const& directory, int iteration) {
+    auto const& opts = getOptions();
     if (!fs::is_directory(directory)) {
         throw std::runtime_error(
             std::format("Checkpoint directory {} does not exist", directory.c_str()));
@@ -408,7 +411,7 @@ void validateCheckpointDirectory(fs::path const& directory, int iteration) {
         label != "COSMICTIGER_CHECKPOINT" ||
         (manifestVersion != kCheckpointManifestVersion &&
             manifestVersion != kScenarioManifestVersion) ||
-        (getOptions().run.test.empty() && manifestVersion != kScenarioManifestVersion) ||
+        (opts.run.test.empty() && manifestVersion != kScenarioManifestVersion) ||
         payloadVersion != kCheckpointVersion || savedIteration != iteration ||
         rankCount != hpxSize()) {
         throw std::runtime_error(std::format(
@@ -710,41 +713,41 @@ static_assert(kHistoricalDriverBytes == offsetof(DriverParameters, itime) + size
 
 /// Write the versioned driver state and enabled physics/integration metadata extensions.
 void writeDriverState(FILE* fp, DriverParameters const& params) {
-    auto const header = checkpointHeader(getOptions());
+    auto const& opts = getOptions();
+    auto const header = checkpointHeader(opts);
     if (fwrite(&header, sizeof(header), 1, fp) != 1) {
         throw std::ios_base::failure("Unable to write checkpoint header");
     }
-    auto const algorithms = checkpointAlgorithms(getOptions());
+    auto const algorithms = checkpointAlgorithms(opts);
     if (fwrite(algorithms.data(), sizeof(uint64_t), algorithms.size(), fp) != algorithms.size()) {
         throw std::ios_base::failure("Unable to write checkpoint algorithm selection");
     }
 
     if ((header.flags & kIndependentParticleCounts) != 0U) {
         std::array<uint64_t, 2> const counts{
-            getOptions().run.darkMatterParticleCount, getOptions().run.gasParticleCount};
+            opts.run.darkMatterParticleCount, opts.run.gasParticleCount};
         if (fwrite(counts.data(), sizeof(uint64_t), counts.size(), fp) != counts.size()) {
             throw std::ios_base::failure("Unable to write independent particle counts");
         }
     }
-    if (getOptions().hydro.enabled) {
-        auto const sphParameters = sphCheckpointParameters(getOptions());
+    if (opts.hydro.enabled) {
+        auto const sphParameters = sphCheckpointParameters(opts);
         if (fwrite(sphParameters.data(), sizeof(double), sphParameters.size(), fp) !=
             sphParameters.size()) {
             throw std::ios_base::failure("Unable to write SPH checkpoint parameters");
         }
         // Zero conduction preserves the existing SPH checkpoint layout.
         if ((header.flags & kArtificialConduction) != 0U &&
-            fwrite(&getOptions().hydro.conductionCoefficient, sizeof(double), 1, fp) != 1) {
+            fwrite(&opts.hydro.conductionCoefficient, sizeof(double), 1, fp) != 1) {
             throw std::ios_base::failure("Unable to write SPH conduction coefficient");
         }
         // Optional extension: preserve the historical block and zero-force layout.
         if ((header.flags & kZPlaneAcceleration) != 0U &&
-            fwrite(&getOptions().scenario.rayleighTaylor.zPlaneAcceleration, sizeof(double), 1,
-                fp) != 1) {
+            fwrite(&opts.scenario.rayleighTaylor.zPlaneAcceleration, sizeof(double), 1, fp) != 1) {
             throw std::ios_base::failure("Unable to write SPH z-plane acceleration");
         }
         if ((header.flags & kVariableViscosity) != 0U) {
-            auto const viscosityParameters = viscosityCheckpointParameters(getOptions());
+            auto const viscosityParameters = viscosityCheckpointParameters(opts);
             if (fwrite(viscosityParameters.data(), sizeof(double), viscosityParameters.size(),
                     fp) != viscosityParameters.size()) {
                 throw std::ios_base::failure("Unable to write SPH variable-viscosity parameters");
@@ -752,7 +755,7 @@ void writeDriverState(FILE* fp, DriverParameters const& params) {
         }
     }
 #if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_CHEMISTRY
-    if (getOptions().chemistry.enabled) {
+    if (opts.chemistry.enabled) {
         auto const chemicalParameters = sphChemistryCheckpointParameters();
         if (fwrite(chemicalParameters.data(), sizeof(double), chemicalParameters.size(), fp) !=
             chemicalParameters.size()) {
@@ -761,8 +764,8 @@ void writeDriverState(FILE* fp, DriverParameters const& params) {
         }
     }
 #endif
-    if (getOptions().starFormation.enabled) {
-        auto const parameters = starFormationCheckpointParameters(getOptions());
+    if (opts.starFormation.enabled) {
+        auto const parameters = starFormationCheckpointParameters(opts);
         if (fwrite(parameters.data(), sizeof(uint64_t), parameters.size(), fp) !=
             parameters.size()) {
             throw std::ios_base::failure("Unable to write star-formation checkpoint parameters");
@@ -784,6 +787,7 @@ void writeDriverState(FILE* fp, DriverParameters const& params) {
 /// Validate and restore current or supported legacy driver state and its enabled
 /// extensions.
 DriverParameters readDriverState(FILE* fp) {
+    auto const& opts = getOptions();
     DriverParameters params{};
     CheckpointHeader header{};
     uint64_t magic = 0;
@@ -822,27 +826,27 @@ DriverParameters readDriverState(FILE* fp) {
                 "Checkpoint uses the retired SPH viscosity layout and cannot be restarted; only "
                 "none and morrisAndMonaghan viscosity remain");
         }
-        if (getOptions().hydro.enabled && (header.reserved & kCompactSphLayout) != 0U &&
+        if (opts.hydro.enabled && (header.reserved & kCompactSphLayout) != 0U &&
             (header.reserved & kSphFormationMask) !=
-                (checkpointPhysicsCode(getOptions()) & kSphFormationMask)) {
+                (checkpointPhysicsCode(opts) & kSphFormationMask)) {
             uint32_t const saved = header.reserved & kSphFormationMask;
             throw std::runtime_error(
                 std::format("Checkpoint SPH pressure operator ({}) is no longer supported; SPH "
                             "requires the variational pressure operator",
                     saved == kRetiredMonaghanSph ? "monaghan" : "unknown"));
         }
-        if (!checkpointCompatible(header, getOptions())) {
+        if (!checkpointCompatible(header, opts)) {
             throw std::runtime_error(
                 "Checkpoint physics, particle layout or integrator differs from the requested run");
         }
         if ((header.flags & kRuntimeAlgorithms) != 0U) {
             auto algorithms = readCheckpointAlgorithms(fp);
-            if (getOptions().hydro.enabled && !getOptions().gravity.enabled) {
+            if (opts.hydro.enabled && !opts.gravity.enabled) {
                 // Accept old inactive solver selections only after the SPH
                 // block below confirms the saved gravity-enabled flag is zero.
                 algorithms[1] = algorithms[2] = algorithms[3] = 0;
             }
-            if (algorithms != checkpointAlgorithms(getOptions())) {
+            if (algorithms != checkpointAlgorithms(opts)) {
                 throw std::runtime_error("Checkpoint gravity methods, expansion degree, or time "
                                          "integrator differs from the requested run");
             }
@@ -853,21 +857,21 @@ DriverParameters readDriverState(FILE* fp) {
             FREAD(counts.data(), sizeof(uint64_t), counts.size(), fp);
             if (counts !=
                 std::array<uint64_t, 2>{
-                    getOptions().run.darkMatterParticleCount, getOptions().run.gasParticleCount}) {
+                    opts.run.darkMatterParticleCount, opts.run.gasParticleCount}) {
                 throw std::runtime_error(
                     "Checkpoint dark-matter or gas particle count differs from the requested run");
             }
         }
-        if (getOptions().hydro.enabled) {
-            auto sphParameters = sphCheckpointParameters(getOptions());
+        if (opts.hydro.enabled) {
+            auto sphParameters = sphCheckpointParameters(opts);
             FREAD(sphParameters.data(), sizeof(double), sphParameters.size(), fp);
-            if (sphParameters != sphCheckpointParameters(getOptions())) {
+            if (sphParameters != sphCheckpointParameters(opts)) {
                 throw std::runtime_error("SPH checkpoint parameters differ from the requested run");
             }
             if ((header.flags & kArtificialConduction) != 0U) {
                 double conductionCoefficient;
                 FREAD(&conductionCoefficient, sizeof(conductionCoefficient), 1, fp);
-                if (conductionCoefficient != getOptions().hydro.conductionCoefficient) {
+                if (conductionCoefficient != opts.hydro.conductionCoefficient) {
                     throw std::runtime_error("SPH checkpoint hydro.conductionCoefficient differs "
                                              "from the requested run");
                 }
@@ -875,23 +879,23 @@ DriverParameters readDriverState(FILE* fp) {
             if ((header.flags & kZPlaneAcceleration) != 0U) {
                 double acceleration;
                 FREAD(&acceleration, sizeof(acceleration), 1, fp);
-                if (!zPlaneCheckpointCompatible(acceleration, getOptions())) {
+                if (!zPlaneCheckpointCompatible(acceleration, opts)) {
                     throw std::runtime_error(
                         "SPH checkpoint scenario.rayleighTaylor.zPlaneAcceleration differs from "
                         "the requested run");
                 }
             }
             if ((header.flags & kVariableViscosity) != 0U) {
-                auto viscosityParameters = viscosityCheckpointParameters(getOptions());
+                auto viscosityParameters = viscosityCheckpointParameters(opts);
                 FREAD(viscosityParameters.data(), sizeof(double), viscosityParameters.size(), fp);
-                if (viscosityParameters != viscosityCheckpointParameters(getOptions())) {
+                if (viscosityParameters != viscosityCheckpointParameters(opts)) {
                     throw std::runtime_error("SPH checkpoint variable-viscosity parameters differ "
                                              "from the requested run");
                 }
             }
         }
 #if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_CHEMISTRY
-        if (getOptions().chemistry.enabled) {
+        if (opts.chemistry.enabled) {
             auto chemicalParameters = sphChemistryCheckpointParameters();
             FREAD(chemicalParameters.data(), sizeof(double), chemicalParameters.size(), fp);
             if (chemicalParameters[0] != sphChemistryCheckpointParameters()[0]) {
@@ -915,10 +919,10 @@ DriverParameters readDriverState(FILE* fp) {
             }
         }
 #endif
-        if (getOptions().starFormation.enabled) {
-            auto parameters = starFormationCheckpointParameters(getOptions());
+        if (opts.starFormation.enabled) {
+            auto parameters = starFormationCheckpointParameters(opts);
             FREAD(parameters.data(), sizeof(uint64_t), parameters.size(), fp);
-            if (parameters != starFormationCheckpointParameters(getOptions())) {
+            if (parameters != starFormationCheckpointParameters(opts)) {
                 throw std::runtime_error("Checkpoint star-formation model, thresholds, or "
                                          "random-stream parameters differ from the requested run");
             }
@@ -952,7 +956,7 @@ DriverParameters readDriverState(FILE* fp) {
         }
 
     } else {
-        if (!legacyCheckpointCompatible(getOptions())) {
+        if (!legacyCheckpointCompatible(opts)) {
             throw std::runtime_error(
                 "Legacy checkpoints support only the original dark-matter hierarchical mode with "
                 "the degree-eight Ferrers gravity kernel");
@@ -992,6 +996,7 @@ DriverParameters readDriverState(FILE* fp) {
 /// Exercise driver-state round trips and rejection of incompatible checkpoint modes and
 /// layouts.
 void checkpointStateTest() {
+    auto const& opts = getOptions();
     constexpr double kScale = 0.5;
     constexpr double kClock = 0.125;
     constexpr double kThermal = 3.0;
@@ -1005,13 +1010,13 @@ void checkpointStateTest() {
     input.a = kScale;
     input.tau = kClock;
     input.tauMax = 2.0;
-    input.itime = usesGlobalIntegration(getOptions().run) ? 0 : 128;
+    input.itime = usesGlobalIntegration(opts.run) ? 0 : 128;
     input.iter = 1;
     input.maxRung = kRung;
     input.energies.therm = kThermal;
     input.energies.heating = kHeating;
-    input.globalTimestep = usesGlobalIntegration(getOptions().run) ? 0.03125 : 0.0;
-    input.globalHydroTimestep = usesGlobalIntegration(getOptions().run) ? 0.0625 : 0.0;
+    input.globalTimestep = usesGlobalIntegration(opts.run) ? 0.03125 : 0.0;
+    input.globalHydroTimestep = usesGlobalIntegration(opts.run) ? 0.0625 : 0.0;
 
     detail::writeDriverState(fp, input);
     rewind(fp);
@@ -1022,7 +1027,7 @@ void checkpointStateTest() {
     ALWAYS_ASSERT(restored.energies.therm == kThermal && restored.energies.heating == kHeating);
     ALWAYS_ASSERT(restored.globalTimestep == input.globalTimestep);
     ALWAYS_ASSERT(restored.globalHydroTimestep == input.globalHydroTimestep);
-    if (!usesGlobalIntegration(getOptions().run)) {
+    if (!usesGlobalIntegration(opts.run)) {
         // Strip only the new selection extension to reconstruct the exact old
         // version-three driver payload and exercise its unchanged decoder.
         long const length = ftell(fp);
@@ -1030,7 +1035,7 @@ void checkpointStateTest() {
         std::vector<unsigned char> bytes(static_cast<size_t>(length));
         rewind(fp);
         ALWAYS_ASSERT(fread(bytes.data(), 1, bytes.size(), fp) == bytes.size());
-        auto oldHeader = detail::checkpointHeader(getOptions());
+        auto oldHeader = detail::checkpointHeader(opts);
         oldHeader.flags &= ~detail::kRuntimeAlgorithms;
         detail::CheckpointFile oldStream(tmpfile());
         ALWAYS_ASSERT(oldStream != nullptr);
@@ -1043,13 +1048,12 @@ void checkpointStateTest() {
         ALWAYS_ASSERT(previous.tau == input.tau && previous.itime == input.itime &&
             previous.energies.heating == input.energies.heating && previous.globalTimestep == 0.0);
     }
-    auto changed = getOptions();
+    auto changed = opts;
     auto const header = detail::checkpointHeader(changed);
     // The algorithm extension distinguishes global gravity from no gravity.
     changed.gravity.enabled = !changed.gravity.enabled;
-    ALWAYS_ASSERT(
-        detail::checkpointAlgorithms(getOptions()) != detail::checkpointAlgorithms(changed));
-    auto hydroOnlyOptions = getOptions();
+    ALWAYS_ASSERT(detail::checkpointAlgorithms(opts) != detail::checkpointAlgorithms(changed));
+    auto hydroOnlyOptions = opts;
     hydroOnlyOptions.gravity.enabled = false;
     hydroOnlyOptions.hydro.enabled = true;
     {
@@ -1060,7 +1064,7 @@ void checkpointStateTest() {
         oldHydroOnlyHeader.flags |= detail::kParticleMultipoleMesh;
         ALWAYS_ASSERT(!detail::checkpointCompatible(oldHydroOnlyHeader, hydroOnlyOptions));
     }
-    changed = getOptions();
+    changed = opts;
     // Reject the retired scalar particle-mesh bits rather than treating their
     // extension bytes as driver state.
     for (uint32_t const retiredFlag : {detail::kRetiredParticleMesh, detail::kParticleMeshInterval,
@@ -1070,11 +1074,11 @@ void checkpointStateTest() {
         retiredPmHeader.flags |= retiredFlag;
         ALWAYS_ASSERT(!detail::checkpointCompatible(retiredPmHeader, changed));
     }
-    changed = getOptions();
+    changed = opts;
     changed.output.units = "both";
     changed.output.frame = "lab";
     ALWAYS_ASSERT(detail::checkpointCompatible(header, changed));
-    changed = getOptions();
+    changed = opts;
     if (changed.hydro.enabled) {
         auto oldFormulation = header;
         oldFormulation.reserved = 0;
@@ -1083,10 +1087,10 @@ void checkpointStateTest() {
     }
     changed.hydro.enabled = !changed.hydro.enabled;
     ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
-    changed = getOptions();
+    changed = opts;
     changed.run.hierarchicalGravity = !changed.run.hierarchicalGravity;
     ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
-    changed = getOptions();
+    changed = opts;
     auto removedPhysics = header;
     removedPhysics.flags |= 1U << 1;
     ALWAYS_ASSERT(!detail::checkpointCompatible(removedPhysics, changed));
@@ -1102,29 +1106,29 @@ void checkpointStateTest() {
         }
         return degree == 8 ? 6 : 8;
     };
-    changed = getOptions();
+    changed = opts;
     changed.gravity.kernelFamily = changed.gravity.kernelFamily == "spline" ? "ferrers" : "spline";
     changed.gravity.kernelDegree = 8;
     ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
     auto const changedGravityHeader = detail::checkpointHeader(changed);
     ALWAYS_ASSERT(detail::checkpointCompatible(changedGravityHeader, changed));
-    ALWAYS_ASSERT(!detail::checkpointCompatible(changedGravityHeader, getOptions()));
-    changed = getOptions();
+    ALWAYS_ASSERT(!detail::checkpointCompatible(changedGravityHeader, opts));
+    changed = opts;
     changed.gravity.kernelDegree =
         differentKernelDegree(changed.gravity.kernelFamily, changed.gravity.kernelDegree);
     ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
-    changed = getOptions();
+    changed = opts;
     changed.hydro.kernelFamily = changed.hydro.kernelFamily == "spline" ? "ferrers" : "spline";
     changed.hydro.kernelDegree = 8;
     ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
     auto const changedHydroHeader = detail::checkpointHeader(changed);
     ALWAYS_ASSERT(detail::checkpointCompatible(changedHydroHeader, changed));
-    ALWAYS_ASSERT(!detail::checkpointCompatible(changedHydroHeader, getOptions()));
-    changed = getOptions();
+    ALWAYS_ASSERT(!detail::checkpointCompatible(changedHydroHeader, opts));
+    changed = opts;
     changed.hydro.kernelDegree =
         differentKernelDegree(changed.hydro.kernelFamily, changed.hydro.kernelDegree);
     ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
-    auto defaultKernelOptions = getOptions();
+    auto defaultKernelOptions = opts;
     defaultKernelOptions.gravity.kernelFamily = "ferrers";
     defaultKernelOptions.gravity.kernelDegree = 8;
     defaultKernelOptions.hydro.kernelFamily = "spline";
@@ -1144,7 +1148,7 @@ void checkpointStateTest() {
     legacyKernelOptions.gravity.kernelFamily = "ferrers";
     legacyKernelOptions.gravity.kernelDegree = 6;
     ALWAYS_ASSERT(!detail::legacyCheckpointCompatible(legacyKernelOptions));
-    auto legacySphOptions = getOptions();
+    auto legacySphOptions = opts;
     legacySphOptions.hydro.enabled = true;
     auto legacySphHeader = detail::checkpointHeader(legacySphOptions);
     ALWAYS_ASSERT(legacySphHeader.version == detail::kCheckpointVersion);
@@ -1153,14 +1157,14 @@ void checkpointStateTest() {
     ALWAYS_ASSERT(!detail::checkpointCompatible(legacySphHeader, legacySphOptions));
     legacySphHeader.version = 2;
     ALWAYS_ASSERT(!detail::checkpointCompatible(legacySphHeader, legacySphOptions));
-    auto legacyDarkMatterOptions = getOptions();
+    auto legacyDarkMatterOptions = opts;
     legacyDarkMatterOptions.hydro.enabled = false;
     auto legacyDarkMatterHeader = detail::checkpointHeader(legacyDarkMatterOptions);
     legacyDarkMatterHeader.version = detail::kLegacyDarkMatterCheckpointVersion;
     ALWAYS_ASSERT(detail::checkpointCompatible(legacyDarkMatterHeader, legacyDarkMatterOptions) ==
         (legacyDarkMatterOptions.compute.positionType == "fixed32"));
-    auto const sphParameters = detail::sphCheckpointParameters(getOptions());
-    auto starOptions = getOptions();
+    auto const sphParameters = detail::sphCheckpointParameters(opts);
+    auto starOptions = opts;
     starOptions.hydro.enabled = true;
     starOptions.chemistry.enabled = true;
     starOptions.starFormation.enabled = true;
@@ -1196,7 +1200,7 @@ void checkpointStateTest() {
     alteredStarOptions = starOptions;
     alteredStarOptions.starFormation.seed ^= uint64_t{1} << 63;
     ALWAYS_ASSERT(starParameters != detail::starFormationCheckpointParameters(alteredStarOptions));
-    auto conductionOptions = getOptions();
+    auto conductionOptions = opts;
     conductionOptions.hydro.enabled = true;
     conductionOptions.hydro.conductionCoefficient = 0.0;
     auto const noConductionHeader = detail::checkpointHeader(conductionOptions);
@@ -1208,7 +1212,7 @@ void checkpointStateTest() {
     conductionOptions.hydro.conductionCoefficient = 0.0;
     ALWAYS_ASSERT(!detail::checkpointCompatible(conductionHeader, conductionOptions));
     // Every SPH checkpoint carries the Balsara factor and evolved alpha.
-    auto balsaraOptions = getOptions();
+    auto balsaraOptions = opts;
     balsaraOptions.hydro.enabled = true;
     auto const balsaraHeader = detail::checkpointHeader(balsaraOptions);
     ALWAYS_ASSERT((balsaraHeader.flags & detail::kBalsaraSwitch) != 0U);
@@ -1219,7 +1223,7 @@ void checkpointStateTest() {
     ALWAYS_ASSERT(!detail::checkpointCompatible(unlimitedHeader, balsaraOptions));
     // Programmatic updates validate exactly as CLI/INI parsing does.
     {
-        auto const previousOptions = getOptions();
+        auto const previousOptions = opts;
         auto invalidOptions = previousOptions;
         invalidOptions.hydro.minimumBulkViscosityCoefficient = 0.5;
         invalidOptions.hydro.maximumBulkViscosityCoefficient = 0.25;
@@ -1232,11 +1236,11 @@ void checkpointStateTest() {
                 std::string::npos;
         }
         ALWAYS_ASSERT(rejected);
-        ALWAYS_ASSERT(getOptions().hydro.maximumBulkViscosityCoefficient ==
+        ALWAYS_ASSERT(opts.hydro.maximumBulkViscosityCoefficient ==
             previousOptions.hydro.maximumBulkViscosityCoefficient);
     }
     // Variational checkpoints round-trip; retired Monaghan pressure is never reinterpreted.
-    auto operatorOptions = getOptions();
+    auto operatorOptions = opts;
     operatorOptions.hydro.enabled = true;
     auto const variationalHeader = detail::checkpointHeader(operatorOptions);
     ALWAYS_ASSERT(
@@ -1256,7 +1260,7 @@ void checkpointStateTest() {
     auto unlimitedViscosityHeader = variationalHeader;
     unlimitedViscosityHeader.reserved &= ~detail::kRosswogViscosityLayout;
     ALWAYS_ASSERT(!detail::checkpointCompatible(unlimitedViscosityHeader, operatorOptions));
-    auto viscosityOptions = getOptions();
+    auto viscosityOptions = opts;
     viscosityOptions.hydro.enabled = true;
     auto const viscosityParameters = detail::viscosityCheckpointParameters(viscosityOptions);
     {
@@ -1277,7 +1281,7 @@ void checkpointStateTest() {
         altered.hydro.balsaraSoundSpeedCoefficient += 0.125;
         ALWAYS_ASSERT(viscosityParameters != detail::viscosityCheckpointParameters(altered));
     }
-    auto planeOptions = getOptions();
+    auto planeOptions = opts;
     planeOptions.hydro.enabled = true;
     planeOptions.scenario.rayleighTaylor.zPlaneAcceleration = 0.0;
     auto const noPlaneHeader = detail::checkpointHeader(planeOptions);
@@ -1294,22 +1298,22 @@ void checkpointStateTest() {
     planeOptions.scenario.rayleighTaylor.zPlaneAcceleration = 0.0;
     ALWAYS_ASSERT(!detail::checkpointCompatible(planeHeader, planeOptions));
     ALWAYS_ASSERT(!detail::zPlaneCheckpointCompatible(0.5, planeOptions));
-    changed = getOptions();
+    changed = opts;
     changed.hydro.vonNeumannRichtmyerCoefficient += 0.25;
     ALWAYS_ASSERT(sphParameters != detail::sphCheckpointParameters(changed));
-    changed = getOptions();
+    changed = opts;
     changed.hydro.neighborNumber += 1.0;
     ALWAYS_ASSERT(sphParameters != detail::sphCheckpointParameters(changed));
-    changed = getOptions();
+    changed = opts;
     changed.hydro.maxSmoothingLength *= 2.0;
     ALWAYS_ASSERT(sphParameters != detail::sphCheckpointParameters(changed));
-    changed = getOptions();
+    changed = opts;
     changed.run.numberOfOutputs++;
     ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
-    changed = getOptions();
+    changed = opts;
     changed.initial.numberOfParticles++;
     ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
-    if (detail::legacyCheckpointCompatible(getOptions())) {
+    if (detail::legacyCheckpointCompatible(opts)) {
         detail::LegacyDriver legacy{};
         legacy.a = kScale;
         legacy.tau = kClock;
@@ -1323,7 +1327,7 @@ void checkpointStateTest() {
         ALWAYS_ASSERT(previous.energies.pot == -1.0 && previous.energies.therm == 0.0);
     }
     fclose(fp);
-    if (!getOptions().hydro.enabled && !usesCuda(getOptions())) {
+    if (!opts.hydro.enabled && !usesCuda(opts)) {
         // Exercise the actual particle payload with low coordinate bits that a
         // double round trip cannot preserve in the fixed64 backend.
         fp = tmpfile();
@@ -1338,10 +1342,10 @@ void checkpointStateTest() {
                 particlesVel(dim, particle) = float(particle + dim);
             }
             particlesRung(particle) = char(particle);
-            if (getOptions().analysis.groups) {
+            if (opts.analysis.groups) {
                 particlesLastgroup(particle) = particle;
             }
-            if (getOptions().analysis.tracers) {
+            if (opts.analysis.tracers) {
                 particlesTracer(particle) = char(particle);
             }
         }
@@ -1407,7 +1411,8 @@ void writeCheckpoint(DriverParameters params) {
         particlesSave(file.get());
         domainsSave(file.get());
 #if COSMICTIGER_ENABLE_ROCKSTAR
-        if (getOptions().lightcone.enabled) {
+        auto const& opts = getOptions();
+        if (opts.lightcone.enabled) {
             lcSave(file.get());
         }
 #endif
@@ -1437,13 +1442,13 @@ void writeCheckpoint(DriverParameters params) {
 /// Validate the checkpoint set and restore distributed driver, particle, domain, and
 /// optional analysis state.
 DriverParameters readCheckpoint() {
+    auto const& opts = getOptions();
     DriverParameters params{};
     if (hpxRank() == 0) {
         std::cout << "Reading checkpoint\n" << std::flush;
         profile::ScopedPhase profilePhase("readCheckpoint.validate");
         detail::validateCheckpointDirectory(
-            detail::checkpointDirectory(getOptions().checkpoint.readIndex),
-            getOptions().checkpoint.readIndex);
+            detail::checkpointDirectory(opts.checkpoint.readIndex), opts.checkpoint.readIndex);
     }
     Vector<hpx::future<DriverParameters>> futs;
     for (auto const& c : hpxChildren()) {
@@ -1451,7 +1456,7 @@ DriverParameters readCheckpoint() {
     }
     {
         profile::ScopedPhase profilePhase("readCheckpoint.local", hpxRank() == 0);
-        int const iter = getOptions().checkpoint.readIndex;
+        int const iter = opts.checkpoint.readIndex;
         auto const rankPath =
             detail::checkpointRankFile(detail::checkpointDirectory(iter), hpxRank());
         detail::CheckpointFile file(fopen(rankPath.c_str(), "rb"));
@@ -1463,7 +1468,7 @@ DriverParameters readCheckpoint() {
         particlesLoad(file.get());
         domainsLoad(file.get());
 #if COSMICTIGER_ENABLE_ROCKSTAR
-        if (getOptions().lightcone.enabled) {
+        if (opts.lightcone.enabled) {
             lcLoad(file.get());
         }
 #endif

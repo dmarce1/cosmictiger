@@ -192,6 +192,7 @@ HPX_PLAIN_ACTION(particlesActivePct, ParticlesActivePctAction);
 /// Reduce active particle counts through the locality tree; rank zero returns the global
 /// fraction.
 double particlesActivePct() {
+    auto const& opts = getOptions();
     Vector<hpx::future<double>> futs;
     for (auto& c : hpxChildren()) {
         futs.push_back(hpx::async<ParticlesActivePctAction>(c));
@@ -201,7 +202,7 @@ double particlesActivePct() {
         numActive += f.get();
     }
     if (hpxRank() == 0) {
-        numActive /= getOptions().initial.numberOfParticles;
+        numActive /= opts.initial.numberOfParticles;
     }
     return numActive;
 }
@@ -277,7 +278,8 @@ struct LineIdType {
 struct LineIdHash {
     /// Map a remote owner and aligned particle index to a unique cache-line hash.
     inline size_t operator()(LineIdType id) const {
-        ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
+        auto const& opts = getOptions();
+        ParticleInteger const lineSize = opts.compute.particleCacheLineSize;
         ParticleInteger const i = id.index / lineSize;
         return i * (hpxSize() - 1) + ((id.proc < hpxRank()) ? id.proc : id.proc - 1);
     }
@@ -382,7 +384,8 @@ static T const* readParticleCacheLine(LineIdType lineId,
 /// Partition a particle range so dark matter precedes other species and return the split
 /// index.
 ParticleInteger particlesPartitionDarkMatter(Pair<ParticleInteger> rng) {
-    if (!getOptions().hydro.enabled) {
+    auto const& opts = getOptions();
+    if (!opts.hydro.enabled) {
         return rng.second;
     }
     ParticleInteger lo = rng.first;
@@ -458,6 +461,7 @@ Vector<OutputParticle> particlesGetTracers() {
 
 /// Assign evenly distributed tracer flags using global particle counts and rank offsets.
 void particlesSetTracers(size_t count, size_t totalCount) {
+    auto const& opts = getOptions();
     if (hpxRank() == 0) {
         Vector<hpx::future<ParticleInteger>> counts;
         for (size_t rank = 1; rank < hpxLocalities().size(); ++rank) {
@@ -480,8 +484,8 @@ void particlesSetTracers(size_t count, size_t totalCount) {
     }
 
     if (particlesSize() > 0) {
-        detail::setTracerFlags(&particlesTracer(0), particlesSize(), count, totalCount,
-            getOptions().analysis.tracerCount);
+        detail::setTracerFlags(
+            &particlesTracer(0), particlesSize(), count, totalCount, opts.analysis.tracerCount);
     }
 
     if (hpxRank() < hpxSize() - 1) {
@@ -604,6 +608,7 @@ static std::function<void()> undoLastMemadvise = nullptr;
 /// Apply GPU access advice to the active particle range while retaining an undo operation.
 void particlesMemadviseGpu() {
 #ifdef USE_CUDA
+    auto const& opts = getOptions();
     if (!cudaEnabled()) {
         return;
     }
@@ -620,7 +625,7 @@ void particlesMemadviseGpu() {
     CUDA_WARN(cudaAdviseMemory(
         &particlesRung(0) + begin, count * sizeof(char), cudaMemAdviseSetAccessedBy, deviceid));
     // The CUDA drift reads species for lightcone crossings when hydro is on.
-    bool const types = getOptions().hydro.enabled;
+    bool const types = opts.hydro.enabled;
     if (types) {
         CUDA_WARN(cudaAdviseMemory(
             particlesTy + begin, count * sizeof(char), cudaMemAdviseSetAccessedBy, deviceid));
@@ -641,6 +646,7 @@ void particlesMemadviseGpu() {
 /// Restore host memory preference and prefetch the active particle fields to CPU memory.
 void particlesMemadviseCpu() {
 #ifdef USE_CUDA
+    auto const& opts = getOptions();
     if (!cudaEnabled()) {
         return;
     }
@@ -656,7 +662,7 @@ void particlesMemadviseCpu() {
         cudaMemAdviseSetPreferredLocation, cudaCpuDeviceId));
     CUDA_WARN(cudaAdviseMemory(&particlesRung(0) + begin, count * sizeof(char),
         cudaMemAdviseSetPreferredLocation, cudaCpuDeviceId));
-    bool const types = getOptions().hydro.enabled;
+    bool const types = opts.hydro.enabled;
     if (types) {
         CUDA_WARN(cudaAdviseMemory(particlesTy + begin, count * sizeof(char),
             cudaMemAdviseSetPreferredLocation, cudaCpuDeviceId));
@@ -690,7 +696,8 @@ void particlesMemadviseCpu() {
 /// arrays.
 void particlesGlobalReadPosAndGroup(ParticleGlobalRange range, Position* x, Position* y,
     Position* z, GroupInteger* groupNumbers, ParticleInteger offset) {
-    ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
+    auto const& opts = getOptions();
+    ParticleInteger const lineSize = opts.compute.particleCacheLineSize;
     if (range.range.first != range.range.second) {
         if (range.proc == hpxRank()) {
             ParticleInteger const dif = offset - range.range.first;
@@ -872,6 +879,7 @@ void particlesSetMinrung(int minrung) {
 
 /// Gather species-dependent masses from local particles or remote cache entries.
 void particlesGlobalReadMasses(ParticleGlobalRange range, float* masses, ParticleInteger offset) {
+    auto const& opts = getOptions();
     if (range.range.first == range.range.second) {
         return;
     }
@@ -881,7 +889,7 @@ void particlesGlobalReadMasses(ParticleGlobalRange range, float* masses, Particl
         }
         return;
     }
-    ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
+    ParticleInteger const lineSize = opts.compute.particleCacheLineSize;
     ParticleInteger const startLine = (range.range.first / lineSize) * lineSize;
     ParticleInteger const stopLine = ((range.range.second - 1) / lineSize) * lineSize;
     ParticleInteger destination = offset;
@@ -891,9 +899,9 @@ void particlesGlobalReadMasses(ParticleGlobalRange range, float* masses, Particl
         auto const end = std::min(line + lineSize, range.range.second);
         for (ParticleInteger i = begin; i < end; ++i) {
             auto const& value = values[i - line];
-            masses[destination++] = getOptions().hydro.enabled ?
-                float(value.type == kDarkMatterType ? getOptions().initial.darkMatterMass :
-                                                      getOptions().initial.gasMass) :
+            masses[destination++] = opts.hydro.enabled ?
+                float(value.type == kDarkMatterType ? opts.initial.darkMatterMass :
+                                                      opts.initial.gasMass) :
                 1.0f;
         }
     }
@@ -903,8 +911,9 @@ void particlesGlobalReadMasses(ParticleGlobalRange range, float* masses, Particl
 /// arrays.
 void particlesGlobalReadPos(ParticleGlobalRange range, Position* x, Position* y, Position* z,
     char* types, ParticleInteger offset) {
-    static bool const sph = getOptions().hydro.enabled;
-    ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
+    auto const& opts = getOptions();
+    static bool const sph = opts.hydro.enabled;
+    ParticleInteger const lineSize = opts.compute.particleCacheLineSize;
     if (range.range.first != range.range.second) {
         if (range.proc == hpxRank()) {
             ParticleInteger const dif = offset - range.range.first;
@@ -925,7 +934,7 @@ void particlesGlobalReadPos(ParticleGlobalRange range, Position* x, Position* y,
             if (types) {
                 for (int i = range.range.first; i < range.range.second; i++) {
                     int const j = offset + i - range.range.first;
-                    if (getOptions().hydro.enabled) {
+                    if (opts.hydro.enabled) {
                         ParticleInteger const k = particlesCatIndex(i);
                         int type = particlesType(i);
                         types[j] = type;
@@ -953,7 +962,7 @@ void particlesGlobalReadPos(ParticleGlobalRange range, Position* x, Position* y,
                     z[destIndex] =
                         kSpatialDimensions > 2 ? ptr[srcIndex].position[kZi] : Position(0.5);
                     if (types) {
-                        if (getOptions().hydro.enabled) {
+                        if (opts.hydro.enabled) {
                             types[destIndex] = ptr[srcIndex].type;
                         } else {
                             types[destIndex] = kDarkMatterType;
@@ -973,9 +982,10 @@ static ParticlesCacheEntry const* particlesCacheReadLine(LineIdType lineId) {
 
 /// Pack a local position/type cache line while holding the particle-reordering read lock.
 static Vector<ParticlesCacheEntry> particlesFetchCacheLine(ParticleInteger index) {
+    auto const& opts = getOptions();
     std::shared_lock<SharedMutexType> lock(sharedMutex);
-    bool const sph = getOptions().hydro.enabled;
-    ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
+    bool const sph = opts.hydro.enabled;
+    ParticleInteger const lineSize = opts.compute.particleCacheLineSize;
     Vector<ParticlesCacheEntry> line(lineSize);
     ParticleInteger const begin = (index / lineSize) * lineSize;
     ParticleInteger const end = std::min(particlesSize(), begin + lineSize);
@@ -984,7 +994,7 @@ static Vector<ParticlesCacheEntry> particlesFetchCacheLine(ParticleInteger index
         for (int dim = 0; dim < kSpatialDimensions; dim++) {
             ln.position[dim] = particlesPositionValue(dim, i);
         }
-        if (getOptions().hydro.enabled) {
+        if (opts.hydro.enabled) {
             int type = particlesType(i);
             auto const kk = particlesCatIndex(i);
             ln.type = type;
@@ -997,8 +1007,9 @@ static Vector<ParticlesCacheEntry> particlesFetchCacheLine(ParticleInteger index
 
 /// Pack local positions and current group labels for a remote group-cache request.
 static Vector<GroupParticle> particlesGroupFetchCacheLine(ParticleInteger index) {
+    auto const& opts = getOptions();
     std::shared_lock<SharedMutexType> lock(sharedMutex);
-    ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
+    ParticleInteger const lineSize = opts.compute.particleCacheLineSize;
     Vector<GroupParticle> line(lineSize);
     ParticleInteger const begin = (index / lineSize) * lineSize;
     ParticleInteger const end = std::min(particlesSize(), begin + lineSize);
@@ -1013,7 +1024,8 @@ static Vector<GroupParticle> particlesGroupFetchCacheLine(ParticleInteger index)
 
 /// Advance the group-cache refresh epoch throughout the locality tree.
 void particlesIncGroupCacheEpoch() {
-    ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
+    auto const& opts = getOptions();
+    ParticleInteger const lineSize = opts.compute.particleCacheLineSize;
     Vector<hpx::future<void>> futs;
     auto const children = hpxChildren();
     for (auto const& c : children) {
@@ -1025,8 +1037,9 @@ void particlesIncGroupCacheEpoch() {
 
 /// Pack current local group labels without retransmitting unchanged positions.
 static Vector<GroupInteger> particlesGroupRefreshCacheLine(ParticleInteger index) {
+    auto const& opts = getOptions();
     std::shared_lock<SharedMutexType> lock(sharedMutex);
-    ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
+    ParticleInteger const lineSize = opts.compute.particleCacheLineSize;
     Vector<GroupInteger> line(lineSize);
     ParticleInteger const begin = (index / lineSize) * lineSize;
     ParticleInteger const end = std::min(particlesSize(), begin + lineSize);
@@ -1096,7 +1109,8 @@ void particlesArrayResize(T*& ptr, ParticleInteger newCapacity, bool reg) {
 
 /// Allocate and initialize sample-index storage when gravity-error capture is enabled.
 static void particlesEnsureGravitySampleStorage() {
-    if (getOptions().gravity.errorInterval > 0 && particlesGravitySampleIndices == nullptr &&
+    auto const& opts = getOptions();
+    if (opts.gravity.errorInterval > 0 && particlesGravitySampleIndices == nullptr &&
         capacity > 0) {
         particlesArrayResize(particlesGravitySampleIndices, capacity, true);
         std::fill_n(particlesGravitySampleIndices, capacity, ParticleInteger{-1});
@@ -1105,8 +1119,8 @@ static void particlesEnsureGravitySampleStorage() {
 
 /// Allocate and initialize per-particle star-formation metadata when required.
 static void particlesEnsureStarFormationStorage() {
-    if (getOptions().starFormation.enabled && particlesStarFormationStates == nullptr &&
-        capacity > 0) {
+    auto const& opts = getOptions();
+    if (opts.starFormation.enabled && particlesStarFormationStates == nullptr && capacity > 0) {
         particlesArrayResize(particlesStarFormationStates, capacity, true);
         std::fill_n(particlesStarFormationStates, capacity, StarFormationState{});
     }
@@ -1116,16 +1130,17 @@ static void particlesEnsureStarFormationStorage() {
 /// Zero retained force-output fields for particle slots without a gravity pass to populate
 /// them.
 static void particlesClearGravityDiagnostics(ParticleInteger begin, ParticleInteger end) {
+    auto const& opts = getOptions();
     if (begin >= end) {
         return;
     }
     // These output arrays have no force pass to populate them in an SPH-only build.
-    if (saveParticleAcceleration(getOptions().analysis)) {
+    if (saveParticleAcceleration(opts.analysis)) {
         for (int dim = 0; dim < kSpatialDimensions; ++dim) {
             std::fill_n(particlesGravityAccelerations[dim] + begin, end - begin, 0.0f);
         }
     }
-    if (saveParticlePotential(getOptions().analysis)) {
+    if (saveParticlePotential(opts.analysis)) {
         std::fill_n(particlesP + begin, end - begin, 0.0f);
     }
 }
@@ -1134,6 +1149,7 @@ static void particlesClearGravityDiagnostics(ParticleInteger begin, ParticleInte
 /// Grow enabled particle arrays together and initialize metadata for newly exposed particle
 /// slots.
 static void particlesResizeStorage(ParticleInteger sz, bool lock) {
+    auto const& opts = getOptions();
     if (sz > capacity) {
         if (lock) {
             sharedMutex.lock();
@@ -1148,36 +1164,36 @@ static void particlesResizeStorage(ParticleInteger sz, bool lock) {
         }
         particlesArrayResize(particlesV, newCapacity, true);
         particlesArrayResize(particlesR, newCapacity, true);
-        if (getOptions().analysis.groups) {
+        if (opts.analysis.groups) {
             particlesArrayResize(particlesLgrp, newCapacity, false);
             for (ParticleInteger i = size; i < newCapacity; i++) {
                 particlesLgrp[i] = kNoParticleGroup;
             }
         }
-        if (saveParticleAcceleration(getOptions().analysis)) {
+        if (saveParticleAcceleration(opts.analysis)) {
             for (int dim = 0; dim < kSpatialDimensions; dim++) {
                 particlesArrayResize(particlesGravityAccelerations[dim], newCapacity, true);
             }
         }
 
-        if (saveParticlePotential(getOptions().analysis)) {
+        if (saveParticlePotential(opts.analysis)) {
             particlesArrayResize(particlesP, newCapacity, true);
         }
-        if (getOptions().analysis.tracers) {
+        if (opts.analysis.tracers) {
             particlesArrayResize(particlesTr, newCapacity, false);
         }
-        if (getOptions().gravity.errorInterval > 0 || particlesGravitySampleIndices != nullptr) {
+        if (opts.gravity.errorInterval > 0 || particlesGravitySampleIndices != nullptr) {
             bool const firstAllocation = particlesGravitySampleIndices == nullptr;
             particlesArrayResize(particlesGravitySampleIndices, newCapacity, true);
             ParticleInteger const begin = firstAllocation ? 0 : size;
             std::fill(particlesGravitySampleIndices + begin,
                 particlesGravitySampleIndices + newCapacity, ParticleInteger{-1});
         }
-        if (getOptions().hydro.enabled) {
+        if (opts.hydro.enabled) {
             particlesArrayResize(particlesSph, newCapacity, true);
             particlesArrayResize(particlesTy, newCapacity, true);
         }
-        if (getOptions().starFormation.enabled || particlesStarFormationStates != nullptr) {
+        if (opts.starFormation.enabled || particlesStarFormationStates != nullptr) {
             bool const firstAllocation = particlesStarFormationStates == nullptr;
             particlesArrayResize(particlesStarFormationStates, newCapacity, true);
             ParticleInteger const begin = firstAllocation ? 0 : size;
@@ -1194,10 +1210,10 @@ static void particlesResizeStorage(ParticleInteger sz, bool lock) {
     ParticleInteger const oldsz = size;
     size = sz;
     if (sz > oldsz) {
-        if (getOptions().analysis.groups) {
+        if (opts.analysis.groups) {
             std::fill(particlesLgrp + oldsz, particlesLgrp + sz, kNoParticleGroup);
         }
-        if (getOptions().analysis.tracers) {
+        if (opts.analysis.tracers) {
             std::fill(particlesTr + oldsz, particlesTr + sz, char{0});
         }
     }
@@ -1214,7 +1230,7 @@ static void particlesResizeStorage(ParticleInteger sz, bool lock) {
             particlesStarFormationStates + std::max(ParticleInteger(oldsz), sz),
             StarFormationState{});
     }
-    if (getOptions().hydro.enabled) {
+    if (opts.hydro.enabled) {
         for (ParticleInteger i = oldsz; i < sz; i++) {
             particlesCatIndex(i) = kNoParticleIndex;
             particlesType(i) = kDarkMatterType;
@@ -1261,7 +1277,8 @@ HPX_PLAIN_ACTION(particlesStarFormationCount, ParticlesStarFormationCountAction)
 /// Validate distributed identity coverage or assign identities before initial rank-zero
 /// particles migrate.
 void particlesInitializeStarFormationIds() {
-    if (!getOptions().starFormation.enabled) {
+    auto const& opts = getOptions();
+    if (!opts.starFormation.enabled) {
         return;
     }
     if (hpxRank() != 0) {
@@ -1301,7 +1318,7 @@ void particlesInitializeStarFormationIds() {
         return;
     }
     if (missing != total || total != uint64_t(particlesOwnedSize()) ||
-        (getOptions().run.scenario == "cosmology" && getOptions().run.test.empty())) {
+        (opts.run.scenario == "cosmology" && opts.run.test.empty())) {
         throw std::logic_error(
             "Distributed initial conditions must supply globally stable star-formation IDs");
     }
@@ -1312,9 +1329,10 @@ void particlesInitializeStarFormationIds() {
 /// formation metadata.
 void particlesConvertToStar(ParticleInteger index, double formationTime) {
 #if COSMICTIGER_WITH_SPH
+    auto const& opts = getOptions();
     uint64_t timeBits;
     std::memcpy(&timeBits, &formationTime, sizeof(timeBits));
-    if (!getOptions().starFormation.enabled || index < 0 || index >= particlesOwnedSize() ||
+    if (!opts.starFormation.enabled || index < 0 || index >= particlesOwnedSize() ||
         particlesType(index) != kSphType ||
         (timeBits & 0x7ff0000000000000ULL) == 0x7ff0000000000000ULL || formationTime < 0.0 ||
         particlesStarFormationStates[index].id == 0) {
@@ -1338,7 +1356,8 @@ void particlesRegisterReleaseHook(void (*hook)()) {
 
 /// Replace gravity sample-acceleration storage and reset particle-to-sample markers.
 void particlesGravitySamplesBegin(size_t sampleCount) {
-    if (sampleCount > 0 && getOptions().gravity.errorInterval <= 0) {
+    auto const& opts = getOptions();
+    if (sampleCount > 0 && opts.gravity.errorInterval <= 0) {
         throw std::logic_error("Gravity sample capture requires gravity.errorInterval > 0");
     }
     if (sampleCount > size_t(std::numeric_limits<ParticleInteger>::max()) ||
@@ -1369,6 +1388,7 @@ void particlesGravitySamplesBegin(size_t sampleCount) {
 
 /// Run dependent release hooks and free the enabled local particle arrays.
 void particlesFree() {
+    auto const& opts = getOptions();
     for (auto hook : particleReleaseHooks) {
         hook();
     }
@@ -1383,22 +1403,22 @@ void particlesFree() {
     particlesGravitySampleAccelerations = nullptr;
     freeManagedMemory(particlesStarFormationStates);
     particlesStarFormationStates = nullptr;
-    if (getOptions().analysis.groups) {
+    if (opts.analysis.groups) {
         free(particlesLgrp);
     }
-    if (saveParticleAcceleration(getOptions().analysis)) {
+    if (saveParticleAcceleration(opts.analysis)) {
         for (int dim = 0; dim < kSpatialDimensions; dim++) {
             freeManagedMemory(particlesGravityAccelerations[dim]);
         }
     }
 
-    if (saveParticlePotential(getOptions().analysis)) {
+    if (saveParticlePotential(opts.analysis)) {
         freeManagedMemory(particlesP);
     }
-    if (getOptions().analysis.tracers) {
+    if (opts.analysis.tracers) {
         free(particlesTr);
     }
-    if (getOptions().hydro.enabled) {
+    if (opts.hydro.enabled) {
         freeManagedMemory(particlesTy);
         freeManagedMemory(particlesSph);
     }
@@ -1407,12 +1427,13 @@ void particlesFree() {
 /// Create this rank's share of random initial positions with zero velocities and initial
 /// rungs.
 void particlesRandomInit() {
+    auto const& opts = getOptions();
     Vector<hpx::future<void>> futs;
     auto const children = hpxChildren();
     for (auto const& c : children) {
         futs.push_back(hpx::async<ParticlesRandomInitAction>(c));
     }
-    size_t const totalNumberOfParticles = getOptions().initial.numberOfParticles;
+    size_t const totalNumberOfParticles = opts.initial.numberOfParticles;
     size_t const begin = (size_t) (hpxRank()) * totalNumberOfParticles / hpxSize();
     size_t const end = (size_t) (hpxRank() + 1) * totalNumberOfParticles / hpxSize();
     size_t const localParticleCount = end - begin;
@@ -1599,7 +1620,8 @@ void particlesSortByRung(int minrung) {
 
 /// Gather local or cached remote rung values into a caller-provided array.
 void particlesGlobalReadRungs(ParticleGlobalRange range, char* r, ParticleInteger offset) {
-    ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
+    auto const& opts = getOptions();
+    ParticleInteger const lineSize = opts.compute.particleCacheLineSize;
     if (range.range.first != range.range.second) {
         if (range.proc == hpxRank()) {
             ParticleInteger const dif = offset - range.range.first;
@@ -1634,7 +1656,8 @@ static char const* particlesCacheReadLineRungs(LineIdType lineId) {
 
 /// Pack a local rung cache line for remote retrieval.
 static Vector<char> particlesFetchCacheLineRungs(ParticleInteger index) {
-    ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
+    auto const& opts = getOptions();
+    ParticleInteger const lineSize = opts.compute.particleCacheLineSize;
     Vector<char> line(lineSize);
     ParticleInteger const begin = (index / lineSize) * lineSize;
     ParticleInteger const end = std::min(particlesSize(), begin + lineSize);
@@ -1648,7 +1671,8 @@ static Vector<char> particlesFetchCacheLineRungs(ParticleInteger index) {
 #if COSMICTIGER_WITH_GRAVITY
 /// Gather the requested output sample, including enabled force diagnostics.
 Vector<ParticleSample> particlesSample(int cnt) {
-    auto const& analysis = getOptions().analysis;
+    auto const& opts = getOptions();
+    auto const& analysis = opts.analysis;
     Vector<ParticleSample> parts;
     Vector<hpx::future<Vector<ParticleSample>>> futs;
     if (hpxRank() == 0) {
@@ -1761,10 +1785,11 @@ void saveStarFormationParticles(FILE* fp) {
 /// Restore enabled particle arrays, rung traversal state, and species metadata from a
 /// checkpoint stream.
 void particlesLoad(FILE* fp) {
+    auto const& opts = getOptions();
     ParticleInteger size;
     FREAD(&size, sizeof(ParticleInteger), 1, fp);
 #if COSMICTIGER_WITH_SPH
-    if (getOptions().hydro.enabled) {
+    if (opts.hydro.enabled) {
         ParticleInteger sphSize = 0;
         FREAD(&sphSize, sizeof(ParticleInteger), 1, fp);
         std::cout << std::format("Reading {:d} total particles {:d} sph\n", size, sphSize)
@@ -1789,20 +1814,20 @@ void particlesLoad(FILE* fp) {
     }
     FREAD(particlesVelData(), sizeof(ParticleVector<float>), particlesSize(), fp);
     FREAD(&particlesRung(0), sizeof(char), particlesSize(), fp);
-    if (getOptions().analysis.groups) {
+    if (opts.analysis.groups) {
         FREAD(&particlesLastgroup(0), sizeof(GroupInteger), particlesSize(), fp);
     }
-    if (getOptions().analysis.tracers) {
+    if (opts.analysis.tracers) {
         FREAD(&particlesTracer(0), sizeof(char), particlesSize(), fp);
     }
 #if COSMICTIGER_WITH_SPH
-    if (getOptions().hydro.enabled) {
+    if (opts.hydro.enabled) {
         FREAD(&particlesType(0), sizeof(char), particlesSize(), fp);
         FREAD(&particlesCatIndex(0), sizeof(ParticleInteger), particlesSize(), fp);
         sphParticlesLoad(fp);
     }
 #endif
-    if (getOptions().starFormation.enabled) {
+    if (opts.starFormation.enabled) {
         detail::loadStarFormationParticles(fp);
     }
 
@@ -1820,10 +1845,11 @@ void particlesLoad(FILE* fp) {
 
 /// Write enabled particle arrays and rung traversal state to a checkpoint stream.
 void particlesSave(FILE* fp) {
+    auto const& opts = getOptions();
     ParticleInteger size = particlesSize();
     fwrite(&size, sizeof(ParticleInteger), 1, fp);
 #if COSMICTIGER_WITH_SPH
-    if (getOptions().hydro.enabled) {
+    if (opts.hydro.enabled) {
         ParticleInteger const sphSize = sphParticlesSize();
         fwrite(&sphSize, sizeof(ParticleInteger), 1, fp);
     }
@@ -1833,20 +1859,20 @@ void particlesSave(FILE* fp) {
     }
     fwrite(particlesVelData(), sizeof(ParticleVector<float>), particlesSize(), fp);
     fwrite(&particlesRung(0), sizeof(char), particlesSize(), fp);
-    if (getOptions().analysis.groups) {
+    if (opts.analysis.groups) {
         fwrite(&particlesLastgroup(0), sizeof(GroupInteger), particlesSize(), fp);
     }
-    if (getOptions().analysis.tracers) {
+    if (opts.analysis.tracers) {
         fwrite(&particlesTracer(0), sizeof(char), particlesSize(), fp);
     }
 #if COSMICTIGER_WITH_SPH
-    if (getOptions().hydro.enabled) {
+    if (opts.hydro.enabled) {
         fwrite(&particlesType(0), sizeof(char), particlesSize(), fp);
         fwrite(&particlesCatIndex(0), sizeof(ParticleInteger), particlesSize(), fp);
         sphParticlesSave(fp);
     }
 #endif
-    if (getOptions().starFormation.enabled) {
+    if (opts.starFormation.enabled) {
         detail::saveStarFormationParticles(fp);
     }
 
@@ -1858,8 +1884,9 @@ void particlesSave(FILE* fp) {
 
 /// Write species-separated fixed-point positions in the glass initial-condition format.
 void particlesSaveGlass(char const* filename) {
+    auto const& opts = getOptions();
     FILE* fp = fopen(outputPath(filename).c_str(), "wb");
-    ParticleInteger size = getOptions().initial.latticeSide;
+    ParticleInteger size = opts.initial.latticeSide;
     fwrite(&size, sizeof(ParticleInteger), 1, fp);
     for (ParticleInteger i = 0; i < particlesSize(); i++) {
         if (particlesType(i) == kDarkMatterType) {
@@ -1927,8 +1954,9 @@ void particlesResolveWithSphParticles() {
 /// Gather local or cached remote velocity components into caller-provided arrays.
 void particlesGlobalReadVels(
     ParticleGlobalRange range, float* vx, float* vy, float* vz, ParticleInteger offset) {
-    static bool const sph = getOptions().hydro.enabled;
-    ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
+    auto const& opts = getOptions();
+    static bool const sph = opts.hydro.enabled;
+    ParticleInteger const lineSize = opts.compute.particleCacheLineSize;
     if (range.range.first != range.range.second) {
         if (range.proc == hpxRank()) {
             ParticleInteger const dif = offset - range.range.first;
@@ -1969,8 +1997,9 @@ static ParticleVector<float> const* particlesCacheReadLineVels(LineIdType lineId
 
 /// Pack a local velocity cache line for remote retrieval.
 static Vector<ParticleVector<float>> particlesFetchCacheLineVels(ParticleInteger index) {
-    static bool const sph = getOptions().hydro.enabled;
-    ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
+    auto const& opts = getOptions();
+    static bool const sph = opts.hydro.enabled;
+    ParticleInteger const lineSize = opts.compute.particleCacheLineSize;
     Vector<ParticleVector<float>> line(lineSize);
     ParticleInteger const begin = (index / lineSize) * lineSize;
     ParticleInteger const end = std::min(particlesSize(), begin + lineSize);
@@ -1997,11 +2026,12 @@ EnergiesT particlesSumEnergies(bool includeGas) {
     for (int proc = 0; proc < numberOfThreads; proc++) {
         futs.push_back(hpx::async(hpx::annotated_function(
             [numberOfThreads, proc, includeGas]() {
+                auto const& opts = getOptions();
                 EnergiesT energies;
                 ParticleInteger const b = (size_t) proc * particlesSize() / numberOfThreads;
                 ParticleInteger const e = (size_t) (proc + 1) * particlesSize() / numberOfThreads;
 #if COSMICTIGER_WITH_SPH
-                bool const skipGas = !includeGas && getOptions().hydro.enabled;
+                bool const skipGas = !includeGas && opts.hydro.enabled;
 #endif
                 for (ParticleInteger i = b; i != e; i++) {
 #if COSMICTIGER_WITH_SPH
@@ -2013,7 +2043,7 @@ EnergiesT particlesSumEnergies(bool includeGas) {
                     float const vy = particlesVelocityValue(kYi, i);
                     float const vz = particlesVelocityValue(kZi, i);
                     float const m = particlesMass(i);
-                    if (saveParticlePotential(getOptions().analysis)) {
+                    if (saveParticlePotential(opts.analysis)) {
                         energies.pot += 0.5 * m * particlesPot(i);
                     }
                     energies.kin += 0.5 * m * (sqr(vx) + sqr(vy) + sqr(vz));
@@ -2134,6 +2164,7 @@ HPX_PLAIN_ACTION(particlesReadGadget4, ParticlesReadGadget4Action);
 /// Load each locality's Gadget particle file and convert positions and velocities to
 /// simulation storage units.
 GadgetIoHeader particlesReadGadget4(std::string fnameBase) {
+    auto const& opts = getOptions();
     std::cout << "Reading gadget4 file\n" << std::flush;
     Vector<hpx::future<void>> futs;
     for (auto& c : hpxChildren()) {
@@ -2183,7 +2214,7 @@ GadgetIoHeader particlesReadGadget4(std::string fnameBase) {
     for (ParticleInteger i = 0; i < numberOfParticles; i++) {
         for (int dim = 0; dim < kSpatialDimensions; dim++) {
             particlesVel(dim, i) *=
-                sqrt(a) * a * 1e5 * getOptions().units.timeSeconds / getOptions().units.lengthCm;
+                sqrt(a) * a * 1e5 * opts.units.timeSeconds / opts.units.lengthCm;
         }
     }
     checkBlock();

@@ -433,12 +433,13 @@ struct GasMigrationState {
     /// `bulkViscosityCoefficient.bits`, `electronFraction` in transport order.
     template <class Archive>
     void serialize(Archive& arc, unsigned) {
+        auto const& opts = getOptions();
         arc & smoothingLength;
         arc & entropy;
         arc & density;
         arc & flags.bits;
         arc & bulkViscosityCoefficient.bits;
-        if (getOptions().chemistry.enabled) {
+        if (opts.chemistry.enabled) {
             arc & electronFraction;
         }
     }
@@ -472,6 +473,7 @@ void receiveSphParticles(Vector<SphMigrationParticle> parts, int sourceRank, siz
 HPX_PLAIN_ACTION(receiveSphParticles, ReceiveSphParticlesAction);
 /// Pack a base particle and its optional gas thermodynamic state into one migration record.
 static SphMigrationParticle packSphParticle(ParticleInteger index) {
+    auto const& opts = getOptions();
     SphMigrationParticle result;
     result.part = particlesGetParticle(index);
     ALWAYS_ASSERT(result.part.type == kDarkMatterType || result.part.type == kSphType ||
@@ -484,7 +486,7 @@ static SphMigrationParticle packSphParticle(ParticleInteger index) {
         gas.flags = sphParticlesFlags[i];
         gas.entropy = sphParticlesEntropies[i];
         gas.bulkViscosityCoefficient = sphParticlesBulkViscosityCoefficients[i];
-        if (getOptions().chemistry.enabled) {
+        if (opts.chemistry.enabled) {
             gas.electronFraction = sphParticlesElectronFractions[i];
         }
     }
@@ -493,6 +495,7 @@ static SphMigrationParticle packSphParticle(ParticleInteger index) {
 /// Install a migration record and rebuild the base-particle/gas catalogue cross-reference.
 static void unpackSphParticle(
     SphMigrationParticle record, ParticleInteger index, ParticleInteger gasIndex) {
+    auto const& opts = getOptions();
     if (record.part.type == kSphType) {
         record.part.catalogIndex = gasIndex;
     }
@@ -507,7 +510,7 @@ static void unpackSphParticle(
         sphParticlesFlags[i] = gas.flags;
         sphParticlesEntropies[i] = gas.entropy;
         sphParticlesBulkViscosityCoefficients[i] = gas.bulkViscosityCoefficient;
-        if (getOptions().chemistry.enabled) {
+        if (opts.chemistry.enabled) {
             sphParticlesElectronFractions[i] = gas.electronFraction;
         }
     }
@@ -515,6 +518,7 @@ static void unpackSphParticle(
 /// Select outgoing mixed-species records, retain local records, and complete bounded parcel
 /// submissions.
 static void beginSphMigration(int rung) {
+    auto const& opts = getOptions();
     Vector<hpx::future<void>> pending;
     for (auto const& child : hpxChildren()) {
         pending.push_back(hpx::async<DomainsBeginAction>(child, rung));
@@ -535,7 +539,7 @@ static void beginSphMigration(int rung) {
             position[dim] = detail::particleDomainCoordinate(particlesPositionValue(dim, i));
         }
         auto record = packSphParticle(i);
-        bool const eligible = rung < 0 || !getOptions().run.hierarchicalGravity ||
+        bool const eligible = rung < 0 || !opts.run.hierarchicalGravity ||
             (i >= activeRange.first && particlesRung(i) == rung);
         if (!eligible || box.contains(position)) {
             retainedSphParticles.push_back(std::move(record));
@@ -641,7 +645,8 @@ size_t domainsMigrationParcelCapacity(bool gas) {
 /// Dispatch outgoing particles for the active range to their new domain owners.
 void domainsBegin(int rung) {
 #if COSMICTIGER_WITH_SPH
-    if (getOptions().hydro.enabled) {
+    auto const& opts = getOptions();
+    if (opts.hydro.enabled) {
         sphTreeInvalidate();
         beginSphMigration(rung);
         return;
@@ -664,6 +669,7 @@ void domainsBegin(int rung) {
         futs.push_back(hpx::async(hpx::annotated_function(
             [proc, numberOfThreads, &mutex, &nextBegin, myDomain, currentRange, rung,
                 parcelCapacity]() {
+                auto const& opts = getOptions();
                 std::unordered_map<int, Vector<Particle>> sends;
                 Vector<hpx::future<void>> futs;
                 Vector<ParticleInteger> myFreeIndices;
@@ -674,8 +680,8 @@ void domainsBegin(int rung) {
                         // Ordinary timesteps drift every rung together. Rebalance
                         // all particles before building their common gravity tree.
 
-                        if (rung < 0 || !getOptions().run.hierarchicalGravity ||
-                            !getOptions().gravity.enabled || particlesRung(i) == rung) {
+                        if (rung < 0 || !opts.run.hierarchicalGravity || !opts.gravity.enabled ||
+                            particlesRung(i) == rung) {
                             Vector3<double> position;
                             for (ParticleInteger dim = 0; dim < kDimensions; dim++) {
                                 position[dim] = detail::particleDomainCoordinate(
@@ -718,7 +724,8 @@ void domainsBegin(int rung) {
 /// across localities.
 void domainsEnd() {
 #if COSMICTIGER_WITH_SPH
-    if (getOptions().hydro.enabled) {
+    auto const& opts = getOptions();
+    if (opts.hydro.enabled) {
         endSphMigration();
         return;
     }

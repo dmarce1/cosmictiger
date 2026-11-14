@@ -192,6 +192,7 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
 /// completion.
 void cudaDrift(
     int rung, double a, double dt, double tau0, double tau1, double tauMax, double drag) {
+    auto const& opts = getOptions();
 #if !defined(COSMICTIGER_ENABLE_ROCKSTAR) || COSMICTIGER_ENABLE_ROCKSTAR
     static bool init = false;
 #endif
@@ -208,7 +209,7 @@ void cudaDrift(
         return;
     }
 #if !defined(COSMICTIGER_ENABLE_ROCKSTAR) || COSMICTIGER_ENABLE_ROCKSTAR
-    bool const doLc = getOptions().lightcone.enabled && tauMax > 0.0 && tauMax - tau1 < 1.0;
+    bool const doLc = opts.lightcone.enabled && tauMax > 0.0 && tauMax - tau1 < 1.0;
 #else
     bool const doLc = false;
 #endif
@@ -231,12 +232,11 @@ void cudaDrift(
     auto* vels = particlesVelData() + rng.first;
     auto const* rungs = &particlesRung(rng.first);
     // particlesTy is managed memory; particlesType() returns a shared static when hydro is off.
-    char const* const types = getOptions().hydro.enabled ? particlesTy + rng.first : nullptr;
-    drag = getOptions().run.scenario == "glass" ? std::numbers::pi : 0.0;
+    char const* const types = opts.hydro.enabled ? particlesTy + rng.first : nullptr;
+    drag = opts.run.scenario == "glass" ? std::numbers::pi : 0.0;
     CudaStream stream(cudaGetDevice());
     cudaDriftKernel<<<numberOfBlocks, kDriftBlockSize, 0, stream.nativeHandle()>>>(x, y, z, vels,
-        rungs, types, cnt, rung, a, dt, tau0, tau1, tauMax, doLc, getOptions().lightcone.mapSize,
-        drag);
+        rungs, types, cnt, rung, a, dt, tau0, tau1, tauMax, doLc, opts.lightcone.mapSize, drag);
     stream.checkLaunch();
     stream.wait();
 #if !defined(COSMICTIGER_ENABLE_ROCKSTAR) || COSMICTIGER_ENABLE_ROCKSTAR

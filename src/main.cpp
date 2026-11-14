@@ -69,7 +69,8 @@ namespace detail {
 
 // The coordinator owns the phase stack; print and save its exclusive phase times.
 void writeProfile() {
-    if (hpxRank() != 0 || !getOptions().run.test.empty()) {
+    auto const& opts = getOptions();
+    if (hpxRank() != 0 || !opts.run.test.empty()) {
         return;
     }
     std::string const report = profile::profileReport();
@@ -98,6 +99,9 @@ int hpx_main(int argc, char* argv[]) {
     try {
         profile::checkForInterrupt();
         if (processOptions(argc, argv)) {
+#if defined(COSMICTIGER_BUILD_TESTING) || defined(USE_CUDA) || COSMICTIGER_WITH_SPH
+            auto const& opts = getOptions();
+#endif
             profile::checkForInterrupt();
             validateCheckpointOutput();
             startMemuseDaemon();
@@ -118,28 +122,28 @@ int hpx_main(int argc, char* argv[]) {
 
 #ifdef COSMICTIGER_BUILD_TESTING
             // The metadata-only checkpoint test needs no GPU.
-            if (getOptions().run.test == "checkpointState" && !getOptions().hydro.enabled) {
-                test(getOptions().run.test);
+            if (opts.run.test == "checkpointState" && !opts.hydro.enabled) {
+                test(opts.run.test);
                 stopMemuseDaemon();
                 daemonStarted = false;
                 return hpx::finalize();
             }
 #endif
 #ifdef USE_CUDA
-            if (usesCuda(getOptions())) {
+            if (usesCuda(opts)) {
                 hpxInitCuda();
             }
 #endif
             profile::checkForInterrupt();
             profile::checkForInterrupt();
 #ifdef COSMICTIGER_BUILD_TESTING
-            if (getOptions().run.test != "") {
-                test(getOptions().run.test);
+            if (opts.run.test != "") {
+                test(opts.run.test);
             } else {
 #endif
                 driver();
 #if COSMICTIGER_WITH_SPH
-                if (getOptions().hydro.enabled && sphGhostsActive()) {
+                if (opts.hydro.enabled && sphGhostsActive()) {
                     // Evidence that remote sources came from pushed ghost leaves.
                     auto const ghosts = sphGhostsStatistics();
                     std::cout << std::format("SPH ghosts: syncs={} refreshes={} leaves={} "

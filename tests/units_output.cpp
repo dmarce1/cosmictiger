@@ -61,7 +61,8 @@ using UnitsOutputMesh = std::unique_ptr<DBpointmesh, decltype(&DBFreePointmesh)>
 using UnitsOutputField = std::unique_ptr<DBpointvar, decltype(&DBFreePointvar)>;
 
 UnitsOutputFile openUnitsOutput(int cycle, int rank) {
-    auto const filename = std::filesystem::path(getOptions().output.directory) /
+    auto const& opts = getOptions();
+    auto const filename = std::filesystem::path(opts.output.directory) /
         ("view.0." + std::to_string(cycle) + ".silo");
     UnitsOutputFile master(DBOpen(filename.c_str(), DB_UNKNOWN, DB_READ), DBClose);
     requireUnitsOutput(bool(master), "open master " + filename.string());
@@ -121,6 +122,7 @@ int readUnitsOutputInteger(DBfile* file, std::string const& name) {
 }
 
 void checkUnitsOutputCommandLine(DBfile* file) {
+    auto const& opts = getOptions();
     requireUnitsOutputClose(readUnitsOutputScalar(file, "/cli/hydro/viscosityCoefficientMax"), 1.75,
         "scalar viscosity maximumBulkViscosityCoefficient");
     requireUnitsOutputClose(readUnitsOutputScalar(file, "/cli/gravity/effectiveRadius"), 0.125,
@@ -139,14 +141,13 @@ void checkUnitsOutputCommandLine(DBfile* file) {
         2.0e24 * 0.7 / constants::kMpcToCm, "resolved comoving box length in Mpc/h");
     requireUnitsOutput(readUnitsOutputInteger(file, "/cli/hydro/enabled") == 1,
         "boolean option stored as scalar integer");
-    requireUnitsOutput(readUnitsOutputInteger(file, "/cli/run/numberOfOutputs") ==
-            getOptions().run.numberOfOutputs,
+    requireUnitsOutput(
+        readUnitsOutputInteger(file, "/cli/run/numberOfOutputs") == opts.run.numberOfOutputs,
         "integer option stored as scalar integer");
     requireUnitsOutput(readUnitsOutputText(file, "/cli/configuration") == "input with spaces.ini",
         "configuration path preserves spaces");
-    requireUnitsOutput(
-        readUnitsOutputText(file, "/cli/output/units") == getOptions().output.units &&
-            readUnitsOutputText(file, "/cli/output/frame") == getOptions().output.frame,
+    requireUnitsOutput(readUnitsOutputText(file, "/cli/output/units") == opts.output.units &&
+            readUnitsOutputText(file, "/cli/output/frame") == opts.output.frame,
         "effective current output options");
     requireUnitsOutput(readUnitsOutputText(file, "/cli/scenario/cosmology/gadget4Restart").empty(),
         "empty string option");
@@ -292,6 +293,7 @@ void checkUnitsOutputGas(DBfile* file, std::string const& name, int count, doubl
 }
 
 void checkConvertedUnitsOutput(DBfile* file, bool cosmological, bool lab) {
+    auto const& opts = getOptions();
     std::string const path =
         std::string(cosmological ? "cosmological/" : "cgs/") + (lab ? "lab/" : "comoving/");
     checkUnitsOutputViscosity(file, path);
@@ -348,8 +350,7 @@ void checkConvertedUnitsOutput(DBfile* file, bool cosmological, bool lab) {
     double const epoch = readUnitsOutputClock(file, path);
     requireUnitsOutput(epoch > 0.0, "positive cosmological age");
     double const entropyScale = energyScale * a * a *
-        std::pow(
-            densityScale * (lab ? a * a * a : 1.0), 1.0 - getOptions().hydro.heatCapacityRatio);
+        std::pow(densityScale * (lab ? a * a * a : 1.0), 1.0 - opts.hydro.heatCapacityRatio);
     UnitsOutputMesh mesh(DBGetPointmesh(file, (path + "darkMatter/mesh").c_str()), DBFreePointmesh);
     requireUnitsOutput(bool(mesh) && mesh->datatype == DB_DOUBLE && mesh->nels == 2,
         "dark matter mesh shape and datatype");
@@ -393,6 +394,9 @@ void unitsOutputParticleFixture(bool initialize);
 HPX_PLAIN_ACTION(unitsOutputParticleFixture, UnitsOutputParticleFixtureAction);
 
 void unitsOutputParticleFixture(bool initialize) {
+#if COSMICTIGER_ENABLE_CHEMISTRY || COSMICTIGER_ENABLE_STAR_FORMATION
+    auto const& opts = getOptions();
+#endif
     Vector<hpx::future<void>> pending;
     for (auto const& child : hpxChildren()) {
         pending.push_back(hpx::async<UnitsOutputParticleFixtureAction>(child, initialize));
@@ -414,7 +418,7 @@ void unitsOutputParticleFixture(bool initialize) {
             particlesType(i) = i == 2 ? kSphType : kDarkMatterType;
             particlesCatIndex(i) = i == 2 ? 0 : kNoParticleIndex;
 #if COSMICTIGER_ENABLE_STAR_FORMATION
-            if (getOptions().starFormation.enabled) {
+            if (opts.starFormation.enabled) {
                 particlesStarFormationStates[i] = {};
                 particlesStarFormationStates[i].id =
                     (uint64_t{1} << 60) + 3 * uint64_t(hpxRank()) + i + 1;
@@ -422,12 +426,12 @@ void unitsOutputParticleFixture(bool initialize) {
 #endif
         }
 #if COSMICTIGER_ENABLE_CHEMISTRY
-        if (getOptions().chemistry.enabled) {
+        if (opts.chemistry.enabled) {
             sphParticlesElectronFractions[0] = {0.25f};
         }
 #endif
 #if COSMICTIGER_ENABLE_STAR_FORMATION
-        if (getOptions().starFormation.enabled) {
+        if (opts.starFormation.enabled) {
             particlesStarFormationStates[2].specificStarFormationRate = 0.125;
         }
 #endif

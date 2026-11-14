@@ -132,7 +132,8 @@ double cosmosConformalTime(double a0, double a1, bool countFlops) {
 #if COSMICTIGER_ENABLE_ROCKSTAR
 /// Estimate the halo scale radius from maximum circular speed, virial radius, and mass.
 double cosmosKlypinFit(double vmax, double rvir, double mvir) {
-    return rockstar::klypinScaleRadius(vmax, rvir, mvir * getOptions().gravity.gm);
+    auto const& opts = getOptions();
+    return rockstar::klypinScaleRadius(vmax, rvir, mvir * opts.gravity.gm);
 }
 
 /// Fit an NFW profile to the supplied radii and return its scale radius and density.

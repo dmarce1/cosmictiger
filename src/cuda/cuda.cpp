@@ -29,7 +29,8 @@
 /// Report whether this build and the resolved options enable a CUDA backend.
 bool cudaEnabled() {
 #ifdef USE_CUDA
-    return usesCuda(getOptions());
+    auto const& opts = getOptions();
+    return usesCuda(opts);
 #else
     return false;
 #endif

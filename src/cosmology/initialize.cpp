@@ -71,10 +71,11 @@ struct PowerSpectrumFunction {
 /// Determine the fundamental and largest corner wavenumbers for the configured initial
 /// Fourier mesh.
 static std::pair<double, double> initialWavenumberRange() {
+    auto const& opts = getOptions();
     double const boxSize =
-        (units::scalesFromOptions(getOptions()).lengthScale() / units::kMegaparsec).value();
+        (units::scalesFromOptions(opts).lengthScale() / units::kMegaparsec).value();
     double const fundamental = 2.0 * std::acos(-1.0) / boxSize;
-    double const maximumMode = (getOptions().initial.fourierSize + 1) / 2;
+    double const maximumMode = (opts.initial.fourierSize + 1) / 2;
     double const corner = std::sqrt(3.0) * maximumMode * fundamental;
     return {fundamental, corner};
 }
@@ -263,6 +264,7 @@ PowerSpectrumFunction computePowerSpectrum() {
 /// Build cosmological particle initial conditions using transfer functions, Zel'dovich
 /// displacement, and optional 2LPT.
 void initialize(double z0) {
+    auto const& opts = getOptions();
     profile::checkForInterrupt();
     auto const checkInitializationInterrupt = []() {
         if (profile::interruptRequested()) {
@@ -274,7 +276,7 @@ void initialize(double z0) {
             throw profile::Interrupted();
         }
     };
-    if (getOptions().cosmology.sigma8 == 0.0) {
+    if (opts.cosmology.sigma8 == 0.0) {
         // A homogeneous lattice needs no transfer functions. The application
         // still requires a spatially flat background.
         profile::ScopedPhase profilePhase("initialize.lattice");
@@ -282,7 +284,7 @@ void initialize(double z0) {
         clearX0();
         return;
     }
-    if (std::abs(getOptions().cosmology.omegaK) > 1.0e-12) {
+    if (std::abs(opts.cosmology.omegaK) > 1.0e-12) {
         throw std::invalid_argument(
             "The internal Einstein-Boltzmann solver requires a flat universe");
     }
@@ -291,8 +293,8 @@ void initialize(double z0) {
         initX0();
     }
     checkInitializationInterrupt();
-    int64_t const n = getOptions().initial.fourierSize;
-    float const omegaM = getOptions().cosmology.omegaM;
+    int64_t const n = opts.initial.fourierSize;
+    float const omegaM = opts.cosmology.omegaM;
     float const a0 = 1.0 / (z0 + 1.0);
     float const om = omegaM / (omegaM + (a0 * a0 * a0) * (1.0 - omegaM));
     float const hValue = cosmosDadt(a0) / a0;
@@ -305,10 +307,10 @@ void initialize(double z0) {
     terminal::detailPrint("D2 = %e\n", d2Value);
     terminal::detailPrint("Linear velocity factor = %e\n", linearVelocityFactor / a0);
     terminal::detailPrint("prefac2 = %e\n", prefac2 / a0);
-    int const latticePhases = interpolatedInitialConditions(
-                                  getOptions().initial, getOptions().scenario.cosmology.useGlass) ?
+    int const latticePhases =
+        interpolatedInitialConditions(opts.initial, opts.scenario.cosmology.useGlass) ?
         1 :
-        (getOptions().initial.closePack ? 2 : 1) * (getOptions().hydro.enabled ? 2 : 1);
+        (opts.initial.closePack ? 2 : 1) * (opts.hydro.enabled ? 2 : 1);
     for (int dim = 0; dim < kDimensions; dim++) {
         for (int phase = 0; phase < latticePhases; ++phase) {
             {
@@ -333,7 +335,7 @@ void initialize(double z0) {
             }
         }
     }
-    if (getOptions().scenario.cosmology.twoLpt) {
+    if (opts.scenario.cosmology.twoLpt) {
         profile::ScopedPhase profilePhase("initialize.twoLpt");
         twolptInit();
 
@@ -464,7 +466,8 @@ void twolptF2delta2Inv() {
 
 /// Load the second-order source into a fresh real mesh and transform it to Fourier space.
 void twolptCorrection1() {
-    int const n = getOptions().initial.fourierSize;
+    auto const& opts = getOptions();
+    int const n = opts.initial.fourierSize;
     if (hpxRank() == 0) {
         fft3dInit(n);
     }
@@ -484,7 +487,8 @@ void twolptCorrection1() {
 /// Build one Fourier component of the second-order displacement correction and
 /// inverse-transform it.
 void twolptCorrection2(int dim, int latticePhase) {
-    int const n = getOptions().initial.fourierSize;
+    auto const& opts = getOptions();
+    int const n = opts.initial.fourierSize;
     if (hpxRank() == 0) {
         fft3dInit(n);
     }
@@ -493,7 +497,7 @@ void twolptCorrection2(int dim, int latticePhase) {
         futs.push_back(hpx::async<TwolptCorrection2Action>(c, dim, latticePhase));
     }
     float const boxSize =
-        (units::scalesFromOptions(getOptions()).lengthScale() / units::kMegaparsec).value();
+        (units::scalesFromOptions(opts).lengthScale() / units::kMegaparsec).value();
     float const factor = std::pow(boxSize, -1.5) * n * n * n;
     auto const box = fft3dComplexRange();
     auto yValue = delta2Inv;
@@ -504,6 +508,7 @@ void twolptCorrection2(int dim, int latticePhase) {
             hpx::annotated_function(
                 [n, box, boxSize, &yValue, dim, factor, latticePhase](
                     Array<int64_t, kDimensions> iValue2) {
+                    auto const& opts = getOptions();
                     int const i = (iValue2[0] <= n / 2 ? iValue2[0] : iValue2[0] - n);
                     float const kx = 2.f * std::numbers::pi_v<float> / boxSize * float(i);
                     for (iValue2[1] = box.begin[1]; iValue2[1] != box.end[1]; iValue2[1]++) {
@@ -520,16 +525,15 @@ void twolptCorrection2(int dim, int latticePhase) {
                                 Vector3<float> const kValue = {kx, ky, kz};
                                 yValue[index] =
                                     -ComplexFloat(0, 1) * kValue[dim] * yValue[index] / k2;
-                                if (interpolatedInitialConditions(getOptions().initial,
-                                        getOptions().scenario.cosmology.useGlass)) {
+                                if (interpolatedInitialConditions(
+                                        opts.initial, opts.scenario.cosmology.useGlass)) {
                                     yValue[index] *= cloudFilter(kx * boxSize / n);
                                     yValue[index] *= cloudFilter(ky * boxSize / n);
                                     yValue[index] *= cloudFilter(kz * boxSize / n);
                                 } else {
-                                    yValue[index] *=
-                                        lpt::latticeShift(iValue2[0], iValue2[1], iValue2[2], n,
-                                            lpt::latticeOffset(
-                                                latticePhase, getOptions().initial.closePack));
+                                    yValue[index] *= lpt::latticeShift(iValue2[0], iValue2[1],
+                                        iValue2[2], n,
+                                        lpt::latticeOffset(latticePhase, opts.initial.closePack));
                                 }
                             } else {
                                 yValue[index] = ComplexFloat(0, 0);
@@ -554,9 +558,10 @@ void twolptCorrection2(int dim, int latticePhase) {
 /// Generate deterministic Fourier modes for the requested density/displacement derivative
 /// and lattice phase.
 void twolptGenerate(int dim1, int dim2, bool velocity = false, int latticePhase = 0) {
-    int64_t const n = getOptions().initial.fourierSize;
+    auto const& opts = getOptions();
+    int64_t const n = opts.initial.fourierSize;
     float const boxSize =
-        (units::scalesFromOptions(getOptions()).lengthScale() / units::kMegaparsec).value();
+        (units::scalesFromOptions(opts).lengthScale() / units::kMegaparsec).value();
     float const factor = std::pow(boxSize, -1.5) * n * n * n;
     static auto const power = []() {
         profile::ScopedPhase profilePhase("initialize.transferFunctions", hpxRank() == 0);
@@ -568,6 +573,7 @@ void twolptGenerate(int dim1, int dim2, bool velocity = false, int latticePhase 
     for (int64_t ix = box.begin[0]; ix < box.end[0]; ++ix) {
         futures.push_back(hpx::async(hpx::annotated_function(
             [=, &yValue]() {
+                auto const& opts = getOptions();
                 for (int64_t iy = box.begin[1]; iy < box.end[1]; ++iy) {
                     for (int64_t iz = box.begin[2]; iz < box.end[2]; ++iz) {
                         auto const random = lpt::gaussianMode(ix, iy, iz, n);
@@ -587,9 +593,9 @@ void twolptGenerate(int dim1, int dim2, bool velocity = false, int latticePhase 
                         yValue[index] = random * float(power.amplitude(std::sqrt(k2), velocity)) *
                             factor * derivative[dim1] * derivative[dim2] / k2;
                         yValue[index] = lpt::interpolationCorrectedDerivative(
-                            yValue[index], dim1, dim2, [=](ComplexFloat value) {
-                                if (interpolatedInitialConditions(getOptions().initial,
-                                        getOptions().scenario.cosmology.useGlass)) {
+                            yValue[index], dim1, dim2, [=, &opts](ComplexFloat value) {
+                                if (interpolatedInitialConditions(
+                                        opts.initial, opts.scenario.cosmology.useGlass)) {
                                     value *= cloudFilter(kx * boxSize / n);
                                     value *= cloudFilter(ky * boxSize / n);
                                     value *= cloudFilter(kz * boxSize / n);
@@ -597,8 +603,7 @@ void twolptGenerate(int dim1, int dim2, bool velocity = false, int latticePhase 
                                 }
                                 return value *
                                     lpt::latticeShift(ix, iy, iz, n,
-                                        lpt::latticeOffset(
-                                            latticePhase, getOptions().initial.closePack));
+                                        lpt::latticeOffset(latticePhase, opts.initial.closePack));
                             });
                     }
                 }
@@ -614,7 +619,8 @@ void twolptGenerate(int dim1, int dim2, bool velocity = false, int latticePhase 
 /// Build and inverse-transform a selected second derivative used by the second-order
 /// source.
 void twolpt(int dim1, int dim2) {
-    int const n = getOptions().initial.fourierSize;
+    auto const& opts = getOptions();
+    int const n = opts.initial.fourierSize;
     if (hpxRank() == 0) {
         fft3dInit(n);
     }
@@ -711,10 +717,11 @@ static Range<int64_t> findMyBox(Range<int64_t> box, int begin, int end, int dept
 
 /// Determine this locality's recursively partitioned initial-condition lattice box.
 static Range<int64_t> findMyBox() {
+    auto const& opts = getOptions();
     Range<int64_t> box;
     for (int dim = 0; dim < kDimensions; dim++) {
         box.begin[dim] = 0;
-        box.end[dim] = getOptions().initial.fourierSize;
+        box.end[dim] = opts.initial.fourierSize;
     }
     return findMyBox(box, 0, hpxSize(), 0);
 }
@@ -949,14 +956,15 @@ static void initX0() {
 /// return maximum displacement.
 static float zeldovichEnd(
     int dim, float d1Value, float prefac1, bool velocityOnly, int latticePhase) {
+    auto const& opts = getOptions();
     float dxmax = 0.0;
     SpinlockType mutex;
-    int64_t const n = getOptions().initial.fourierSize;
+    int64_t const n = opts.initial.fourierSize;
     double const boxSize =
-        (units::scalesFromOptions(getOptions()).lengthScale() / units::kMegaparsec).value();
+        (units::scalesFromOptions(opts).lengthScale() / units::kMegaparsec).value();
     auto box = findMyBox();
-    bool const glass = interpolatedInitialConditions(
-        getOptions().initial, getOptions().scenario.cosmology.useGlass);
+    bool const glass =
+        interpolatedInitialConditions(opts.initial, opts.scenario.cosmology.useGlass);
     if (glass) {
         for (int dim = 0; dim < kDimensions; dim++) {
             box.end[dim] += kCloudMax;
@@ -977,6 +985,7 @@ static float zeldovichEnd(
         futs.push_back(hpx::async(hpx::annotated_function(
             [proc, numberOfThreads, n, box, boxSizeInv, dim, d1Value, prefac1, velocityOnly,
                 latticePhase, glass, &yValue]() {
+                auto const& opts = getOptions();
                 size_t const b = (size_t) proc * particlesSize() / numberOfThreads;
                 size_t const e = (size_t) (proc + 1) * particlesSize() / numberOfThreads;
                 double dxmax = 0.0;
@@ -986,10 +995,10 @@ static float zeldovichEnd(
                     double const z0 = x0Value[kZi][i].toDouble();
                     double dx = 0.0;
                     if (!glass) {
-                        int const sublattices = getOptions().initial.closePack ? 2 : 1;
+                        int const sublattices = opts.initial.closePack ? 2 : 1;
                         size_t speciesCount = particlesSize();
 #if COSMICTIGER_WITH_SPH
-                        if (getOptions().hydro.enabled) {
+                        if (opts.hydro.enabled) {
                             speciesCount -= sphParticlesSize();
                         }
 #endif
@@ -998,8 +1007,7 @@ static float zeldovichEnd(
                         if (phase != latticePhase) {
                             continue;
                         }
-                        double const offset =
-                            lpt::latticeOffset(phase, getOptions().initial.closePack);
+                        double const offset = lpt::latticeOffset(phase, opts.initial.closePack);
                         int64_t const ix = lpt::latticeNode(x0, n, offset);
                         int64_t const iy = lpt::latticeNode(y0, n, offset);
                         int64_t const iz = lpt::latticeNode(z0, n, offset);
@@ -1039,8 +1047,7 @@ static float zeldovichEnd(
                         particlesPos(dim, i) = position;
                     }
                     particlesVel(dim, i) += prefac1 * dx;
-                    double const ndim =
-                        pow(getOptions().initial.numberOfParticles, 1.0 / kDimensions);
+                    double const ndim = pow(opts.initial.numberOfParticles, 1.0 / kDimensions);
                     dxmax = std::max(dxmax, std::abs(dx) * ndim);
                 }
                 return (float) dxmax;

@@ -127,21 +127,22 @@ void outputTracers(int number) {
 
 /// Gather the projected slice and write its grid and intensity field to Silo.
 void outputSlice(int number, double time) {
+    auto const& opts = getOptions();
     constexpr int kNdim = 2;
     auto pixels = []() {
         profile::ScopedPhase profilePhase("output.slice.gather");
         return outputGetSlice();
     }();
     profile::ScopedPhase profilePhase("output.slice.write");
-    int const res = getOptions().analysis.sliceResolution;
+    int const res = opts.analysis.sliceResolution;
     std::string const filename = outputPath("slice." + std::to_string(number) + ".silo");
     auto file = detail::openOutputFile(filename, "Data");
     auto* db = file.get();
     Vector<float> x(res + 1);
     Vector<float> y(res + 1);
-    float const hubble = getOptions().cosmology.hubble;
+    float const hubble = opts.cosmology.hubble;
     float const c0 =
-        (units::scalesFromOptions(getOptions()).lengthScale() * double(hubble) / units::kMegaparsec)
+        (units::scalesFromOptions(opts).lengthScale() * double(hubble) / units::kMegaparsec)
             .value();
     for (int i = 0; i < res + 1; i++) {
         y[i] = x[i] = (float) i / res * c0;
@@ -178,15 +179,16 @@ void outputSlice(int number, double time) {
 /// Accumulate mass into the configured planar slice and reduce pixel values across
 /// localities.
 Vector<float> outputGetSlice() {
+    auto const& opts = getOptions();
     Vector<hpx::future<Vector<float>>> futs;
-    int const res = getOptions().analysis.sliceResolution;
+    int const res = opts.analysis.sliceResolution;
     Vector<float> pixels(sqr(res), 0.0);
     for (auto const& c : hpxChildren()) {
         futs.push_back(hpx::async<OutputGetSliceAction>(c));
     }
     for (int i = 0; i < particlesSize(); i++) {
         double const z = particlesPositionValue(kZi, i).toDouble();
-        if (z < getOptions().analysis.sliceSize) {
+        if (z < opts.analysis.sliceSize) {
             double const x = particlesPositionValue(kXi, i).toDouble();
             double const y = particlesPositionValue(kYi, i).toDouble();
             int const xi = x * res;

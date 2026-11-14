@@ -41,6 +41,7 @@ bool profileDriftCoordinator() {
 /// Partition the selected particle range among CPU workers and collect optional lightcone
 /// crossings.
 void cpuDrift(int rung, double a, double dt, double tau0, double tau1, double tauMax, double drag) {
+    auto const& opts = getOptions();
     auto const range =
         rung < 0 ? Pair<ParticleInteger>(0, particlesSize()) : particlesCurrentRange();
     size_t const count = range.second - range.first;
@@ -55,12 +56,12 @@ void cpuDrift(int rung, double a, double dt, double tau0, double tau1, double ta
     parameters.tau1 = tau1;
     parameters.tauMax = tauMax;
     // Match the glass damping policy in cudaDrift, including its override of drag.
-    drag = getOptions().run.scenario == "glass" ? std::numbers::pi : 0.0;
+    drag = opts.run.scenario == "glass" ? std::numbers::pi : 0.0;
     parameters.drag = drag;
 #if !defined(COSMICTIGER_ENABLE_ROCKSTAR) || COSMICTIGER_ENABLE_ROCKSTAR
-    parameters.lightcone = getOptions().lightcone.enabled && tauMax > 0.0f && tauMax - tau1 < 1.0f;
+    parameters.lightcone = opts.lightcone.enabled && tauMax > 0.0f && tauMax - tau1 < 1.0f;
 #endif
-    parameters.mapSize = getOptions().lightcone.mapSize;
+    parameters.mapSize = opts.lightcone.mapSize;
     constexpr size_t kMinimumChunkSize = 4096;
     size_t const workers = std::min(
         size_t(std::max(1, hpxHardwareConcurrency())), (count - 1) / kMinimumChunkSize + 1);
@@ -69,7 +70,7 @@ void cpuDrift(int rung, double a, double dt, double tau0, double tau1, double ta
         size_t const begin = size_t(range.first) + worker * count / workers;
         size_t const end = size_t(range.first) + (worker + 1) * count / workers;
         // particlesType() returns a shared static when hydro is off; pass the array only then.
-        char const* const types = getOptions().hydro.enabled ? particlesTy + begin : nullptr;
+        char const* const types = opts.hydro.enabled ? particlesTy + begin : nullptr;
         cpuDriftKernel(particlesPositionData(kXi, begin), particlesPositionData(kYi, begin),
             particlesPositionData(kZi, begin), particlesVelData() + begin, &particlesRung(begin),
             types, end - begin, parameters, parameters.lightcone ? &entries[worker] : nullptr);
@@ -106,6 +107,9 @@ void cpuDrift(int rung, double a, double dt, double tau0, double tau1, double ta
 /// distributed work.
 void drift(
     double scale, double dt, double tau0, double tau1, double tauMax, int rung, double drag) {
+#if COSMICTIGER_WITH_SPH || defined(USE_CUDA)
+    auto const& opts = getOptions();
+#endif
     Vector<hpx::future<void>> futures;
     if (rung < 0) {
         for (auto const& child : hpxChildren()) {
@@ -114,13 +118,13 @@ void drift(
         }
     }
 #if COSMICTIGER_WITH_SPH
-    if (getOptions().hydro.enabled) {
+    if (opts.hydro.enabled) {
         // Same displacement factor as the CPU/CUDA drift; expand before wrapping.
         sphTreeDriftBounds(dt / scale, rung);
     }
 #endif
 #ifdef USE_CUDA
-    if (getOptions().drift.cuda) {
+    if (opts.drift.cuda) {
         {
             profile::ScopedPhase profilePhase("drift.cuda", detail::profileDriftCoordinator());
             cudaDrift(rung, scale, dt, tau0, tau1, tauMax, drag);

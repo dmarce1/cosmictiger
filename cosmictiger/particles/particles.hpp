@@ -311,8 +311,9 @@ Pair<ParticleInteger, ParticleInteger> particlesCurrentRange();
 /// Access the species flag, or a shared dark-matter sentinel when hydrodynamics is
 /// disabled.
 inline char& particlesType(ParticleInteger index) {
-    static bool const sph = getOptions().hydro.enabled;
-    if (getOptions().hydro.enabled) {
+    auto const& opts = getOptions();
+    static bool const sph = opts.hydro.enabled;
+    if (opts.hydro.enabled) {
         CHECK_PART_BOUNDS(index);
         return particlesTy[index];
     } else {
@@ -324,11 +325,12 @@ inline char& particlesType(ParticleInteger index) {
 /// Return the configured species mass, using unit mass in the dark-matter-only
 /// representation.
 inline float particlesMass(ParticleInteger index) {
-    if (!getOptions().hydro.enabled) {
+    auto const& opts = getOptions();
+    if (!opts.hydro.enabled) {
         return 1.0f;
     }
-    float const sphMass = getOptions().initial.gasMass;
-    float const darkMatterMass = getOptions().initial.darkMatterMass;
+    float const sphMass = opts.initial.gasMass;
+    float const darkMatterMass = opts.initial.darkMatterMass;
     if (particlesType(index) != kDarkMatterType) {
         return sphMass;
     } else {
@@ -449,8 +451,9 @@ inline ParticleInteger& particlesCatIndex(ParticleInteger index) {
 /// Gather the particle's enabled fields from structure-of-arrays storage into a transport
 /// record.
 inline Particle particlesGetParticle(ParticleInteger index) {
-    static bool doGroups = getOptions().analysis.groups;
-    static bool doTracers = getOptions().analysis.tracers;
+    auto const& opts = getOptions();
+    static bool doGroups = opts.analysis.groups;
+    static bool doTracers = opts.analysis.tracers;
     CHECK_PART_BOUNDS(index);
     Particle p;
     for (int dim = 0; dim < kSpatialDimensions; dim++) {
@@ -464,14 +467,14 @@ inline Particle particlesGetParticle(ParticleInteger index) {
     if (doTracers) {
         p.isTracer = particlesTracer(index);
     }
-    if (getOptions().gravity.errorInterval > 0) {
+    if (opts.gravity.errorInterval > 0) {
         p.gravitySample = particlesGravitySample(index);
     }
-    if (getOptions().hydro.enabled) {
+    if (opts.hydro.enabled) {
         p.type = particlesType(index);
         p.catalogIndex = particlesCatIndex(index);
     }
-    if (getOptions().starFormation.enabled) {
+    if (opts.starFormation.enabled) {
         p.starFormation = particlesStarFormationStates[index];
     }
 
@@ -481,8 +484,9 @@ inline Particle particlesGetParticle(ParticleInteger index) {
 /// Scatter a transport record into the particle arrays, including enabled analysis, gas,
 
 inline void particlesSetParticle(Particle p, ParticleInteger index) {
-    static bool doGroups = getOptions().analysis.groups;
-    static bool doTracers = getOptions().analysis.tracers;
+    auto const& opts = getOptions();
+    static bool doGroups = opts.analysis.groups;
+    static bool doTracers = opts.analysis.tracers;
     CHECK_PART_BOUNDS(index);
     for (int dim = 0; dim < kSpatialDimensions; dim++) {
         particlesPos(dim, index) = p.position[dim];
@@ -495,14 +499,14 @@ inline void particlesSetParticle(Particle p, ParticleInteger index) {
     if (doTracers) {
         particlesTracer(index) = p.isTracer;
     }
-    if (getOptions().gravity.errorInterval > 0) {
+    if (opts.gravity.errorInterval > 0) {
         particlesGravitySample(index) = p.gravitySample;
     }
-    if (getOptions().hydro.enabled) {
+    if (opts.hydro.enabled) {
         particlesType(index) = p.type;
         particlesCatIndex(index) = p.catalogIndex;
     }
-    if (getOptions().starFormation.enabled) {
+    if (opts.starFormation.enabled) {
         particlesStarFormationStates[index] = p.starFormation;
     }
 }
@@ -550,6 +554,7 @@ struct EnergiesT {
     /// in transport order.
     template <class A>
     void serialize(A&& arc, unsigned) {
+        auto const& opts = getOptions();
         arc & xmom;
         arc & ymom;
         arc & cosmic;
@@ -558,7 +563,7 @@ struct EnergiesT {
         arc & pot;
         arc & kin;
         arc & tckin;
-        if (getOptions().hydro.enabled) {
+        if (opts.hydro.enabled) {
             arc & therm;
             arc & heating;
         }

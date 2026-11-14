@@ -70,7 +70,8 @@ using DistributedOutputMesh = std::unique_ptr<DBpointmesh, decltype(&DBFreePoint
 using DistributedOutputVariable = std::unique_ptr<DBpointvar, decltype(&DBFreePointvar)>;
 
 std::filesystem::path distributedMasterPath(int cycle) {
-    return std::filesystem::path(getOptions().output.directory) /
+    auto const& opts = getOptions();
+    return std::filesystem::path(opts.output.directory) /
         ("view.0." + std::to_string(cycle) + ".silo");
 }
 
@@ -103,6 +104,7 @@ struct DistributedOutputScales {
 };
 
 DistributedOutputScales distributedOutputScales(bool cosmological, bool lab) {
+    auto const& opts = getOptions();
     double const a = 0.25;
     double const hubble = 0.7;
     double const length = 2.0e24;
@@ -117,8 +119,7 @@ DistributedOutputScales distributedOutputScales(bool cosmological, bool lab) {
         (cosmological ? std::pow(constants::kMpcToCm, 3) / (constants::kM0 * hubble * hubble) :
                         1.0);
     scales.entropy = length * length / (time * time) * (cosmological ? 1e-10 : 1.0) *
-        std::pow(
-            scales.density * (lab ? a * a * a : 1.0), 1.0 - getOptions().hydro.heatCapacityRatio);
+        std::pow(scales.density * (lab ? a * a * a : 1.0), 1.0 - opts.hydro.heatCapacityRatio);
     return scales;
 }
 

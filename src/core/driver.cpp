@@ -108,7 +108,8 @@ Vector<Timing> timings;
 
 /// Write measured throughput by bucket size and optionally clear the accumulated samples.
 static void flushTimings(bool reset) {
-    auto const theta = getOptions().gravity.openingAngle;
+    auto const& opts = getOptions();
+    auto const theta = opts.gravity.openingAngle;
     char* fname;
     asprintf(&fname, "buckets.%.2f.txt", theta);
     FILE* fp = fopen(outputPath(fname).c_str(), "wt");
@@ -127,6 +128,7 @@ static void flushTimings(bool reset) {
 #if COSMICTIGER_ENABLE_ROCKSTAR
 /// Run the halo-group tree, linking, catalogue, baryon measurement, and cleanup stages.
 void doGroups(int number, double scale, double years) {
+    auto const& opts = getOptions();
     groupsPrepareHistory(number);
 
     Timer total;
@@ -161,8 +163,7 @@ void doGroups(int number, double scale, double years) {
         tm.start();
         {
             profile::ScopedPhase phase("groups.find");
-            active =
-                groupsFind(rootId, std::move(checklist), getOptions().analysis.linkingLength).get();
+            active = groupsFind(rootId, std::move(checklist), opts.analysis.linkingLength).get();
         }
         tm.stop();
         terminal::detailPrint("%i groups_find = %s active = %li\n", iter,
@@ -243,6 +244,7 @@ void doGroups(int number, double scale, double years) {
 // All-particle counts make the rebuild decision identical on every rank. The
 // threshold is per event, not an accumulated number of force evaluations.
 bool prepareSphDomainEvent(int minimumRung) {
+    auto const& opts = getOptions();
     auto const counts = particlesRungCounts();
     size_t active = 0;
     size_t total = 0;
@@ -253,8 +255,7 @@ bool prepareSphDomainEvent(int minimumRung) {
         }
     }
     bool const valid = sphTreeAllValid();
-    bool const threshold =
-        sphTreeShouldRebuild(active, total, getOptions().compute.sphTreeRebuildFraction);
+    bool const threshold = sphTreeShouldRebuild(active, total, opts.compute.sphTreeRebuildFraction);
     bool const rebuild = !valid || threshold;
     if (rebuild) {
         terminal::detailPrint("SPH octree rebuild: active=%zu total=%zu reason=%s\n", active, total,
@@ -331,6 +332,7 @@ static int sphBalanceBoundaryRungs(double scale) {
 static SphRunReturn sphMidpointEvaluate(int minrung, int maximumHydroRung, double scale, double tau,
     double t0, double adot, double hydroTimestep, double maximumGlobalTimestep,
     double viscosityTimestep = 0.0) {
+    auto const& opts = getOptions();
     bool constexpr verbose = true;
     profile::ScopedPhase profilePhase("hydro.sph");
     bool const globalTimestep = maximumGlobalTimestep > 0.0;
@@ -343,7 +345,7 @@ static SphRunReturn sphMidpointEvaluate(int minrung, int maximumHydroRung, doubl
     runParameters.minimumRung = minrung;
     runParameters.maximumRung = maximumHydroRung;
 #if COSMICTIGER_WITH_GRAVITY
-    if (getOptions().run.scenario == "cosmology") {
+    if (opts.run.scenario == "cosmology") {
         runParameters.maximumTimestep =
             cosmology::expansionTimestep(scale, adot / scale, cosmosD2adt2(scale), kScaleTimestep);
     }
@@ -359,8 +361,8 @@ static SphRunReturn sphMidpointEvaluate(int minrung, int maximumHydroRung, doubl
         }
         runParameters.maximumTimestep = std::min(runParameters.maximumTimestep, kernelCap);
     } else {
-        runParameters.maximumTimestep = std::min(runParameters.maximumTimestep,
-            std::ldexp(static_cast<float>(t0), -getOptions().run.minRung));
+        runParameters.maximumTimestep = std::min(
+            runParameters.maximumTimestep, std::ldexp(static_cast<float>(t0), -opts.run.minRung));
     }
 
     runParameters.expansionRate = adot;
@@ -649,11 +651,12 @@ namespace detail {
 // Global FMM chooses its opening angle from the current cosmological scale,
 // including when resuming a checkpoint, as the historical global solver did.
 void updateOpeningSchedule(double scale) {
-    if (getOptions().gravity.openingSchedule.empty() ||
-        getOptions().gravity.openingSchedule == "none") {
+    auto const& currentOptions = getOptions();
+    if (currentOptions.gravity.openingSchedule.empty() ||
+        currentOptions.gravity.openingSchedule == "none") {
         return;
     }
-    auto opts = getOptions();
+    auto opts = currentOptions;
     auto const schedule = gravity::parseOpeningSchedule(opts.gravity.openingSchedule);
     double const theta = gravity::openingScheduleTheta(
         schedule, opts.cosmology.startRedshift, 1.0 / scale - 1.0, opts.gravity.openingAngle);
@@ -673,13 +676,14 @@ namespace detail {
 
 KickParameters prepareFmmKick(int minrung, double scale, double dadt, double t0, double theta,
     bool firstCall, bool fullEval, double previousTimestep, double maximumGlobalTimestep) {
+    auto const& opts = getOptions();
     Timer tm;
     tm.start();
     terminal::detailPrint("domains_begin\n");
     profile::profileBegin("domains");
     bool migrate = true;
 #if COSMICTIGER_WITH_SPH
-    if (getOptions().hydro.enabled) {
+    if (opts.hydro.enabled) {
         migrate = prepareSphDomainEvent(minrung);
     }
 #endif
@@ -711,7 +715,7 @@ KickParameters prepareFmmKick(int minrung, double scale, double dadt, double t0,
     tm.start();
 
     KickParameters kparams;
-    if (getOptions().run.scenario == "cosmology") {
+    if (opts.run.scenario == "cosmology") {
         kparams.maxDt =
             cosmology::expansionTimestep(scale, dadt / scale, cosmosD2adt2(scale), kScaleTimestep);
     }
@@ -729,20 +733,20 @@ KickParameters prepareFmmKick(int minrung, double scale, double dadt, double t0,
         gravityBeginGlobalKick();
     } else {
         kparams.maxDt =
-            std::min(kparams.maxDt, std::ldexp(static_cast<float>(t0), -getOptions().run.minRung));
+            std::min(kparams.maxDt, std::ldexp(static_cast<float>(t0), -opts.run.minRung));
     }
     kparams.htime = false;
     kparams.ascending = kparams.descending = kparams.top = true;
     kparams.doPhi = fullEval;
-    kparams.sign = getOptions().run.scenario == "glass" ? -1.0 : 1.0;
+    kparams.sign = opts.run.scenario == "glass" ? -1.0 : 1.0;
     kparams.nodeLoad = flopsPerNode / flopsPerParticle;
-    kparams.gpu = getOptions().gravity.cuda;
+    kparams.gpu = opts.gravity.cuda;
     usedGpu = kparams.gpu;
     kparams.minLevel = tparams.minLevel;
-    kparams.saveForce = getOptions().analysis.saveForce;
-    kparams.gm = getOptions().gravity.enabled ? getOptions().gravity.gm : 0.0;
-    kparams.eta = getOptions().gravity.timestepEta;
-    kparams.gravitySmoothingLength = getOptions().gravity.smoothingLength;
+    kparams.saveForce = opts.analysis.saveForce;
+    kparams.gm = opts.gravity.enabled ? opts.gravity.gm : 0.0;
+    kparams.eta = opts.gravity.timestepEta;
+    kparams.gravitySmoothingLength = opts.gravity.smoothingLength;
     kparams.a = scale;
     kparams.firstCall = firstCall;
     kparams.minRung = minrung;
@@ -833,6 +837,7 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
     double baseTimestep, double theta, bool firstCall, bool fullEvaluation, EnergiesT& energies,
     int gravityErrorStep, bool closingOnly, double previousTimestep, double maximumGlobalTimestep,
     ForceStepSchedule const& schedule, bool deferHydroOpening) {
+    auto const& opts = getOptions();
     ForceStepResult result{};
     bool const global = maximumGlobalTimestep > 0.0;
 
@@ -849,7 +854,7 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
         gravityErrorBegin();
         profile::profileEnd();
     }
-    if (getOptions().gravity.enabled) {
+    if (opts.gravity.enabled) {
         result = kickStep(minRung, scale, scaleDerivative, baseTimestep, theta, firstCall,
             fullEvaluation, previousTimestep, maximumGlobalTimestep, deferHydroOpening);
 
@@ -859,7 +864,7 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
         profile::profileBegin("domains");
         bool migrate = true;
 #if COSMICTIGER_WITH_SPH
-        if (getOptions().hydro.enabled) {
+        if (opts.hydro.enabled) {
             migrate = prepareSphDomainEvent(minRung);
         }
 #endif
@@ -879,7 +884,7 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
     auto& gravity = result;
 #if COSMICTIGER_WITH_SPH
     if (midpointHydro) {
-        if (!getOptions().gravity.enabled && !global && !closingOnly) {
+        if (!opts.gravity.enabled && !global && !closingOnly) {
             if (sphCommonBoundary(minRung)) {
                 sphParticlesSelectMidpointRungs(minRung);
                 result.maxRung = sphBalanceBoundaryRungs(scale);
@@ -898,7 +903,7 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
         auto const gas = particlesSumEnergies();
         energies.therm = gas.therm / sqr(scale);
         if (global || fullEvaluation) {
-            bool const selfGravity = getOptions().gravity.enabled;
+            bool const selfGravity = opts.gravity.enabled;
             energies.kin = (selfGravity ? gravity.kin : gas.kin) / sqr(scale);
             energies.xmom = (selfGravity ? gravity.xmom : gas.xmom) / scale;
             energies.ymom = (selfGravity ? gravity.ymom : gas.ymom) / scale;
@@ -910,7 +915,7 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
     }
 #endif
 #if COSMICTIGER_WITH_GRAVITY
-    if (getOptions().gravity.enabled && !getOptions().hydro.enabled) {
+    if (opts.gravity.enabled && !opts.hydro.enabled) {
         if (global || fullEvaluation) {
             energies.pot = gravity.pot / scale;
             energies.kin = gravity.kin / sqr(scale);
@@ -923,7 +928,7 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
             energies.tckin += gravity.dkin;
         }
     }
-    if (global && !closingOnly && getOptions().gravity.enabled) {
+    if (global && !closingOnly && opts.gravity.enabled) {
         {
             profile::ScopedPhase phase("kick.finishGlobal");
             gravityFinishGlobalKick(result.minimumTimestep);
@@ -976,12 +981,13 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
     double tau, double t0, double theta, EnergiesT* energies, int minrung0, bool doPhi,
     hpx::future<void>* lcFut, bool nocrop, double drag, int gravityErrorStep, bool closingOnly,
     ForceStepSchedule const& schedule, bool deferHydroOpening) {
+    auto const& opts = getOptions();
     // A terminal energy evaluation consumes only the outstanding closing
     // ladder. The saved checkpoint retains the original staggered momenta.
     nocrop = nocrop || closingOnly;
-    bool const selfGravity = getOptions().gravity.enabled;
+    bool const selfGravity = opts.gravity.enabled;
 
-    bool const hierarchicalHydro = getOptions().hydro.enabled;
+    bool const hierarchicalHydro = opts.hydro.enabled;
 #if COSMICTIGER_WITH_SPH
     bool const balanceHydro = hierarchicalHydro && !closingOnly && sphCommonBoundary(minrung);
     bool hydroBalanced = false;
@@ -1057,7 +1063,7 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
             // Close the lowest rung and reopen it one rung finer when the
             // occupied finer set meets the configured inclusive threshold.
             auto const counts = particlesRungCounts();
-            double const fraction = getOptions().run.rungMergeFraction;
+            double const fraction = opts.run.rungMergeFraction;
             auto const merge = rungMergeDecision(counts, minrung0, fraction);
             if (merge.merge) {
                 clipTop = true;
@@ -1092,27 +1098,27 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
         } else {
             kparams.top = top;
         }
-        kparams.sign = getOptions().run.scenario == "glass" ? -1.0 : 1.0;
+        kparams.sign = opts.run.scenario == "glass" ? -1.0 : 1.0;
         kparams.ascending = ascending || top;
         if (closingOnly || (clipTop && top)) {
             kparams.descending = false;
         } else {
             kparams.descending = !ascending || top;
         }
-        kparams.velInit = getOptions().run.scenario == "plummer";
+        kparams.velInit = opts.run.scenario == "plummer";
         kparams.nodeLoad = flopsPerNode / flopsPerParticle;
-        kparams.gpu = getOptions().gravity.cuda;
+        kparams.gpu = opts.gravity.cuda;
         kparams.minLevel = minimumTreeLevel;
-        kparams.saveForce = getOptions().analysis.saveForce;
-        kparams.gm = getOptions().gravity.gm;
-        kparams.eta = getOptions().gravity.timestepEta;
-        kparams.gravitySmoothingLength = getOptions().gravity.smoothingLength;
+        kparams.saveForce = opts.analysis.saveForce;
+        kparams.gm = opts.gravity.gm;
+        kparams.eta = opts.gravity.timestepEta;
+        kparams.gravitySmoothingLength = opts.gravity.smoothingLength;
         kparams.a = scale;
         kparams.firstCall = tau == 0.0;
         kparams.minRung = levels[li];
-        kparams.doPhi = top && (doPhi || saveParticlePotential(getOptions().analysis));
+        kparams.doPhi = top && (doPhi || saveParticlePotential(opts.analysis));
         kparams.t0 = t0;
-        if (getOptions().run.scenario == "cosmology") {
+        if (opts.run.scenario == "cosmology") {
             kparams.maxDt =
                 cosmology::expansionTimestep(scale, adot, cosmosD2adt2(scale), kScaleTimestep);
         }
@@ -1221,15 +1227,14 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
                 *lcFut = hpx::make_ready_future();
             }
             double a = scale;
-            if (getOptions().run.scenario == "cosmology") {
+            if (opts.run.scenario == "cosmology") {
                 double scaleWork = scale;
                 double adotWork = adot;
                 a = 1.0 / cosmosAinv(adotWork, scaleWork, dt);
             }
             profile::profileBegin("drift");
-            double const endTime = schedule.endTime > 0.0 ?
-                schedule.endTime :
-                getOptions().run.outputIntervalCount() * t0;
+            double const endTime =
+                schedule.endTime > 0.0 ? schedule.endTime : opts.run.outputIntervalCount() * t0;
             driftRungEverywhere(a, dt, tau, tau + dt, endTime, levels[li], drag);
             profile::profileEnd();
             tm.stop();
@@ -1256,7 +1261,7 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
     }
 #endif
     totalTime.stop();
-    int bucketSize = getOptions().compute.bucketSize;
+    int bucketSize = opts.compute.bucketSize;
     if (timings.size() <= bucketSize) {
         timings.resize(bucketSize + 1);
     }
@@ -1270,6 +1275,7 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
 #if COSMICTIGER_WITH_GRAVITY
 /// Measure folded density spectra and write the filtered power and shot-noise diagnostics.
 double doPowerSpectrum(int num, double a, double adot) {
+    auto const& opts = getOptions();
     auto const softFilter = [](double kh) {
         if (kh > 0.01) {
             return -15.0 * (3.0 * kh * cos(kh) + ((sqr(kh) - 3.0) * sin(kh))) * pow(kh, -5.0);
@@ -1279,15 +1285,15 @@ double doPowerSpectrum(int num, double a, double adot) {
     };
     int const m = 8;
     terminal::detailPrint("Computing power spectrum\n");
-    double const h = getOptions().cosmology.hubble;
-    auto const glass = getOptions().run.scenario == "glass";
-    double const omegaM = getOptions().cosmology.omegaM;
+    double const h = opts.cosmology.hubble;
+    auto const glass = opts.run.scenario == "glass";
+    double const omegaM = opts.cosmology.omegaM;
     double const boxSize =
-        (units::scalesFromOptions(getOptions()).lengthScale() / units::kMegaparsec).value();
-    double const n3 = pow((double) getOptions().initial.fourierSize, 3);
+        (units::scalesFromOptions(opts).lengthScale() / units::kMegaparsec).value();
+    double const n3 = pow((double) opts.initial.fourierSize, 3);
     // The historical growth approximation is restricted to an expanding,
     // flat matter/Lambda background. Other models retain measured epoch power.
-    auto const& cosmology = getOptions().cosmology;
+    auto const& cosmology = opts.cosmology;
     bool rescaleGrowth = !glass && adot > 0.0 && omegaM > 0.0 && omegaM <= 1.0 &&
         std::abs(cosmology.omegaK) <= 1.0e-12 && cosmology.omegaLambda >= 0.0;
     double growthRatio = 1.0;
@@ -1299,7 +1305,7 @@ double doPowerSpectrum(int num, double a, double adot) {
         }
     }
     double factor = pow(boxSize, 3) / n3 / (glass ? 1.0 : (n3 * sqr(growthRatio)));
-    if (getOptions().initial.closePack) {
+    if (opts.initial.closePack) {
         factor *= 0.25;
     }
     double maxpow = 0.0;
@@ -1323,7 +1329,7 @@ double doPowerSpectrum(int num, double a, double adot) {
         //		kmax = sqrt(power0.k.front() * kmax * M);
         //	}
         double const c1 = h * h * h * factor;
-        double const kshot = 2.0 * std::numbers::pi * getOptions().initial.fourierSize / boxSize;
+        double const kshot = 2.0 * std::numbers::pi * opts.initial.fourierSize / boxSize;
         for (int i = 0; i < power0.p.size(); i++) {
             double const k = power0.k[i];
             if (k >= kmin && k <= kmax) {
@@ -1343,13 +1349,14 @@ double doPowerSpectrum(int num, double a, double adot) {
 
 /// Write scheduled output times, scale factors, and redshifts from the background history.
 void outputTimeFile(DriverParameters const& parameters) {
-    double const a0 = 1.0 / (1.0 + getOptions().cosmology.startRedshift);
+    auto const& opts = getOptions();
+    double const a0 = 1.0 / (1.0 + opts.cosmology.startRedshift);
     auto const background = cosmology::simulationBackground(parameters.tauMax);
-    bool const expandingBackground = getOptions().run.scenario == "cosmology";
+    bool const expandingBackground = opts.run.scenario == "cosmology";
     double const initialTau =
         expandingBackground ? cosmosConformalTime(a0 * 1.0e-6, a0, false) : 0.0;
     double const initialTime = expandingBackground ? cosmosTime(a0 * 1.0e-6, a0) : 0.0;
-    int const m = getOptions().run.outputIntervalCount();
+    int const m = opts.run.outputIntervalCount();
     FILE* fp = fopen(outputPath("time.txt").c_str(), "wt");
     if (fp == NULL) {
         throw std::ios_base::failure("Unable to open time.txt for writing");
@@ -1361,7 +1368,7 @@ void outputTimeFile(DriverParameters const& parameters) {
         auto const sample = background->sample(elapsed);
         double const a = sample.state.scaleFactor;
         double const z = 1.0 / a - 1.0;
-        double const c0 = getOptions().units.timeSeconds / constants::kSpyr;
+        double const c0 = opts.units.timeSeconds / constants::kSpyr;
         fprintf(fp, "%4i %21.14e %21.14e %21.14e %21.14e\n", i,
             (initialTime + sample.physicalTime) * c0, (initialTau + elapsed) * c0, a, z);
     }
@@ -1397,21 +1404,22 @@ static void outputEnergy(double coarseTime, double scale, EnergiesT const& energ
 /// Advance the simulation or checkpoint state through its configured integration and output
 /// schedule.
 void driver() {
+    auto const& currentOptions = getOptions();
     profile::checkForInterrupt();
 #if COSMICTIGER_WITH_GRAVITY
-    if (getOptions().run.scenario == "benchmark") {
+    if (currentOptions.run.scenario == "benchmark") {
         scenarios::runBenchmark();
         return;
     }
 #endif
-    bool const global = usesGlobalIntegration(getOptions().run);
+    bool const global = usesGlobalIntegration(currentOptions.run);
 #if COSMICTIGER_WITH_SPH
     bool const midpointHydro = sphMidpointEnabled();
 #else
     bool const midpointHydro = false;
 #endif
 
-    if (scenarios::definition(getOptions().run.scenario).fixedTime) {
+    if (scenarios::definition(currentOptions.run.scenario).fixedTime) {
         runFixedScenario();
         return;
     }
@@ -1422,13 +1430,13 @@ void driver() {
     DriverParameters params{};
     hpx::future<void> lcFut = hpx::make_ready_future();
     int buckets[11] = {80, 112, 112, 128, 128, 160, 176, 184, 184, 184, 192};
-    double a0 = 1.0 / (1.0 + getOptions().cosmology.startRedshift);
-    if (getOptions().checkpoint.readIndex != -1) {
+    double a0 = 1.0 / (1.0 + currentOptions.cosmology.startRedshift);
+    if (currentOptions.checkpoint.readIndex != -1) {
         profile::profileBegin("readCheckpoint");
         params = readCheckpoint();
         profile::profileEnd();
         profile::checkForInterrupt();
-        double const coarseInterval = params.tauMax / getOptions().run.outputIntervalCount();
+        double const coarseInterval = params.tauMax / currentOptions.run.outputIntervalCount();
         double const endpointTolerance =
             32.0 * std::numeric_limits<double>::epsilon() * params.tauMax;
         if (!std::isfinite(coarseInterval) || !(coarseInterval > 0.0) ||
@@ -1463,8 +1471,8 @@ void driver() {
                 params.step = resumedStep;
             }
         }
-        if (getOptions().run.scenario == "cosmology") {
-            if (getOptions().run.endTime == 0.0) {
+        if (currentOptions.run.scenario == "cosmology") {
+            if (currentOptions.run.endTime == 0.0) {
                 double const requestedDuration = cosmology::configuredDuration(a0);
                 double const tolerance = 1.0e-10 * std::max(requestedDuration, params.tauMax);
                 if (std::abs(requestedDuration - params.tauMax) > tolerance) {
@@ -1475,7 +1483,7 @@ void driver() {
             auto const expected =
                 cosmology::simulationBackground(params.tauMax)->sample(params.tau).state;
             double const hubble =
-                units::normalizedHubble100(getOptions()) * getOptions().cosmology.hubble;
+                units::normalizedHubble100(currentOptions) * currentOptions.cosmology.hubble;
             double const savedRate = params.a * params.adot / hubble;
             double const expectedRate = expected.conformalDerivative / hubble;
             double const scaleTolerance =
@@ -1492,17 +1500,17 @@ void driver() {
     } else {
         profile::profileBegin("initialize");
 #if COSMICTIGER_WITH_GRAVITY
-        if (getOptions().run.scenario == "glass") {
+        if (currentOptions.run.scenario == "glass") {
             scenarios::initializeGlass(params);
-        } else if (getOptions().run.scenario == "plummer") {
+        } else if (currentOptions.run.scenario == "plummer") {
             scenarios::initializePlummer(params);
         } else
 #endif
         {
-            if (getOptions().scenario.cosmology.gadget4Restart.empty()) {
+            if (currentOptions.scenario.cosmology.gadget4Restart.empty()) {
                 scenarios::initializeCosmology(params);
             } else {
-                particlesReadGadget4(getOptions().scenario.cosmology.gadget4Restart);
+                particlesReadGadget4(currentOptions.scenario.cosmology.gadget4Restart);
                 params.a = a0;
                 params.adot = cosmosDadt(a0);
                 params.tauMax = cosmology::configuredDuration(a0);
@@ -1510,15 +1518,15 @@ void driver() {
         }
         profile::profileEnd();
         profile::checkForInterrupt();
-        if (getOptions().run.endTime > 0.0) {
-            params.tauMax = getOptions().run.endTime;
+        if (currentOptions.run.endTime > 0.0) {
+            params.tauMax = currentOptions.run.endTime;
         }
-        if (getOptions().analysis.tracers) {
+        if (currentOptions.analysis.tracers) {
             particlesSetTracers();
         }
         params.step = 0;
         params.flops = 0;
-        params.bucketSize = getOptions().compute.bucketSize;
+        params.bucketSize = currentOptions.compute.bucketSize;
         terminal::detailPrint("TAU_MAX = %e\n", params.tauMax);
         params.tau = 0.0;
         params.maxRung = 0;
@@ -1527,16 +1535,16 @@ void driver() {
         params.minrung0 = 0;
         params.runtime = 0.0;
         params.totalProcessed = 0;
-        params.years = getOptions().run.scenario == "cosmology" ?
-            cosmosTime(1e-6 * a0, a0) * getOptions().units.timeSeconds / constants::kSpyr :
+        params.years = currentOptions.run.scenario == "cosmology" ?
+            cosmosTime(1e-6 * a0, a0) * currentOptions.units.timeSeconds / constants::kSpyr :
             0.0;
         auto tmp1 = particlesSumEnergies();
         params.energies.tckin = tmp1.kin;
         //		write_checkpoint(params);
     }
-    if (getOptions().checkpoint.readIndex == -1) {
+    if (currentOptions.checkpoint.readIndex == -1) {
 #if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_STAR_FORMATION
-        if (getOptions().starFormation.enabled) {
+        if (currentOptions.starFormation.enabled) {
             profile::profileBegin("starFormation");
             starFormationInitialize();
             profile::profileEnd();
@@ -1544,7 +1552,7 @@ void driver() {
 #endif
         outputTimeFile(params);
     }
-    if (getOptions().run.scenario == "cosmology") {
+    if (currentOptions.run.scenario == "cosmology") {
         profile::ScopedPhase phase("output.background");
         cosmology::writeBackgroundPlot(params.tauMax);
         profile::checkForInterrupt();
@@ -1561,19 +1569,19 @@ void driver() {
     auto& bucketSize = params.bucketSize;
     auto& itime = params.itime;
     auto& minrung0 = params.minrung0;
-    minrung0 = global ? 0 : std::max(minrung0, getOptions().run.minRung);
+    minrung0 = global ? 0 : std::max(minrung0, currentOptions.run.minRung);
     auto& iter = params.iter;
     int& step = params.step;
     auto& totalProcessed = params.totalProcessed;
     auto& runtime = params.runtime;
-    int numberOfSteps = getOptions().run.outputIntervalCount();
-    double z0 = getOptions().cosmology.startRedshift;
+    int numberOfSteps = currentOptions.run.outputIntervalCount();
+    double z0 = currentOptions.cosmology.startRedshift;
     double dloga = log(z0 + 1.0) / numberOfSteps;
     double pot;
     int thisIter = 0;
     size_t progressRows = 0;
     std::string progressRungHeader;
-    terminal::section(getOptions().run.scenario.c_str());
+    terminal::section(currentOptions.run.scenario.c_str());
     std::cout << "  tau is conformal time / coarse interval; dt is in code units.\n"
                  "  Wall durations use hh:mm:ss.ss; initialization is excluded.\n"
               << std::flush;
@@ -1587,7 +1595,7 @@ void driver() {
     Timer reset;
     reset.start();
 #if COSMICTIGER_ENABLE_ROCKSTAR
-    if (getOptions().lightcone.enabled) {
+    if (currentOptions.lightcone.enabled) {
         lcInit(tau, tauMax);
     }
 #endif
@@ -1597,7 +1605,7 @@ void driver() {
         particlesSetMinrung(minrung0);
     }
 #if COSMICTIGER_ENABLE_ROCKSTAR
-    auto const checkLc = [&tau, &dt, &tauMax, &a, &iter](bool force) {
+    auto const checkLc = [&tau, &dt, &tauMax, &a, &iter, &currentOptions](bool force) {
         if (force || lcTimeToFlush(tau, tauMax)) {
             profile::profileBegin("lightcone");
             Timer tm;
@@ -1627,8 +1635,8 @@ void driver() {
                 "lc_particles_boundaries1 %s\n", terminal::formatDuration(tm.read()).c_str());
             tm.reset();
             tm.start();
-            double const linkingLength = getOptions().lightcone.linkingLength *
-                pow(darkMatterReferenceCount(getOptions()), -1.0 / kDimensions);
+            double const linkingLength = currentOptions.lightcone.linkingLength *
+                pow(darkMatterReferenceCount(currentOptions), -1.0 / kDimensions);
             {
                 profile::ScopedPhase phase("lightcone.treeCreate");
                 lcFormTrees(tau, linkingLength);
@@ -1700,10 +1708,9 @@ void driver() {
     };
 #endif
     auto checkpointlist = readCheckpointList();
-    double const hsoft0 = getOptions().gravity.smoothingLength;
     bool doCheck = false;
     double checkz = 1.0 / a - 1.0;
-    int lastCheckpointIteration = getOptions().checkpoint.readIndex >= 0 ? params.iter : -1;
+    int lastCheckpointIteration = currentOptions.checkpoint.readIndex >= 0 ? params.iter : -1;
     EnergiesT energies0;
     double glassError = 1.0;
     bool interrupted = false;
@@ -1711,15 +1718,16 @@ void driver() {
     Timer evolutionTime;
     evolutionTime.start();
     totalTime.start();
-    double const coarseInterval = tauMax / getOptions().run.outputIntervalCount();
+    double const coarseInterval = tauMax / currentOptions.run.outputIntervalCount();
     int lastOutputStep = driverOutputStep(tau, coarseInterval) -
         (driverFinalOutputStep(tau, coarseInterval) == driverOutputStep(tau, coarseInterval));
     for (;; step += global ? 0 : 1) {
-        if (cosmology::endTimeReached(tau, tauMax) || thisIter >= getOptions().run.maxIterations) {
+        if (cosmology::endTimeReached(tau, tauMax) ||
+            thisIter >= currentOptions.run.maxIterations) {
             break;
         }
 
-        double t0 = tauMax / getOptions().run.outputIntervalCount();
+        double t0 = tauMax / currentOptions.run.outputIntervalCount();
         do {
             // Stop only between completed substeps, retaining the current clock
             // for the ordinary final checkpoint and distributed cleanup below.
@@ -1731,7 +1739,7 @@ void driver() {
             stepTm.start();
             tmr.stop();
             if ((params.iter > 0 && params.iter != lastCheckpointIteration &&
-                    tmr.read() > getOptions().checkpoint.intervalSeconds) ||
+                    tmr.read() > currentOptions.checkpoint.intervalSeconds) ||
                 doCheck) {
                 totalTime.stop();
                 runtime += totalTime.read();
@@ -1767,16 +1775,16 @@ void driver() {
                 lastOutputStep = outputStep;
                 profile::profileBegin("output");
                 int const number = outputStep;
-                if (getOptions().analysis.tracers) {
+                if (currentOptions.analysis.tracers) {
                     outputTracers(number);
                 }
-                if (getOptions().analysis.slice) {
+                if (currentOptions.analysis.slice) {
                     outputSlice(number, years);
                 }
                 if (fullEval) {
                     viewOutputViews(outputStep, a, false, years);
                 }
-                if (getOptions().analysis.views) {
+                if (currentOptions.analysis.views) {
                     Timer tm;
                     tm.start();
                     outputView(number, years);
@@ -1812,17 +1820,13 @@ void driver() {
             schedule.endTime = tauMax;
 
             detail::updateOpeningSchedule(a);
-            auto opts = getOptions();
-            opts.gravity.smoothingLength =
-                hsoft0;    // Fixed comoving support for every particle type.
-
-            double const theta = opts.gravity.openingAngle;
-            bucketSize = opts.compute.bucketSize;
+            double const theta = currentOptions.gravity.openingAngle;
+            bucketSize = currentOptions.compute.bucketSize;
             ForceStepResult tmp;
             bool nocrop = false;
             if ((uint64_t(step % 8)) == 0 && fullEval) {
                 nocrop = true;
-                minrung0 = global ? 0 : std::max(minrung0 - 1, getOptions().run.minRung);
+                minrung0 = global ? 0 : std::max(minrung0 - 1, currentOptions.run.minRung);
             }
             int thisMinrung = std::max(minrung, minrung0);
             int om = thisMinrung;
@@ -1830,24 +1834,24 @@ void driver() {
             if (outputDue) {
                 //				kick_workspace::clear_buffers();
                 //				tree_destroy(true);
-                if (getOptions().analysis.power) {
+                if (currentOptions.analysis.power) {
                     profile::profileBegin("powerSpectrum");
                     doPowerSpectrum(outputStep, a, adot);
                     profile::profileEnd();
                 }
 #if COSMICTIGER_ENABLE_ROCKSTAR && !defined(CHECK_MUTUAL_SORT)
-                if (getOptions().analysis.groups) {
+                if (currentOptions.analysis.groups) {
                     profile::profileBegin("groups");
                     doGroups(outputStep, a, years);
                     profile::profileEnd();
                 }
 #endif
             }
-            if (getOptions().scenario.cosmology.useGlass && minrung == minrung0) {
+            if (currentOptions.scenario.cosmology.useGlass && minrung == minrung0) {
                 //			particles_displace(rand1(), rand1(), rand1());
             }
             resetFlops();
-            int const errorInterval = getOptions().gravity.errorInterval;
+            int const errorInterval = currentOptions.gravity.errorInterval;
             int const gravityErrorStep =
                 outputDue && errorInterval > 0 && outputStep % errorInterval == 0 ? outputStep : -1;
 #if COSMICTIGER_WITH_SPH
@@ -1855,7 +1859,7 @@ void driver() {
                 double const estimateBase = t0;
                 auto const estimate = sphMidpointStep(-1, tau, 0.0, estimateBase, a, a * adot,
                     energies, global,
-                    global ? estimateBase : std::ldexp(estimateBase, -getOptions().run.minRung));
+                    global ? estimateBase : std::ldexp(estimateBase, -currentOptions.run.minRung));
                 params.globalHydroTimestep = estimate.minimumTimestep;
             }
 #endif
@@ -1865,10 +1869,10 @@ void driver() {
             bool deferHydroOpening = false;
 #if COSMICTIGER_WITH_SPH
             int const coincidentHydroRung = global ? -1 : sphMidpointRung(itime);
-            deferHydroOpening = midpointHydro && getOptions().gravity.enabled &&
+            deferHydroOpening = midpointHydro && currentOptions.gravity.enabled &&
                 coincidentHydroRung >= 0 && sphMidpointTargetCount(coincidentHydroRung) != 0;
 #endif
-            if (!getOptions().run.hierarchicalGravity) {
+            if (!currentOptions.run.hierarchicalGravity) {
                 tmp = advanceForces(minrung, a, a * adot, tau, t0, theta, tau == 0.0, fullEval,
                     energies, gravityErrorStep, false, params.globalTimestep, forceStepCap,
                     schedule, deferHydroOpening);
@@ -1943,7 +1947,8 @@ void driver() {
             double midpointScaleDerivative = adot;
             double firstDriftScale = a;
             double secondDriftScale = a;
-            if (getOptions().run.scenario != "glass" && getOptions().run.scenario != "plummer") {
+            if (currentOptions.run.scenario != "glass" &&
+                currentOptions.run.scenario != "plummer") {
                 if (midpointHydro) {
                     // Integrate each cosmological half-interval independently;
                     // half of the full drift factor is not generally its value
@@ -1968,10 +1973,10 @@ void driver() {
             double const driftThermal = energies.therm;
             double const workEndScale = midpointHydro ? midpointScale : a;
             energies.cosmic += cosmology::kineticExpansionWork(a0, workEndScale, energies.tckin) +
-                (workEndScale - a0) * (3.0 * getOptions().hydro.heatCapacityRatio - 4.0) *
+                (workEndScale - a0) * (3.0 * currentOptions.hydro.heatCapacityRatio - 4.0) *
                     driftThermal;
             double const dyears =
-                physicalInterval * getOptions().units.timeSeconds / constants::kSpyr;
+                physicalInterval * currentOptions.units.timeSeconds / constants::kSpyr;
             auto const z0 = 1.0 / a0 - 1.0;
             auto const z1 = 1.0 / a - 1.0;
             for (auto& z : checkpointlist) {
@@ -2004,7 +2009,7 @@ void driver() {
                 energies.tckin = afterHydro.kin;
                 energies.cosmic +=
                     cosmology::kineticExpansionWork(midpointScale, a, afterHydro.kin) +
-                    (a - midpointScale) * (3.0 * getOptions().hydro.heatCapacityRatio - 4.0) *
+                    (a - midpointScale) * (3.0 * currentOptions.hydro.heatCapacityRatio - 4.0) *
                         afterHydro.therm / sqr(midpointScale);
                 // Complete each old gas interval before the next gravity
                 // boundary changes its rung. Checkpoints therefore contain
@@ -2018,7 +2023,7 @@ void driver() {
                 }
             } else
 #endif
-                if (!getOptions().run.hierarchicalGravity) {
+                if (!currentOptions.run.hierarchicalGravity) {
                 profile::profileBegin("drift");
                 drift(driftScale, dt, tau, tau + dt, tauMax);
                 profile::profileEnd();
@@ -2038,7 +2043,7 @@ void driver() {
             runtime += totalTime.read();
             double pps = totalProcessed / runtime;
 
-            double const numberOfParticles = getOptions().initial.numberOfParticles;
+            double const numberOfParticles = currentOptions.initial.numberOfParticles;
             double close = 0.0, direct = 0.0;
             getGravityCounters(close, direct);
             direct += close;
@@ -2061,9 +2066,9 @@ void driver() {
                 direct, flopRates.singlePrecision * 1e-9, flopRates.doublePrecision * 1e-9);
             auto const rungCounts = particlesRungCounts();
             std::span<size_t const> const rungPopulations{rungCounts.data(), rungCounts.size()};
-            bool const siloOutput = outputDue && getOptions().output.silo;
+            bool const siloOutput = outputDue && currentOptions.output.silo;
             std::string events = siloOutput ? "SILO" : "";
-            double const activeTheta = getOptions().gravity.openingAngle;
+            double const activeTheta = currentOptions.gravity.openingAngle;
             if (activeTheta != theta) {
                 if (!events.empty()) {
                     events += "; ";
@@ -2112,7 +2117,7 @@ void driver() {
                 std::cout << "\n  Finished: reached the requested end time or redshift.\n"
                           << std::flush;
                 break;
-            } else if (thisIter >= getOptions().run.maxIterations) {
+            } else if (thisIter >= currentOptions.run.maxIterations) {
                 std::cout << "\n  Stopped at the iteration limit.\n" << std::flush;
                 break;
             }
@@ -2121,7 +2126,7 @@ void driver() {
                 //			abort();
             }
 #if COSMICTIGER_ENABLE_ROCKSTAR
-            if (getOptions().lightcone.enabled && minRung(itime) <= minrung0) {
+            if (currentOptions.lightcone.enabled && minRung(itime) <= minrung0) {
                 checkLc(false);
             }
 #endif
@@ -2129,10 +2134,10 @@ void driver() {
 
         } while (itime != 0);
         if (interrupted || cosmology::endTimeReached(tau, tauMax) ||
-            thisIter >= getOptions().run.maxIterations) {
+            thisIter >= currentOptions.run.maxIterations) {
             break;
 #if COSMICTIGER_WITH_GRAVITY
-        } else if (getOptions().run.scenario == "glass" && std::abs(glassError) < 1.0e-5) {
+        } else if (currentOptions.run.scenario == "glass" && std::abs(glassError) < 1.0e-5) {
             break;
 #endif
         }
@@ -2143,12 +2148,12 @@ void driver() {
                   << std::flush;
     }
 #if COSMICTIGER_WITH_GRAVITY
-    if (getOptions().run.scenario == "glass") {
+    if (currentOptions.run.scenario == "glass") {
         scenarios::saveGlass();
     }
 #endif
 #if COSMICTIGER_ENABLE_ROCKSTAR
-    if (getOptions().lightcone.enabled) {
+    if (currentOptions.lightcone.enabled) {
         checkLc(true);
     }
 #endif
@@ -2181,14 +2186,14 @@ void driver() {
         // Keep the work ledger and driver state at the completed drift, and
         // leave completed-checkpoint restarts alone (thisIter == 0).
         EnergiesT finalEnergies = energies;
-        double t0 = tauMax / getOptions().run.outputIntervalCount();
+        double t0 = tauMax / currentOptions.run.outputIntervalCount();
         detail::updateOpeningSchedule(params.a);
-        double const theta = getOptions().gravity.openingAngle;
+        double const theta = currentOptions.gravity.openingAngle;
         ForceStepSchedule schedule;
         schedule.endTime = tauMax;
 
 #if COSMICTIGER_WITH_GRAVITY && COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
-        if (getOptions().run.hierarchicalGravity) {
+        if (currentOptions.run.hierarchicalGravity) {
             int minimumRung = minrung0;
             kickStepHierarchical(minimumRung, maxRung, a, adot, tau, t0, theta, &finalEnergies,
                 minrung0, true, nullptr, true, 0.0, -1, true, schedule);
@@ -2203,10 +2208,10 @@ void driver() {
         double const finalGlassError = std::abs(energies0.pot - a * finalEnergies.pot) /
             std::max(std::abs(a * finalEnergies.pot), 1.0e-30);
         // Energy rows are labelled on the coarse output clock, not the outer interval.
-        outputEnergy(tau / (tauMax / getOptions().run.outputIntervalCount()), a, finalEnergies,
+        outputEnergy(tau / (tauMax / currentOptions.run.outputIntervalCount()), a, finalEnergies,
             energy0, finalGlassError);
     }
-    if (getOptions().lightcone.enabled) {
+    if (currentOptions.lightcone.enabled) {
         particlesFree();
     }
     evolutionTime.stop();
@@ -2214,7 +2219,7 @@ void driver() {
     std::cout << std::format("  Total evolution time (this run, initialization excluded): {:s}\n",
                      terminal::formatDuration(thisIter > 0 ? evolutionTime.read() : 0.0).c_str())
               << std::flush;
-    if (getOptions().checkpoint.readIndex >= 0) {
+    if (currentOptions.checkpoint.readIndex >= 0) {
         std::cout << std::format("  Recorded time including previous runs: {:s}\n",
                          terminal::formatDuration(
                              previousRuntime + (thisIter > 0 ? evolutionTime.read() : 0.0))
@@ -2223,6 +2228,6 @@ void driver() {
     }
 #else
     throw std::invalid_argument(std::format(
-        "run.scenario={} requires a gravity-enabled build", getOptions().run.scenario.c_str()));
+        "run.scenario={} requires a gravity-enabled build", currentOptions.run.scenario.c_str()));
 #endif
 }

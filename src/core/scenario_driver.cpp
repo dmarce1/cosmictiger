@@ -97,13 +97,14 @@ void writeScenarioDiagnostics(DriverParameters const& state) {
 /// Initialize or resume the chosen scenario and advance its planned stages with diagnostics
 /// and output.
 void runFixedScenario() {
+    auto const& opts = getOptions();
     profile::checkForInterrupt();
-    auto const& definition = scenarios::definition(getOptions().run.scenario);
+    auto const& definition = scenarios::definition(opts.run.scenario);
     profile::profileBegin("initialize");
     auto plan = definition.initialize();
     profile::profileEnd();
     profile::checkForInterrupt();
-    auto baseOptions = getOptions();
+    auto baseOptions = opts;
 #if COSMICTIGER_WITH_SPH
     baseOptions.run.gasParticleCount = sphParticlesSize();
 #else
@@ -201,7 +202,7 @@ void runFixedScenario() {
     }
     int lastCheckpoint = restarting ? state.iter : -1;
     auto const checkpoint = [&]() {
-        auto const stageOptions = getOptions();
+        auto const stageOptions = opts;
         setOptions(baseOptions);
         profile::profileBegin("writeCheckpoint");
         writeCheckpoint(state);
@@ -285,7 +286,7 @@ void runFixedScenario() {
                 lastOutputStep = outputStep;
                 profile::profileBegin("output");
                 viewOutputViews(outputStep, 1.0, false,
-                    state.tau * getOptions().units.timeSeconds * constants::kSecondsToYears);
+                    state.tau * opts.units.timeSeconds * constants::kSecondsToYears);
                 profile::profileEnd();
             }
             resetFlops();
@@ -429,7 +430,7 @@ void runFixedScenario() {
                 runtime.start();
                 auto const rungCounts = particlesRungCounts();
                 std::span<size_t const> const rungPopulations{rungCounts.data(), rungCounts.size()};
-                bool const siloOutput = outputDue && getOptions().output.silo;
+                bool const siloOutput = outputDue && opts.output.silo;
                 std::string events = siloOutput ? "SILO" : "";
                 auto const rungHeader = terminal::formatRungPopulations(rungPopulations, true);
                 if (siloOutput || progressRows % 25 == 0 || progressRungHeader != rungHeader) {
@@ -462,7 +463,7 @@ void runFixedScenario() {
     }
     // Preserve the completed integrator state before refreshing density for
     // final views; this keeps stopped and uninterrupted checkpoints identical.
-    auto finalOptions = getOptions();
+    auto finalOptions = opts;
     setOptions(baseOptions);
     if (state.iter > 0 && state.iter != lastCheckpoint) {
         profile::profileBegin("writeCheckpoint");
@@ -490,7 +491,7 @@ void runFixedScenario() {
     // Use the next cycle for a final partial coarse step, preserving earlier snapshots.
     profile::profileBegin("output");
     viewOutputViews(driverFinalOutputStep(state.tau, coarseInterval), 1.0, true,
-        state.tau * getOptions().units.timeSeconds * constants::kSecondsToYears);
+        state.tau * opts.units.timeSeconds * constants::kSecondsToYears);
     profile::profileEnd();
     if (completed && !interrupted && iterations > 0) {
         // Only terminal diagnostics consume the outstanding gravity closing
