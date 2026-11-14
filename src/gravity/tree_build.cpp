@@ -8,7 +8,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <limits>
 #include <stdexcept>
 
 #include <cosmictiger/core/flops.hpp>
@@ -30,26 +29,6 @@ namespace detail {
 constexpr FlopCount treePositionConversionExtraFlops(double coordinate) {
     return FlopCount(kPositionBits == 64 ? 3 : 0) +
         FlopCount(!(coordinate > -1.0 && coordinate < 1.0));
-}
-
-/// Store an anchored COM without first rounding its absolute coordinate to double.
-/// Retain the quantization residual for mass-weighted reductions higher in the tree.
-void treeSetMassCenter(
-    TreeCreateReturn& result, Vector3<Position> const& anchor, Vector3<double> const& offset) {
-    for (int dim = 0; dim < kDimensions; ++dim) {
-        result.pos[dim] = anchor[dim] + Position(offset[dim]);
-        result.centerOfMassOffset[dim] =
-            offset[dim] - unwrappedDoubleDistance(result.pos[dim], anchor[dim]);
-    }
-}
-
-/// Round an enclosing radius outward when narrowing to the stored float.
-float treeEnclosingRadius(double radius) {
-    float rounded = radius;
-    if (double(rounded) < radius) {
-        rounded = std::nextafter(rounded, std::numeric_limits<float>::infinity());
-    }
-    return rounded;
 }
 
 }    // namespace detail
@@ -232,188 +211,147 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
                 flops += 2;
             }
         }
-        if constexpr (cosmictiger::gravity::cartesian::kDipoleFree) {
-            double const mass = ml[0] + mr[0];
-            flops += 1;
-            if (mass != 0.0) {
-                auto const& anchor = ml[0] != 0.0 ? xl : xr;
-                Vector3<double> offset{};
-                for (int dim = 0; dim < kDimensions; ++dim) {
-                    offset[dim] = (ml[0] *
-                                          (unwrappedDoubleDistance(xl[dim], anchor[dim]) +
-                                              rcl.centerOfMassOffset[dim]) +
-                                      mr[0] *
-                                          (unwrappedDoubleDistance(xr[dim], anchor[dim]) +
-                                              rcr.centerOfMassOffset[dim])) /
-                        mass;
-                    flops += 10;
-                }
-                detail::treeSetMassCenter(rc, anchor, offset);
-                flops += kDimensions * (4 + (kPositionBits == 64 ? 3 : 0));
-                r = 0.0;
-                for (auto const* child : {&rcl, &rcr}) {
-                    if (child->multi[0] != 0.0) {
-                        Vector3<double> displacement{};
-                        for (int dim = 0; dim < kDimensions; ++dim) {
-                            displacement[dim] =
-                                unwrappedDoubleDistance(child->pos[dim], centerPosition[dim]);
-                        }
-                        r = std::max(r, double(child->radius) + displacement.norm());
-                        flops += 14;
+        Vector3<double> xlValue;
+        Vector3<double> xrValue;
+        for (int dim = 0; dim < kDimensions; dim++) {
+            xlValue[dim] = xl[dim].toDouble();
+            xrValue[dim] = xr[dim].toDouble();
+        }
+        flops += 2 * kDimensions;
+        Vector3<double> xc1, xc2;
+        double radius1 = 0.0, radius2;
+        bool tried1 = false;
+        // Global nodes have no rank-local particle range to rescan.
+        bool const canRescan = processRange.second - processRange.first == 1 &&
+            processRange.first == hpxRank() && particleRange.first >= 0 && numberOfParticles > 0 &&
+            numberOfParticles <= 64LL * opts.compute.bucketSize;
+        flops += canRescan ? 1 : 0;
+        if (canRescan && (rbox.end[xdim] - rbox.begin[xdim] <= 0.5)) {
+            tried1 = true;
+            for (int dim = 0; dim < kDimensions; dim++) {
+                xc1[dim] = 0.5 * (rbox.begin[dim] + rbox.end[dim]);
+            }
+            Vector3<SimdPosition> xc{};
+            for (int dim = 0; dim < kDimensions; dim++) {
+                xc[dim] = math::broadcast<SimdPosition>(Position(xc1[dim]).raw());
+                flops += detail::treePositionConversionExtraFlops(xc1[dim]);
+            }
+            flops += 9;
+            SimdFloat r2Max = math::broadcast<SimdFloat>(0.0);
+            for (ParticleInteger i = particleRange.first; i < particleRange.second;
+                i += kSimdFloatSize) {
+                SimdPosition position{};
+                Vector3<SimdFloat> dx{};
+                int const maxj =
+                    std::min<ParticleInteger>(particleRange.second - i, kSimdFloatSize);
+                for (int dim = 0; dim < kDimensions; dim++) {
+                    for (int j = 0; j < maxj; j++) {
+                        simdSetLane(position, j, sources.positions[dim][i + j].raw());
                     }
+                    for (int j = maxj; j < kSimdFloatSize; j++) {
+                        simdSetLane(position, j, xc[dim][0]);
+                    }
+                    dx[dim] = simdCast<SimdFloat>(simdPositionDifference(position, xc[dim])) *
+                        toFloatFactor;
                 }
-                radius = detail::treeEnclosingRadius(r);
+                auto const r2 = sqr(dx[kXi], dx[kYi], dx[kZi]);
+                r2Max = math::max(r2Max, r2);
+            }
+            float r2 = 0.0f;
+            for (int i = 0; i < kSimdFloatSize; i++) {
+                r2 = std::max(r2, static_cast<float>(r2Max[i]));
+            }
+            singleFlops +=
+                FlopCount(roundUp(numberOfParticles, ParticleInteger(kSimdFloatSize))) * 8;
+            if constexpr (std::is_same_v<decltype(sqrt(r2)), float>) {
+                singleFlops += 1;
+                flops += 1;    // Float square root widened to radius1.
+            } else {
+                flops += 2;    // Float argument widened before a double square root.
+            }
+            radius1 = sqrt(r2);
+        }
+        double rr;
+        double rl;
+        Vector3<double> n;
+        float rValue;
+        double norminv = 0.0;
+        for (int dim = 0; dim < kDimensions; dim++) {
+            n[dim] = xlValue[dim] - xrValue[dim];
+            norminv += sqr(n[dim]);
+        }
+        flops += 12 + (norminv > 0.0 ? 2 : 0);
+        norminv = norminv > 0.0 ? 1.0 / std::sqrt(norminv) : 0.0;
+        for (int dim = 0; dim < kDimensions; dim++) {
+            n[dim] *= norminv;
+            n[dim] = std::abs(n[dim]);
+        }
+        r = 0.0;
+        if (mr[0] != 0.0) {
+            if (ml[0] != 0.0) {
+                if (norminv > 0.0) {
+                    for (int dim = 0; dim < kDimensions; dim++) {
+                        double const xmax = std::max(
+                            xlValue[dim] + n[dim] * rlValue, xrValue[dim] + n[dim] * rrValue);
+                        double const xmin = std::min(
+                            xlValue[dim] - n[dim] * rlValue, xrValue[dim] - n[dim] * rrValue);
+                        xc2[dim] = (xmax + xmin) * 0.5;
+                        r += sqr((xmax - xmin) * 0.5);
+                    }
+                    flops += 42;
+                } else {
+                    xc2 = xlValue;
+                    r = std::max(sqr(rlValue), sqr(rrValue));
+                    flops += 2;
+                }
+            } else {
+                xc2 = xrValue;
+                r = rrValue * rrValue;
+                flops += 1;
+            }
+        } else {
+            if (ml[0] != 0.0) {
+                xc2 = xlValue;
+                r = rlValue * rlValue;
                 flops += 1;
             } else {
                 for (int dim = 0; dim < kDimensions; ++dim) {
-                    centerPosition[dim] = rbox.begin[dim];
-                    flops += 1 + detail::treePositionConversionExtraFlops(rbox.begin[dim]);
-                }
-                radius = 0.0f;
-            }
-        } else {
-            Vector3<double> xlValue;
-            Vector3<double> xrValue;
-            for (int dim = 0; dim < kDimensions; dim++) {
-                xlValue[dim] = xl[dim].toDouble();
-                xrValue[dim] = xr[dim].toDouble();
-            }
-            flops += 2 * kDimensions;
-            Vector3<double> xc1, xc2;
-            double radius1 = 0.0, radius2;
-            bool tried1 = false;
-            // Global nodes have no rank-local particle range to rescan.
-            bool const canRescan = processRange.second - processRange.first == 1 &&
-                processRange.first == hpxRank() && particleRange.first >= 0 &&
-                numberOfParticles > 0 && numberOfParticles <= 64LL * opts.compute.bucketSize;
-            flops += canRescan ? 1 : 0;
-            if (canRescan && (rbox.end[xdim] - rbox.begin[xdim] <= 0.5)) {
-                tried1 = true;
-                for (int dim = 0; dim < kDimensions; dim++) {
-                    xc1[dim] = 0.5 * (rbox.begin[dim] + rbox.end[dim]);
-                }
-                Vector3<SimdPosition> xc{};
-                for (int dim = 0; dim < kDimensions; dim++) {
-                    xc[dim] = math::broadcast<SimdPosition>(Position(xc1[dim]).raw());
-                    flops += detail::treePositionConversionExtraFlops(xc1[dim]);
-                }
-                flops += 9;
-                SimdFloat r2Max = math::broadcast<SimdFloat>(0.0);
-                for (ParticleInteger i = particleRange.first; i < particleRange.second;
-                    i += kSimdFloatSize) {
-                    SimdPosition position{};
-                    Vector3<SimdFloat> dx{};
-                    int const maxj =
-                        std::min<ParticleInteger>(particleRange.second - i, kSimdFloatSize);
-                    for (int dim = 0; dim < kDimensions; dim++) {
-                        for (int j = 0; j < maxj; j++) {
-                            simdSetLane(position, j, sources.positions[dim][i + j].raw());
-                        }
-                        for (int j = maxj; j < kSimdFloatSize; j++) {
-                            simdSetLane(position, j, xc[dim][0]);
-                        }
-                        dx[dim] = simdCast<SimdFloat>(simdPositionDifference(position, xc[dim])) *
-                            toFloatFactor;
-                    }
-                    auto const r2 = sqr(dx[kXi], dx[kYi], dx[kZi]);
-                    r2Max = math::max(r2Max, r2);
-                }
-                float r2 = 0.0f;
-                for (int i = 0; i < kSimdFloatSize; i++) {
-                    r2 = std::max(r2, static_cast<float>(r2Max[i]));
-                }
-                singleFlops +=
-                    FlopCount(roundUp(numberOfParticles, ParticleInteger(kSimdFloatSize))) * 8;
-                if constexpr (std::is_same_v<decltype(sqrt(r2)), float>) {
-                    singleFlops += 1;
-                    flops += 1;    // Float square root widened to radius1.
-                } else {
-                    flops += 2;    // Float argument widened before a double square root.
-                }
-                radius1 = sqrt(r2);
-            }
-            double rr;
-            double rl;
-            Vector3<double> n;
-            float rValue;
-            double norminv = 0.0;
-            for (int dim = 0; dim < kDimensions; dim++) {
-                n[dim] = xlValue[dim] - xrValue[dim];
-                norminv += sqr(n[dim]);
-            }
-            flops += 12 + (norminv > 0.0 ? 2 : 0);
-            norminv = norminv > 0.0 ? 1.0 / std::sqrt(norminv) : 0.0;
-            for (int dim = 0; dim < kDimensions; dim++) {
-                n[dim] *= norminv;
-                n[dim] = std::abs(n[dim]);
-            }
-            r = 0.0;
-            if (mr[0] != 0.0) {
-                if (ml[0] != 0.0) {
-                    if (norminv > 0.0) {
-                        for (int dim = 0; dim < kDimensions; dim++) {
-                            double const xmax = std::max(
-                                xlValue[dim] + n[dim] * rlValue, xrValue[dim] + n[dim] * rrValue);
-                            double const xmin = std::min(
-                                xlValue[dim] - n[dim] * rlValue, xrValue[dim] - n[dim] * rrValue);
-                            xc2[dim] = (xmax + xmin) * 0.5;
-                            r += sqr((xmax - xmin) * 0.5);
-                        }
-                        flops += 42;
-                    } else {
-                        xc2 = xlValue;
-                        r = std::max(sqr(rlValue), sqr(rrValue));
-                        flops += 2;
-                    }
-                } else {
-                    xc2 = xrValue;
-                    r = rrValue * rrValue;
-                    flops += 1;
-                }
-            } else {
-                if (ml[0] != 0.0) {
-                    xc2 = xlValue;
-                    r = rlValue * rlValue;
-                    flops += 1;
-                } else {
-                    for (int dim = 0; dim < kDimensions; ++dim) {
-                        xc2[dim] = rbox.begin[dim];
-                    }
+                    xc2[dim] = rbox.begin[dim];
                 }
             }
-            radius2 = std::sqrt(r);
-            flops += 1;
-            if (tried1 && radius1 < radius2) {
-                xcValue = xc1;
-                radius = radius1;
-            } else {
-                xcValue = xc2;
-                radius = radius2;
-            }
-            flops += 1;    // The selected double radius narrows into tree storage.
-            r = 0.0;
-            for (int dim = 0; dim < kDimensions; dim++) {
-                double const span = (rbox.end[dim] - rbox.begin[dim]);
-                ALWAYS_ASSERT(span >= 0.0);
-                r += sqr(span * 0.5);
-            }
-            r = std::sqrt(r);
-            flops += 13;
-            if (r < radius) {
-                radius = r;
-                flops += 1;    // Double radius narrows to float.
-                for (int dim = 0; dim < kDimensions; dim++) {
-                    xcValue[dim] = (rbox.begin[dim] + rbox.end[dim]) * 0.5;
-                }
-                flops += 6;
-            }
-
-            for (int dim = 0; dim < kDimensions; dim++) {
-                centerPosition[dim] = xcValue[dim];
-                flops += detail::treePositionConversionExtraFlops(xcValue[dim]);
-            }
-            flops += 3;
         }
+        radius2 = std::sqrt(r);
+        flops += 1;
+        if (tried1 && radius1 < radius2) {
+            xcValue = xc1;
+            radius = radius1;
+        } else {
+            xcValue = xc2;
+            radius = radius2;
+        }
+        flops += 1;    // The selected double radius narrows into tree storage.
+        r = 0.0;
+        for (int dim = 0; dim < kDimensions; dim++) {
+            double const span = (rbox.end[dim] - rbox.begin[dim]);
+            ALWAYS_ASSERT(span >= 0.0);
+            r += sqr(span * 0.5);
+        }
+        r = std::sqrt(r);
+        flops += 13;
+        if (r < radius) {
+            radius = r;
+            flops += 1;    // Double radius narrows to float.
+            for (int dim = 0; dim < kDimensions; dim++) {
+                xcValue[dim] = (rbox.begin[dim] + rbox.end[dim]) * 0.5;
+            }
+            flops += 6;
+        }
+
+        for (int dim = 0; dim < kDimensions; dim++) {
+            centerPosition[dim] = xcValue[dim];
+            flops += detail::treePositionConversionExtraFlops(xcValue[dim]);
+        }
+        flops += 3;
         multipoleFlops += treeComputeMultipole<kFmmOrder>(multi, ml, mr, xl, xr, centerPosition);
         children[kLeftChild] = rcl.id;
         children[kRightChild] = rcr.id;
@@ -435,69 +373,29 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
                 xminValue[dim] = std::min(xminValue[dim], position);
             }
         }
-        if constexpr (cosmictiger::gravity::cartesian::kDipoleFree) {
-            double mass = 0.0;
-            Vector3<double> offset{};
-            Vector3<Position> anchor{};
-            if (numberOfParticles != 0) {
-                for (int dim = 0; dim < kDimensions; ++dim) {
-                    anchor[dim] = sources.positions[dim][particleRange.first];
-                }
-            }
-            for (ParticleInteger i = particleRange.first; i < particleRange.second; ++i) {
-                double const particleMass = fmmSourceMass(sources, i);
-                mass += particleMass;
-                for (int dim = 0; dim < kDimensions; ++dim) {
-                    offset[dim] += particleMass *
-                        unwrappedDoubleDistance(sources.positions[dim][i], anchor[dim]);
-                }
-                flops += 2 + 4 * kDimensions;
-            }
-            if (mass != 0.0) {
-                offset /= mass;
-                detail::treeSetMassCenter(rc, anchor, offset);
-                flops += 1 + kDimensions * (5 + (kPositionBits == 64 ? 3 : 0));
-            } else {
-                for (int dim = 0; dim < kDimensions; ++dim) {
-                    centerPosition[dim] = (xmaxValue[dim] + xminValue[dim]) * 0.5;
-                    flops += 3 +
-                        detail::treePositionConversionExtraFlops(
-                            (xmaxValue[dim] + xminValue[dim]) * 0.5);
-                }
-            }
-        }
-        if constexpr (!cosmictiger::gravity::cartesian::kDipoleFree) {
-            for (int dim = 0; dim < kDimensions; dim++) {
-                xcValue[dim] = (xmaxValue[dim] + xminValue[dim]) * 0.5;
-            }
-            flops += 6;
+        for (int dim = 0; dim < kDimensions; dim++) {
+            xcValue[dim] = (xmaxValue[dim] + xminValue[dim]) * 0.5;
         }
 
         r = 0.0;
-        flops += FlopCount(numberOfParticles) * 15;
+        flops += 6 + FlopCount(numberOfParticles) * 15;
         for (ParticleInteger i = particleRange.first; i < particleRange.second; i++) {
             double thisRadius = 0.0;
             for (int dim = 0; dim < kDimensions; dim++) {
-                double const delta = cosmictiger::gravity::cartesian::kDipoleFree ?
-                    unwrappedDoubleDistance(sources.positions[dim][i], centerPosition[dim]) :
-                    sources.positions[dim][i].toDouble() - xcValue[dim];
+                double const delta = sources.positions[dim][i].toDouble() - xcValue[dim];
                 thisRadius += sqr(delta);
             }
             r = std::max(r, thisRadius);
         }
-        radius = cosmictiger::gravity::cartesian::kDipoleFree ?
-            detail::treeEnclosingRadius(std::sqrt(r)) :
-            std::sqrt(r);
+        radius = std::sqrt(r);
         flops += 1;    // Double square-root result narrows into radius.
 
-        flops += cosmictiger::gravity::cartesian::kDipoleFree ? 1 : 4;
+        flops += 4;    // Square root and three center-to-fixed conversions below.
         children[kLeftChild].index = children[kRightChild].index = -1;
         // P2M and the stored node must use the same initialized fixed-point center.
-        if constexpr (!cosmictiger::gravity::cartesian::kDipoleFree) {
-            for (int dim = 0; dim < kDimensions; ++dim) {
-                centerPosition[dim] = xcValue[dim];
-                flops += detail::treePositionConversionExtraFlops(xcValue[dim]);
-            }
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            centerPosition[dim] = xcValue[dim];
+            flops += detail::treePositionConversionExtraFlops(xcValue[dim]);
         }
         multipoleFlops +=
             treeComputeMultipole<kFmmOrder>(multi, particleRange, centerPosition, sources);

@@ -31,7 +31,6 @@ endif()
 # Global periodic FMM gravity. Close leaf
 # interactions use the particle-pair kernels inside the FMM tree walk.
 option(COSMICTIGER_ENABLE_GRAVITY "Compile global FMM gravity" ON)
-option(COSMICTIGER_DIPOLE_FREE "Generate dipole-free FMM kernels and center tree multipoles at centers of mass" OFF)
 option(COSMICTIGER_ENABLE_SPH "Compile SPH hydrodynamics" ON)
 option(COSMICTIGER_ENABLE_ROCKSTAR "Compile ROCKSTAR halo finding and lightcone analysis when gravity is enabled" ON)
 option(COSMICTIGER_ENABLE_CHEMISTRY "Compile GADGET-4 equilibrium cooling when SPH is enabled" ON)

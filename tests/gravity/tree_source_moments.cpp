@@ -69,18 +69,6 @@ void cloud(double extent, bool subDoubleCenters) {
             }
         }
     }
-    if constexpr (cartesian::kDipoleFree) {
-        // Each child has exactly zero first moment on the native fixed grid,
-        // with unequal masses. The root may be shifted: its dipole is discarded.
-        std::array<int, 9> const shifts{6, -1, 3, -10, 2, -20, 14, -5, 0};
-        auto const step = subDoubleCenters ? PositionInteger(1) : Position(extent / 128).raw();
-        for (int axis = 0; axis < kDimensions; ++axis) {
-            for (size_t i = 0; i < masses.size(); ++i) {
-                auto const anchor = i < 4 ? leftCenter[axis] : rightCenter[axis];
-                positions[axis][i].raw() = anchor.raw() + PositionInteger(shifts[i]) * step;
-            }
-        }
-    }
     FmmSourceView sources;
     sources.count = masses.size();
     sources.masses = masses.data();

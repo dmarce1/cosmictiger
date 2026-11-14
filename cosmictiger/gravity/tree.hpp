@@ -135,8 +135,6 @@ struct is_not_bitwise_serializable<TreeNode> : std::true_type {};
 struct TreeCreateReturn {
     SourceMultipoleBuffer multi;
     Vector3<Position> pos;
-    // COM minus the stored fixed-point center; carried only during construction.
-    Vector3<double> centerOfMassOffset{};
     TreeId id;
     float radius;
     Range<double> box;
@@ -152,9 +150,6 @@ struct TreeCreateReturn {
         a & box;
         a & nodeCount;
         a & leafCount;
-        if constexpr (cosmictiger::gravity::cartesian::kDipoleFree) {
-            a & centerOfMassOffset;
-        }
     }
 };
 

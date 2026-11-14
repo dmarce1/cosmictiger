@@ -319,15 +319,13 @@ def accessor(g,components):
     return get
 
 
-def sourceComponents(g, variable, rank, quadrupoleTrace=True, dipoleFree=False):
+def sourceComponents(g, variable, rank, quadrupoleTrace=True):
     """Read the STF projection used by harmonic contractions.
 
     Degree two stores the full raw tensor when enabled. Its isotropic part
     contracts to zero with Newtonian derivatives and with every higher-rank
     derivative of the constant-Laplacian periodic Green function.
     """
-    if dipoleFree and rank == 1:
-        return {a: g.zero for a in indices(rank)}
     result = {a: g.symbol(f'{variable}[{index(a)}]') for a in indices(rank)}
     if quadrupoleTrace and rank == 2:
         trace = g.scale(g.add(result[(2, 0, 0)], result[(0, 2, 0)],
@@ -406,7 +404,7 @@ def horner(g,p,u,used=None):
     return root
 
 
-def buildKernel(E,independentM2lRatios=False,quadrupoleTrace=True,dipoleFree=False):
+def buildKernel(E,independentM2lRatios=False,quadrupoleTrace=True):
     g=Dag(); u=[g.mul(g.symbol(name), g.symbol('iR')) for name in ('dx','dy','dz')]
     invr=g.symbol('iR')
     eta=g.symbol('sourceRatio') if independentM2lRatios else invr
@@ -419,7 +417,7 @@ def buildKernel(E,independentM2lRatios=False,quadrupoleTrace=True,dipoleFree=Fal
     contractions={}
     for n in range(E):
         K=E-n; J=min(n,K)
-        M=sourceComponents(g, 'M', n, quadrupoleTrace, dipoleFree)
+        M=sourceComponents(g, 'M', n, quadrupoleTrace)
         get=accessor(g,M)
         C={J:{a:g.mul(weights[n],g.add(*(g.mul(get(plus(a,b)),B[b]) for b in indices(n-J)))) for a in indices(J)}}
         for j in range(J-1,-1,-1):
@@ -495,8 +493,8 @@ def normalizeSigns(old,roots):
     return new,result
 
 
-def emitKernel(E,independentM2lRatios=False,quadrupoleTrace=True,dipoleFree=False):
-    g,result=buildKernel(E,independentM2lRatios,quadrupoleTrace,dipoleFree)
+def emitKernel(E,independentM2lRatios=False,quadrupoleTrace=True):
+    g,result=buildKernel(E,independentM2lRatios,quadrupoleTrace)
     g,signed=normalizeSigns(g,list(result.values()))
     result=dict(zip(result,signed))
     live=g.live(root for root,sign in result.values())
@@ -558,7 +556,7 @@ def replaceCartesianFields(cpp, sourceDegree, localDegree):
 
 
 def generateCartesianTracefree(minLocalDegree=2, maxLocalDegree=8, independentM2lRatios=False,
-                              quadrupoleTrace=True, dipoleFree=False):
+                              quadrupoleTrace=True):
     """Generate typed free functions in one header per Cartesian operator."""
     from cartesian.particles import generateParticles
     from cartesian.translations import generateTranslations
@@ -574,10 +572,10 @@ def generateCartesianTracefree(minLocalDegree=2, maxLocalDegree=8, independentM2
                  'p2l':'kP2LFlops', 'm2p':'kM2PFlops', 'l2p':'kL2PFlops'}
     for localDegree in range(minLocalDegree, maxLocalDegree + 1):
         sourceDegree = localDegree - 1
-        direct, directStats = emitKernel(localDegree, independentM2lRatios, quadrupoleTrace, dipoleFree)
+        direct, directStats = emitKernel(localDegree, independentM2lRatios, quadrupoleTrace)
         statistics.append(directStats)
-        translations, translationStats = generateTranslations(sourceDegree, localDegree, sys.modules[__name__], quadrupoleTrace, dipoleFree)
-        particles, particleStats = generateParticles(sourceDegree, localDegree, sys.modules[__name__], quadrupoleTrace, dipoleFree)
+        translations, translationStats = generateTranslations(sourceDegree, localDegree, sys.modules[__name__], quadrupoleTrace)
+        particles, particleStats = generateParticles(sourceDegree, localDegree, sys.modules[__name__], quadrupoleTrace)
         particles[1] += particles[1].replace(
             f'Expansion<Real, {localDegree+1}>& L',
             f'Derivatives<Real, {localDegree+1}>& L')
@@ -654,13 +652,11 @@ inline constexpr int kMinMultipoleDegree = {minLocalDegree - 1};
 inline constexpr int kMaxMultipoleDegree = {maxLocalDegree - 1};
 inline constexpr bool kIndependentM2lRatios = {str(independentM2lRatios).lower()};
 inline constexpr bool kQuadrupoleTrace = {str(quadrupoleTrace).lower()};
-inline constexpr bool kDipoleFree = {str(dipoleFree).lower()};
 }}
 '''
     report = {'min_local_degree':minLocalDegree, 'max_local_degree':maxLocalDegree,
               'independent_m2l_ratios':independentM2lRatios,
               'quadrupole_trace':quadrupoleTrace,
-              'dipole_free':dipoleFree,
               'description':'Static emitted arithmetic counts. Conventional FMA=2; weighted FMA=1. '
                             'Distance geometry is evaluated inside direct kernels and excluded from DAG counts.',
               'kernels':statistics, 'operators':operatorStats}
@@ -668,14 +664,14 @@ inline constexpr bool kDipoleFree = {str(dipoleFree).lower()};
     return outputs
 
 
-def generate(minLocalDegree=2, maxLocalDegree=8, independentM2lRatios=False, quadrupoleTrace=True, dipoleFree=False):
+def generate(minLocalDegree=2, maxLocalDegree=8, independentM2lRatios=False, quadrupoleTrace=True):
     """Generate Cartesian trace-free free-space and periodic operators."""
     from cartesian.ewald import generate as generateCartesianEwald
 
-    outputs = generateCartesianTracefree(minLocalDegree, maxLocalDegree, independentM2lRatios, quadrupoleTrace, dipoleFree)
+    outputs = generateCartesianTracefree(minLocalDegree, maxLocalDegree, independentM2lRatios, quadrupoleTrace)
     report = json.loads(outputs.pop('operation_counts.json'))
     report['representations'] = {}
-    generated, counts = generateCartesianEwald(minLocalDegree, maxLocalDegree, sys.modules[__name__], quadrupoleTrace, dipoleFree)
+    generated, counts = generateCartesianEwald(minLocalDegree, maxLocalDegree, sys.modules[__name__], quadrupoleTrace)
     outputs.update(generated)
     report['representations']['cartesianEwald'] = counts
     report['representations']['cartesianTracefree'] = {
@@ -820,9 +816,6 @@ def main():
     ap.add_argument('--quadrupole-trace',dest='quadrupoleTrace',
                     action=argparse.BooleanOptionalAction,default=True,
                     help='store the independent degree-two zz component (default: enabled)')
-    ap.add_argument('--dipole-free',dest='dipoleFree',
-                    action=argparse.BooleanOptionalAction,default=False,
-                    help='omit source dipoles; requires center-of-mass tree centers (default: disabled)')
     ap.add_argument('--no-format',dest='noFormat',action='store_true',
                     help='skip clang-format for temporary output; checked-in C++ uses formatting')
     args=ap.parse_args()
@@ -836,7 +829,7 @@ def main():
     from fmm.constants import hoistConstants
     from fmm.sources import executionSpace, singleOrderApi, splitSources
 
-    outputs=generate(args.degree,args.degree,args.independentM2lRatios,args.quadrupoleTrace,args.dipoleFree)
+    outputs=generate(args.degree,args.degree,args.independentM2lRatios,args.quadrupoleTrace)
     outputs = {name: unnameUnusedGeneratedParameters(code) if name.endswith('.hpp') else code
                for name, code in outputs.items()}
     outputs = splitSources(singleOrderApi(outputs, args.degree), args.degree)

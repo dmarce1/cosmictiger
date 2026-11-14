@@ -122,10 +122,6 @@ build/release_cpu/cosmictiger \
 Fresh defaults enable global FMM gravity, SPH, equilibrium cooling, ROCKSTAR, and
 potential expansion degree 6. Each executable generates and compiles one degree;
 change COSMICTIGER_EXPANSION_DEGREE and rebuild to use another (2 through 8).
-Set `-DCOSMICTIGER_DIPOLE_FREE=ON` to generate kernels that omit source dipoles
-and build tree multipoles at centers of mass. The default is `OFF`, preserving
-the existing geometric centers and full source kernels. Reconfigure and rebuild
-to change modes.
 The sole integration scheme uses hierarchical
 global FMM gravity kicks and midpoint SPH.
 

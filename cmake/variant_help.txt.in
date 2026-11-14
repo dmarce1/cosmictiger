@@ -10,7 +10,6 @@ Enabled capabilities:
   Equilibrium cooling: @COSMICTIGER_WITH_CHEMISTRY@ (requires SPH)
   Stars: @COSMICTIGER_WITH_STARS@ (COSMICTIGER_ENABLE_STARS; requires chemistry and SPH)
   ROCKSTAR halo and lightcone analysis: @COSMICTIGER_WITH_ROCKSTAR@ (COSMICTIGER_ENABLE_ROCKSTAR; requires gravity)
-  Dipole-free COM multipoles: @COSMICTIGER_DIPOLE_FREE@
   Potential expansion degree: @COSMICTIGER_EXPANSION_DEGREE@
   Particle positions: @COSMICTIGER_POSITION_TYPE@
 

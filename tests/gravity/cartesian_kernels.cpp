@@ -159,10 +159,8 @@ Multipole<order> projectedMoments(std::vector<Particle> const& particles) {
                 kernels::kQuadrupoleTrace && rank == 2 ? raw : harmonicProjection(raw, rank);
             for (auto const& [index, value] : harmonic) {
                 if (index[2] <= 1) {
-                    if (!kernels::kDipoleFree || rank != 1) {
-                        result[compactIndex(index)] +=
-                            particle.mass * value * factorial(index) / factorial(rank);
-                    }
+                    result[compactIndex(index)] +=
+                        particle.mass * value * factorial(index) / factorial(rank);
                 } else if (kernels::kQuadrupoleTrace && rank == 2) {
                     result[(kMultipoleDegree + 1) * (kMultipoleDegree + 1)] +=
                         particle.mass * value;
@@ -237,19 +235,7 @@ std::vector<Particle> particleCloud() {
 template <int order>
 void testParticleMomentsAndTranslation() {
     constexpr int kMultipoleDegree = KernelLayout<order>::kMultipoleDegree_;
-    auto particles = particleCloud();
-    if constexpr (kernels::kDipoleFree) {
-        Position center{};
-        double mass = 0;
-        for (auto const& particle : particles) {
-            center += particle.position * particle.mass;
-            mass += particle.mass;
-        }
-        center /= mass;
-        for (auto& particle : particles) {
-            particle.position -= center;
-        }
-    }
+    auto const particles = particleCloud();
     auto const expected = projectedMoments<order>(particles);
     Multipole<order> Mi{};
     for (auto const& particle : particles) {
@@ -273,7 +259,7 @@ template <int order>
 void testInteractions() {
     constexpr int kMultipoleDegree = KernelLayout<order>::kMultipoleDegree_;
     constexpr int kLocalDegree = KernelLayout<order>::kLocalDegree_;
-    // Nonzero source dipoles are retained only by the general kernels.
+    // The source has a nonzero dipole, which the general kernels must retain.
     auto const particles = particleCloud();
     constexpr std::array<Position, 7> kDirections{{{1.3, -.9, 1.7}, {-1.3, .9, -1.7}, {2.1, 0, 0},
         {0, -2.1, 0}, {0, 0, 2.1}, {.001, 2., -.03}, {-1.7, -1.1, .7}}};
@@ -286,9 +272,6 @@ void testInteractions() {
         auto const derivatives = greenDerivatives(separation, kLocalDegree);
         Polynomial raw;
         for (int rank = 0; rank <= kMultipoleDegree; ++rank) {
-            if (kernels::kDipoleFree && rank == 1) {
-                continue;
-            }
             for (auto const& index : indices(rank)) {
                 for (auto const& particle : particles) {
                     raw[index] += particle.mass * monomial(particle.position, index);
@@ -485,9 +468,6 @@ void testEwaldContraction() {
                 double value = 0;
                 for (int sourceRank = 0;
                     sourceRank <= std::min(kMultipoleDegree, kLocalDegree - rank); ++sourceRank) {
-                    if (kernels::kDipoleFree && sourceRank == 1) {
-                        continue;
-                    }
                     for (auto const& b : indices(sourceRank)) {
                         double moment = 0;
                         for (auto const& particle : particles) {
@@ -565,15 +545,8 @@ void testPeriodicBoundaryCancellation() {
     // The source pair straddles the minimum-image choice x = 1/2. Both
     // expansions use the same cell-center branch; the independent particle
     // reference wraps each pair separately before summing the periodic field.
-    Position separation{.5, .13, .21};
-    std::vector<Particle> particles{{.7, {-.0002, .0001, 0}}, {1.3, {.0002, -.0001, 0}}};
-    if constexpr (kernels::kDipoleFree) {
-        Position const center = (particles[0].position * .7 + particles[1].position * 1.3) / 2.0;
-        for (auto& particle : particles) {
-            particle.position -= center;
-        }
-        separation -= center;
-    }
+    Position const separation{.5, .13, .21};
+    std::vector<Particle> const particles{{.7, {-.0002, .0001, 0}}, {1.3, {.0002, -.0001, 0}}};
     Multipole<order> source{};
     for (auto const& particle : particles) {
         kernels::P2M(particle.mass, particle.position * double(kScaleFactor), source);
@@ -651,10 +624,9 @@ void testDirectParticleRemainder() {
         kernels::M2P(source, Position{2., 0., 0.}, field);
         double const potential = -1 / (2 * (1 - q));
         double const acceleration = -1 / (4 * (1 - q) * (1 - q));
-        double const omittedDipole = kernels::kDipoleFree ? -q / 2 : 0;
-        near(potential - field[0], series.potential + omittedDipole, 1,
-            "Direct particle exact potential remainder", 3e-14);
-        near(acceleration - field[1], series.acceleration + omittedDipole, 1,
+        near(potential - field[0], series.potential, 1, "Direct particle exact potential remainder",
+            3e-14);
+        near(acceleration - field[1], series.acceleration, 1,
             "Direct particle exact acceleration remainder", 3e-14);
         near(field[2], 0, 1, "Direct particle transverse y force");
         near(field[3], 0, 1, "Direct particle transverse z force");
@@ -729,49 +701,10 @@ void testSimd() {
     }
 }
 
-/// Poison the unused rank-one slots to prove every source consumer omits them.
-template <int order>
-void testDipoleFreeInputs() {
-    if constexpr (kernels::kDipoleFree) {
-        auto source = projectedMoments<order>(particleCloud());
-        auto poisoned = source;
-        for (int i = 1; i < 4; ++i) {
-            poisoned[i] = 1000.0 * i;
-        }
-        Position const distance{1.3, -.9, 1.7};
-        Multipole<order> shifted{}, shiftedPoisoned{};
-        kernels::M2M(source, distance, 1.0, shifted);
-        kernels::M2M(poisoned, distance, 1.0, shiftedPoisoned);
-        compareRanks<KernelLayout<order>::kMultipoleDegree_>(
-            shiftedPoisoned, shifted, "Dipole-free M2M ignores source rank one");
-        for (int i = 1; i < 4; ++i) {
-            EXPECT_EQ(shifted[i], 0.0);
-        }
-        Expansion<order> local{}, localPoisoned{};
-        kernels::M2L(source, distance, local);
-        kernels::M2L(poisoned, distance, localPoisoned);
-        compareRanks<KernelLayout<order>::kLocalDegree_>(
-            localPoisoned, local, "Dipole-free M2L ignores source rank one");
-        Green<order> green{};
-        kernels::evaluateEwaldGreen(Position{.23, -.19, .31}, green);
-        kernels::M2Lewald(source, green, local);
-        kernels::M2Lewald(poisoned, green, localPoisoned);
-        compareRanks<KernelLayout<order>::kLocalDegree_>(
-            localPoisoned, local, "Dipole-free Ewald M2L ignores source rank one");
-        Field field{}, fieldPoisoned{};
-        kernels::M2P(source, distance, field);
-        kernels::M2P(poisoned, distance, fieldPoisoned);
-        for (int i = 0; i < kFieldCount; ++i) {
-            EXPECT_EQ(field[i], fieldPoisoned[i]);
-        }
-    }
-}
-
 template <int order>
 void testOrder() {
     worstDiscrepancy.clear();
     testParticleMomentsAndTranslation<order>();
-    testDipoleFreeInputs<order>();
     testInteractions<order>();
     testLocalTranslation<order>();
     testEwaldContraction<order>();

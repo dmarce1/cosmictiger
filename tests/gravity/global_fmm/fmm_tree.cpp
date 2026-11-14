@@ -44,9 +44,6 @@ Vector3<Position> fmmTreePosition(int rank, int particle) {
     position[kXi] = 0.25 + 0.125 * (rank + (particle & 1)) / hpxSize();
     position[kYi] = 0.25 + 0.0625 * ((particle >> 1) & 1);
     position[kZi] = 0.25 + 0.0625 * ((particle >> 2) & 1);
-    if (particle == 7) {
-        position[kYi] = 0.25 + 0.03125;
-    }
     // X/Z extrema fall between stored box coordinates; Y remains exactly aligned.
     position[kXi].raw() += 1;
     position[kZi].raw() += 3;
@@ -105,7 +102,6 @@ void verifyTreeReturnArchive() {
     expected.id.proc = 3;
     expected.id.index = 17;
     expected.radius = 0.125f;
-    expected.centerOfMassOffset = {1.e-11, -2.e-11, 3.e-11};
     // Source moments retain double precision across locality boundaries.
     int const coefficientCount = fmmMultipoleCoefficientCount(kFmmOrder);
     for (int i = 0; i < coefficientCount; i++) {
@@ -131,12 +127,6 @@ void verifyTreeReturnArchive() {
     }
     requireFmmTree(actual.id == expected.id && actual.radius == expected.radius,
         "tree-return metadata did not survive the HPX archive");
-    if constexpr (cosmictiger::gravity::cartesian::kDipoleFree) {
-        for (int dim = 0; dim < kDimensions; ++dim) {
-            requireFmmTree(actual.centerOfMassOffset[dim] == expected.centerOfMassOffset[dim],
-                "COM rounding residual did not survive the HPX archive");
-        }
-    }
     for (int i = 0; i < coefficientCount; i++) {
         requireFmmTree(
             actual.multi[i] == expected.multi[i], "multipole did not survive the HPX archive");
@@ -249,59 +239,6 @@ void verifyRemoteMultipoleStorage() {
     }
 }
 
-struct TreeCloud {
-    std::vector<Vector3<Position>> positions;
-};
-
-/// Check every stored center and radius against the particles below it.
-TreeCloud verifyMassCenters(TreeId id) {
-    auto const* node = treeGetNode(id);
-    TreeCloud cloud;
-    if (node->leaf) {
-        // This fixture is distributed by disjoint kd boxes; exact leaf bounds
-        // identify its known particles without relying on remote particle arrays.
-        for (int rank = 0; rank < hpxSize(); ++rank) {
-            for (int i = 0; i < kFmmTreeParticlesPerRank; ++i) {
-                auto const position = fmmTreePosition(rank, i);
-                bool inside = true;
-                for (int dim = 0; dim < kDimensions; ++dim) {
-                    inside = inside &&
-                        position[dim].toDouble() >= node->box.begin[dim].toDouble() &&
-                        position[dim].toDouble() <= node->box.end[dim].toDouble();
-                }
-                if (inside) {
-                    cloud.positions.push_back(position);
-                }
-            }
-        }
-    } else {
-        for (auto const child : node->children) {
-            auto subset = verifyMassCenters(child);
-            cloud.positions.insert(
-                cloud.positions.end(), subset.positions.begin(), subset.positions.end());
-        }
-    }
-    auto const mass = fmmMultiPos(node->mpos).multi[0];
-    requireFmmTree(
-        cloud.positions.size() == size_t(mass), "COM fixture particle ownership mismatch");
-    if (!cloud.positions.empty()) {
-        Vector3<long double> moment{};
-        for (auto const& position : cloud.positions) {
-            Vector3<double> displacement{};
-            for (int dim = 0; dim < kDimensions; ++dim) {
-                displacement[dim] = unwrappedDoubleDistance(position[dim], node->pos[dim]);
-                moment[dim] += displacement[dim];
-            }
-            requireFmmTree(displacement.norm() <= node->radius, "COM sphere misses a particle");
-        }
-        for (int dim = 0; dim < kDimensions; ++dim) {
-            requireFmmTree(std::abs(moment[dim] / mass) <= 2 * Position::kToFloatFactor_ + 1.e-16,
-                "tree node is not centered at its particle center of mass");
-        }
-    }
-    return cloud;
-}
-
 void verifyTreeGeometry(TreeId id, bool empty) {
     TreeNode const* node = treeGetNode(id);
     requireFmmTree(
@@ -319,12 +256,6 @@ void verifyTreeGeometry(TreeId id, bool empty) {
             }
         }
     }();
-    if constexpr (cosmictiger::gravity::cartesian::kDipoleFree) {
-        auto const& multipole = fmmMultiPos(node->mpos).multi;
-        for (int i = 1; i < 4; ++i) {
-            requireFmmTree(multipole[i] == 0.0f, "mass-centered node retained a dipole");
-        }
-    }
     if (empty) {
         requireFmmTree(node->radius == 0.0f, "empty node has a nonzero radius");
     }
@@ -378,9 +309,6 @@ void fmmTreeTest() {
     domainsEnd();
     auto const built = treeCreate(TreeCreateParameters(0, 0.5));
     detail::verifyTreeGeometry(built.id, false);
-    if constexpr (cosmictiger::gravity::cartesian::kDipoleFree) {
-        detail::verifyMassCenters(built.id);
-    }
     detail::verifyTreeNodeArchive(built.id);
     detail::verifyRemoteMultipoleStorage();
     detail::requireFmmTree(built.multi[0] == float(options.initial.numberOfParticles),
