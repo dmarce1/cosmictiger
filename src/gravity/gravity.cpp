@@ -1,3 +1,4 @@
+// CPU direct particle gravity and tree interaction dispatch.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -30,6 +31,8 @@ void cpuGravityPp(
     Timer tm;
     tm.start();
     constexpr int kChunkSize = 32;
+    float const darkMatterMass = particlesMassForType(kDarkMatterType);
+    float const gasMass = particlesMassForType(kSphType);
     if (list.size()) {
         SimdFloat const sinkHsoft = math::broadcast<SimdFloat>(hfloat);
         SimdFloat const hinvI = math::broadcast<SimdFloat>(1.f) / sinkHsoft;
@@ -48,7 +51,6 @@ void cpuGravityPp(
         for (int li = 0; li < list.size(); li += kChunkSize) {
             Vector3<SimdPosition> position{};
             Vector3<SimdPosition> yValue{};
-            SimdPosition srcType{};
             Array<TreeNode const*, kChunkSize> treePtrs;
             int numberOfSources = 0;
             int const maxi = std::min((int) list.size(), li + kChunkSize) - li;
@@ -60,23 +62,20 @@ void cpuGravityPp(
             Vector<Position> srcx;
             Vector<Position> srcy;
             Vector<Position> srcz;
-            Vector<float> sourceWeights;
             Vector<char> types(numberOfSources);
             srcx.resize(numberOfSources);
             srcy.resize(numberOfSources);
             srcz.resize(numberOfSources);
-            sourceWeights.resize(numberOfSources);
             int count = 0;
             for (int i = 0; i < maxi; i++) {
-                gravityReadSourcePositions(*treePtrs[i], srcx.data(), srcy.data(), srcz.data(),
-                    types.data(), sourceWeights.data(), count);
+                gravityReadSourcePositions(
+                    *treePtrs[i], srcx.data(), srcy.data(), srcz.data(), types.data(), count);
                 count += treePtrs[i]->numberOfParticles();
             }
             for (int i = count; i < numberOfSources; i++) {
                 srcx[i] = 0.f;
                 srcy[i] = 0.f;
                 srcz[i] = 0.f;
-                sourceWeights[i] = 0.0f;
             }
             //			feenableexcept (FE_DIVBYZERO);
             //			feenableexcept (FE_INVALID);
@@ -96,7 +95,10 @@ void cpuGravityPp(
                         simdSetLane(yValue[kXi], l, srcx[j + l].raw());
                         simdSetLane(yValue[kYi], l, srcy[j + l].raw());
                         simdSetLane(yValue[kZi], l, srcz[j + l].raw());
-                        simdSetLane(sourceWeight, l, sourceWeights[j + l]);
+                        simdSetLane(sourceWeight, l,
+                            (j + l < count ?
+                                    (types[j + l] == kDarkMatterType ? darkMatterMass : gasMass) :
+                                    0.0f));
                     }
                     Vector3<SimdFloat> dx{};
                     for (int dim = 0; dim < kDimensions; dim++) {

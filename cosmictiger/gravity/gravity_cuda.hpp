@@ -1,4 +1,6 @@
 /*
+ CUDA gravity operators and shared staging of particle types and positions.
+
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
 
@@ -37,7 +39,6 @@ namespace detail {
 template <int order, bool equalMass>
 __device__ int cudaStageParticleSources(CudaKickData const& data, CudaKickControl<order>& control,
     DeviceVector<int> const& partlist, int& i, Pair<ParticleInteger>& particleRange) {
-    int const& tid = threadIdx.x;
     auto group = cooperative_groups::this_thread_block();
     auto const* treeNodes = data.treeNodes;
     int const capacity = control.layout.particleCapacity;
@@ -47,8 +48,6 @@ __device__ int cudaStageParticleSources(CudaKickData const& data, CudaKickContro
         auto const* sourceX = data.x;
         auto const* sourceY = data.y;
         auto const* sourceZ = data.z;
-        auto const* sourceTypes = data.type;
-        auto const* sourceMasses = data.sourceMasses;
         while (i + 1 < partsz) {
             auto const& otherNode = treeNodes[partlist[i + 1]];
             auto const otherTreeParticleRange = otherNode.particleRange;
@@ -70,11 +69,8 @@ __device__ int cudaStageParticleSources(CudaKickData const& data, CudaKickContro
         cuda::memcpy_async(group, control.sourceZ + particleIndex, sourceZ + imin,
             sizeof(Position) * sz, control.barrier);
         if constexpr (!equalMass) {
-            for (int j = tid; j < sz; j += kWarpSize) {
-                control.sourceMass[particleIndex + j] = sourceMasses != nullptr ?
-                    sourceMasses[imin + j] :
-                    (sourceTypes[imin + j] == kDarkMatterType ? data.darkMatterMass : data.sphMass);
-            }
+            cuda::memcpy_async(group, control.sourceType + particleIndex, data.type + imin,
+                sizeof(char) * sz, control.barrier);
         }
         __syncwarp();
         particleRange.first += sz;
@@ -99,13 +95,13 @@ __device__ int cudaStageParticleSources(CudaKickData const& data, CudaKickContro
 // 16-byte aligned: the arena offset and the force region are multiples of
 // kKickArenaAlignment and the plane stride is a multiple of WARP_SIZE entries.
 struct CudaStagedSources {
-    Position const* x;
-    Position const* y;
-    Position const* z;
-    float const* mass;    // nullptr without a mass plane
+    Position const* x;    // Shared source x coordinates in normalized box units.
+    Position const* y;    // Shared source y coordinates in normalized box units.
+    Position const* z;    // Shared source z coordinates in normalized box units.
+    char const* type;     // Particle species; nullptr without a type plane.
 };
 
-/// View the shared-memory source position planes and optional mass plane selected by the
+/// View the shared-memory source position planes and optional type plane selected by the
 /// launch layout.
 template <int order>
 __device__ inline CudaStagedSources cudaStagedSources(CudaKickControl<order> const& control) {
@@ -116,8 +112,8 @@ __device__ inline CudaStagedSources cudaStagedSources(CudaKickControl<order> con
         reinterpret_cast<Position const*>(shmemPtr + layout.arenaOffset + layout.sourceOffset);
     sources.y = sources.x + layout.particleCapacity;
     sources.z = sources.y + layout.particleCapacity;
-    sources.mass = layout.massPlane ?
-        reinterpret_cast<float const*>(sources.z + layout.particleCapacity) :
+    sources.type = layout.typePlane ?
+        reinterpret_cast<char const*>(sources.z + layout.particleCapacity) :
         nullptr;
     return sources;
 }
@@ -231,8 +227,8 @@ __device__ inline void cudaPpInversePowers(float const (&r2)[kPairs], float h2, 
 // it is wanted, which keeps a per-pair select out of the loop; callers store
 // it only with doPhi.
 template <int nSinks, bool equalMass>
-__device__ inline void cudaPpSinkGroup(CudaStagedSources const& sources, int count,
-    Position const (&sinkX)[nSinks], Position const (&sinkY)[nSinks],
+__device__ inline void cudaPpSinkGroup(CudaKickData const& data, CudaStagedSources const& sources,
+    int count, Position const (&sinkX)[nSinks], Position const (&sinkY)[nSinks],
     Position const (&sinkZ)[nSinks], float h2, float hinv, float h2inv, float h3inv, bool doPhi,
     float (&fx)[nSinks], float (&fy)[nSinks], float (&fz)[nSinks], float (&pot)[nSinks],
     FlopCount& close, FlopCounter<FlopCount>& flops, FlopCounts& mixedFlops) {
@@ -265,11 +261,6 @@ __device__ inline void cudaPpSinkGroup(CudaStagedSources const& sources, int cou
                 zs[u] = sources.z[j + u].raw();
             }
         }
-        float4 m4 = make_float4(1.f, 1.f, 1.f, 1.f);
-        if constexpr (!equalMass) {
-            m4 = *reinterpret_cast<float4 const*>(sources.mass + j);
-        }
-        float const ms[kVector] = {m4.x, m4.y, m4.z, m4.w};
         float dx0[kPairs];
         float dx1[kPairs];
         float dx2[kPairs];
@@ -294,12 +285,16 @@ __device__ inline void cudaPpSinkGroup(CudaStagedSources const& sources, int cou
             r2, h2, hinv, h2inv, h3inv, doPhi, r3inv, r1inv, close, flops, mixedFlops);
 #pragma unroll
         for (int u = 0; u < kVector; u++) {
+            float mass = 1.0f;
+            if constexpr (!equalMass) {
+                mass = sources.type[j + u] == kDarkMatterType ? data.darkMatterMass : data.sphMass;
+            }
 #pragma unroll
             for (int s = 0; s < nSinks; s++) {
                 int const p = u * nSinks + s;
                 if constexpr (!equalMass) {
-                    r3inv[p] *= ms[u];
-                    r1inv[p] *= ms[u];
+                    r3inv[p] *= mass;
+                    r1inv[p] *= mass;
                 }
                 fx[s] = fmaf(dx0[p], r3inv[p], fx[s]);    // 2
                 fy[s] = fmaf(dx1[p], r3inv[p], fy[s]);    // 2
@@ -314,7 +309,7 @@ __device__ inline void cudaPpSinkGroup(CudaStagedSources const& sources, int cou
         Position const sourceZ = sources.z[j];
         float mass = 1.f;
         if constexpr (!equalMass) {
-            mass = sources.mass[j];
+            mass = sources.type[j] == kDarkMatterType ? data.darkMatterMass : data.sphMass;
         }
         float dx0[nSinks];
         float dx1[nSinks];
@@ -427,7 +422,8 @@ __device__ FlopCounts cudaGravityCpDirect(CudaKickData const& data, CudaKickCont
                         l[k] += d[k];
                     }
                 } else {
-                    float const mass = sources.mass[j];
+                    float const mass =
+                        sources.type[j] == kDarkMatterType ? data.darkMatterMass : data.sphMass;
                     for (int k = 0; k < FmmOrder<order>::kLocalCoefficients_; k++) {
                         l[k] += mass * d[k];
                     }
@@ -579,8 +575,8 @@ __device__ FlopCounts cudaGravityPpDirectImpl(CudaKickData const& data,
                 float fy[kPair] = {0.f, 0.f};
                 float fz[kPair] = {0.f, 0.f};
                 float pot[kPair] = {0.f, 0.f};
-                cudaPpSinkGroup<kPair, equalMass>(sources, particleIndex, sx, sy, sz, h2, hinv,
-                    h2inv, h3inv, doPhi, fx, fy, fz, pot, close, flops, mixedFlops);
+                cudaPpSinkGroup<kPair, equalMass>(data, sources, particleIndex, sx, sy, sz, h2,
+                    hinv, h2inv, h3inv, doPhi, fx, fy, fz, pot, close, flops, mixedFlops);
 #pragma unroll
                 for (int s = 0; s < kPair; s++) {
                     int const sink = k + s * kWarpSize;
@@ -601,8 +597,8 @@ __device__ FlopCounts cudaGravityPpDirectImpl(CudaKickData const& data,
                 float fy[1] = {0.f};
                 float fz[1] = {0.f};
                 float pot[1] = {0.f};
-                cudaPpSinkGroup<1, equalMass>(sources, particleIndex, sx, sy, sz, h2, hinv, h2inv,
-                    h3inv, doPhi, fx, fy, fz, pot, close, flops, mixedFlops);
+                cudaPpSinkGroup<1, equalMass>(data, sources, particleIndex, sx, sy, sz, h2, hinv,
+                    h2inv, h3inv, doPhi, fx, fy, fz, pot, close, flops, mixedFlops);
                 if (sharedForces) {
                     cudaApplyPpForce(arenaForce, k, fx[0], fy[0], fz[0], pot[0], doPhi);
                 } else {
@@ -631,8 +627,10 @@ __device__ FlopCounts cudaGravityPpDirectImpl(CudaKickData const& data,
                     cudaPpInversePowers<1>(
                         r2, h2, hinv, h2inv, h3inv, doPhi, r3inv, r1inv, close, flops, mixedFlops);
                     if constexpr (!equalMass) {
-                        r3inv[0] *= sources.mass[j];
-                        r1inv[0] *= sources.mass[j];
+                        float const mass =
+                            sources.type[j] == kDarkMatterType ? data.darkMatterMass : data.sphMass;
+                        r3inv[0] *= mass;
+                        r1inv[0] *= mass;
                     }
                     fx = fmaf(dx0, r3inv[0], fx);    // 2
                     fy = fmaf(dx1, r3inv[0], fy);    // 2

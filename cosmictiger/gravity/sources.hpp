@@ -1,3 +1,4 @@
+// Borrowed gravity source positions and species-dependent mass lookup.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026 Dominic C. Marcello
@@ -11,20 +12,18 @@
 
 #include <cosmictiger/particles/particles.hpp>
 
-// Non-owning particle arrays used for local source arithmetic. Explicit masses
-// allow independent moment fixtures; production views use particlesMass().
+// Non-owning position and species arrays used for local source arithmetic.
 struct FmmSourceView {
-    Array<Position*, kDimensions> positions{};
-    char* types = nullptr;
-    ParticleInteger count = 0;
-    float* masses = nullptr;
+    Array<Position*, kDimensions> positions{};    // Native fixed-point coordinates by axis.
+    char* types = nullptr;                        // Species labels; null denotes dark matter only.
+    ParticleInteger count = 0;    // Number of readable particles in each source array.
 };
 
 static_assert(std::is_trivially_copyable_v<FmmSourceView>);
 
 FmmSourceView fmmSourceView();
 
-/// Read an explicit source mass or the mass from the local particle store.
+/// Derive source mass from this view's species, independent of the local particle store.
 inline float fmmSourceMass(FmmSourceView const& sources, ParticleInteger index) {
-    return sources.masses != nullptr ? sources.masses[index] : particlesMass(index);
+    return particlesMassForType(sources.types != nullptr ? sources.types[index] : kDarkMatterType);
 }

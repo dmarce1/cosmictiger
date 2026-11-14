@@ -1,4 +1,6 @@
 /*
+ CUDA kick declarations and per-block control and storage layouts.
+
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
 
@@ -129,31 +131,30 @@ CUDA_EXPORT inline size_t kickCarveListStorage(
 // (or, without a reservation, in the cudaAllocate pool).
 template <int order>
 struct CudaKickControl {
-    StackVector<int> echecks;
-    StackVector<int> dchecks;
-    DeviceVector<int> leaflist;
-    DeviceVector<int> cplist;
-    DeviceVector<int> cclist;
-    DeviceVector<int> pclist;
-    DeviceVector<int> nextlist;
-    DeviceVector<int>
-        bothlist;    // equal radii: opened sources whose children go to the sink's children
-    DeviceVector<CudaExpansionType<order>> ancestors;    // expansions awaiting their right child
-    DeviceVector<CudaExpansionType<order>> current;    // active expansion when not in shared memory
-    DeviceVector<float> forceBacking;    // whole-bucket forces when not in shared memory
-    DeviceVector<SearchParameters> params;
-    BarrierType barrier;
+    StackVector<int> echecks;      // Pending sources needing Newtonian and periodic interactions.
+    StackVector<int> dchecks;      // Pending sources needing only Newtonian interactions.
+    DeviceVector<int> leaflist;    // Source leaves selected for particle-particle interactions.
+    DeviceVector<int> cplist;      // Source leaves selected for particle-to-local interactions.
+    DeviceVector<int> cclist;      // Source cells selected for multipole-to-local interactions.
+    DeviceVector<int> pclist;      // Source cells selected for multipole-to-particle interactions.
+    DeviceVector<int> nextlist;    // Source cells to split at the current sink level.
+    DeviceVector<int> bothlist;    // Equal-radius sources whose children go to the sink's children.
+    DeviceVector<CudaExpansionType<order>> ancestors;    // Expansions awaiting their right child.
+    DeviceVector<CudaExpansionType<order>> current;      // Active expansion in global backing.
+    DeviceVector<float> forceBacking;         // Whole-bucket forces when not in shared memory.
+    DeviceVector<SearchParameters> params;    // Sink traversal state for each pending level.
+    BarrierType barrier;                      // Completion barrier for cooperative source staging.
     // Resolved arena pointers.
-    Position* sourceX;
-    Position* sourceY;
-    Position* sourceZ;
-    float* sourceMass;
-    char* multipoles;
-    float* scratchExpansion;
-    cosmictiger::gravity::cartesian::Expansion<float>* expansion;
-    Vector3<Position>* expansionPos;
-    CudaKickForceTile forces;
-    CudaKickArenaLayout layout;
+    Position* sourceX;          // Shared source x coordinates in normalized box units.
+    Position* sourceY;          // Shared source y coordinates in normalized box units.
+    Position* sourceZ;          // Shared source z coordinates in normalized box units.
+    char* sourceType;           // Shared particle species; null when hydro is disabled.
+    char* multipoles;           // Shared positioned multipoles, overlapping the source planes.
+    float* scratchExpansion;    // Temporary L2L output, overlapping the sink forces.
+    cosmictiger::gravity::cartesian::Expansion<float>* expansion;    // Active sink local expansion.
+    Vector3<Position>* expansionPos;    // Center of the active local expansion.
+    CudaKickForceTile forces;           // Active sink-force tile in shared or global memory.
+    CudaKickArenaLayout layout;         // Host-selected region offsets and tile capacities.
 
     // Lists on pool blocks grown on demand.
     CudaKickControl() = default;
@@ -201,6 +202,6 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
 template <int order>
 KickReturn cudaExecuteKicksImpl(KickParameters params, Position* devX, Position* devY,
     Position* devZ, TreeNode* devTreeNodes, Vector<KickWorkitem> workitems,
-    detail::FmmForceOutput output, float const* sourceMasses);
+    detail::FmmForceOutput output);
 template <int order>
 CudaKickArenaLayout const& kickArenaLayoutImpl();

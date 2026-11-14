@@ -1,4 +1,6 @@
 /*
+ CUDA kick dispatch, handoff sizing and interaction counters.
+
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
 
@@ -20,11 +22,10 @@
 // Dispatch to the single compiled CUDA kick order.
 
 KickReturn cudaExecuteKicks(KickParameters params, Position* devX, Position* devY, Position* devZ,
-    TreeNode* devTreeNodes, Vector<KickWorkitem> workitems, detail::FmmForceOutput output,
-    float const* sourceMasses) {
+    TreeNode* devTreeNodes, Vector<KickWorkitem> workitems, detail::FmmForceOutput output) {
     return kickRunCudaLaunch([&]() {
         return cudaExecuteKicksImpl<kFmmOrder>(
-            params, devX, devY, devZ, devTreeNodes, std::move(workitems), output, sourceMasses);
+            params, devX, devY, devZ, devTreeNodes, std::move(workitems), output);
     });
 }
 

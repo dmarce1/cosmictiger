@@ -202,8 +202,8 @@ uint64_t particleKey(int owner, ParticleInteger index) {
     return (uint64_t(uint32_t(owner)) << 32) | uint32_t(index);
 }
 
-long double lowerSquare(long double value) {
-    return std::nextafter(value * value, -std::numeric_limits<long double>::infinity());
+double lowerSquare(double value) {
+    return std::nextafter(value * value, -std::numeric_limits<double>::infinity());
 }
 
 bool terminalCertified(TreeNode const& source, SourceRootDescriptor const& destination) {
@@ -212,36 +212,36 @@ bool terminalCertified(TreeNode const& source, SourceRootDescriptor const& desti
     }
     auto const& cover = destination.cover;
     constexpr std::array<int, 3> kNearestImageOffsets{-1, 0, 1};
-    long double squaredDistance = 0;
+    double squaredDistance = 0;
     for (int axis = 0; axis < kDimensions; ++axis) {
-        long double const point =
-            std::ldexp(static_cast<long double>(source.pos[axis].raw()), -kPositionBits);
-        long double const begin = cover.begin[axis];
-        long double const end = cover.end[axis];
-        long double axisDistance = 1;
+        double const point =
+            std::ldexp(static_cast<double>(source.pos[axis].raw()), -kPositionBits);
+        double const begin = cover.begin[axis];
+        double const end = cover.end[axis];
+        double axisDistance = 1;
         for (int const image : kNearestImageOffsets) {
-            long double const shifted = point + image;
-            long double const distance =
+            double const shifted = point + image;
+            double const distance =
                 shifted < begin ? begin - shifted : (shifted > end ? shifted - end : 0);
-            long double const lower = std::max(0.0L,
-                std::nextafter(distance, -std::numeric_limits<long double>::infinity()) -
-                    32 * std::numeric_limits<long double>::epsilon());
+            double const lower = std::max(0.0,
+                std::nextafter(distance, -std::numeric_limits<double>::infinity()) -
+                    32 * std::numeric_limits<double>::epsilon());
             axisDistance = std::min(axisDistance, lower);
         }
-        squaredDistance = std::nextafter(squaredDistance + lowerSquare(axisDistance),
-            -std::numeric_limits<long double>::infinity());
+        squaredDistance = std::nextafter(
+            squaredDistance + lowerSquare(axisDistance), -std::numeric_limits<double>::infinity());
     }
-    long double const infinity = std::numeric_limits<long double>::infinity();
-    long double const radii =
-        std::nextafter(static_cast<long double>(geometricTreeRadiusLimit(source.depth)) +
-                static_cast<long double>(geometricTreeRadiusLimit(destination.ewaldDepth)),
+    double const infinity = std::numeric_limits<double>::infinity();
+    double const radii =
+        std::nextafter(static_cast<double>(geometricTreeRadiusLimit(source.depth)) +
+                static_cast<double>(geometricTreeRadiusLimit(destination.ewaldDepth)),
             infinity);
-    long double const opening = std::nextafter(
-        radii * static_cast<long double>(fmmInverseOpeningAngle(destination.theta)), infinity);
-    long double const support =
-        std::nextafter(radii + static_cast<long double>(destination.smoothingLength), infinity);
-    long double const threshold = std::nextafter(std::max(opening, support), infinity);
-    long double const thresholdSquared = std::nextafter(threshold * threshold, infinity);
+    double const opening = std::nextafter(
+        radii * static_cast<double>(fmmInverseOpeningAngle(destination.theta)), infinity);
+    double const support =
+        std::nextafter(radii + static_cast<double>(destination.smoothingLength), infinity);
+    double const threshold = std::nextafter(std::max(opening, support), infinity);
+    double const thresholdSquared = std::nextafter(threshold * threshold, infinity);
     return squaredDistance > thresholdSquared;
 }
 
@@ -436,9 +436,6 @@ void exchangeOwner(Vector<SourceRootDescriptor> roots) {
     auto waitStart = std::chrono::steady_clock::time_point{};
     int const owner = hpxRank();
     auto const sources = fmmSourceView();
-    if (sources.masses != nullptr) {
-        throw std::logic_error("Geometric source exchange requires configured species masses");
-    }
     auto transfers = detail::geometricLaunchAndDrain<void>(roots.size() - 1, [&](size_t index) {
         auto const& destination = roots[index < size_t(owner) ? index : index + 1];
         FmmMeasurementScope packTimer(FmmMeasurementPhase::ExportPack);
@@ -597,13 +594,12 @@ void treeSourceForestMaterialize(TreeId id) {
 }
 
 bool treeSourceForestReadParticleRange(TreeNode const& source, Position* x, Position* y,
-    Position* z, char* types, float* masses, ParticleInteger offset) {
+    Position* z, char* types, ParticleInteger offset) {
     if (!importsEnabled) {
         return false;
     }
     int const owner = source.processRange.first;
     auto const range = source.particleRange;
-    auto const& options = getOptions();
     for (ParticleInteger index = range.first; index < range.second; ++index) {
         if (!importedParticles.contains(particleKey(owner, index))) {
             return false;
@@ -617,11 +613,6 @@ bool treeSourceForestReadParticleRange(TreeNode const& source, Position* x, Posi
         z[output] = particle.position[kZi];
         if (types != nullptr) {
             types[output] = particle.type;
-        }
-        if (masses != nullptr) {
-            masses[output] = !options.hydro.enabled ? 1.0f :
-                particle.type == kDarkMatterType    ? float(options.initial.darkMatterMass) :
-                                                      float(options.initial.gasMass);
         }
     }
     return true;

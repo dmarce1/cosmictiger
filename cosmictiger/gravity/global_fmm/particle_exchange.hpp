@@ -4,4 +4,4 @@
 #include <cosmictiger/gravity/source_access.hpp>
 
 void globalFmmReadSourcePositions(
-    TreeNode const&, Position*, Position*, Position*, char*, float*, ParticleInteger);
+    TreeNode const&, Position*, Position*, Position*, char*, ParticleInteger);

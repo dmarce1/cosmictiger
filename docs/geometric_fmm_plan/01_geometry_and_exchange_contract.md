@@ -154,29 +154,30 @@ half-box tie at -1/2. Never obtain assignment bits by converting Fixed64 to doub
 
 ### 2. Representability and terminal leaves
 
-With centers stored in `Position`, a cell is exactly representable only if
-nᵢ+1 <= P on every axis. Its center bits are `(2kᵢ+1) << (P-nᵢ-1)`; construct them
-as integer bits. The root and the endpoint at one need explicit extent/seam handling,
-not a shift by the integer width. The first globally unavailable child depth is
-3(P-1)+1: native maximum depths are 93 for Fixed32 and 189 for Fixed64.
+Geometric cells must have exact `Fixed32` box boundaries and exact centers in
+`Position`. Therefore nᵢ <= min(32,P-1) on every axis. Center bits are
+`(2kᵢ+1) << (P-nᵢ-1)`; construct them as integer bits. The root and the endpoint
+at one need explicit extent/seam handling, not a shift by the integer width.
 
-The initial supported CPU maximum is
+The supported CPU maximum is
 
-    dMax = min(3(P-1), kMaxDepth-1),
+    dMax = min(3 min(32,P-1), kMaxDepth-1),
 
-giving 93 and 127 with the inspected `kMaxDepth=128`. Advertise this inclusive limit
-in the generation descriptor. Fixed64's limit of 127 is a software limit, not its
-native precision limit. Do not raise it without auditing the traversal/arena and
-double-bound consumers. Current CUDA stacks use `kCudaMaxDepth=64`; dispatch only
-subtrees whose required stack fits, otherwise retain CPU processing. Their stack
-capacity is not permission to change the geometric tree or truncate an export.
+giving 93 for Fixed32 positions and 96 for Fixed64 positions with
+`kMaxDepth=128`. The deepest Fixed32-position cell has width two Fixed32 ticks,
+so its midpoint remains representable. Fixed64 positions allow a cell one
+Fixed32 tick wide. No geometric cell is finer than the Fixed32 box grid.
+Advertise this inclusive limit in the generation descriptor. Current CUDA
+stacks use `kCudaMaxDepth=64`; dispatch only subtrees whose required stack fits,
+otherwise retain CPU processing. Their stack capacity is not permission to
+change the geometric tree or truncate an export.
 
-`FmmBox` is a conservative Fixed32 acceptance box, not the authoritative cell.
-For exact dyadic bounds a,b, store floor(2³²a) and ceil(2³²b) before reducing endpoints
-modulo 2³². Set `fullAxes` for an extent of 2³²; equal endpoints without that bit mean
-a point. Compute these integers from the cell descriptor. Below a Fixed32 tick the
-box may enclose multiple distinct Fixed64 cells; keep their identities and exact
-centers distinct. Never reconstruct a center or subdivision from that rounded box.
+For exact dyadic bounds a,b, `FmmBox` stores the exact integers 2³²a and 2³²b
+before reducing endpoints modulo 2³². Set `fullAxes` for an extent of 2³²;
+equal endpoints without that bit mean a point. Compute these integers from the
+cell descriptor. Adjacent deepest cells have distinct boxes; there is no
+rounded box shared by finer geometric cells. Reconstruct centers and
+subdivision from the cell descriptor, preserving the native Position bits.
 
 For nonempty nodes, the ordinary terminal condition is exactly
 
@@ -232,8 +233,15 @@ child-enclosure sums with bounded outward error, then narrow upward and cap by �
 Thus every stored r encloses the native positions and is <= ρ(d). Subtract native
 integers before floating conversion; subtracting two rounded Fixed64 doubles loses
 small separations. A final `nextafter` alone is not a proof for an arbitrarily
-underestimated preceding norm. Use directed bounds or a documented operation-error
-bound, including the conversion, sum of squares, square root, and narrowing.
+underestimated preceding norm. Use double intermediates with an upward step after
+integer conversion and each nonnegative square/sum. Under strict IEEE arithmetic,
+apply `nextafter(std::sqrt(sum), +infinity)` at the norm calculation, preserving
+zero explicitly for an empty or zero-distance cloud, and narrow upward to float.
+Parent bounds and Ewald thresholds retain their directed rounding as well.
+Long double is unnecessary: Q64 squared differences are at least 2⁻¹²⁸ when
+nonzero, within normal double range. Compile the consumers without fast-math or
+implicit contraction. Validate enclosure using exact integer squared distances,
+including a true radius just above a float boundary by a transverse Q64 tick.
 
 All separation certificates compare a lower bound on distance against an upper
 bound on the threshold; uncertainty and equality mean unresolved. Apply this rule
@@ -385,9 +393,9 @@ are range-checked; serialize field contents, never arena pointers. Required node
 | ParticleLeaf | True physical leaf, nonzero count, geometry, radius, moments and complete particle payload; ordinary/coincident/depth-limit reason recorded. |
 | MultipoleTerminal | Nonzero count, geometry, radius, moments and terminal-certificate context; descendants/particles deliberately omitted, never declared physically empty. |
 
-Particle payloads retain native positions, actual source masses/weights and any
-fields needed by the existing source reader, plus generation-qualified particle
-identity `(owner, source index)`. This is sufficient for audit/self identification
+Particle payloads retain native positions and species labels, plus generation-qualified
+particle identity `(owner, source index)`. Mass is derived from the configured
+species masses; no per-particle mass array is stored or transferred. This is sufficient for audit/self identification
 while that frozen ordering lives; persistent particle IDs may also be retained.
 Imported particles are read-only sources, never sinks, migration candidates, or
 members of the destination-owned moments.

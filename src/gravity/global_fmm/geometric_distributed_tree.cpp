@@ -1,5 +1,7 @@
 /* CosmicTiger - independent geometric FMM trees; BSL-1.0. */
 
+// Build locality trees, publish exact dyadic source covers and retire shared generations.
+
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -41,12 +43,11 @@ Range<double> localSourceCover(
         int const shift = kPositionBits - cuts[axis];
         uint64_t const lowerCell = lowest >> shift;
         uint64_t const upperCell = highest >> shift;
-        long double const lower = std::ldexp(static_cast<long double>(lowerCell), -cuts[axis]);
-        long double const upper = std::ldexp(static_cast<long double>(upperCell) + 1, -cuts[axis]);
-        cover.begin[axis] =
-            std::max(0.0, std::nextafter(double(lower), -std::numeric_limits<double>::infinity()));
-        cover.end[axis] =
-            std::min(1.0, std::nextafter(double(upper), std::numeric_limits<double>::infinity()));
+        // At most 32 cell bits make both endpoints exactly representable in double.
+        double const lower = std::ldexp(double(lowerCell), -cuts[axis]);
+        double const upper = std::ldexp(double(upperCell + 1), -cuts[axis]);
+        cover.begin[axis] = lower;
+        cover.end[axis] = upper;
     }
     return cover;
 }

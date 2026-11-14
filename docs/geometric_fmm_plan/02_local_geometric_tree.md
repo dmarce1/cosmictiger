@@ -56,9 +56,14 @@ step 3 activates independent locality trees.
 3. Partition owned particles at the prescribed midpoint. Continue nonempty subdivision
    until d >= dEwald and N <= bucketSize. Apply the contract's coincident-particle and
    representability terminal cases; no occupied-extent or equal-count fallback split.
+   Limit each axis to min(32,P-1) cuts: depth 93 for Fixed32 positions and 96 for
+   Fixed64 positions. Box boundaries remain exact Fixed32 ticks at every depth.
 4. Measure leaf radii about their stored centers, using position arithmetic that preserves
    relevant native fixed-point differences. Aggregate nonempty child radii with
-   min(Rmax(d), max_j(|c_j-c|+r_j)). Round conservatively when narrowing to float.
+   min(Rmax(d), max_j(|c_j-c|+r_j)). Use double intermediates with outward rounding
+   after integer conversion, products, sums and a direct `std::sqrt` call; preserve
+   exactly zero leaf radii. Round conservatively when narrowing to float and retain
+   strict floating-point compilation. No extended-precision arithmetic is required.
 5. Preserve complete source moments, including dipoles, and existing source precision.
    Distinguish all owned sources required by gravity from the currently active sink subset.
 6. Revisit local arena capacity/depth assumptions affected by sparse chains and overflow
@@ -70,7 +75,9 @@ step 3 activates independent locality trees.
 - Verify depth schedule, midpoint boxes and centers over a complete 18-cut cycle.
 - Sparse/asymmetric particles must not shrink cells; measured radii must enclose particles.
 - One particle, empty branches, coincident overfull particles, and points exactly on splits.
-- Radius recurrence versus direct maximum-distance scans, including precision boundaries.
+- Radius enclosure and recurrence checked with exact integer squared distances,
+  including a radius just above a float boundary by one transverse Q64 tick.
+- Deepest supported boxes remain distinct and exact; attempting another split fails.
 - Single-locality force/multipole regression with nonzero dipoles about geometric centers.
 - Cover both fixed32 and fixed64 when relevant builds are available and authorized.
 

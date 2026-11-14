@@ -2,7 +2,7 @@
 
 // Run the actual kick kernel without application initialization or an HPX runtime.
 // Its isolated four-particle tree uses only direct softened pairs; this is not
-// a force accuracy test.
+// a broad force-accuracy test; its direct reference also checks species masses.
 // Every launch has at most two one-warp blocks, further bounded by SM_count / 6.
 // No initialization, memset, or reduction kernels are launched by this fixture.
 
@@ -42,6 +42,8 @@ constexpr int kParticleCount = 4;
 constexpr int kItemCount = 5;
 constexpr int kOutputCount = kParticleCount * kItemCount;
 constexpr float kSupport = 0.06f;
+constexpr float kDarkMatterMass = 2.0f;
+constexpr float kGasMass = 0.5f;
 constexpr std::uint64_t kPoison = std::numeric_limits<std::uint64_t>::max();
 using Output = std::array<std::array<float, kOutputCount>, kDimensions + 1>;
 using PhaseCalls = std::array<std::uint64_t, profile::kDevicePhaseCount>;
@@ -99,7 +101,7 @@ constexpr int alignUp(int value, int alignment) {
     return (value + alignment - 1) / alignment * alignment;
 }
 
-CudaKickArenaLayout makeLayout() {
+CudaKickArenaLayout makeLayout(bool useSpeciesMasses) {
     // The same region lifetimes as the production layout, with fixed small
     // capacities. Every vector and stack is backed by the reserved list slab;
     // no pool initialization or dynamic growth is needed for this fixture.
@@ -118,14 +120,16 @@ CudaKickArenaLayout makeLayout() {
     layout.multipoleCapacity = 4;
     layout.multipoleStride = FmmOrder<kOrder>::kPositionedMultipoleStride_;
     layout.sourceOffset = 4 * kWarpSize * int(sizeof(float));
-    int const sourceBytes = std::max(kDimensions * kWarpSize * int(sizeof(Position)),
-        layout.multipoleCapacity * layout.multipoleStride);
+    int const particleBytes = kWarpSize *
+        (kDimensions * int(sizeof(Position)) + (useSpeciesMasses ? int(sizeof(char)) : 0));
+    int const sourceBytes =
+        std::max(particleBytes, layout.multipoleCapacity * layout.multipoleStride);
     layout.arenaBytes = alignUp(
         std::max(layout.sourceOffset + sourceBytes, FmmOrder<kOrder>::kLocalExpansionBytes_), 16);
     layout.totalBytes = layout.arenaOffset + layout.arenaBytes;
     layout.budgetBytes = layout.totalBytes;
     layout.residency = 1;
-    layout.massPlane = false;
+    layout.typePlane = useSpeciesMasses;
     layout.listReserve = 64;
     layout.forceBackingCapacity = 0;
     CudaKickListStorage<kOrder> storage;
@@ -161,7 +165,8 @@ std::array<TreeNode, 3> makeTree() {
     return nodes;
 }
 
-Output reference(std::array<std::array<Position, kParticleCount>, kDimensions> const& positions) {
+Output reference(std::array<std::array<Position, kParticleCount>, kDimensions> const& positions,
+    std::array<char, kParticleCount> const& types, bool useSpeciesMasses) {
     Output result{};
     double const inverseSupport = 1.0 / double(kSupport);
     auto const& kernel = selectedGravityKernel();
@@ -180,9 +185,12 @@ Output reference(std::array<std::array<Position, kParticleCount>, kDimensions> c
                     distanceSquared += displacement[dim] * displacement[dim];
                 }
                 double const q = std::sqrt(distanceSquared) * inverseSupport;
-                double const force = radial_kernel::forceFactor(kernel, q) * inverseSupport *
+                double const mass = useSpeciesMasses ?
+                    (types[source] == kDarkMatterType ? kDarkMatterMass : kGasMass) :
+                    1.0;
+                double const force = mass * radial_kernel::forceFactor(kernel, q) * inverseSupport *
                     inverseSupport * inverseSupport;
-                field[0] -= radial_kernel::potential(kernel, q) * inverseSupport;
+                field[0] -= mass * radial_kernel::potential(kernel, q) * inverseSupport;
                 for (int dim = 0; dim < kDimensions; ++dim) {
                     field[dim + 1] -= displacement[dim] * force;
                 }
@@ -232,7 +240,7 @@ PhaseCalls checkRecords(std::vector<profile::DeviceBlockRecord> const& records) 
     return calls;
 }
 
-void run(int blocks) {
+void run(int blocks, bool useSpeciesMasses) {
     std::array<std::array<Position, kParticleCount>, kDimensions> positions{};
     double const coordinates[kDimensions][kParticleCount] = {
         {0.48, 0.49, 0.51, 0.52}, {0.49, 0.51, 0.48, 0.52}, {0.50, 0.48, 0.52, 0.51}};
@@ -241,11 +249,14 @@ void run(int blocks) {
             positions[dim][i] = Position(coordinates[dim][i]);
         }
     }
-    auto const expected = reference(positions);
+    std::array<char, kParticleCount> const types = {
+        kDarkMatterType, kSphType, kSphType, kDarkMatterType};
+    auto const expected = reference(positions, types, useSpeciesMasses);
     auto const nodes = makeTree();
-    auto const layout = makeLayout();
+    auto const layout = makeLayout(useSpeciesMasses);
     DeviceBuffer<Position> x(kParticleCount), y(kParticleCount), z(kParticleCount);
     DeviceBuffer<TreeNode> tree(nodes.size());
+    DeviceBuffer<char> particleTypes(kParticleCount);
     DeviceBuffer<int> checks(1), nextItem(1);
     DeviceBuffer<KickReturn> result(1);
     DeviceBuffer<CudaKickParameters<kOrder>> parameters(kItemCount);
@@ -257,6 +268,7 @@ void run(int blocks) {
     y.upload(positions[1].data());
     z.upload(positions[2].data());
     tree.upload(nodes.data());
+    particleTypes.upload(types.data());
     int const root = 0;
     checks.upload(&root);
     std::array<CudaKickParameters<kOrder>, kItemCount> items{};
@@ -278,7 +290,10 @@ void run(int blocks) {
     data.gx = gx.data();
     data.gy = gy.data();
     data.gz = gz.data();
-    data.sph = false;
+    data.sph = useSpeciesMasses;
+    data.type = useSpeciesMasses ? particleTypes.data() : nullptr;
+    data.darkMatterMass = kDarkMatterMass;
+    data.sphMass = kGasMass;
     KickParameters global{};
     global.forceOnly = true;
     global.gravitySmoothingLength = kSupport;
@@ -349,9 +364,9 @@ void run(int blocks) {
             }
         }
     }
-    std::printf("Production kick: %d blocks x %d threads, order %d, three launches; "
+    std::printf("Production kick: %d blocks x %d threads, order %d, %s masses, three launches; "
                 "direct-force agreement and repeated-output checks passed.\n",
-        blocks, kWarpSize, kOrder);
+        blocks, kWarpSize, kOrder, useSpeciesMasses ? "species" : "unit");
 #if COSMICTIGER_PROFILE && COSMICTIGER_DEVICE_PROFILE
     std::puts("Device phase coverage and per-launch record overwrite passed "
               "(empty M2L/P2L/M2P lists).");
@@ -391,7 +406,10 @@ int main() {
             return 77;
         }
         uploadKernelSelections();
-        detail::run(blocks);
+        detail::run(blocks, false);
+#if COSMICTIGER_WITH_SPH
+        detail::run(blocks, true);
+#endif
         return 0;
     } catch (std::exception const& error) {
         std::fprintf(stderr, "%s\n", error.what());

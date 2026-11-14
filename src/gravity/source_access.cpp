@@ -10,14 +10,14 @@ static std::atomic<GravityRemoteSourceReader> remoteSourceReader{nullptr};
 void gravitySetRemoteSourceReader(GravityRemoteSourceReader reader) {
     remoteSourceReader.store(reader);
 }
-/// Gather a node's positions and optional types/masses from its local store or remote
+/// Gather a node's positions and optional types from its local store or remote
 /// reader.
 void gravityReadSourcePositions(TreeNode const& source, Position* x, Position* y, Position* z,
-    char* types, float* masses, ParticleInteger offset) {
+    char* types, ParticleInteger offset) {
     if (!source.isLocalHere()) {
         auto const reader = remoteSourceReader.load();
         ALWAYS_ASSERT(reader != nullptr);
-        reader(source, x, y, z, types, masses, offset);
+        reader(source, x, y, z, types, offset);
         return;
     }
     auto const view = fmmSourceView();
@@ -27,11 +27,6 @@ void gravityReadSourcePositions(TreeNode const& source, Position* x, Position* y
     std::copy_n(view.positions[kXi] + range.first, count, x + offset);
     std::copy_n(view.positions[kYi] + range.first, count, y + offset);
     std::copy_n(view.positions[kZi] + range.first, count, z + offset);
-    if (masses != nullptr) {
-        for (ParticleInteger i = 0; i < count; ++i) {
-            masses[offset + i] = fmmSourceMass(view, range.first + i);
-        }
-    }
     if (types != nullptr) {
         if (view.types != nullptr) {
             std::copy_n(view.types + range.first, count, types + offset);

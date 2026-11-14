@@ -1,3 +1,4 @@
+// Particle storage, species access, communication and local operations.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -256,9 +257,7 @@ void particlesDestroy();
 ParticleInteger particlesPartitionDarkMatter(Pair<ParticleInteger> rng);
 void particlesGlobalReadPos(
     ParticleGlobalRange, Position* x, Position* y, Position* z, char* type, ParticleInteger offset);
-void particlesGlobalReadMasses(ParticleGlobalRange range, float* masses, ParticleInteger offset);
-/// Read remote/local positions through the general accessor without requesting source
-/// masses.
+/// Read remote/local positions without requesting species labels.
 inline void particlesGlobalReadPos(
     ParticleGlobalRange range, Position* x, Position* y, Position* z, ParticleInteger offset) {
     particlesGlobalReadPos(range, x, y, z, nullptr, offset);
@@ -324,18 +323,16 @@ inline char& particlesType(ParticleInteger index) {
 
 /// Return the configured species mass, using unit mass in the dark-matter-only
 /// representation.
-inline float particlesMass(ParticleInteger index) {
+inline float particlesMassForType(char type) {
     auto const& opts = getOptions();
-    if (!opts.hydro.enabled) {
-        return 1.0f;
-    }
-    float const sphMass = opts.initial.gasMass;
-    float const darkMatterMass = opts.initial.darkMatterMass;
-    if (particlesType(index) != kDarkMatterType) {
-        return sphMass;
-    } else {
-        return darkMatterMass;
-    }
+    return !opts.hydro.enabled  ? 1.0f :
+        type == kDarkMatterType ? float(opts.initial.darkMatterMass) :
+                                  float(opts.initial.gasMass);
+}
+
+/// Derive the local particle mass from its species label.
+inline float particlesMass(ParticleInteger index) {
+    return particlesMassForType(particlesType(index));
 }
 
 /// Access the stored gravitational potential for the particle.

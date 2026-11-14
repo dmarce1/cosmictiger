@@ -1,4 +1,6 @@
 /*
+ Explicit CUDA kick instantiations for the selected FMM order.
+
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
 
@@ -29,5 +31,5 @@ template __global__ void cudaKickKernel<COSMICTIGER_FMM_INSTANCE_ORDER>(
 #endif
 );
 template KickReturn cudaExecuteKicksImpl<COSMICTIGER_FMM_INSTANCE_ORDER>(KickParameters, Position*,
-    Position*, Position*, TreeNode*, Vector<KickWorkitem>, detail::FmmForceOutput, float const*);
+    Position*, Position*, TreeNode*, Vector<KickWorkitem>, detail::FmmForceOutput);
 template CudaKickArenaLayout const& kickArenaLayoutImpl<COSMICTIGER_FMM_INSTANCE_ORDER>();

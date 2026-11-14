@@ -12,7 +12,7 @@
 #include <cosmictiger/gravity/geometric_tree_geometry.hpp>
 #include <cosmictiger/gravity/tree.hpp>
 
-inline constexpr int kGeometricSourceForestVersion = 2;
+inline constexpr int kGeometricSourceForestVersion = 3;
 
 struct SourceRootDescriptor {
     TreeId root{};    // Owner locality and arena index of its independent tree root.
@@ -144,7 +144,7 @@ bool treeSourceForestImportsEnabled();
 TreeNode const* treeSourceForestImportedNode(TreeId id);
 void treeSourceForestMaterialize(TreeId id);
 bool treeSourceForestReadParticleRange(TreeNode const& source, Position* x, Position* y,
-    Position* z, char* types, float* masses, ParticleInteger offset);
+    Position* z, char* types, ParticleInteger offset);
 void treeSourceForestCountFallback();
 uint64_t treeSourceForestFallbackCount();
 void treeExchangeSourceForest(Vector<SourceRootDescriptor> const& roots);

@@ -4,15 +4,12 @@
 #include <cosmictiger/particles/particles.hpp>
 
 void globalFmmReadSourcePositions(TreeNode const& source, Position* x, Position* y, Position* z,
-    char* types, float* masses, ParticleInteger offset) {
-    if (treeSourceForestReadParticleRange(source, x, y, z, types, masses, offset)) {
+    char* types, ParticleInteger offset) {
+    if (treeSourceForestReadParticleRange(source, x, y, z, types, offset)) {
         return;
     }
     if (treeSourceForestImportsEnabled()) {
         treeSourceForestCountFallback();
     }
     particlesGlobalReadPos(source.globalParticleRange(), x, y, z, types, offset);
-    if (masses != nullptr) {
-        particlesGlobalReadMasses(source.globalParticleRange(), masses, offset);
-    }
 }

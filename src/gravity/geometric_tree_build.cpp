@@ -84,13 +84,13 @@ size_t geometricCountNodes(
     return 1 + left + right;
 }
 
-long double geometricUp(long double value) {
-    return std::nextafter(value, std::numeric_limits<long double>::infinity());
+double geometricUp(double value) {
+    return std::nextafter(value, std::numeric_limits<double>::infinity());
 }
 
-float geometricNarrowUp(long double value) {
+float geometricNarrowUp(double value) {
     float result = float(value);
-    if (static_cast<long double>(result) < value) {
+    if (static_cast<double>(result) < value) {
         result = std::nextafter(result, std::numeric_limits<float>::infinity());
     }
     return result;
@@ -100,9 +100,9 @@ float geometricNarrowUp(long double value) {
 // separations. Each conversion and nonnegative operation is bounded upward.
 float geometricLeafRadius(
     Pair<ParticleInteger> range, Vector3<Position> const& center, FmmSourceView const& sources) {
-    long double largest = 0;
+    double largest = 0;
     for (ParticleInteger i = range.first; i < range.second; ++i) {
-        long double squared = 0;
+        double squared = 0;
         for (int axis = 0; axis < kDimensions; ++axis) {
             PositionInteger const a = sources.positions[axis][i].raw();
             PositionInteger const b = center[axis].raw();
@@ -110,11 +110,14 @@ float geometricLeafRadius(
             if (magnitude == 0) {
                 continue;
             }
-            long double const delta =
-                std::ldexp(geometricUp(static_cast<long double>(magnitude)), -kPositionBits);
+            double const delta =
+                std::ldexp(geometricUp(static_cast<double>(magnitude)), -kPositionBits);
             squared = geometricUp(squared + geometricUp(delta * delta));
         }
-        largest = std::max(largest, geometricTreeSqrtUp(squared));
+        if (squared != 0) {
+            largest = std::max(largest,
+                std::nextafter(std::sqrt(squared), std::numeric_limits<double>::infinity()));
+        }
     }
     return range.first == range.second ? 0.0f : geometricNarrowUp(largest);
 }
@@ -160,19 +163,19 @@ TreeCreateReturn geometricBuildNode(
         result.nodeCount += left.nodeCount + right.nodeCount;
         result.leafCount = left.leafCount + right.leafCount;
         int const axis = kGeometricSplitAxes[cell.depth % kGeometricSplitAxes.size()];
-        long double const offset = std::ldexp(1.0L, -cuts[axis] - 2);
+        double const offset = std::ldexp(1.0, -cuts[axis] - 2);
         // Derived fixed-center adaptation of Dehnen (2002), equation 9:
         // r = min(R, maxⱼ(|cⱼ − c| + rⱼ)), excluding empty children.
         // Symbol directory: r → cloud radius; R → cell half-diagonal;
         // c, cⱼ → parent and child centers; rⱼ → child cloud radius.
         // Code names: r → result.radius; R → geometricTreeRadiusLimit;
         // |cⱼ − c| → offset; maxⱼ(|cⱼ − c| + rⱼ) → bound.
-        long double bound = 0;
+        double bound = 0;
         if (middle != range.first) {
-            bound = geometricUp(offset + static_cast<long double>(left.radius));
+            bound = geometricUp(offset + static_cast<double>(left.radius));
         }
         if (middle != range.second) {
-            bound = std::max(bound, geometricUp(offset + static_cast<long double>(right.radius)));
+            bound = std::max(bound, geometricUp(offset + static_cast<double>(right.radius)));
         }
         result.radius = std::min(geometricTreeRadiusLimit(cell.depth), geometricNarrowUp(bound));
         geometryFlops += (middle != range.first) + (middle != range.second) + 1;
@@ -209,13 +212,12 @@ GeometricTreeBuildResult treeBuildGeometricLocal(
         particleRange.second > std::numeric_limits<int>::max() - std::max(32, kSimdFloatSize)) {
         throw std::length_error("Geometric tree source range must be owned and within int range");
     }
-    long double const infinity = std::numeric_limits<long double>::infinity();
-    long double const theta =
-        std::nextafter(1.0L / static_cast<long double>(inverseTheta), -infinity);
-    long double const denominator = detail::geometricUp(1 + theta);
-    long double const firstLimit = std::nextafter(theta / (4 * denominator), -infinity);
-    long double const secondLimit =
-        std::nextafter(0.125L - 0.25L * static_cast<long double>(smoothing), -infinity);
+    double const infinity = std::numeric_limits<double>::infinity();
+    double const theta = std::nextafter(1.0 / static_cast<double>(inverseTheta), -infinity);
+    double const denominator = detail::geometricUp(1 + theta);
+    double const firstLimit = std::nextafter(theta / (4 * denominator), -infinity);
+    double const secondLimit =
+        std::nextafter(0.125 - 0.25 * static_cast<double>(smoothing), -infinity);
     int ewaldDepth = 0;
     while (ewaldDepth <= kGeometricTreeMaxDepth &&
         !(geometricTreeRadiusLimit(ewaldDepth) < firstLimit &&

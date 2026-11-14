@@ -1,3 +1,4 @@
+// Order-templated CPU multipole and particle gravity operators.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -122,6 +123,8 @@ template <int order>
 void cpuGravityCp(cosmictiger::gravity::cartesian::Expansion<float>& lValue,
     Vector<TreeId> const& list, TreeId self, bool doPhi) {
     constexpr int kChunkSize = 32;
+    float const darkMatterMass = particlesMassForType(kDarkMatterType);
+    float const gasMass = particlesMassForType(kSphType);
     constexpr int kLocalCoefficients = FmmOrder<order>::kLocalCoefficients_;
     FlopCounter<FlopCount> flops = 0;
     FlopCounts geometryFlops{};
@@ -139,17 +142,15 @@ void cpuGravityCp(cosmictiger::gravity::cartesian::Expansion<float>& lValue,
             Vector<Position> srcx;
             Vector<Position> srcy;
             Vector<Position> srcz;
-            Vector<float> masses;
             Vector<char> types;
             srcx.resize(numberOfSources);
             srcy.resize(numberOfSources);
             srcz.resize(numberOfSources);
-            masses.resize(numberOfSources);
             types.resize(numberOfSources);
             int count = 0;
             for (int i = 0; i < maxi; i++) {
-                gravityReadSourcePositions(*treePtrs[i], srcx.data(), srcy.data(), srcz.data(),
-                    types.data(), masses.data(), count);
+                gravityReadSourcePositions(
+                    *treePtrs[i], srcx.data(), srcy.data(), srcz.data(), types.data(), count);
                 count += treePtrs[i]->numberOfParticles();
             }
             for (int i = count; i < numberOfSources; i++) {
@@ -159,7 +160,6 @@ void cpuGravityCp(cosmictiger::gravity::cartesian::Expansion<float>& lValue,
                 srcx[i] = srcx[count - 1];
                 srcy[i] = srcy[count - 1];
                 srcz[i] = srcz[count - 1];
-                masses[i] = 0.0;
             }
             Vector3<SimdPosition> position{};
             Vector3<SimdPosition> yValue{};
@@ -175,7 +175,10 @@ void cpuGravityCp(cosmictiger::gravity::cartesian::Expansion<float>& lValue,
                     simdSetLane(yValue[kXi], l, srcx[j + l].raw());
                     simdSetLane(yValue[kYi], l, srcy[j + l].raw());
                     simdSetLane(yValue[kZi], l, srcz[j + l].raw());
-                    simdSetLane(mass, l, masses[j + l]);
+                    simdSetLane(mass, l,
+                        (j + l < count ?
+                                (types[j + l] == kDarkMatterType ? darkMatterMass : gasMass) :
+                                0.0f));
                 }
                 Vector3<SimdFloat> dx{};
                 for (int dim = 0; dim < kDimensions; dim++) {

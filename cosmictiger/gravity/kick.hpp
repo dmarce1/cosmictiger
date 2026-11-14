@@ -1,4 +1,6 @@
 /*
+ Gravity kick parameters, device views, workspace layout and launch interfaces.
+
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
 
@@ -23,28 +25,27 @@
 struct SphParticleFlags;
 
 struct CudaKickData {
-    TreeNode* treeNodes;
-    Position* x;
-    Position* y;
-    Position* z;
-    Vector3<float>* vel;
-    bool midpointHydro = false;
-    SphParticleFlags const* sphHydroFlags = nullptr;
-    ParticleInteger* catIndex;
-    char* type;
-    bool sph;
-    float darkMatterMass;
-    float sphMass;
-    float const* sourceMasses;
-    char* rungs;
-    float* gx;
-    float* gy;
-    float* gz;
-    float* pot;
-    Array<float*, kDimensions> globalAcceleration{};
-    Vector3<float>* deferredGasOpening = nullptr;
-    ParticleInteger const* gravitySampleIndices;
-    Vector3<float>* gravitySampleAccelerations;
+    TreeNode* treeNodes;           // Local and staged source nodes in device index order.
+    Position* x;                   // Particle x coordinates in normalized box units.
+    Position* y;                   // Particle y coordinates in normalized box units.
+    Position* z;                   // Particle z coordinates in normalized box units.
+    Vector3<float>* vel;           // Owned-particle velocities; null for force-only walks.
+    bool midpointHydro = false;    // Apply the midpoint hydro gravity-kick policy.
+    SphParticleFlags const* sphHydroFlags = nullptr;    // Midpoint gas activity flags.
+    ParticleInteger* catIndex;    // Map base-particle indices to species storage indices.
+    char* type;              // Particle species; null when hydro is disabled and every mass is one.
+    bool sph;                // Use species-dependent masses and hydro particle metadata.
+    float darkMatterMass;    // Configured dark-matter particle mass in code units.
+    float sphMass;           // Configured gas and stellar particle mass in code units.
+    char* rungs;             // Owned-particle timestep rung indices.
+    float* gx;               // Output acceleration x components, or null if not requested.
+    float* gy;               // Output acceleration y components, or null if not requested.
+    float* gz;               // Output acceleration z components, or null if not requested.
+    float* pot;              // Output gravitational potentials, or null if not requested.
+    Array<float*, kDimensions> globalAcceleration{};    // Saved global-step accelerations.
+    Vector3<float>* deferredGasOpening = nullptr;       // Deferred opening impulses for gas.
+    ParticleInteger const* gravitySampleIndices;    // Sample slot per particle; negative if absent.
+    Vector3<float>* gravitySampleAccelerations;     // Acceleration output indexed by sample slot.
 };
 
 // Host-computed byte layout of one block's dynamic shared memory.
@@ -63,12 +64,12 @@ struct CudaKickData {
 // Plain aggregate: the device control block is constructed by every lane, and a
 // value-initialized member would race with lane zero's later assignment.
 struct CudaKickArenaLayout {
-    int order;    // FMM order the layout was selected for
-    int totalBytes;
-    int controlOffset;
-    int expansionOffset;    // -1: the active expansion stays in global backing
-    int arenaOffset;
-    int arenaBytes;
+    int order;                // FMM order the layout was selected for
+    int totalBytes;           // Total dynamic shared-memory bytes per CUDA block.
+    int controlOffset;        // Byte offset of the persistent control block.
+    int expansionOffset;      // -1: the active expansion stays in global backing
+    int arenaOffset;          // Byte offset of the reusable phase arena.
+    int arenaBytes;           // Size of the reusable phase arena in bytes.
     int forceOffset;          // arena-relative; -1: forces use whole-bucket global backing
     int sourceOffset;         // arena-relative
     int scratchOffset;        // arena-relative L2L output expansion
@@ -76,7 +77,7 @@ struct CudaKickArenaLayout {
     int particleCapacity;     // staged particle sources, a multiple of WARP_SIZE
     int multipoleCapacity;    // staged positioned multipoles
     int multipoleStride;      // bytes per staged multipole: the tree arena's record stride
-    bool massPlane;           // mixed-mass sources stage a mass plane
+    bool typePlane;           // Species-dependent sources stage one type byte per particle.
     int residency;            // resident blocks per multiprocessor the budget targets
     int budgetBytes;          // dynamic shared bytes allowed per block at that residency
     int listReserve;          // entries reserved per interaction list and checklist stack; 0: none
@@ -226,8 +227,7 @@ struct FmmForceOutput {
 KickReturn kickRunCudaLaunch(std::function<KickReturn()> const& launch);
 // Dispatches to the per-order CUDA kick instantiation for kFmmOrder.
 KickReturn cudaExecuteKicks(KickParameters params, Position*, Position*, Position*, TreeNode*,
-    Vector<KickWorkitem> workitems, detail::FmmForceOutput output = {},
-    float const* sourceMasses = nullptr);
+    Vector<KickWorkitem> workitems, detail::FmmForceOutput output = {});
 // Shared-memory policy of the build-order kick kernel.
 CudaKickArenaLayout const& kickArenaLayout();
 #endif

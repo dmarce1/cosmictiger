@@ -1,4 +1,6 @@
 /*
+ CUDA gravity tree walk, particle interactions and sink updates.
+
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
 
@@ -134,9 +136,7 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
         vx = vels[sinkIndex][kXi];
         vy = vels[sinkIndex][kYi];
         vz = vels[sinkIndex][kZi];
-        float const mass = data.sourceMasses != nullptr ?
-            data.sourceMasses[sinkIndex] :
-            data.sph ?
+        float const mass = data.sph ?
             (data.type[sinkIndex] == kDarkMatterType ? data.darkMatterMass : data.sphMass) :
             1.0f;
         float const kin0 = 0.5f * mass * sqr(vx, vy, vz);
@@ -448,8 +448,8 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
         control.sourceX = reinterpret_cast<Position*>(arena + layout.sourceOffset);
         control.sourceY = control.sourceX + layout.particleCapacity;
         control.sourceZ = control.sourceY + layout.particleCapacity;
-        control.sourceMass = layout.massPlane ?
-            reinterpret_cast<float*>(control.sourceZ + layout.particleCapacity) :
+        control.sourceType = layout.typePlane ?
+            reinterpret_cast<char*>(control.sourceZ + layout.particleCapacity) :
             nullptr;
         control.multipoles = arena + layout.sourceOffset;
         control.scratchExpansion = reinterpret_cast<float*>(arena + layout.scratchOffset);
@@ -708,9 +708,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                             for (int l = tid; l < sinkCount; l += kWarpSize) {
                                 ParticleInteger const sinkIndex =
                                     self.particleRange.first + sinkBegin + l;
-                                float const mass = data.sourceMasses != nullptr ?
-                                    data.sourceMasses[sinkIndex] :
-                                    data.sph ?
+                                float const mass = data.sph ?
                                     (data.type[sinkIndex] == kDarkMatterType ? data.darkMatterMass :
                                                                                data.sphMass) :
                                     1.0f;

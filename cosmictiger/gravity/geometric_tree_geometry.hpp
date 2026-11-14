@@ -15,10 +15,11 @@
 #include <cosmictiger/gravity/fmm_box.hpp>
 #include <cosmictiger/math/position.hpp>
 
-// Coordinates identify dyadic cells independently of the rounded FmmBox.
-// A child at the maximum depth must still have an exactly representable center.
+// Cell bounds must remain exact in FmmBox, and centers must remain exact in Position.
+inline constexpr int kGeometricTreeMaxAxisCuts =
+    std::min(std::numeric_limits<uint32_t>::digits, kPositionBits - 1);
 inline constexpr int kGeometricTreeMaxDepth =
-    std::min(kDimensions * (kPositionBits - 1), kMaxDepth - 1);
+    std::min(kDimensions * kGeometricTreeMaxAxisCuts, kMaxDepth - 1);
 inline constexpr std::array<int, 18> kGeometricSplitAxes{
     kXi, kYi, kZi, kZi, kYi, kXi, kZi, kXi, kYi, kYi, kXi, kZi, kYi, kZi, kXi, kXi, kZi, kYi};
 
@@ -63,42 +64,22 @@ inline Position geometricTreeCenter(GeometricTreeCell const& cell, int axis) {
     return center;
 }
 
-// Round exact dyadic bounds outward to Fixed32 ticks, including the seam at 1.
+// Store exact dyadic bounds as Fixed32 ticks, including the seam at 1.
 inline FmmBox geometricTreeBox(GeometricTreeCell const& cell) {
+    constexpr int kBoxBits = std::numeric_limits<uint32_t>::digits;
     FmmBox box{};
     auto const cuts = geometricTreeAxisCuts(cell.depth);
     for (int axis = 0; axis < kDimensions; ++axis) {
         int const n = cuts[axis];
-        uint64_t lower;
-        uint64_t upper;
-        if (n <= 32) {
-            lower = cell.coordinate[axis] << (32 - n);
-            upper = (cell.coordinate[axis] + 1) << (32 - n);
-        } else {
-            lower = cell.coordinate[axis] >> (n - 32);
-            upper = lower + 1;
-        }
+        uint64_t const lower = cell.coordinate[axis] << (kBoxBits - n);
+        uint64_t const upper = (cell.coordinate[axis] + 1) << (kBoxBits - n);
         box.begin[axis].setInteger(uint32_t(lower));
         box.end[axis].setInteger(uint32_t(upper));
-        if (upper - lower == (uint64_t(1) << 32)) {
+        if (upper - lower == (uint64_t(1) << kBoxBits)) {
             box.fullAxes = uint8_t(box.fullAxes | (1u << axis));
         }
     }
     return box;
-}
-
-// Certify the square root without relying on the library sqrt's error bound:
-// one downward step bounds each nonnegative rounded square from below.
-inline long double geometricTreeSqrtUp(long double value) {
-    if (value == 0) {
-        return 0;
-    }
-    long double root = std::sqrt(value);
-    long double const infinity = std::numeric_limits<long double>::infinity();
-    while (std::nextafter(root * root, -infinity) < value) {
-        root = std::nextafter(root, infinity);
-    }
-    return root;
 }
 
 // Derived geometric half-diagonal: R(d) = ½√(Σᵢ Lᵢ(d)²).
@@ -107,15 +88,15 @@ inline long double geometricTreeSqrtUp(long double value) {
 // Each operation is rounded upward under round-to-nearest.
 inline float geometricTreeRadiusLimit(int depth) {
     auto const cuts = geometricTreeAxisCuts(depth);
-    long double sum = 0;
-    long double const infinity = std::numeric_limits<long double>::infinity();
+    double sum = 0;
+    double const infinity = std::numeric_limits<double>::infinity();
     for (int axis = 0; axis < kDimensions; ++axis) {
-        long double const square = std::ldexp(1.0L, -2 * (cuts[axis] + 1));
+        double const square = std::ldexp(1.0, -2 * (cuts[axis] + 1));
         sum = std::nextafter(sum + square, infinity);
     }
-    long double const radius = geometricTreeSqrtUp(sum);
+    double const radius = std::nextafter(std::sqrt(sum), infinity);
     float result = float(radius);
-    if (static_cast<long double>(result) < radius) {
+    if (double(result) < radius) {
         result = std::nextafter(result, std::numeric_limits<float>::infinity());
     }
     return result;

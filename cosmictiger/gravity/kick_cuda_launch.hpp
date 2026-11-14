@@ -1,4 +1,6 @@
 /*
+ CUDA kick resource selection, shared-memory layout and host launch.
+
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
 
@@ -212,7 +214,7 @@ inline int kickSharedBudget(KickDeviceResources const& resources, int residency)
 
 // Fill the arena for a budget; returns false when the minimum tiles do not fit.
 template <int order>
-bool kickBuildLayout(Gravity const& gravity, bool massPlane, int residency, int budget,
+bool kickBuildLayout(Gravity const& gravity, bool typePlane, int residency, int budget,
     CudaKickArenaLayout& layout) {
     auto const& opts = getOptions();
     layout = CudaKickArenaLayout{};
@@ -220,7 +222,7 @@ bool kickBuildLayout(Gravity const& gravity, bool massPlane, int residency, int 
     layout.residency = residency;
     layout.listReserve = gravity.cudaKickListReserve;
     layout.budgetBytes = budget;
-    layout.massPlane = massPlane;
+    layout.typePlane = typePlane;
     int const controlBytes = kickRoundUp(int(sizeof(CudaKickControl<order>)), kKickArenaAlignment);
     layout.controlOffset = 0;
     int offset = controlBytes;
@@ -260,7 +262,7 @@ bool kickBuildLayout(Gravity const& gravity, bool massPlane, int residency, int 
         sinkCapacity = kickRoundUp(std::min(bucket, maximumSinkCapacity), kWarpSize);
     }
     int const particleBytesPerSource =
-        int(sizeof(Position)) * kDimensions + (massPlane ? int(sizeof(float)) : 0);
+        int(sizeof(Position)) * kDimensions + (typePlane ? int(sizeof(char)) : 0);
     // Staged records keep the tree arena's stride, so cudaGravityPcDirect
     // stages each record with one aligned asynchronous copy.
     static_assert(FmmOrder<order>::kPositionedMultipoleStride_ % kKickArenaAlignment == 0,
@@ -340,7 +342,7 @@ template <int order>
 CudaKickArenaLayout kickSelectLayout() {
     auto const& opts = getOptions();
     auto const& gravity = opts.gravity;
-    bool const massPlane = opts.hydro.enabled;
+    bool const typePlane = opts.hydro.enabled;
     auto const resources = kickDeviceResources<order>();
     int const registerLimit = kickRegisterResidencyLimit(resources);
     int residency = gravity.cudaKickResidency > 0 ?
@@ -350,7 +352,7 @@ CudaKickArenaLayout kickSelectLayout() {
     while (residency >= 1) {
         int budget = kickSharedBudget(resources, residency);
         while (
-            budget > 0 && kickBuildLayout<order>(gravity, massPlane, residency, budget, layout)) {
+            budget > 0 && kickBuildLayout<order>(gravity, typePlane, residency, budget, layout)) {
             if (layout.totalBytes > 48 * 1024) {
                 CUDA_CHECK(cudaFuncSetAttribute((void const*) cudaKickKernel<order>,
                     cudaFuncAttributeMaxDynamicSharedMemorySize, layout.totalBytes));
@@ -368,7 +370,7 @@ CudaKickArenaLayout kickSelectLayout() {
                     "CUDA kick arena (FMM order %i): %i registers, %i static shared bytes, %i "
                     "blocks/SM "
                     "(register limit %i), budget %i, dynamic shared %i bytes: control %i, "
-                    "expansion %s, forces %s, particle tile %i (%s mass plane), multipole tile "
+                    "expansion %s, forces %s, particle tile %i (%s type plane), multipole tile "
                     "%i x %i bytes; list slab %i bytes per block (%i entries per list)\n",
                     order, resources.numberOfRegisters, resources.staticSharedBytes,
                     layout.residency, registerLimit, layout.budgetBytes, layout.totalBytes,
@@ -378,7 +380,7 @@ CudaKickArenaLayout kickSelectLayout() {
                         (std::string("shared tile ") + std::to_string(layout.sinkCapacity))
                             .c_str() :
                         "global whole bucket",
-                    layout.particleCapacity, layout.massPlane ? "with" : "without",
+                    layout.particleCapacity, layout.typePlane ? "with" : "without",
                     layout.multipoleCapacity, layout.multipoleStride, layout.listSlabBytes,
                     layout.listReserve);
                 return layout;
@@ -409,7 +411,7 @@ CudaKickArenaLayout const& kickArenaLayoutImpl() {
 template <int order>
 KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position* devY,
     Position* devZ, TreeNode* devTreeNodes, Vector<KickWorkitem> workitems,
-    detail::FmmForceOutput output, float const* sourceMasses) {
+    detail::FmmForceOutput output) {
     auto const& opts = getOptions();
     using Parameters = CudaKickParameters<order>;
 #if COSMICTIGER_PROFILE
@@ -541,7 +543,6 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
     data.sph = COSMICTIGER_WITH_SPH && opts.hydro.enabled;
     data.darkMatterMass = opts.initial.darkMatterMass;
     data.sphMass = opts.initial.gasMass;
-    data.sourceMasses = sourceMasses;
     data.type = data.sph ? &particlesType(0) : nullptr;
 #if COSMICTIGER_WITH_SPH
     bool const gasKick = data.sph && !kparams.forceOnly;
@@ -564,7 +565,7 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
         data.gz = saveAcceleration ? &particlesGravityAcceleration(kZi, 0) : nullptr;
         data.pot = savePotential && kparams.doPhi ? &particlesPot(0) : nullptr;
     }
-    ALWAYS_ASSERT(layout.massPlane == data.sph);
+    ALWAYS_ASSERT(layout.typePlane == data.sph);
 
     for (int i = 0; i < workitems.size(); i++) {
         Parameters params;

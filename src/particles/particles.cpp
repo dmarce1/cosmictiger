@@ -1,3 +1,4 @@
+// Particle allocation, reordering, initialization and distributed reads.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -886,36 +887,6 @@ void particlesSetMinrung(int minrung) {
     }
     for (auto& f : futs) {
         f.get();
-    }
-}
-
-/// Gather species-dependent masses from local particles or remote cache entries.
-void particlesGlobalReadMasses(ParticleGlobalRange range, float* masses, ParticleInteger offset) {
-    auto const& opts = getOptions();
-    if (range.range.first == range.range.second) {
-        return;
-    }
-    if (range.proc == hpxRank()) {
-        for (ParticleInteger i = range.range.first; i < range.range.second; ++i) {
-            masses[offset + i - range.range.first] = particlesMass(i);
-        }
-        return;
-    }
-    ParticleInteger const lineSize = opts.compute.particleCacheLineSize;
-    ParticleInteger const startLine = (range.range.first / lineSize) * lineSize;
-    ParticleInteger const stopLine = ((range.range.second - 1) / lineSize) * lineSize;
-    ParticleInteger destination = offset;
-    for (ParticleInteger line = startLine; line <= stopLine; line += lineSize) {
-        auto const* values = particlesCacheReadLine({range.proc, line});
-        auto const begin = std::max(line, range.range.first);
-        auto const end = std::min(line + lineSize, range.range.second);
-        for (ParticleInteger i = begin; i < end; ++i) {
-            auto const& value = values[i - line];
-            masses[destination++] = opts.hydro.enabled ?
-                float(value.type == kDarkMatterType ? opts.initial.darkMatterMass :
-                                                      opts.initial.gasMass) :
-                1.0f;
-        }
     }
 }
 

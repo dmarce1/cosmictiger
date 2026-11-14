@@ -19,6 +19,9 @@
 namespace detail {
 size_t checks = 0;
 double worst = 0;
+Options sourceOptions{};
+constexpr float kDarkMatterMass = 2.5f;
+constexpr float kGasMass = .75f;
 void check(double actual, double expected, double scale) {
     ++checks;
     double const error = std::abs(actual - expected) / std::max(scale, 1.e-250);
@@ -36,10 +39,10 @@ void cosmictigerAssert(char const*, bool value, char const*, int) {
         std::abort();
     }
 }
-// The fixture supplies explicit borrowed masses and positions; any fallback to
-// the application's particle store is an error, rather than a hidden oracle.
+// The fixture supplies borrowed types and positions with configured species
+// masses. The application's particle type store stays null to expose fallback.
 Options const& getOptions() {
-    std::abort();
+    return detail::sourceOptions;
 }
 char* particlesTy = nullptr;
 
@@ -49,7 +52,8 @@ template <int order>
 void cloud(double extent, bool subDoubleCenters) {
     namespace cartesian = cosmictiger::gravity::cartesian;
     std::array<std::array<Position, 9>, kDimensions> positions;
-    std::array<float, 9> masses{.125f, .75f, 1.25f, .375f, 2.5f, .25f, .625f, 1.75f, .875f};
+    std::array<char, 9> types{kDarkMatterType, kSphType, kStarType, kSphType, kDarkMatterType,
+        kStarType, kDarkMatterType, kSphType, kDarkMatterType};
     Vector3<Position> center, leftCenter, rightCenter;
     for (int axis = 0; axis < kDimensions; ++axis) {
         double const coordinate = 1. - .5 * extent;
@@ -61,7 +65,7 @@ void cloud(double extent, bool subDoubleCenters) {
             leftCenter[axis].raw() = center[axis].raw() - 4;
             rightCenter[axis].raw() = center[axis].raw() + 6;
         }
-        for (size_t i = 0; i < masses.size(); ++i) {
+        for (size_t i = 0; i < types.size(); ++i) {
             if (subDoubleCenters) {
                 positions[axis][i].raw() = center[axis].raw() - 13 + (i * (axis + 3)) % 29;
             } else {
@@ -70,8 +74,8 @@ void cloud(double extent, bool subDoubleCenters) {
         }
     }
     FmmSourceView sources;
-    sources.count = masses.size();
-    sources.masses = masses.data();
+    sources.count = types.size();
+    sources.types = sourceOptions.hydro.enabled ? types.data() : nullptr;
     for (int axis = 0; axis < kDimensions; ++axis) {
         sources.positions[axis] = positions[axis].data();
     }
@@ -83,17 +87,20 @@ void cloud(double extent, bool subDoubleCenters) {
     cartesian::Multipole<double> expected{};
     double maximumOffset = 0;
     double expectedZz = 0;
-    for (size_t i = 0; i < masses.size(); ++i) {
+    for (size_t i = 0; i < types.size(); ++i) {
+        double const mass = !sourceOptions.hydro.enabled ? 1.0 :
+            types[i] == kDarkMatterType                  ? kDarkMatterMass :
+                                                           kGasMass;
         Vector3<double> offset;
         for (int axis = 0; axis < kDimensions; ++axis) {
             offset[axis] = unwrappedDoubleDistance(positions[axis][i], center[axis]);
         }
         auto const scaledOffset = fmmScaleDisplacement(offset);
-        expectedZz += double(masses[i]) * scaledOffset[2] * scaledOffset[2];
+        expectedZz += mass * scaledOffset[2] * scaledOffset[2];
         for (int axis = 0; axis < kDimensions; ++axis) {
             maximumOffset = std::max(maximumOffset, std::abs(scaledOffset[axis]));
         }
-        cartesian::P2M(double(masses[i]), scaledOffset, expected);
+        cartesian::P2M(mass, scaledOffset, expected);
     }
     double rankScale = expected[0];
     for (int n = 0; n <= order - 2; ++n) {
@@ -143,10 +150,15 @@ void transport() {
 int main() {
     try {
         detail::transport();
-        for (int inverseExtent : {1, 2, 3, 4, 5, 7, 8, 12, 30, 32, 1024}) {
-            detail::cloud<kFmmOrder>(1. / inverseExtent, false);
+        detail::sourceOptions.initial.darkMatterMass = detail::kDarkMatterMass;
+        detail::sourceOptions.initial.gasMass = detail::kGasMass;
+        for (bool hydroEnabled : {false, true}) {
+            detail::sourceOptions.hydro.enabled = hydroEnabled;
+            for (int inverseExtent : {1, 2, 3, 4, 5, 7, 8, 12, 30, 32, 1024}) {
+                detail::cloud<kFmmOrder>(1. / inverseExtent, false);
+            }
+            detail::cloud<kFmmOrder>(1, true);
         }
-        detail::cloud<kFmmOrder>(1, true);
         std::printf(
             "Owned source fixed%d build order: %zu checks passed, worst rank-scaled error %.3e\n",
             kPositionBits, detail::checks, detail::worst);

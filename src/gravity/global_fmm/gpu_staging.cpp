@@ -1,4 +1,6 @@
 /*
+ Assemble local and imported source trees and particle data for CUDA gravity.
+
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
 
@@ -244,8 +246,7 @@ KickReturn globalFmmStageGpu(KickParameters params, Vector<KickWorkitem> workite
                 source.particleRange = range;
                 if (!treeSourceForestReadParticleRange(source, &particlesPos(kXi, localRange.first),
                         &particlesPos(kYi, localRange.first), &particlesPos(kZi, localRange.first),
-                        opts.hydro.enabled ? &particlesType(localRange.first) : nullptr, nullptr,
-                        0)) {
+                        opts.hydro.enabled ? &particlesType(localRange.first) : nullptr, 0)) {
                     return false;
                 }
             }

@@ -2,9 +2,11 @@
 
 // Test source payload serialization, frozen-generation checks and exchange failure cleanup.
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <exception>
 #include <stdexcept>
 #include <vector>
@@ -14,9 +16,12 @@
 
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
+#include <cosmictiger/gravity/direct_reference.hpp>
 #include <cosmictiger/gravity/global_fmm/distributed_tree.hpp>
 #include <cosmictiger/gravity/global_fmm/execution.hpp>
 #include <cosmictiger/gravity/global_fmm/source_forest.hpp>
+#include <cosmictiger/gravity/gravity.hpp>
+#include <cosmictiger/gravity/kernels/cartesian_tracefree_operators.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_SPH
 #include <cosmictiger/sph/particles.hpp>
@@ -36,6 +41,34 @@ char sourcePayloadType(int mode, ParticleInteger index) {
     return mode == 0 ? kDarkMatterType :
         mode == 1    ? (index % 2 == 0 ? kSphType : kStarType) :
                        char(index % 3);
+}
+
+Vector3<double> sourcePayloadForceReference(Vector3<Position> const& sink, int mode) {
+    Vector3<double> reference{};
+    for (ParticleInteger index = 0; index < kSourcePayloadParticles; ++index) {
+        Vector3<double> displacement;
+        for (int axis = 0; axis < kDimensions; ++axis) {
+            Position const source = double(index + 1 + axis) / 16.0;
+            displacement[axis] = doubleDistance(sink[axis], source);
+        }
+        // Fixture masses are specified independently of the production type lookup.
+        double const mass = mode == 0                         ? 1.0 :
+            sourcePayloadType(mode, index) == kDarkMatterType ? 2.5 :
+                                                                .75;
+        reference += directGravityReference(displacement, selectedGravityKernel<double>(),
+                         getOptions().gravity.smoothingLength, false) *
+            (mass * hpxSize());
+    }
+    return reference;
+}
+
+void requireSourcePayloadForce(
+    Vector3<double> const& actual, Vector3<double> const& expected, char const* message) {
+    auto const difference = actual - expected;
+    double const bound = 3.0e-6 * std::max(1.0, std::sqrt(expected.dot(expected)));
+    if (!(difference.dot(difference) <= bound * bound)) {
+        throw std::runtime_error(message);
+    }
 }
 
 void sourcePayloadWireTest() {
@@ -137,7 +170,16 @@ void verifySourcePayloadLocal(Vector<SourceRootDescriptor> roots, int mode) {
             throw std::runtime_error("Source export changed an owned particle species");
         }
     }
+    double expectedTotalMass = 0;
+    for (ParticleInteger index = 0; index < detail::kSourcePayloadParticles; ++index) {
+        expectedTotalMass += mode == 0                                ? 1.0 :
+            detail::sourcePayloadType(mode, index) == kDarkMatterType ? 2.5 :
+                                                                        .75;
+    }
     for (auto const& root : roots) {
+        if (root.multi[0] != expectedTotalMass) {
+            throw std::runtime_error("Source root mass does not match its particle species");
+        }
         if (root.root.proc == hpxRank()) {
             continue;
         }
@@ -147,10 +189,10 @@ void verifySourcePayloadLocal(Vector<SourceRootDescriptor> roots, int mode) {
         }
         std::array<Position, detail::kSourcePayloadParticles + 2> x{}, y{}, z{};
         std::array<char, detail::kSourcePayloadParticles + 2> types{};
-        std::array<float, detail::kSourcePayloadParticles + 2> masses{};
-        masses.front() = masses.back() = -1;
+        x.front() = x.back() = y.front() = y.back() = z.front() = z.back() = Position::max();
+        types.fill(-1);
         if (!treeSourceForestReadParticleRange(
-                *node, x.data(), y.data(), z.data(), types.data(), masses.data(), 1)) {
+                *node, x.data(), y.data(), z.data(), types.data(), 1)) {
             throw std::runtime_error("Source range headers did not recover all particle indices");
         }
         for (int output = 1; output <= detail::kSourcePayloadParticles; ++output) {
@@ -158,20 +200,52 @@ void verifySourcePayloadLocal(Vector<SourceRootDescriptor> roots, int mode) {
             char const expectedType = detail::sourcePayloadType(mode, original) == kDarkMatterType ?
                 kDarkMatterType :
                 kSphType;
-            float const expectedMass = mode == 0 ? 1.0f :
-                expectedType == kDarkMatterType  ? 2.5f :
-                                                   .75f;
             if (original < 0 || original >= detail::kSourcePayloadParticles ||
                 y[output].toDouble() != double(original + 2) / 16 ||
                 z[output].toDouble() != double(original + 3) / 16 ||
-                types[output] != expectedType || masses[output] != expectedMass) {
-                throw std::runtime_error("Imported source positions, mass class, or mass changed");
+                types[output] != expectedType) {
+                throw std::runtime_error("Imported source positions or mass class changed");
             }
         }
-        if (masses.front() != -1 || masses.back() != -1) {
+        if (x.front() != Position::max() || x.back() != Position::max() ||
+            y.front() != Position::max() || y.back() != Position::max() ||
+            z.front() != Position::max() || z.back() != Position::max() || types.front() != -1 ||
+            types.back() != -1) {
             throw std::runtime_error("Imported source read exceeded its output range");
         }
     }
+    Vector<TreeId> sourceRoots;
+    for (auto const& root : roots) {
+        sourceRoots.push_back(root.root);
+    }
+    TreeId const sinkRoot = roots[hpxRank()].root;
+    ForceVectors forces(detail::kSourcePayloadParticles);
+    for (ParticleInteger index = 0; index < detail::kSourcePayloadParticles; ++index) {
+        forces.phi[index] = forces.gx[index] = forces.gy[index] = forces.gz[index] = 0;
+    }
+    cpuGravityPp(forces, true, sinkRoot, sourceRoots, getOptions().gravity.smoothingLength);
+    for (ParticleInteger index = 0; index < detail::kSourcePayloadParticles; ++index) {
+        Vector3<Position> sink;
+        for (int axis = 0; axis < kDimensions; ++axis) {
+            sink[axis] = particlesPos(axis, index);
+        }
+        detail::requireSourcePayloadForce({forces.gx[index], forces.gy[index], forces.gz[index]},
+            detail::sourcePayloadForceReference(sink, mode),
+            "Species-derived CPU P2P force disagrees with the direct reference");
+    }
+    // Evaluate at the expansion center so this tests the actual P2L gather without
+    // truncation error. Every fixture source is separated from the center, and the
+    // six-source ranges also exercise partially filled SIMD packets.
+    namespace cartesian = cosmictiger::gravity::cartesian;
+    cartesian::Expansion<float> expansion{};
+    cpuGravityCp<kFmmOrder>(expansion, sourceRoots, sinkRoot, true);
+    cosmictiger::gravity::Field<float> field{};
+    cartesian::L2P(expansion, Vector3<float>{}, true, field);
+    detail::requireSourcePayloadForce(
+        {kScaleFactor2 * field.accelerationX(), kScaleFactor2 * field.accelerationY(),
+            kScaleFactor2 * field.accelerationZ()},
+        detail::sourcePayloadForceReference(treeGetNode(sinkRoot)->pos, mode),
+        "Species-derived CPU P2L force disagrees with the direct reference");
 }
 HPX_PLAIN_ACTION(verifySourcePayloadLocal, VerifySourcePayloadLocalAction);
 
