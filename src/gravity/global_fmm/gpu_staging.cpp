@@ -12,7 +12,6 @@
 #include <exception>
 #include <memory>
 #include <mutex>
-#include <set>
 #include <stdexcept>
 
 #include <hpx/threading_base/annotated_function.hpp>
@@ -76,8 +75,8 @@ KickReturn globalFmmStageGpu(KickParameters params, Vector<KickWorkitem> workite
     profile::ScopedWork gpuPhase(profile::WorkPhase::KickGpuGroupSources, profileEnabled);
 
     struct GlobalParticleRange {
-        int rank;
-        Pair<ParticleInteger> range;
+        int rank;                       // Locality owning the source particles.
+        Pair<ParticleInteger> range;    // Half-open range in that owner's particle array.
         bool operator==(GlobalParticleRange other) const {
             return rank == other.rank && range == other.range;
         }
@@ -130,8 +129,8 @@ KickReturn globalFmmStageGpu(KickParameters params, Vector<KickWorkitem> workite
     }
     gpuPhase.next(profile::WorkPhase::KickGpuCollectSources);
     struct ParticleRequest {
-        Vector<Vector<Pair<ParticleInteger>>> data;
-        size_t count;
+        Vector<Vector<Pair<ParticleInteger>>> data;    // Batches of particle-bearing leaf ranges.
+        size_t count;    // Particles in the last batch, bounded except for an oversized leaf.
         ParticleRequest() {
             count = 0;
             data.resize(1);
@@ -141,17 +140,14 @@ KickReturn globalFmmStageGpu(KickParameters params, Vector<KickWorkitem> workite
     std::unordered_map<int, ParticleRequest> particleRequests;
     std::unordered_map<GlobalParticleRange, Pair<ParticleInteger>, GlobalParticleRangeHash>
         particleMap;
-    std::set<TreeId> remoteRoots;
     ParticleInteger particleIndex = particlesSize();
     Vector<hpx::future<void>> futs2;
-    Vector<hpx::future<void>> futs3;
     size_t const originalParticleCount = particlesSize();
     size_t const maximumParticlesPerRequest = 64 * 1024 * 1024;
     Vector<hpx::future<Vector<TreeId>>> futs0;
     Vector<TreeId> trees;
     std::unique_ptr<TreeStagingArena> stagedTree;
     TreeNode* treeNodes = nullptr;
-    std::function<void(int, ParticleInteger)> adjustParticleReferences;
     hpx::future<void> sortFuture;
     futs0.reserve(numberOfThreads);
     futs2.reserve(std::max(numberOfThreads, int(hpxHardwareConcurrency())));
@@ -161,39 +157,13 @@ KickReturn globalFmmStageGpu(KickParameters params, Vector<KickWorkitem> workite
             auto const& ids = idsByDepth[depth];
             for (int proc = 0; proc < numberOfThreads; proc++) {
                 futs0.push_back(hpx::async(hpx::annotated_function(
-                    [proc, numberOfThreads, &ids, &treeMap, &mutex, &particleRequests, &particleMap,
-                        &particleIndex, &remoteRoots]() {
+                    [proc, numberOfThreads, &ids, &treeMap]() {
                         Vector<TreeId> trees;
                         int const b = (size_t) proc * ids.size() / numberOfThreads;
                         int const e = (size_t) (proc + 1) * ids.size() / numberOfThreads;
                         for (int i = b; i < e; i++) {
                             if (treeMap.find(ids[i]) == treeMap.end()) {
-                                TreeNode const* node = treeGetNode(ids[i]);
                                 addTreeNode(trees, ids[i]);
-                                int const rank = node->processRange.first;
-                                if (rank != hpxRank() && node->numberOfParticles() != 0) {
-                                    auto const range = node->particleRange;
-                                    auto const thisCount = range.second - range.first;
-                                    GlobalParticleRange gpr;
-                                    gpr.rank = rank;
-                                    gpr.range = range;
-                                    size_t const numberOfParticles = node->numberOfParticles();
-                                    std::unique_lock<SharedMutexType> lock(particlesSharedMutex());
-                                    auto& entry = particleRequests[rank];
-                                    entry.data.back().push_back(range);
-                                    entry.count += thisCount;
-                                    particleMap[gpr].first = particleIndex;
-                                    particleMap[gpr].second = particleIndex + numberOfParticles;
-                                    particleIndex += numberOfParticles;
-                                    particlesResize(particleIndex, false);
-                                    remoteRoots.insert(ids[i]);
-                                    if (entry.count > maximumParticlesPerRequest) {
-                                        size_t count = entry.count;
-                                        ParticleInteger index = 0;
-                                        entry.count = 0;
-                                        entry.data.resize(entry.data.size() + 1);
-                                    }
-                                }
                             }
                         }
                         return trees;
@@ -217,6 +187,40 @@ KickReturn globalFmmStageGpu(KickParameters params, Vector<KickWorkitem> workite
                 }
             }
             futs0.resize(0);
+        }
+        // A collapsed terminal represents a source count and moments, with no
+        // coordinate payload. Stage each true remote leaf independently so a
+        // parent containing both leaf data and terminals need not be contiguous
+        // in the staging particle array. Internal/terminal ranges keep their
+        // owner indices for counts only; CUDA never dereferences those ranges.
+        for (auto const id : trees) {
+            if (id.proc == hpxRank()) {
+                continue;
+            }
+            TreeNode const& node = *treeGetNode(id);
+            if (!node.leaf || node.sourceKind == kTreeSourceMultipoleTerminal ||
+                node.numberOfParticles() == 0) {
+                continue;
+            }
+            GlobalParticleRange const globalRange{node.processRange.first, node.particleRange};
+            if (particleMap.contains(globalRange)) {
+                continue;
+            }
+            auto& request = particleRequests[globalRange.rank];
+            ParticleInteger const count = node.numberOfParticles();
+            if (request.count != 0 && request.count + count > maximumParticlesPerRequest) {
+                request.data.emplace_back();
+                request.count = 0;
+            }
+            request.data.back().push_back(node.particleRange);
+            request.count += count;
+            particleMap.emplace(
+                globalRange, Pair<ParticleInteger>{particleIndex, particleIndex + count});
+            particleIndex += count;
+        }
+        {
+            std::unique_lock<SharedMutexType> lock(particlesSharedMutex());
+            particlesResize(particleIndex, false);
         }
         gpuPhase.next(profile::WorkPhase::KickGpuRemap);
         size_t const remoteNodeCount = std::count_if(
@@ -285,7 +289,7 @@ KickReturn globalFmmStageGpu(KickParameters params, Vector<KickWorkitem> workite
                                                    GlobalParticleRange gpr;
                                                    gpr.rank = rank;
                                                    gpr.range = ranges[k];
-                                                   auto localRange = particleMap[gpr];
+                                                   auto const localRange = particleMap.at(gpr);
                                                    auto const numberOfParticles =
                                                        localRange.second - localRange.first;
                                                    for (int dim = 0; dim < kDimensions; dim++) {
@@ -328,8 +332,8 @@ KickReturn globalFmmStageGpu(KickParameters params, Vector<KickWorkitem> workite
         for (int proc = 0; proc < numberOfThreads; proc++) {
             futs2.push_back(hpx::async(HPX_PRIORITY_HI,
                 hpx::annotated_function(
-                    [proc, numberOfThreads, &treeMap, &treeNodes, treeNodesRemoteBegin,
-                        treeNodesRemoteEnd]() {
+                    [proc, numberOfThreads, &treeMap, &particleMap, &treeNodes,
+                        treeNodesRemoteBegin, treeNodesRemoteEnd]() {
                         for (size_t i = treeNodesRemoteBegin + proc; i < treeNodesRemoteEnd;
                             i += numberOfThreads) {
                             if (treeNodes[i].children[kLeftChild].index != -1) {
@@ -342,6 +346,13 @@ KickReturn globalFmmStageGpu(KickParameters params, Vector<KickWorkitem> workite
                                 left.index = treeMap[left];
                                 right.index = treeMap[right];
                             }
+                            auto& node = treeNodes[i];
+                            if (node.leaf && node.sourceKind != kTreeSourceMultipoleTerminal &&
+                                node.numberOfParticles() != 0) {
+                                GlobalParticleRange const globalRange{
+                                    node.processRange.first, node.particleRange};
+                                node.particleRange = particleMap.at(globalRange);
+                            }
                         }
                     },
                     "gravity.gpuStage.remapTreeNodes")));
@@ -351,39 +362,6 @@ KickReturn globalFmmStageGpu(KickParameters params, Vector<KickWorkitem> workite
             future.get();
         }
         futs2.resize(0);
-        adjustParticleReferences = [&adjustParticleReferences, &treeNodes](
-                                       int index, ParticleInteger offset) -> void {
-            auto& node = treeNodes[index];
-            node.particleRange.first += offset;
-            node.particleRange.second += offset;
-            ASSERT(node.particleRange.first >= 0);
-            ASSERT(node.particleRange.second <= particlesSize());
-            if (node.children[kLeftChild].index != -1) {
-                adjustParticleReferences(node.children[kLeftChild].index, offset);
-                adjustParticleReferences(node.children[kRightChild].index, offset);
-            }
-        };
-        futs3.reserve(remoteRoots.size());
-        for (auto i = remoteRoots.begin(); i != remoteRoots.end(); i++) {
-            futs3.push_back(hpx::async(HPX_PRIORITY_HI,
-                hpx::annotated_function(
-                    [i, &treeMap, &particleMap, adjustParticleReferences, &treeNodes,
-                        treeNodesRemoteBegin]() {
-                        GlobalParticleRange gpr;
-                        ASSERT(treeMap.find(*i) != treeMap.end());
-                        int index = treeMap[*i];
-                        ASSERT(index >= treeNodesRemoteBegin);
-                        auto& node = treeNodes[index];
-                        gpr.rank = node.processRange.first;
-                        gpr.range = node.particleRange;
-                        ASSERT(particleMap.find(gpr) != particleMap.end());
-                        auto localRange = particleMap[gpr];
-                        ParticleInteger offset = localRange.first - gpr.range.first;
-                        ASSERT(treeNodes[index].particleRange.first == gpr.range.first);
-                        adjustParticleReferences(index, offset);
-                    },
-                    "gravity.gpuStage.remapParticleRanges")));
-        }
         for (int proc = 0; proc < numberOfThreads; proc++) {
             futs2.push_back(hpx::async(HPX_PRIORITY_HI,
                 hpx::annotated_function(
@@ -418,11 +396,7 @@ KickReturn globalFmmStageGpu(KickParameters params, Vector<KickWorkitem> workite
                 return treeGetNode(a.self)->particleRange.first <
                     treeGetNode(b.self)->particleRange.first;
             });
-        hpx::wait_all(futs3.begin(), futs3.end());
         hpx::wait_all(futs1.begin(), futs1.end());
-        for (auto& future : futs3) {
-            future.get();
-        }
         for (auto& future : futs1) {
             future.get();
         }
@@ -456,7 +430,6 @@ KickReturn globalFmmStageGpu(KickParameters params, Vector<KickWorkitem> workite
     join(futs0);
     join(futs1);
     join(futs2);
-    join(futs3);
     if (sortFuture.valid()) {
         sortFuture.wait();
     }

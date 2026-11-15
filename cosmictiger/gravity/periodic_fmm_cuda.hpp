@@ -6,6 +6,8 @@
 #include <cosmictiger/gravity/periodic_fmm.hpp>
 
 namespace detail {
+/// Consume accepted periodic M2L terms and retain unresolved source identities for
+/// sink refinement, preserving whether the Newtonian term is still pending.
 template <int order>
 __device__ FlopCount cudaPeriodicFmm(CudaKickData const& data, TreeNode const& sink,
     CudaKickControl<order>& control, float theta, float smoothingLength, bool doPotential,
@@ -51,10 +53,18 @@ __device__ FlopCount cudaPeriodicFmm(CudaKickData const& data, TreeNode const& s
                         }
                     }
                     bool const unresolved = !selected[0] && !selected[1];
-                    selected[2] =
-                        unresolved && !source.leaf && (sink.leaf || source.radius >= sink.radius);
-                    selected[3] = unresolved && !selected[2];
-                    ALWAYS_ASSERT(!unresolved || !sink.leaf || !source.leaf);
+                    if (unresolved && source.sourceKind == kTreeSourceMultipoleTerminal) {
+                        // A terminal cannot open or supply particles. Neither periodic
+                        // term was consumed, so defer this same echeck to sink children.
+                        // Rejection at a true sink leaf violates the export certificate.
+                        ALWAYS_ASSERT(!sink.leaf && "CUDA terminal failed periodic certificate");
+                        selected[3] = true;
+                    } else {
+                        selected[2] = unresolved && !source.leaf &&
+                            (sink.leaf || source.radius >= sink.radius);
+                        selected[3] = unresolved && !selected[2];
+                        ALWAYS_ASSERT(!unresolved || !sink.leaf || !source.leaf);
+                    }
                 }
             }
             Array<int, 4> offsets, totals;

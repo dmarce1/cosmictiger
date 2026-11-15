@@ -12,7 +12,7 @@
 #include <cosmictiger/gravity/geometric_tree_geometry.hpp>
 #include <cosmictiger/gravity/tree.hpp>
 
-inline constexpr int kGeometricSourceForestVersion = 3;
+inline constexpr int kGeometricSourceForestVersion = 4;
 
 struct SourceRootDescriptor {
     TreeId root{};    // Owner locality and arena index of its independent tree root.
@@ -90,12 +90,13 @@ struct SourceExportView {
     int destinationEwaldDepth = 0;    // Receiver's minimum nonempty-leaf depth for certification.
     float theta = 0;                // Receiver's opening angle used to certify collapsed subtrees.
     float smoothingLength = 0;      // Receiver's gravity smoothing support in unit-box coordinates.
-    bool destinationGpu = false;    // Include particle data for coarse terminals on GPU walks.
+    bool destinationGpu = false;    // Receiver's traversal backend, checked for compatibility.
     Range<double> destinationCover{};    // Receiver's occupied Ewald-depth cell bounds.
     Vector<SourceExportNode> nodes;      // Exported tree in parent-before-children traversal order.
-    // Payload order follows particle-bearing leaves/terminals in nodes. Their
+    // Payload order follows true particle leaves in nodes. Their
     // existing particleRange supplies each source index without per-particle IDs.
-    Vector<SourceExportParticle> particles;    // Position payload for particle-bearing terminals.
+    Vector<SourceExportParticle>
+        particles;    // Leaf positions; multipole terminals omit particles.
     char uniformParticleType = kDarkMatterType;    // Shared mass class when particleTypes is empty.
     Vector<char> particleTypes;    // Per-particle mass classes for mixed payloads; stars use gas.
 

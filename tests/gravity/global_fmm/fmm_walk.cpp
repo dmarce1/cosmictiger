@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <exception>
 #include <format>
 #include <iostream>
 #include <limits>
@@ -15,6 +16,9 @@
 #include <cosmictiger/gravity/direct_reference.hpp>
 #include <cosmictiger/gravity/global_fmm/distributed_tree.hpp>
 #include <cosmictiger/gravity/global_fmm/execution.hpp>
+#include <cosmictiger/gravity/global_fmm/measurement.hpp>
+#include <cosmictiger/gravity/global_fmm/source_forest.hpp>
+#include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/tree.hpp>
 #include <cosmictiger/gravity/tree_build.hpp>
 #include <cosmictiger/math/kernel.hpp>
@@ -23,6 +27,28 @@
 
 namespace detail {
 constexpr int kForceParticles = 96;
+// Eight symmetric corner shells plus the center keep distant depth-14
+// quadrants internal at the tighter opening angle used by this fixture.
+constexpr int kTerminalClusterParticles = 65;
+constexpr float kTerminalFixtureTheta = .25f;
+
+int terminalFixtureCount(int rank) {
+    return kTerminalClusterParticles * (rank == 1 ? 2 : 1);
+}
+
+Vector3<Position> terminalFixturePosition(int rank, int index) {
+    int const cluster = rank == 0 ? 1 : rank == 1 ? index / kTerminalClusterParticles : rank % 8;
+    int const point = index % kTerminalClusterParticles;
+    Vector3<Position> position;
+    for (int axis = 0; axis < kDimensions; ++axis) {
+        double const center = .15625 + .375 * ((cluster >> axis) & 1);
+        double const offset = point == 0 ?
+            0 :
+            (1 + (point - 1) / 8) * (((point - 1) >> axis) & 1 ? 1.0 : -1.0) / 1024.0;
+        position[axis] = center + offset;
+    }
+    return position;
+}
 
 Vector3<Position> forcePosition(int index, bool imageBoundary) {
     if (imageBoundary) {
@@ -134,8 +160,11 @@ void compareGlobalForces(
             double const bound = 2.0e-5 * std::max(1.0, std::abs(reference[rank][index]));
             if (!(std::abs(reference[rank][index] - imported[rank][index]) <= bound)) {
                 throw std::runtime_error(std::format(
-                    "Geometric import differs from complete-source reference at rank {} value {}",
-                    rank, index));
+                    "Geometric import differs from complete-source reference at rank {} value {} "
+                    "(particle {} field {}): reference={} imported={} difference={} bound={}",
+                    rank, index, index / (kDimensions + 1), index % (kDimensions + 1),
+                    reference[rank][index], imported[rank][index],
+                    imported[rank][index] - reference[rank][index], bound));
             }
         }
     }
@@ -145,6 +174,241 @@ uint64_t geometricFallbackLocal() {
     return treeSourceForestFallbackCount();
 }
 HPX_PLAIN_ACTION(geometricFallbackLocal, GeometricFallbackLocalAction);
+
+void initializeTerminalPayloadTest() {
+    int const count = detail::terminalFixtureCount(hpxRank());
+    particlesResize(count);
+    for (int index = 0; index < count; ++index) {
+        auto const position = detail::terminalFixturePosition(hpxRank(), index);
+        for (int axis = 0; axis < kDimensions; ++axis) {
+            particlesPos(axis, index) = position[axis];
+            particlesVel(axis, index) = 0;
+        }
+        particlesRung(index) = 0;
+    }
+}
+HPX_PLAIN_ACTION(initializeTerminalPayloadTest, InitializeTerminalPayloadTestAction);
+
+Array<double, 3> verifyTerminalPayloadForce() {
+    Array<double, 3> sums{};
+    for (ParticleInteger index = 0; index < particlesOwnedSize(); ++index) {
+        bool center = false;
+        for (int source = 0; source < detail::terminalFixtureCount(hpxRank());
+            source += detail::kTerminalClusterParticles) {
+            auto const position = detail::terminalFixturePosition(hpxRank(), source);
+            bool matches = true;
+            for (int axis = 0; axis < kDimensions; ++axis) {
+                matches = matches && particlesPos(axis, index) == position[axis];
+            }
+            center = center || matches;
+        }
+        if (!center) {
+            continue;
+        }
+        // Symmetric local shells cancel at their centers, exposing a lost
+        // distant multipole even when the other sinks have strong local forces.
+        Vector3<double> reference{};
+        for (int rank = 0; rank < hpxSize(); ++rank) {
+            for (int source = 0; source < detail::terminalFixtureCount(rank); ++source) {
+                auto const position = detail::terminalFixturePosition(rank, source);
+                Vector3<double> displacement;
+                for (int axis = 0; axis < kDimensions; ++axis) {
+                    displacement[axis] = doubleDistance(particlesPos(axis, index), position[axis]);
+                }
+                reference += detail::directGravityReference(displacement,
+                    selectedGravityKernel<double>(), getOptions().gravity.smoothingLength);
+            }
+        }
+        for (int axis = 0; axis < kDimensions; ++axis) {
+            double const error = particlesGravityAcceleration(axis, index) - reference[axis];
+            sums[0] += error * error;
+            sums[1] += reference[axis] * reference[axis];
+        }
+        ++sums[2];
+    }
+    return sums;
+}
+HPX_PLAIN_ACTION(verifyTerminalPayloadForce, VerifyTerminalPayloadForceAction);
+
+void geometricTerminalPayloadTest() {
+    if (hpxSize() < 2) {
+        return;
+    }
+    auto const savedOptions = getOptions();
+    auto options = savedOptions;
+    options.compute.bucketSize = 8;
+    options.initial.numberOfParticles = detail::kTerminalClusterParticles * (hpxSize() + 1);
+    options.gravity.smoothingLength = .02;
+    // Hand the whole owned tree to CUDA before a CPU walk can consume terminals.
+    options.gravity.cudaKickHandoffBlocks = 1;
+    options.gravity.cudaKickFineHandoffBlocks = 0;
+    setOptions(options);
+    std::exception_ptr failure;
+    try {
+        auto initialized =
+            detail::geometricLaunchAndDrain<void>(hpxLocalities().size(), [](size_t rank) {
+                return hpx::async<InitializeTerminalPayloadTestAction>(hpxLocalities()[rank]);
+            });
+        for (auto& future : initialized) {
+            future.get();
+        }
+        // Preserve the deliberate owner geometry: rank zero is close to only
+        // the second of rank one's two internal clusters.
+        particlesSortByRung(0);
+        fmmMeasurementBegin();
+        treeCreateGeometric(TreeCreateParameters(0, detail::kTerminalFixtureTheta));
+        Vector<TreeId> pending{treeGeometricRoots()[1].root};
+        ParticleInteger firstParticle = std::numeric_limits<ParticleInteger>::max();
+        ParticleInteger firstTerminalEnd = std::numeric_limits<ParticleInteger>::max();
+        while (!pending.empty()) {
+            auto const id = pending.back();
+            pending.pop_back();
+            auto const* node = treeSourceForestImportedNode(id);
+            if (node == nullptr) {
+                throw std::runtime_error("Terminal payload fixture lost an imported node");
+            }
+            if (!node->leaf) {
+                for (auto const child : node->children) {
+                    pending.push_back(child);
+                }
+                continue;
+            }
+            if (node->numberOfParticles() == 0) {
+                continue;
+            }
+            Vector<Position> x(node->numberOfParticles());
+            Vector<Position> y(node->numberOfParticles());
+            Vector<Position> z(node->numberOfParticles());
+            bool const readable =
+                treeSourceForestReadParticleRange(*node, x.data(), y.data(), z.data(), nullptr, 0);
+            if (node->sourceKind == kTreeSourceMultipoleTerminal) {
+                if (readable) {
+                    throw std::runtime_error("Multipole terminal retained a particle payload");
+                }
+                firstTerminalEnd = std::min(firstTerminalEnd, node->particleRange.second);
+            } else {
+                if (node->sourceKind != kTreeSourceParticleLeaf || !readable) {
+                    throw std::runtime_error("Fine source leaf lost its particle payload");
+                }
+                firstParticle = std::min(firstParticle, node->particleRange.first);
+            }
+        }
+        if (firstParticle == std::numeric_limits<ParticleInteger>::max() ||
+            firstTerminalEnd > firstParticle) {
+            throw std::runtime_error(
+                "Terminal fixture requires an omitted range before fine leaves");
+        }
+
+        KickParameters parameters;
+        parameters.htime = true;
+        parameters.theta = detail::kTerminalFixtureTheta;
+        parameters.minRung = 0;
+        parameters.t0 = 1;
+        parameters.gm = 1;
+        parameters.eta = options.gravity.timestepEta;
+        parameters.gravitySmoothingLength = options.gravity.smoothingLength;
+        parameters.saveForce = true;
+        parameters.firstCall = true;
+        parameters.gpu = options.gravity.cuda;
+        parameters.nodeLoad = 1;
+        parameters.ascending = parameters.descending = false;
+        parameters.top = true;
+        parameters.doPhi = true;
+        auto const directErrors = [] {
+            Array<double, 3> sums{};
+            for (auto const& locality : hpxLocalities()) {
+                auto const part = hpx::async<VerifyTerminalPayloadForceAction>(locality).get();
+                for (size_t index = 0; index < sums.size(); ++index) {
+                    sums[index] += part[index];
+                }
+            }
+            return sums;
+        };
+        fmmMeasurementPrepareWalk();
+        kickSourceForest(parameters, true);
+        auto const reference = captureGlobalForces();
+        auto const referenceErrors = directErrors();
+        // Clear complete-source caches so they cannot conceal missing imports.
+        fmmMeasurementPrepareWalk();
+        if (options.gravity.cuda) {
+            setGravityCounterUse(true);
+            resetGravityCounters();
+        }
+        kickSourceForest(parameters);
+        auto const imported = captureGlobalForces();
+        auto const sums = directErrors();
+        std::cout << std::format(
+                         "Terminal center direct reference: complete error={} imported error={} "
+                         "reference={} centers={} ({} localities)\n",
+                         std::sqrt(referenceErrors[0]), std::sqrt(sums[0]), std::sqrt(sums[1]),
+                         sums[2], hpxSize())
+                  << std::flush;
+        compareGlobalForces(reference, imported);
+        auto const measurements = fmmMeasurementRead();
+        for (auto const& rank : measurements) {
+            if (rank.fallbackRequests != 0 ||
+                hpx::async<GeometricFallbackLocalAction>(hpxLocalities()[rank.rank]).get() != 0) {
+                throw std::runtime_error("Payload-free source walk required a staging fallback");
+            }
+            if (options.gravity.cuda &&
+                !(rank.seconds[size_t(FmmMeasurementPhase::GpuStaging)] > 0)) {
+                throw std::runtime_error(
+                    "Terminal payload fixture did not reach CUDA on every rank");
+            }
+            for (size_t owner = 0; owner < rank.peers.size(); ++owner) {
+                if (int(owner) == rank.rank) {
+                    continue;
+                }
+                auto const& peer = rank.peers[owner];
+                if (peer.coveredSources != uint64_t(detail::terminalFixtureCount(owner)) ||
+                    peer.importedParticles + peer.coarseSources != peer.coveredSources ||
+                    peer.demandSentMessages != 0 || peer.demandReceivedMessages != 0) {
+                    throw std::runtime_error(
+                        "Terminal source cover used extra particles or demand reads");
+                }
+            }
+        }
+        auto const& mixed = measurements[0].peers[1];
+        if (mixed.coarseSources == 0 || mixed.importedParticles == 0) {
+            throw std::runtime_error(
+                "Terminal payload fixture did not mix coarse and fine sources");
+        }
+        double close = 0;
+        double direct = 0;
+        getGravityCounters(close, direct);
+        if (options.gravity.cuda && !(close + direct > 0)) {
+            throw std::runtime_error("Terminal payload fixture did not execute CUDA interactions");
+        }
+        // Match the configurable-order convergence bound used by the main
+        // force fixture, retaining a floor for cancellation in these centers.
+        double const bound = std::max(2.0e-4, std::pow(double(parameters.theta), kFmmOrder - 1));
+        if (referenceErrors[2] != hpxSize() + 1 || sums[2] != hpxSize() + 1 ||
+            !(std::sqrt(std::max(referenceErrors[0], sums[0])) <=
+                bound * std::sqrt(sums[1]) + 1.0e-5)) {
+            throw std::runtime_error(std::format("Terminal payload force differs from direct "
+                                                 "gravity: complete error={} imported error={} "
+                                                 "reference={} centers={}",
+                std::sqrt(referenceErrors[0]), std::sqrt(sums[0]), std::sqrt(sums[1]), sums[2]));
+        }
+        std::cout
+            << std::format(
+                   "Payload-free terminal {} regression passed: {} coarse and {} particle sources; "
+                   "GPU close/direct={}/{} ({} localities)\n",
+                   options.gravity.cuda ? "CUDA" : "CPU", mixed.coarseSources,
+                   mixed.importedParticles, close, direct, hpxSize())
+            << std::flush;
+    } catch (...) {
+        failure = std::current_exception();
+    }
+    setGravityCounterUse(false);
+    fmmMeasurementEnd();
+    treeRetireGeometric(true);
+    particlesCacheFree();
+    setOptions(savedOptions);
+    if (failure) {
+        std::rethrow_exception(failure);
+    }
+}
 
 void geometricHierarchicalSourcesTest();
 void geometricPendingKickTest();
@@ -296,6 +560,7 @@ void fmmWalkTest() {
     if (!passed) {
         throw std::runtime_error("Global FMM disagrees with independent periodic direct force");
     }
+    geometricTerminalPayloadTest();
     geometricHierarchicalSourcesTest();
     geometricPendingKickTest();
     geometricStagingCapacityTest();

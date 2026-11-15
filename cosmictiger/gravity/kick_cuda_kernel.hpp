@@ -567,11 +567,13 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                                 fmmLocalDegree(order)>;
                     }
                 }
-                flops += detail::cudaPeriodicFmm(data, self, control, globalParams.theta,
-                    smoothingLength, globalParams.doPhi, expansion);
                 ParticleInteger const numberOfSinks =
                     self.particleRange.second - self.particleRange.first;
                 if (numberOfSinks) {
+                    // Empty sink branches have no force work or terminal-certificate
+                    // obligations; only occupied sinks consume or defer source terms.
+                    flops += detail::cudaPeriodicFmm(data, self, control, globalParams.theta,
+                        smoothingLength, globalParams.doPhi, expansion);
                     work.next(profile::DevicePhase::KickTraversal);
                     nextlist.resize(0);
                     leaflist.resize(0);
@@ -601,6 +603,8 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                             if (i < checks.size()) {
                                 TreeNode const& other = treeNodes[checks[i]];
                                 if (other.numberOfParticles()) {
+                                    bool const terminal =
+                                        other.sourceKind == kTreeSourceMultipoleTerminal;
                                     for (int dim = 0; dim < kDimensions; dim++) {
                                         dx[dim] = fmmPositionDifference(
                                             self.pos[dim], other.pos[dim], &geometryFlops);    // 3
@@ -613,7 +617,8 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                                             0.0f, smoothingLength, thetainv, &acceptanceFlops);
                                     flops += 5 + acceptanceFlops;    // Float norm; geometry counted
                                                                      // separately.
-                                    if (!acceptance.cellCell && (other.leaf || self.leaf)) {
+                                    if (!terminal && !acceptance.cellCell &&
+                                        (other.leaf || self.leaf)) {
                                         acceptance =
                                             computeFmmAcceptance(r2, self.radius, other.radius,
                                                 fmmBoxDistanceSquared(
@@ -626,23 +631,37 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                                     }
                                     // These checks inherited a separately accepted Ewald
                                     // correction whose cells use one periodic image.
-                                    if (!acceptance.cellCell && self.leaf && other.leaf) {
-                                        flops += 2 + int(acceptance.particleCell) +
-                                            int(acceptance.cellParticle);
-                                    }
-                                    auto const interaction = selectFmmInteraction(
-                                        bool(acceptance.cellCell), bool(acceptance.particleCell),
-                                        bool(acceptance.cellParticle), self.leaf, other.leaf,
-                                        self.radius, other.radius, int(self.numberOfParticles()),
-                                        int(other.numberOfParticles()),
-                                        FmmHybridCost<order>::kHybridPerParticle_,
-                                        FmmHybridCost<order>::kParticlePair_);
-                                    sw[kCc] = interaction == FmmInteraction::CellCell;
-                                    sw[kPc] = interaction == FmmInteraction::ParticleCell;
-                                    sw[kCp] = interaction == FmmInteraction::CellParticle;
-                                    if (!sw[kCc] && !sw[kCp] && !sw[kPc]) {
-                                        cudaOpenOrDefer(globalParams.openLargerCell, self, other,
-                                            sw[kNext], sw[kLeaf], sw[kBoth]);
+                                    if (terminal) {
+                                        // A terminal has moments and a source count, but no
+                                        // particle storage or children. Keep its Newtonian
+                                        // term pending until an occupied sink accepts M2L.
+                                        // The certificate must succeed at a true sink leaf;
+                                        // a device trap reaches the host's checked stream wait.
+                                        ALWAYS_ASSERT((!self.leaf || acceptance.cellCell) &&
+                                            "CUDA terminal failed Newtonian certificate");
+                                        sw[kCc] = bool(acceptance.cellCell);
+                                        sw[kLeaf] = !sw[kCc];
+                                    } else {
+                                        if (!acceptance.cellCell && self.leaf && other.leaf) {
+                                            flops += 2 + int(acceptance.particleCell) +
+                                                int(acceptance.cellParticle);
+                                        }
+                                        auto const interaction =
+                                            selectFmmInteraction(bool(acceptance.cellCell),
+                                                bool(acceptance.particleCell),
+                                                bool(acceptance.cellParticle), self.leaf,
+                                                other.leaf, self.radius, other.radius,
+                                                int(self.numberOfParticles()),
+                                                int(other.numberOfParticles()),
+                                                FmmHybridCost<order>::kHybridPerParticle_,
+                                                FmmHybridCost<order>::kParticlePair_);
+                                        sw[kCc] = interaction == FmmInteraction::CellCell;
+                                        sw[kPc] = interaction == FmmInteraction::ParticleCell;
+                                        sw[kCp] = interaction == FmmInteraction::CellParticle;
+                                        if (!sw[kCc] && !sw[kCp] && !sw[kPc]) {
+                                            cudaOpenOrDefer(globalParams.openLargerCell, self,
+                                                other, sw[kNext], sw[kLeaf], sw[kBoth]);
+                                        }
                                     }
                                 }
                             }

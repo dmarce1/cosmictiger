@@ -261,7 +261,7 @@ void exportNode(SourceExportView& view, TreeId id, GeometricTreeCell const& cell
         node.sourceKind = node.leaf ? kTreeSourceParticleLeaf : kTreeSourceInternal;
     }
     view.nodes.push_back(SourceExportNode{id, cell, node});
-    if (node.numberOfParticles() == 0 || (terminal && !destination.gpu)) {
+    if (node.numberOfParticles() == 0 || terminal) {
         return;
     }
     if (node.leaf) {
@@ -393,8 +393,7 @@ void installExport(SourceExportView view) {
         } else {
             throw std::runtime_error("Unknown geometric source node kind");
         }
-        if (node.sourceKind == kTreeSourceParticleLeaf ||
-            (node.sourceKind == kTreeSourceMultipoleTerminal && destination.gpu)) {
+        if (node.sourceKind == kTreeSourceParticleLeaf) {
             size_t const count = node.numberOfParticles();
             if (count > view.particles.size() - particleOffset) {
                 throw std::runtime_error("Geometric source leaf is missing particles");
@@ -414,8 +413,7 @@ void installExport(SourceExportView view) {
     particleOffset = 0;
     for (auto& record : view.nodes) {
         auto const& node = record.node;
-        if (node.sourceKind == kTreeSourceParticleLeaf ||
-            (node.sourceKind == kTreeSourceMultipoleTerminal && destination.gpu)) {
+        if (node.sourceKind == kTreeSourceParticleLeaf) {
             for (ParticleInteger index = node.particleRange.first;
                 index < node.particleRange.second; ++index, ++particleOffset) {
                 char const type = view.particleTypes.empty() ? view.uniformParticleType :
