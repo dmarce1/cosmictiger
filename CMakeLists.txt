@@ -643,6 +643,15 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                     TIMEOUT 60 PROCESSORS 1 RUN_SERIAL TRUE SKIP_RETURN_CODE 77
                     LABELS "profiler;cuda;gravity")
             endforeach()
+            foreach(terminal_term IN ITEMS newtonian periodic)
+                add_test(NAME kick_terminal_certificate_${terminal_term}
+                    COMMAND ${Python3_EXECUTABLE}
+                        ${PROJECT_SOURCE_DIR}/tests/gravity/run_terminal_certificate_failure.py
+                        $<TARGET_FILE:kick_device_profile_enabled_test> ${terminal_term})
+                set_tests_properties(kick_terminal_certificate_${terminal_term} PROPERTIES
+                    TIMEOUT 60 PROCESSORS 1 RUN_SERIAL TRUE SKIP_RETURN_CODE 77
+                    LABELS "cuda;gravity;global_fmm")
+            endforeach()
         endif()
     endif()
     if(COSMICTIGER_PROFILE AND COSMICTIGER_WITH_SPH)
