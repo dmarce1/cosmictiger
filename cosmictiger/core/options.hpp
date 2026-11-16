@@ -301,7 +301,6 @@ struct BenchmarkScenario {
     std::string openingAngles{};    // Comma-separated opening angles in (0,1], one per input file.
     int size{1};                    // Number of input-distribution tiles along each unit-box axis.
     int repeats{3};                 // Number of benchmark repetitions per input distribution.
-    bool compareSourceForest{false};    // Compare demand fetching with pre-exchanged source views.
 };
 
 // Options read only by the run.scenario problem of the same name.
@@ -501,7 +500,6 @@ struct Options {
         arc & scenario.benchmark.openingAngles;
         arc & scenario.benchmark.size;
         arc & scenario.benchmark.repeats;
-        arc & scenario.benchmark.compareSourceForest;
     }
 };
 

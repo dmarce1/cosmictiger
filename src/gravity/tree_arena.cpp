@@ -1,3 +1,4 @@
+// Gravity-tree arena storage, remote multipoles and launch-owned GPU staging.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -569,8 +570,4 @@ uint64_t treeRemoteFetchCount() {
 /// Increment the process-local remote tree-fetch counter.
 void treeRecordRemoteFetch() {
     remoteTreeFetchCount.fetch_add(1, std::memory_order_relaxed);
-}
-
-size_t treeRemoteMultipoleBytes() {
-    return remoteMultipoleChunks.size() * kRemoteMultipoleChunkSize * multipoleStride;
 }

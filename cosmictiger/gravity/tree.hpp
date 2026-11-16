@@ -6,7 +6,7 @@
  See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
-// Gravity tree nodes, source kinds, multipole serialization and build/traversal metadata.
+// Gravity tree nodes, multipole serialization and build/traversal metadata.
 
 #ifndef TREE_HPP_
 #define TREE_HPP_
@@ -37,12 +37,6 @@
 MultipolePosition* treeAddMultipole(Vector3<Position> const& pos, MultipoleBuffer const& multipole);
 void treeReadMultipole(MultipolePosition const* record, MultipoleBuffer& multipole);
 
-inline constexpr unsigned char kTreeSourceOwned = 0;       // Node from an owner's complete tree.
-inline constexpr unsigned char kTreeSourceInternal = 1;    // Imported node with exported children.
-inline constexpr unsigned char kTreeSourceParticleLeaf = 2;    // Imported leaf with particle data.
-inline constexpr unsigned char kTreeSourceMultipoleTerminal = 3;    // Subtree collapsed to moments.
-inline constexpr unsigned char kTreeSourceEmpty = 4;    // Imported node representing no sources.
-
 struct TreeNode {
     FmmBox box;    // Periodic spatial bounds enclosing this node's sources.
     Array<TreeId, kChildCount> children;    // Child IDs; leaves use index -1 for each child.
@@ -51,12 +45,10 @@ struct TreeNode {
     Vector3<Position> pos;      // Expansion center used for geometry and multipole translations.
     MultipolePosition* mpos;    // Stable arena record containing the center and multipole data.
     float radius;               // Source-cloud radius about pos, excluding the smoothing support.
-    // Imported source meaning remains explicit even when geometry is shared.
-    unsigned char sourceKind = kTreeSourceOwned;    // One of the kTreeSource* record kinds above.
     struct {
-        unsigned short depth : 14;       // Tree depth; geometric locality roots start at zero.
+        unsigned short depth : 14;       // Depth below the global distributed tree root.
         unsigned short localRoot : 1;    // Root of a locality's owned subtree.
-        unsigned short leaf : 1;    // No children to walk, including collapsed imported terminals.
+        unsigned short leaf : 1;         // True for particle leaves with no child nodes.
     };
     CUDA_EXPORT
 
@@ -96,7 +88,6 @@ struct TreeNode {
         arc & processRange;
         arc & particleRange;
         arc & radius;
-        arc & sourceKind;
         int localRoot0;
         int leaf0;
         int depth0;
@@ -121,7 +112,6 @@ struct TreeNode {
         arc & processRange;
         arc & particleRange;
         arc & radius;
-        arc & sourceKind;
         int localRoot0;
         int leaf0;
         int depth0;

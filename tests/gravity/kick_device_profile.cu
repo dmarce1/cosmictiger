@@ -1,10 +1,8 @@
 /* CosmicTiger - bounded production CUDA kick profiling regression; BSL-1.0. */
 
 // Run the actual kick kernel without application initialization or an HPX runtime.
-// Its normal four-particle tree uses only direct softened pairs; this is not
+// Its isolated four-particle tree uses only direct softened pairs; this is not
 // a broad force-accuracy test; its direct reference also checks species masses.
-// Separate failure modes require the production check for a rejected terminal
-// at a true sink leaf. Each failure gets its own process and CUDA context.
 // Every launch has at most two one-warp blocks, further bounded by SM_count / 6.
 // No initialization, memset, or reduction kernels are launched by this fixture.
 
@@ -49,13 +47,6 @@ constexpr float kGasMass = 0.5f;
 constexpr std::uint64_t kPoison = std::numeric_limits<std::uint64_t>::max();
 using Output = std::array<std::array<float, kOutputCount>, kDimensions + 1>;
 using PhaseCalls = std::array<std::uint64_t, profile::kDevicePhaseCount>;
-
-// Negative modes stop at the certificate check before reading source payloads.
-enum class FixtureMode {
-    Profile,            // Validate ordinary particle kicks and optional device profiling.
-    RejectNewtonian,    // Require failure when a true sink leaf rejects a Newtonian terminal.
-    RejectPeriodic      // Require failure when a true sink leaf rejects a periodic terminal.
-};
 
 void checkCuda(cudaError_t status, char const* operation) {
     if (status != cudaSuccess) {
@@ -249,8 +240,7 @@ PhaseCalls checkRecords(std::vector<profile::DeviceBlockRecord> const& records) 
     return calls;
 }
 
-void run(int blocks, bool useSpeciesMasses, FixtureMode mode = FixtureMode::Profile) {
-    bool const rejectTerminal = mode != FixtureMode::Profile;
+void run(int blocks, bool useSpeciesMasses) {
     std::array<std::array<Position, kParticleCount>, kDimensions> positions{};
     double const coordinates[kDimensions][kParticleCount] = {
         {0.48, 0.49, 0.51, 0.52}, {0.49, 0.51, 0.48, 0.52}, {0.50, 0.48, 0.52, 0.51}};
@@ -262,14 +252,7 @@ void run(int blocks, bool useSpeciesMasses, FixtureMode mode = FixtureMode::Prof
     std::array<char, kParticleCount> const types = {
         kDarkMatterType, kSphType, kSphType, kDarkMatterType};
     auto const expected = reference(positions, types, useSpeciesMasses);
-    auto nodes = makeTree();
-    if (rejectTerminal) {
-        // The terminal overlaps true sink leaf 2, so neither certificate can
-        // accept it. Its owner range is deliberately outside staged positions:
-        // an invalid particle fallback must not replace the explicit failure.
-        nodes[1].sourceKind = kTreeSourceMultipoleTerminal;
-        nodes[1].particleRange = {kOutputCount, kOutputCount + 2};
-    }
+    auto const nodes = makeTree();
     auto const layout = makeLayout(useSpeciesMasses);
     DeviceBuffer<Position> x(kParticleCount), y(kParticleCount), z(kParticleCount);
     DeviceBuffer<TreeNode> tree(nodes.size());
@@ -286,21 +269,16 @@ void run(int blocks, bool useSpeciesMasses, FixtureMode mode = FixtureMode::Prof
     z.upload(positions[2].data());
     tree.upload(nodes.data());
     particleTypes.upload(types.data());
-    int const source = rejectTerminal ? 1 : 0;
-    checks.upload(&source);
+    int const root = 0;
+    checks.upload(&root);
     std::array<CudaKickParameters<kOrder>, kItemCount> items{};
     for (int item = 0; item < kItemCount; ++item) {
-        items[item].self = rejectTerminal ? 2 : 0;
+        items[item].self = 0;
         items[item].outputOffset = item * kParticleCount;
-        items[item].lpos = nodes[items[item].self].pos;
+        items[item].lpos = nodes[0].pos;
         items[item].lValue = 0.0f;
-        if (mode == FixtureMode::RejectPeriodic) {
-            items[item].echecks = checks.data();
-            items[item].ecount = 1;
-        } else {
-            items[item].dchecks = checks.data();
-            items[item].dcount = 1;
-        }
+        items[item].dchecks = checks.data();
+        items[item].dcount = 1;
     }
     parameters.upload(items.data());
     CudaKickData data{};
@@ -343,21 +321,15 @@ void run(int blocks, bool useSpeciesMasses, FixtureMode mode = FixtureMode::Prof
         gx.upload(poisonOutput.data());
         gy.upload(poisonOutput.data());
         gz.upload(poisonOutput.data());
-        int const itemCount = rejectTerminal ? 1 : kItemCount;
         cudaKickKernel<kOrder><<<blocks, kWarpSize, layout.totalBytes>>>(result.data(), global,
-            data, parameters.data(), itemCount, nextItem.data(), layout, slab.data()
+            data, parameters.data(), kItemCount, nextItem.data(), layout, slab.data()
 #if COSMICTIGER_PROFILE && COSMICTIGER_DEVICE_PROFILE
-                                                                             ,
+                                                                              ,
             repetition == 0 ? nullptr : records.data()
 #endif
         );
-        if (!rejectTerminal) {
-            checkCuda(cudaGetLastError(), "launch bounded production kick");
-        }
-        // Negative modes synchronize first to collect the device diagnostic even
-        // when this tiny launch traps before a launch-status query could finish.
+        checkCuda(cudaGetLastError(), "launch bounded production kick");
         checkCuda(cudaDeviceSynchronize(), "complete bounded production kick");
-        require(!rejectTerminal, "expected terminal certificate failure did not occur");
         Output actual{};
         potential.download(actual[0].data());
         gx.download(actual[1].data());
@@ -412,16 +384,8 @@ void run(int blocks, bool useSpeciesMasses, FixtureMode mode = FixtureMode::Prof
 
 }    // namespace detail
 
-int main(int argc, char** argv) {
+int main() {
     try {
-        auto mode = detail::FixtureMode::Profile;
-        if (argc == 2 && std::string(argv[1]) == "--reject-terminal-newtonian") {
-            mode = detail::FixtureMode::RejectNewtonian;
-        } else if (argc == 2 && std::string(argv[1]) == "--reject-terminal-periodic") {
-            mode = detail::FixtureMode::RejectPeriodic;
-        } else {
-            detail::require(argc == 1, "unknown bounded kick fixture mode");
-        }
         int deviceCount = 0;
         auto const status = cudaGetDeviceCount(&deviceCount);
         if (status == cudaErrorNoDevice || status == cudaErrorInsufficientDriver ||
@@ -442,10 +406,6 @@ int main(int argc, char** argv) {
             return 77;
         }
         uploadKernelSelections();
-        if (mode != detail::FixtureMode::Profile) {
-            detail::run(1, false, mode);
-            return 1;
-        }
         detail::run(blocks, false);
 #if COSMICTIGER_WITH_SPH
         detail::run(blocks, true);

@@ -63,18 +63,14 @@ function(cosmictiger_feature_sources output)
         list(APPEND cosmictiger_source_files
             src/gravity/global_fmm/distributed_tree.cpp
             src/gravity/global_fmm/execution.cpp
-            src/gravity/global_fmm/geometric_distributed_tree.cpp
-            src/gravity/global_fmm/geometric_execution.cpp
             src/gravity/global_fmm/gpu_staging.cpp
             src/gravity/global_fmm/particle_exchange.cpp
             src/gravity/global_fmm/remote_cache.cpp
-            src/gravity/global_fmm/source_forest.cpp
             src/gravity/gravity.cpp
             src/gravity/kick.cpp
             src/gravity/kick.cu
             src/gravity/kick_workspace.cpp
             src/gravity/tree_build.cpp
-            src/gravity/geometric_tree_build.cpp
             src/gravity/kick_executor.cpp
             src/gravity/source_access.cpp
             src/gravity/sources.cpp
@@ -139,11 +135,7 @@ function(cosmictiger_feature_sources output)
         endif()
         if(COSMICTIGER_WITH_GRAVITY)
             list(APPEND cosmictiger_source_files tests/gravity/global_fmm/fmm_tree.cpp
-                tests/gravity/global_fmm/fmm_walk.cpp
-                tests/gravity/global_fmm/hierarchical_sources.cpp
-                tests/gravity/global_fmm/pending_kick.cpp
-                tests/gravity/global_fmm/staging_capacity.cpp
-                tests/gravity/global_fmm/exchange_guards.cpp)
+                tests/gravity/global_fmm/fmm_walk.cpp)
         endif()
         if(NOT COSMICTIGER_WITH_GRAVITY)
             list(APPEND cosmictiger_source_files tests/sph/no_gravity.cpp)

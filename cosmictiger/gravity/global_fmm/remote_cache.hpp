@@ -1,3 +1,4 @@
+// Demand-fetched remote gravity-tree cache lifecycle.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -10,6 +11,3 @@
 
 void treeEnableRemoteCache();
 void treeResetRemoteCache();
-
-// Clear demand-read caches without retiring the source forest. All readers joined.
-void treeClearRemoteCache();

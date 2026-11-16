@@ -1,3 +1,4 @@
+// Demand-fetched remote tree records and positioned multipoles.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -17,9 +18,7 @@
 #include <hpx/threading_base/annotated_function.hpp>
 
 #include <cosmictiger/core/safe_io.hpp>
-#include <cosmictiger/gravity/global_fmm/measurement.hpp>
 #include <cosmictiger/gravity/global_fmm/remote_cache.hpp>
-#include <cosmictiger/gravity/global_fmm/source_forest.hpp>
 #include <cosmictiger/gravity/tree_build.hpp>
 
 constexpr bool kVerbose = true;
@@ -72,14 +71,9 @@ static void resetLastCacheEntries() {
 
 static TreeNode const* treeCacheRead(TreeId id);
 
-void treeClearRemoteCache() {
+void treeResetRemoteCache() {
     treeCache = decltype(treeCache)();
     resetLastCacheEntries();
-}
-
-void treeResetRemoteCache() {
-    treeClearRemoteCache();
-    treeSourceForestReset();
 }
 
 void treeEnableRemoteCache() {
@@ -87,12 +81,6 @@ void treeEnableRemoteCache() {
 }
 
 static TreeNode const* treeCacheRead(TreeId id) {
-    if (auto const* imported = treeSourceForestImportedNode(id)) {
-        return imported;
-    }
-    if (treeSourceForestImportsEnabled()) {
-        treeSourceForestCountFallback();
-    }
     auto const& opts = getOptions();
     int const lineSize = opts.compute.treeCacheLineSize;
     TreeId lineId;
@@ -127,15 +115,9 @@ static TreeNode const* treeCacheRead(TreeId id) {
                         [promise, lineId]() {
                             try {
                                 treeRecordRemoteFetch();
-                                auto data = hpx::async<TreeFetchCacheLineAction>(
+                                promise->set_value(hpx::async<TreeFetchCacheLineAction>(
                                     hpxLocalities()[lineId.proc], lineId.index)
-                                                .get();
-                                if (fmmMeasurementEnabled) {
-                                    fmmMeasureDemand(lineId.proc, fmmSerializedBytes(lineId.index),
-                                        fmmSerializedBytes(data),
-                                        data.capacity() * sizeof(TreeNode));
-                                }
-                                promise->set_value(std::move(data));
+                                        .get());
                             } catch (...) {
                                 promise->set_exception(std::current_exception());
                             }

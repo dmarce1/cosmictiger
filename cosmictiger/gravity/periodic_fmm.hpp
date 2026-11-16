@@ -1,3 +1,4 @@
+// CPU periodic FMM traversal and Ewald interaction evaluation.
 /* CosmicTiger - float periodic global FMM; BSL-1.0. */
 #pragma once
 
@@ -5,7 +6,6 @@
 
 #include <cosmictiger/gravity/fmm_acceptance.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
-#include <cosmictiger/gravity/global_fmm/source_forest.hpp>
 #include <cosmictiger/gravity/kernels/cartesian_tracefree/ewald_green.hpp>
 #include <cosmictiger/gravity/kernels/cartesian_tracefree/ewald_m2l.hpp>
 #include <cosmictiger/gravity/kernels/cartesian_tracefree_operators.hpp>
@@ -123,13 +123,6 @@ inline FlopCount cpuPeriodicFmm(ExpansionBuffer& local, TreeNode const& sink,
                 directChecks.push_back(id);
             } else {
                 ++directCellCount;
-            }
-        } else if (source.sourceKind == kTreeSourceMultipoleTerminal) {
-            if (sink.leaf) {
-                treeSourceForestMaterialize(id);
-                checks.push_back(id);
-            } else {
-                deferred.push_back(id);
             }
         } else if (!source.leaf && (sink.leaf || source.radius >= sink.radius)) {
             checks.push_back(source.children[kLeftChild]);

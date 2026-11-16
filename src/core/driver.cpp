@@ -1,3 +1,4 @@
+// Simulation integration driver and distributed gravity-step orchestration.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -705,7 +706,7 @@ KickParameters prepareFmmKick(int minrung, double scale, double dadt, double t0,
     TreeCreateParameters tparams(minrung, theta);
     terminal::detailPrint("Create tree %i %e\n", minrung, theta);
     profile::profileBegin("treeCreate");
-    treeCreateGeometric(tparams);
+    treeCreate(tparams);
     profile::profileEnd();
     terminal::detailPrint("Done with tree\n");
 
@@ -758,9 +759,20 @@ KickParameters prepareFmmKick(int minrung, double scale, double dadt, double t0,
 ForceStepResult evaluateFmmKick(KickParameters parameters) {
     Timer timer;
     timer.start();
+    ExpansionBuffer l;
+    l.zero();
+    Vector3<Position> pos;
+    for (int dim = 0; dim < kDimensions; dim++) {
+        pos[dim] = 0.f;
+    }
+    TreeId rootId;
+    rootId.proc = 0;
+    rootId.index = 0;
+    Vector<TreeId> checklist;
+    checklist.push_back(rootId);
     terminal::detailPrint("Do kick\n");
     profile::ScopedPhase phase("kick", parameters.profileCoordinator);
-    KickReturn result = kickSourceForest(parameters);
+    KickReturn result = kick(parameters, l, pos, rootId, {}, checklist, nullptr);
     timer.stop();
     kickTime += timer.read();
     terminal::detailPrint("kick done\n");
@@ -769,7 +781,7 @@ ForceStepResult evaluateFmmKick(KickParameters parameters) {
 
 void finishFmmKick() {
     profile::ScopedPhase phase("kick.cleanup");
-    treeRetireGeometric();
+    treeDestroy();
     particlesCacheFree();
 }
 
@@ -1077,7 +1089,7 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
         if (selfGravity) {
             TreeCreateParameters tparams(levels[li], theta);
             profile::ScopedPhase phase("treeCreate");
-            treeCreateGeometric(tparams, GeometricSourceSelection::CurrentRungRange);
+            treeCreate(tparams);
             minimumTreeLevel = tparams.minLevel;
         }
 
@@ -1134,6 +1146,17 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
         if (kparams.top) {
         }
 
+        ExpansionBuffer l;
+        l.zero();
+        Vector3<Position> pos;
+        for (int dim = 0; dim < kDimensions; dim++) {
+            pos[dim] = 0.f;
+        }
+        TreeId rootId;
+        rootId.proc = 0;
+        rootId.index = 0;
+        Vector<TreeId> checklist;
+        checklist.push_back(rootId);
         tm.reset();
         tm.start();
         if (top) {
@@ -1146,8 +1169,8 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
         }
         if (selfGravity) {
             profile::ScopedPhase phase("kick");
-            thisKr = kickSourceForest(kparams);
-            treeRetireGeometric();
+            thisKr = kick(kparams, l, pos, rootId, {}, checklist, nullptr);
+            treeDestroy();
             particlesCacheFree();
         }
         if (top) {

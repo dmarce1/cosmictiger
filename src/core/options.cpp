@@ -1,3 +1,4 @@
+// Runtime option parsing, validation and diagnostic reporting.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -506,7 +507,6 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"benchmark.openingAngles", options.scenario.benchmark.openingAngles},
         {"benchmark.size", options.scenario.benchmark.size},
         {"benchmark.repeats", options.scenario.benchmark.repeats},
-        {"benchmark.compareSourceForest", options.scenario.benchmark.compareSourceForest},
         {"initial.closePack", options.initial.closePack},
         {"scenario.cosmology.twoLpt", options.scenario.cosmology.twoLpt},
         {"scenario.kelvinHelmholz.packing", options.scenario.kelvinHelmholz.packing},
@@ -764,10 +764,7 @@ bool processOptions(int argc, char* argv[]) {
         po::value<int>(&opts.scenario.benchmark.size)->default_value(1),
         "tile each distribution n by n by n times inside the unit box; n >= 1")("benchmark.repeats",
         po::value<int>(&opts.scenario.benchmark.repeats)->default_value(3),
-        "number of timed tree builds and FMM solves per distribution; at least 1")(
-        "benchmark.compareSourceForest",
-        po::value<bool>(&opts.scenario.benchmark.compareSourceForest)->default_value(false),
-        "compare cold complete-source and exported walks on each identical frozen tree");
+        "number of timed tree builds and FMM solves per distribution; at least 1");
 
     po::options_description plummerScenarioOpts("Plummer scenario");
     plummerScenarioOpts.add_options()("scenario.plummer.radius",

@@ -6,7 +6,7 @@
  See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
-// Tree build requests/results, local geometric construction and stable GPU staging storage.
+// Tree build requests/results and stable GPU staging storage.
 
 #pragma once
 
@@ -35,19 +35,6 @@ struct TreeBuildPolicy {
 
 TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& policy);
 
-// Local host builder for CPU and CUDA walks. The range is a contiguous owned source
-// range: all owned particles for a full-source solve, the current rung suffix for
-// hierarchical integration. Callers must retire all readers of the previous local
-// tree arena. This does not install the resulting root into the distributed solver.
-// It retains the source range's final permutation, preserving suffix membership.
-struct GeometricTreeBuildResult {
-    TreeCreateReturn root;    // Root ID, geometry, multipoles and counts, including empty nodes.
-    size_t coincidentOverflowLeaves = 0;    // Overfull leaves with identical source positions.
-    size_t depthOverflowLeaves = 0;    // Leaves above the bucket limit stopped by maximum depth.
-    int ewaldDepth = 0;                // Minimum nonempty-leaf depth required by periodic FMM.
-};
-GeometricTreeBuildResult treeBuildGeometricLocal(
-    TreeCreateParameters const& params, Pair<ParticleInteger> particleRange);
 // Arena addresses remain fixed from preparation until all tree readers finish.
 size_t treeNodeCapacity(size_t sourceParticleCount);
 void treeAllocateNodesLocal(size_t capacity);
@@ -82,6 +69,3 @@ void treeRecordRemoteFetch();
 // The active solver registers its remote access and epoch-reset policy.
 void treeRegisterRemoteAccess(TreeNode const* (*reader)(TreeId), void (*reset)());
 void treeResetLocal();
-
-// Allocated remote multipole chunks, excluding allocator metadata. Readers joined.
-size_t treeRemoteMultipoleBytes();

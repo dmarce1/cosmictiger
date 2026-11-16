@@ -1,3 +1,4 @@
+// Distributed gravity-tree topology and source-moment regression tests.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026 Dominic C. Marcello
@@ -6,21 +7,15 @@
  See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
-// Test tree geometry, leaf limits, multipoles, serialization and arena lifetime invariants.
-
-#include <algorithm>
 #include <array>
-#include <bit>
 #include <cmath>
 #include <cstdint>
 #include <format>
 #include <iostream>
-#include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
-#include <boost/multiprecision/cpp_int.hpp>
 #include <hpx/serialization/array.hpp>
 #include <hpx/serialization/input_archive.hpp>
 #include <hpx/serialization/output_archive.hpp>
@@ -29,11 +24,9 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/gravity/fmm_types.hpp>
-#include <cosmictiger/gravity/geometric_tree_geometry.hpp>
 #include <cosmictiger/gravity/global_fmm/distributed_tree.hpp>
 #include <cosmictiger/gravity/tree.hpp>
 #include <cosmictiger/gravity/tree_build.hpp>
-#include <cosmictiger/gravity/tree_multipole.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/particles.hpp>
@@ -45,275 +38,6 @@ void requireFmmTree(bool condition, char const* message) {
     if (!condition) {
         throw std::runtime_error(std::string("FMM tree regression: ") + message);
     }
-}
-
-// Compare squared distances on an exact dyadic grid shared by all finite float radii
-// and native positions. The oracle does not repeat the builder's floating-point norm.
-using GeometricExactInteger = boost::multiprecision::cpp_int;
-constexpr int kGeometricReferenceBits =
-    std::numeric_limits<float>::digits - std::numeric_limits<float>::min_exponent;
-
-GeometricExactInteger geometricRadiusTicks(float value) {
-    static_assert(std::numeric_limits<float>::is_iec559 &&
-        std::numeric_limits<float>::digits == 24 && sizeof(float) == sizeof(uint32_t));
-    uint32_t const bits = std::bit_cast<uint32_t>(value);
-    uint32_t const exponent = (bits >> 23) & 0xff;
-    requireFmmTree((bits >> 31) == 0 && exponent != 0xff, "invalid geometric radius");
-    GeometricExactInteger significand = bits & 0x7fffff;
-    if (exponent != 0) {
-        significand += uint32_t(1) << 23;
-        significand <<= exponent - 1;
-    }
-    return significand;
-}
-
-GeometricExactInteger geometricPositionTicks(PositionInteger value) {
-    return GeometricExactInteger(value) << (kGeometricReferenceBits - kPositionBits);
-}
-
-void requireGeometricRadiusBounds(
-    float radius, GeometricExactInteger const& expectedSquared, char const* message) {
-    auto const ticks = geometricRadiusTicks(radius);
-    requireFmmTree(ticks * ticks >= expectedSquared, message);
-    if (expectedSquared == 0) {
-        requireFmmTree(radius == 0, "zero-distance geometric cloud has a nonzero radius");
-    } else {
-        // Allow one extra float step beyond the smallest enclosing float: rounding
-        // the double bound upward can cross an arbitrarily close float boundary.
-        float const previous = std::nextafter(radius, 0.0f);
-        auto const previousTicks = geometricRadiusTicks(std::nextafter(previous, 0.0f));
-        requireFmmTree(previousTicks * previousTicks < expectedSquared,
-            "geometric radius is more than one float step above the exact enclosure");
-    }
-}
-
-void verifyGeometricNode(TreeId id, int depth) {
-    auto const* node = treeGetNode(id);
-    requireFmmTree(node->depth == depth, "geometric node depth mismatch");
-    GeometricExactInteger maximumSquared = 0;
-    for (ParticleInteger i = node->particleRange.first; i < node->particleRange.second; ++i) {
-        GeometricExactInteger squared = 0;
-        for (int axis = 0; axis < kDimensions; ++axis) {
-            auto const a = particlesPos(axis, i).raw();
-            auto const b = node->pos[axis].raw();
-            auto const delta = geometricPositionTicks(a >= b ? a - b : b - a);
-            squared += delta * delta;
-        }
-        maximumSquared = std::max(maximumSquared, squared);
-    }
-    auto const radiusTicks = geometricRadiusTicks(node->radius);
-    requireFmmTree(
-        radiusTicks * radiusTicks >= maximumSquared, "geometric radius does not enclose a source");
-    if (node->numberOfParticles() == 0) {
-        requireFmmTree(node->leaf && node->radius == 0, "empty geometric node is not terminal");
-    } else if (node->leaf) {
-        requireGeometricRadiusBounds(
-            node->radius, maximumSquared, "geometric leaf radius is too small");
-    }
-    if (!node->leaf) {
-        auto const* left = treeGetNode(node->children[kLeftChild]);
-        auto const* right = treeGetNode(node->children[kRightChild]);
-        requireFmmTree(left->particleRange.first == node->particleRange.first &&
-                left->particleRange.second == right->particleRange.first &&
-                right->particleRange.second == node->particleRange.second,
-            "geometric children do not partition the parent range");
-        int const axis = kGeometricSplitAxes[depth % kGeometricSplitAxes.size()];
-        GeometricExactInteger childBound = 0;
-        for (auto const* child : {left, right}) {
-            if (child->numberOfParticles() != 0) {
-                auto const a = child->pos[axis].raw();
-                auto const b = node->pos[axis].raw();
-                auto const offset = geometricPositionTicks(a >= b ? a - b : b - a);
-                GeometricExactInteger const bound = offset + geometricRadiusTicks(child->radius);
-                childBound = std::max(childBound, bound);
-            }
-        }
-        GeometricExactInteger capSquared = 0;
-        auto const cuts = geometricTreeAxisCuts(depth);
-        for (int dim = 0; dim < kDimensions; ++dim) {
-            GeometricExactInteger const halfSide = GeometricExactInteger(1)
-                << (kGeometricReferenceBits - cuts[dim] - 1);
-            capSquared += halfSide * halfSide;
-        }
-        GeometricExactInteger const childBoundSquared = childBound * childBound;
-        GeometricExactInteger const expectedSquared = std::min(childBoundSquared, capSquared);
-        requireGeometricRadiusBounds(node->radius, expectedSquared,
-            "geometric parent radius is below the capped child recurrence");
-        for (ParticleInteger i = left->particleRange.first; i < left->particleRange.second; ++i) {
-            requireFmmTree(particlesPos(axis, i).raw() < node->pos[axis].raw(),
-                "left particle is not below the split");
-        }
-        for (ParticleInteger i = right->particleRange.first; i < right->particleRange.second; ++i) {
-            requireFmmTree(particlesPos(axis, i).raw() >= node->pos[axis].raw(),
-                "right particle is below the split");
-        }
-        verifyGeometricNode(node->children[kLeftChild], depth + 1);
-        verifyGeometricNode(node->children[kRightChild], depth + 1);
-    }
-}
-
-void verifyGeometricBuilder() {
-    auto options = getOptions();
-    options.compute.bucketSize = 4;
-    options.gravity.cuda = false;
-    options.gravity.smoothingLength = 0.001;
-    setOptions(options);
-    constexpr std::array<int, 18> kExpectedAxes{
-        kXi, kYi, kZi, kZi, kYi, kXi, kZi, kXi, kYi, kYi, kXi, kZi, kYi, kZi, kXi, kXi, kZi, kYi};
-    GeometricTreeCell cell{};
-    std::array<double, kDimensions> lower{};
-    std::array<double, kDimensions> upper{1, 1, 1};
-    for (size_t depth = 0; depth < kExpectedAxes.size(); ++depth) {
-        requireFmmTree(
-            kGeometricSplitAxes[depth] == kExpectedAxes[depth], "split schedule changed");
-        int const axis = kExpectedAxes[depth];
-        double const midpoint = (lower[axis] + upper[axis]) / 2;
-        bool const right = depth % 3 == 1;
-        if (right) {
-            lower[axis] = midpoint;
-        } else {
-            upper[axis] = midpoint;
-        }
-        cell = geometricTreeChild(cell, right);
-        auto const box = geometricTreeBox(cell);
-        for (int dim = 0; dim < kDimensions; ++dim) {
-            requireFmmTree(
-                geometricTreeCenter(cell, dim).toDouble() == (lower[dim] + upper[dim]) / 2,
-                "geometric center disagrees with midpoint construction");
-            if (!box.full(dim)) {
-                requireFmmTree(box.begin[dim].toDouble() == lower[dim] &&
-                        (upper[dim] == 1 ? box.end[dim].raw() == 0 :
-                                           box.end[dim].toDouble() == upper[dim]),
-                    "geometric box disagrees with midpoint construction");
-            }
-        }
-    }
-    GeometricTreeCell lastCell{};
-    for (int depth = 0; depth < kGeometricTreeMaxDepth; ++depth) {
-        lastCell = geometricTreeChild(lastCell, true);
-    }
-    auto const lastCuts = geometricTreeAxisCuts(kGeometricTreeMaxDepth);
-    auto const lastBox = geometricTreeBox(lastCell);
-    for (int axis = 0; axis < kDimensions; ++axis) {
-        PositionInteger const expected =
-            PositionInteger{0} - (PositionInteger{1} << (kPositionBits - lastCuts[axis] - 1));
-        requireFmmTree(geometricTreeCenter(lastCell, axis).raw() == expected,
-            "deep geometric center lost fixed-point bits");
-        constexpr int kBoxBits = std::numeric_limits<uint32_t>::digits;
-        requireFmmTree(lastCuts[axis] <= kBoxBits && lastCuts[axis] < kPositionBits,
-            "geometric depth exceeds box or center precision");
-        requireFmmTree(lastBox.end[axis].raw() == 0 &&
-                lastBox.extentTicks(axis) == (uint64_t(1) << (kBoxBits - lastCuts[axis])),
-            "deep geometric box does not exactly cover the seam-side cell");
-    }
-    auto adjacentCell = lastCell;
-    --adjacentCell.coordinate[kXi];
-    auto const adjacentBox = geometricTreeBox(adjacentCell);
-    requireFmmTree(
-        adjacentBox.begin[kXi] != lastBox.begin[kXi] && adjacentBox.end[kXi] == lastBox.begin[kXi],
-        "adjacent deepest geometric cells do not have distinct exact boxes");
-    bool rejectedChild = false;
-    try {
-        geometricTreeChild(lastCell, false);
-    } catch (std::out_of_range const&) {
-        rejectedChild = true;
-    }
-    requireFmmTree(rejectedChild, "a geometric child exceeded the supported box precision");
-    constexpr ParticleInteger kGeometricFixtureParticles = 8;
-    particlesResize(kGeometricFixtureParticles);
-    for (ParticleInteger i = 0; i < kGeometricFixtureParticles; ++i) {
-        particlesPos(kXi, i) = i == 0 ? 0.5 : 0.125 + 0.03125 * i;
-        particlesPos(kYi, i) = 0.25 + 0.015625 * i;
-        particlesPos(kZi, i) = 0.375;
-        particlesRung(i) = char(i % 2);
-    }
-    auto result =
-        treeBuildGeometricLocal(TreeCreateParameters(1, 0.5), {0, kGeometricFixtureParticles});
-    verifyGeometricNode(result.root.id, 0);
-    requireFmmTree(result.root.multi[0] == double(kGeometricFixtureParticles),
-        "inactive owned sources were omitted from geometric moments");
-    auto const* root = treeGetNode(result.root.id);
-    for (int axis = 0; axis < kDimensions; ++axis) {
-        requireFmmTree(root->pos[axis].raw() == Position(0.5).raw() && root->box.full(axis),
-            "geometric root is not the unit box");
-    }
-    SourceMultipoleBuffer direct;
-    treeComputeMultipole<kFmmOrder>(
-        direct, {0, kGeometricFixtureParticles}, result.root.pos, fmmSourceView());
-    for (int i = 0; i < fmmMultipoleCoefficientCount(kFmmOrder); ++i) {
-        requireFmmTree(
-            std::abs(direct[i] - result.root.multi[i]) < 1.0e-9 * (1 + std::abs(direct[i])),
-            "geometric upward moments differ from direct P2M");
-    }
-    requireFmmTree(std::abs(direct[1]) + std::abs(direct[2]) + std::abs(direct[3]) > 0,
-        "geometric fixture has no dipole");
-
-    // Place a single source at its center, then below, on and above an exact float
-    // radius. The transverse Q64 tick in the last case disappears from even
-    // an extended-precision sum of squares; the integer oracle must still detect it.
-    GeometricTreeCell boundaryCell{};
-    for (int depth = 0; depth < result.ewaldDepth; ++depth) {
-        boundaryCell = geometricTreeChild(boundaryCell, false);
-    }
-    constexpr float kBoundaryRadius = 0x1p-10f;
-    particlesResize(1);
-    for (int side : {-2, -1, 0, 1}) {
-        for (int axis = 0; axis < kDimensions; ++axis) {
-            particlesPos(axis, 0) = geometricTreeCenter(boundaryCell, axis);
-        }
-        if (side != -2) {
-            particlesPos(kXi, 0).raw() += Position(kBoundaryRadius).raw() - (side < 0);
-            particlesPos(kYi, 0).raw() += side > 0;
-        }
-        result = treeBuildGeometricLocal(TreeCreateParameters(0, 0.5), {0, 1});
-        verifyGeometricNode(result.root.id, 0);
-        auto const* leaf = treeGetNode(result.root.id);
-        while (!leaf->leaf) {
-            auto const* left = treeGetNode(leaf->children[kLeftChild]);
-            leaf = left->numberOfParticles() != 0 ? left : treeGetNode(leaf->children[kRightChild]);
-        }
-        if (side > 0) {
-            requireFmmTree(leaf->radius > kBoundaryRadius,
-                "geometric radius lost the transverse tick above a float boundary");
-        }
-    }
-    particlesResize(kGeometricFixtureParticles);
-
-    for (ParticleInteger i = 0; i < kGeometricFixtureParticles; ++i) {
-        for (int axis = 0; axis < kDimensions; ++axis) {
-            particlesPos(axis, i) = 0.375;
-        }
-    }
-    result = treeBuildGeometricLocal(TreeCreateParameters(0, 0.5), {0, kGeometricFixtureParticles});
-    requireFmmTree(result.coincidentOverflowLeaves == 1, "coincident overflow was not recorded");
-    verifyGeometricNode(result.root.id, 0);
-    particlesResize(1);
-    result = treeBuildGeometricLocal(TreeCreateParameters(0, 0.5), {0, 1});
-    requireFmmTree(result.root.nodeCount > 1 && result.root.multi[0] > 0,
-        "single source did not reach the required periodic depth");
-    verifyGeometricNode(result.root.id, 0);
-    particlesResize(2);
-    for (int axis = 0; axis < kDimensions; ++axis) {
-        particlesPos(axis, 1) = particlesPos(axis, 0);
-    }
-    particlesPos(kXi, 1).raw() += 1;
-    options.compute.bucketSize = 2;
-    setOptions(options);
-    result = treeBuildGeometricLocal(TreeCreateParameters(0, 0.5), {0, 2});
-    requireFmmTree(result.coincidentOverflowLeaves == 0 && result.depthOverflowLeaves == 0,
-        "a leaf at the bucket limit was classified as overflow");
-    requireFmmTree(result.root.nodeCount == size_t(2 * result.ewaldDepth + 1),
-        "a leaf at the bucket limit did not stop at the required periodic depth");
-    verifyGeometricNode(result.root.id, 0);
-    options.compute.bucketSize = 1;
-    setOptions(options);
-    result = treeBuildGeometricLocal(TreeCreateParameters(0, 0.5), {0, 2});
-    requireFmmTree(result.depthOverflowLeaves == 1, "depth overflow was not recorded");
-    verifyGeometricNode(result.root.id, 0);
-    particlesResize(0);
-    result = treeBuildGeometricLocal(TreeCreateParameters(0, 0.5), {0, 0});
-    requireFmmTree(
-        result.root.nodeCount == 1 && result.root.radius == 0, "empty geometric root is incorrect");
 }
 
 Vector3<Position> fmmTreePosition(int rank, int particle) {
@@ -647,9 +371,6 @@ void fmmTreeTest() {
     auto const empty = treeCreate(TreeCreateParameters(0, 0.5));
     detail::verifyTreeGeometry(empty.id, true);
     treeDestroy(true);
-    if (hpxSize() == 1) {
-        detail::verifyGeometricBuilder();
-    }
     std::cout << std::format("FMM tree regression passed ({:d} localities)\n", hpxSize())
               << std::flush;
 }

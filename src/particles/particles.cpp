@@ -36,9 +36,6 @@ constexpr bool kVerbose = true;
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/safe_io.hpp>
 #include <cosmictiger/cuda/cuda_memory_advice.hpp>
-#if COSMICTIGER_WITH_GRAVITY
-#include <cosmictiger/gravity/global_fmm/measurement.hpp>
-#endif
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particle_partition.hpp>
@@ -371,16 +368,7 @@ static T const* readParticleCacheLine(LineIdType lineId,
                             }
                             auto remote =
                                 hpx::async<Action>(hpxLocalities()[lineId.proc], lineId.index);
-                            auto data = remote.get();
-#if COSMICTIGER_WITH_GRAVITY
-                            if constexpr (std::is_same_v<Action, ParticlesFetchCacheLineAction>) {
-                                if (fmmMeasurementEnabled) {
-                                    fmmMeasureDemand(lineId.proc, fmmSerializedBytes(lineId.index),
-                                        fmmSerializedBytes(data), data.capacity() * sizeof(T));
-                                }
-                            }
-#endif
-                            promise->set_value(std::move(data));
+                            promise->set_value(remote.get());
                         } catch (...) {
                             promise->set_exception(std::current_exception());
                         }
