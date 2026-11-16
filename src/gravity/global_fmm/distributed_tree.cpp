@@ -1,3 +1,4 @@
+// Build the distributed gravity tree and combine local and remote subtree summaries.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -14,9 +15,8 @@
 #include <cosmictiger/core/safe_io.hpp>
 #include <cosmictiger/core/timer.hpp>
 #include <cosmictiger/gravity/global_fmm/distributed_tree.hpp>
-#include <cosmictiger/gravity/global_fmm/particle_exchange.hpp>
 #include <cosmictiger/gravity/global_fmm/remote_cache.hpp>
-#include <cosmictiger/gravity/source_access.hpp>
+#include <cosmictiger/gravity/sources.hpp>
 #include <cosmictiger/gravity/tree_build.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/particles/domain.hpp>

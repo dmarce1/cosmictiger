@@ -1,3 +1,4 @@
+// Initialize a cold annular gas disc orbiting the prescribed central acceleration.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -13,7 +14,7 @@
 
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/math/math.hpp>
-#include <cosmictiger/scenarios/disc.hpp>
+#include <cosmictiger/scenarios/initializers.hpp>
 #include <cosmictiger/sph/geometry.hpp>
 #include <cosmictiger/sph/particles.hpp>
 

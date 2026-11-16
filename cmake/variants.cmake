@@ -94,7 +94,6 @@ if(COSMICTIGER_WITH_GRAVITY)
         src/cosmology/background_plot.cpp
         src/cosmology/boltzmann.cpp
         src/cosmology/cosmology.cpp
-        src/cosmology/evolution.cpp
         src/cosmology/friedmann.cpp
         src/cosmology/initialize.cpp
         src/cosmology/zero_order.cpp)

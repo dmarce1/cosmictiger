@@ -1,3 +1,4 @@
+// Distributed Fourier transforms, mesh access, and particle-cloud weights.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2021  Dominic C. Marcello
@@ -9,9 +10,12 @@
 #ifndef FFT_HPP_
 #define FFT_HPP_
 
+#include <complex>
+
 #include <cosmictiger/core/defs.hpp>
-#include <cosmictiger/math/complex.hpp>
 #include <cosmictiger/math/range.hpp>
+
+using ComplexFloat = std::complex<float>;
 
 void fft3dInit(int64_t n, float initConst = 0.0);
 void fft3dExecute();

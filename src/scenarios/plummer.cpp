@@ -1,3 +1,4 @@
+// Sample equilibrium Plummer particles and initialize their fixed-background evolution.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -14,7 +15,7 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/particles/particles.hpp>
-#include <cosmictiger/scenarios/plummer.hpp>
+#include <cosmictiger/scenarios/initializers.hpp>
 
 namespace scenarios {
 

@@ -1,13 +1,13 @@
 # Source and header inventory
 
-This inventory covers every tracked C/C++/CUDA source and header under `cosmictiger/`,
-`src/`, `tests/`, and `benchmarks/` from documentation base `9b9e0eec6`, updated for global FMM restoration.
+This inventory covers every current C/C++/CUDA source and header under `cosmictiger/`,
+`src/`, `tests/`, and `benchmarks/` after the `organize` consolidation based on `aaebd28a5`.
 Build trees, third-party dependencies, and archived experiment sources under `docs/` are excluded.
 Two CMake source templates and Python tooling are listed separately below. Descriptions summarize responsibility; they do not
 imply that an optional backend is enabled or that every declared path runs in production.
 
-**489 files:** 220 public/internal headers, 130 application sources/headers,
-138 test sources/headers, and one benchmark.
+**467 files:** 186 public/internal headers, 143 application sources/headers,
+137 test sources/headers, and one benchmark.
 
 ## Application and library headers
 
@@ -17,9 +17,8 @@ imply that an optional backend is enabled or that every declared path runs in pr
 | [cosmictiger/analysis/compress.hpp](../cosmictiger/analysis/compress.hpp) | Block compression of lightcone positions and velocities, with binary read/write support. |
 | [cosmictiger/analysis/group_entry.hpp](../cosmictiger/analysis/group_entry.hpp) | Friends-of-friends catalogue records, including mass, kinematics, shape, and ancestry. |
 | [cosmictiger/analysis/group_header.hpp](../cosmictiger/analysis/group_header.hpp) | Binary groups.dat header containing count, time, box length, and scale factor. |
-| [cosmictiger/analysis/group_tree.hpp](../cosmictiger/analysis/group_tree.hpp) | Distributed spatial tree used to discover friends-of-friends groups. |
+| [cosmictiger/analysis/group_tree.hpp](../cosmictiger/analysis/group_tree.hpp) | Distributed friends-of-friends tree storage, construction, and asynchronous linking traversal. |
 | [cosmictiger/analysis/groups.hpp](../cosmictiger/analysis/groups.hpp) | Distributed group membership, particle exchange, and catalogue orchestration. |
-| [cosmictiger/analysis/groups_find.hpp](../cosmictiger/analysis/groups_find.hpp) | Asynchronous friends-of-friends linking through the group tree. |
 | [cosmictiger/analysis/lightcone.hpp](../cosmictiger/analysis/lightcone.hpp) | Lightcone particle collection, sky partitioning, group finding, and output. |
 | [cosmictiger/analysis/lightcone_entry.hpp](../cosmictiger/analysis/lightcone_entry.hpp) | Lightcone particle records and emission-time scale-factor conversion. |
 | [cosmictiger/analysis/lightcone_map.hpp](../cosmictiger/analysis/lightcone_map.hpp) | Sparse HEALPix weight map with dense map output and sparse checkpoint storage. |
@@ -39,7 +38,6 @@ imply that an optional backend is enabled or that every declared path runs in pr
 | [cosmictiger/core/containers.hpp](../cosmictiger/core/containers.hpp) | Project vector, fixed-array, and pair containers with optional bounds checks and serialization. |
 | [cosmictiger/core/defs.hpp](../cosmictiger/core/defs.hpp) | Shared dimensions, scalar/index types, feature switches, and low-level constants. |
 | [cosmictiger/core/device_profile.hpp](../cosmictiger/core/device_profile.hpp) | Device profiling phase identifiers, counters, and per-block result records. |
-| [cosmictiger/core/diagnostic_output.hpp](../cosmictiger/core/diagnostic_output.hpp) | Shared interfaces for simulation diagnostic output. |
 | [cosmictiger/core/driver.hpp](../cosmictiger/core/driver.hpp) | Cosmological simulation evolution, force-step sequencing, output scheduling, and driver state. |
 | [cosmictiger/core/file_handle.hpp](../cosmictiger/core/file_handle.hpp) | RAII ownership of FILE handles using a unique-pointer deleter. |
 | [cosmictiger/core/fixed_capacity_vector.hpp](../cosmictiger/core/fixed_capacity_vector.hpp) | Small fixed-capacity host/device vector with explicit logical size. |
@@ -65,12 +63,11 @@ imply that an optional backend is enabled or that every declared path runs in pr
 | [cosmictiger/core/timer.hpp](../cosmictiger/core/timer.hpp) | Accumulating elapsed-time stopwatch with start, stop, reset, and read operations. |
 | [cosmictiger/core/tree_id.hpp](../cosmictiger/core/tree_id.hpp) | Distributed tree-node identifiers, comparisons, hashing, and serialization. |
 | [cosmictiger/core/unordered_set_ts.hpp](../cosmictiger/core/unordered_set_ts.hpp) | Partitioned thread-safe unordered set and collection into a vector. |
-| [cosmictiger/cosmology/background.hpp](../cosmictiger/cosmology/background.hpp) | Simulation background trajectory, conformal-time sampling, and shared background construction. |
-| [cosmictiger/cosmology/background_plot.hpp](../cosmictiger/cosmology/background_plot.hpp) | Rendering and writing plots of cosmological background evolution. |
+| [cosmictiger/cosmology/background.hpp](../cosmictiger/cosmology/background.hpp) | Simulation background trajectory, conformal-time sampling, shared history construction, and diagnostic plot output. |
 | [cosmictiger/cosmology/boltzmann.hpp](../cosmictiger/cosmology/boltzmann.hpp) | Linear Einstein–Boltzmann perturbation evolution and transfer-function integration. |
 | [cosmictiger/cosmology/cosmology.hpp](../cosmictiger/cosmology/cosmology.hpp) | Simulation-facing cosmological clock, expansion, growth, and halo-fit interfaces. |
 | [cosmictiger/cosmology/evolution.hpp](../cosmictiger/cosmology/evolution.hpp) | Expansion timestep limits, termination tests, and cosmological energy accounting. |
-| [cosmictiger/cosmology/fft.hpp](../cosmictiger/cosmology/fft.hpp) | Distributed three-dimensional FFT storage, decomposition, transforms, and density-assignment filters. |
+| [cosmictiger/cosmology/fft.hpp](../cosmictiger/cosmology/fft.hpp) | Distributed three-dimensional FFT storage, complex-value alias, decomposition, transforms, and density-assignment filters. |
 | [cosmictiger/cosmology/fftw_lock.hpp](../cosmictiger/cosmology/fftw_lock.hpp) | Process-wide locking of FFTW planner operations. |
 | [cosmictiger/cosmology/fftw_threads.hpp](../cosmictiger/cosmology/fftw_threads.hpp) | Routing FFTW parallel loops through the application's threading runtime. |
 | [cosmictiger/cosmology/friedmann.hpp](../cosmictiger/cosmology/friedmann.hpp) | Friedmann background integration, dense trajectory sampling, and interval quadrature. |
@@ -96,41 +93,41 @@ imply that an optional backend is enabled or that every declared path runs in pr
 | [cosmictiger/gravity/error.hpp](../cosmictiger/gravity/error.hpp) | Sampling and comparing production gravity against direct reference forces. |
 | [cosmictiger/gravity/error_cuda.hpp](../cosmictiger/gravity/error_cuda.hpp) | CUDA evaluation of direct-reference forces for gravity-error samples. |
 | [cosmictiger/gravity/fmm_acceptance.hpp](../cosmictiger/gravity/fmm_acceptance.hpp) | Opening-angle geometry and selection of accepted FMM interaction types. |
+| [cosmictiger/gravity/fmm_box.hpp](../cosmictiger/gravity/fmm_box.hpp) | Unsigned periodic bounds, wrapped extents, and fixed-point source-box geometry. |
 | [cosmictiger/gravity/fmm_cpu_instances.hpp](../cosmictiger/gravity/fmm_cpu_instances.hpp) | CPU FMM instantiation declarations for the build-selected order. |
 | [cosmictiger/gravity/fmm_geometry.hpp](../cosmictiger/gravity/fmm_geometry.hpp) | Periodic fixed-position geometry and source/sink box-distance operations. |
 | [cosmictiger/gravity/fmm_order.hpp](../cosmictiger/gravity/fmm_order.hpp) | Build-selected FMM order, coefficient counts, and storage sizes. |
 | [cosmictiger/gravity/fmm_types.hpp](../cosmictiger/gravity/fmm_types.hpp) | Typed force, multipole, and local-expansion storage with transport buffers. |
+| [cosmictiger/gravity/global_fmm/distributed_tree.hpp](../cosmictiger/gravity/global_fmm/distributed_tree.hpp) | Distributed global particle tree construction. |
+| [cosmictiger/gravity/global_fmm/execution.hpp](../cosmictiger/gravity/global_fmm/execution.hpp) | Distributed FMM task execution. |
+| [cosmictiger/gravity/global_fmm/gpu_staging.hpp](../cosmictiger/gravity/global_fmm/gpu_staging.hpp) | CUDA work and remote source staging. |
+| [cosmictiger/gravity/global_fmm/remote_cache.hpp](../cosmictiger/gravity/global_fmm/remote_cache.hpp) | Remote node and multipole cache lifecycle and distributed particle source reads. |
 | [cosmictiger/gravity/gravity.hpp](../cosmictiger/gravity/gravity.hpp) | Particle/cell force kernels, softening helpers, and gravity work counters. |
 | [cosmictiger/gravity/gravity_cpu.hpp](../cosmictiger/gravity/gravity_cpu.hpp) | CPU/SIMD cell-cell, cell-particle, and particle-cell FMM interactions. |
 | [cosmictiger/gravity/gravity_cuda.hpp](../cosmictiger/gravity/gravity_cuda.hpp) | Cooperative CUDA staging and direct particle/cell interaction kernels. |
+| [cosmictiger/gravity/kernels/cartesian_tracefree.hpp](../cosmictiger/gravity/kernels/cartesian_tracefree.hpp) | Generated scalar, SIMD, and CUDA declarations for P2M, P2L, M2M, M2L, M2P, L2L, and L2P. |
 | [cosmictiger/gravity/kernels/cartesian_tracefree/ewald_common.hpp](../cosmictiger/gravity/kernels/cartesian_tracefree/ewald_common.hpp) | Periodic Ewald image/wave tables and scalar/SIMD special-function helpers. |
 | [cosmictiger/gravity/kernels/cartesian_tracefree/ewald_green.hpp](../cosmictiger/gravity/kernels/cartesian_tracefree/ewald_green.hpp) | Generated Cartesian derivatives of the regular periodic Ewald correction. |
 | [cosmictiger/gravity/kernels/cartesian_tracefree/ewald_m2l.hpp](../cosmictiger/gravity/kernels/cartesian_tracefree/ewald_m2l.hpp) | Generated periodic correction multipole-to-local contraction. |
 | [cosmictiger/gravity/kernels/cartesian_tracefree/geometry.hpp](../cosmictiger/gravity/kernels/cartesian_tracefree/geometry.hpp) | Inverse-radius geometry helpers for Cartesian FMM operators. |
-| [cosmictiger/gravity/kernels/cartesian_tracefree/l2l.hpp](../cosmictiger/gravity/kernels/cartesian_tracefree/l2l.hpp) | Generated Cartesian trace-free kernels to translate a local expansion to a displaced center. |
 | [cosmictiger/gravity/kernels/cartesian_tracefree/l2l_warp.hpp](../cosmictiger/gravity/kernels/cartesian_tracefree/l2l_warp.hpp) | Generated warp-cooperative CUDA local-expansion translation. |
-| [cosmictiger/gravity/kernels/cartesian_tracefree/l2p.hpp](../cosmictiger/gravity/kernels/cartesian_tracefree/l2p.hpp) | Generated Cartesian trace-free kernels to evaluate local potential and acceleration at a particle. |
-| [cosmictiger/gravity/kernels/cartesian_tracefree/m2l.hpp](../cosmictiger/gravity/kernels/cartesian_tracefree/m2l.hpp) | Generated Cartesian trace-free kernels to convert source multipoles into a target local expansion. |
-| [cosmictiger/gravity/kernels/cartesian_tracefree/m2m.hpp](../cosmictiger/gravity/kernels/cartesian_tracefree/m2m.hpp) | Generated Cartesian trace-free kernels to translate and accumulate source multipoles. |
-| [cosmictiger/gravity/kernels/cartesian_tracefree/m2p.hpp](../cosmictiger/gravity/kernels/cartesian_tracefree/m2p.hpp) | Generated Cartesian trace-free kernels to evaluate multipoles at a particle. |
-| [cosmictiger/gravity/kernels/cartesian_tracefree/p2l.hpp](../cosmictiger/gravity/kernels/cartesian_tracefree/p2l.hpp) | Generated Cartesian trace-free kernels to accumulate a particle contribution into a local expansion. |
-| [cosmictiger/gravity/kernels/cartesian_tracefree/p2m.hpp](../cosmictiger/gravity/kernels/cartesian_tracefree/p2m.hpp) | Generated Cartesian trace-free kernels to accumulate particle mass into source multipoles. |
 | [cosmictiger/gravity/kernels/cartesian_tracefree_config.hpp](../cosmictiger/gravity/kernels/cartesian_tracefree_config.hpp) | Generated build-degree configuration for Cartesian trace-free expansions. |
 | [cosmictiger/gravity/kernels/cartesian_tracefree_operators.hpp](../cosmictiger/gravity/kernels/cartesian_tracefree_operators.hpp) | Cartesian FMM operator includes and source-first declarations. |
 | [cosmictiger/gravity/kernels/cartesian_tracefree_types.hpp](../cosmictiger/gravity/kernels/cartesian_tracefree_types.hpp) | Generated named coefficient fields and storage/access/serialization for Cartesian expansions. |
 | [cosmictiger/gravity/kick.hpp](../cosmictiger/gravity/kick.hpp) | Gravity tree walks, pooled interaction lists, and deferred SPH gas-opening state. |
-| [cosmictiger/gravity/kick_context.hpp](../cosmictiger/gravity/kick_context.hpp) | State supplied to gravity kick execution. |
 | [cosmictiger/gravity/kick_cuda.hpp](../cosmictiger/gravity/kick_cuda.hpp) | CUDA kick control records and shared-memory list allocation. |
 | [cosmictiger/gravity/kick_cuda_instances.hpp](../cosmictiger/gravity/kick_cuda_instances.hpp) | CUDA kick instantiation declarations for the build-selected order. |
 | [cosmictiger/gravity/kick_cuda_kernel.hpp](../cosmictiger/gravity/kick_cuda_kernel.hpp) | CUDA gravity tree traversal, particle updates, and deferred gas-opening kernels. |
 | [cosmictiger/gravity/kick_cuda_launch.hpp](../cosmictiger/gravity/kick_cuda_launch.hpp) | CUDA kick launch layout, occupancy/resource budgeting, storage, and profiling events. |
 | [cosmictiger/gravity/kick_interaction_counts.hpp](../cosmictiger/gravity/kick_interaction_counts.hpp) | Records for gravity interaction counts. |
-| [cosmictiger/gravity/kick_walk.hpp](../cosmictiger/gravity/kick_walk.hpp) | Host/device traversal of gravity source trees and accepted-interaction dispatch. |
+| [cosmictiger/gravity/kick_walk.hpp](../cosmictiger/gravity/kick_walk.hpp) | Order-templated CPU gravity traversal, solver execution callbacks, and interaction scheduling. |
 | [cosmictiger/gravity/kick_workspace.hpp](../cosmictiger/gravity/kick_workspace.hpp) | Ownership and aggregation of gravity batch work, results, and device submissions. |
+| [cosmictiger/gravity/opening_schedule.hpp](../cosmictiger/gravity/opening_schedule.hpp) | Parsing, validating, and interpolating the redshift-dependent gravity opening angle. |
+| [cosmictiger/gravity/periodic_fmm.hpp](../cosmictiger/gravity/periodic_fmm.hpp) | CPU periodic-image traversal and coupled Newtonian/Ewald interaction evaluation. |
+| [cosmictiger/gravity/periodic_fmm_cuda.hpp](../cosmictiger/gravity/periodic_fmm_cuda.hpp) | CUDA periodic-image traversal and coupled Newtonian/Ewald interaction evaluation. |
 | [cosmictiger/gravity/reference_table.hpp](../cosmictiger/gravity/reference_table.hpp) | Periodic gravity correction table indexing, symmetry, interpolation, and construction. |
 | [cosmictiger/gravity/softening.hpp](../cosmictiger/gravity/softening.hpp) | Conversion of configured softening length into the effective force-kernel radius. |
-| [cosmictiger/gravity/source_access.hpp](../cosmictiger/gravity/source_access.hpp) | Local/remote gravity source-position access and reader registration. |
-| [cosmictiger/gravity/sources.hpp](../cosmictiger/gravity/sources.hpp) | FMM source partitions, registered source views, and particle-mass access. |
+| [cosmictiger/gravity/sources.hpp](../cosmictiger/gravity/sources.hpp) | Borrowed local gravity source arrays, species-dependent mass lookup, and remote source-reader registration. |
 | [cosmictiger/gravity/tree.hpp](../cosmictiger/gravity/tree.hpp) | Gravity-tree node records, source views, allocation, and traversal interfaces. |
 | [cosmictiger/gravity/tree_build.hpp](../cosmictiger/gravity/tree_build.hpp) | Recursive construction of gravity trees and source multipoles. |
 | [cosmictiger/gravity/tree_multipole.hpp](../cosmictiger/gravity/tree_multipole.hpp) | Particle-to-tree Cartesian multipole reduction and double-precision upward source construction. |
@@ -139,7 +136,6 @@ imply that an optional backend is enabled or that every declared path runs in pr
 | [cosmictiger/io/output.hpp](../cosmictiger/io/output.hpp) | Particle, tracer, and slice output with checked file handling. |
 | [cosmictiger/io/view.hpp](../cosmictiger/io/view.hpp) | Distributed Silo particle views, species fields, unit conversion, metadata, and visualization expressions. |
 | [cosmictiger/math/cell_lattice.hpp](../cosmictiger/math/cell_lattice.hpp) | Periodic spatial lattice descriptions, offsets, plane counts, and occupied-site generation. |
-| [cosmictiger/math/complex.hpp](../cosmictiger/math/complex.hpp) | Project complex-number type aliases and arithmetic integration. |
 | [cosmictiger/math/constants.hpp](../cosmictiger/math/constants.hpp) | Shared mathematical and physical constants. |
 | [cosmictiger/math/fixed.hpp](../cosmictiger/math/fixed.hpp) | Fixed-point arithmetic, raw-bit conversion, and periodic/unwrapped coordinate differences. |
 | [cosmictiger/math/float16_storage.hpp](../cosmictiger/math/float16_storage.hpp) | Portable IEEE binary16 storage conversion without requiring CUDA runtime arithmetic. |
@@ -166,23 +162,15 @@ imply that an optional backend is enabled or that every declared path runs in pr
 | [cosmictiger/particles/particle_selection.hpp](../cosmictiger/particles/particle_selection.hpp) | Evenly spaced particle sampling and tracer selection flags. |
 | [cosmictiger/particles/particle_types.hpp](../cosmictiger/particles/particle_types.hpp) | Particle-species identifiers and shared type definitions. |
 | [cosmictiger/particles/particles.hpp](../cosmictiger/particles/particles.hpp) | Particle structure-of-arrays storage, caches, accessors, initialization, persistence, and species changes. |
-| [cosmictiger/scenarios/blast.hpp](../cosmictiger/scenarios/blast.hpp) | Hydrodynamic blast-wave initial conditions and completion diagnostics. |
-| [cosmictiger/scenarios/cosmology.hpp](../cosmictiger/scenarios/cosmology.hpp) | Cosmological scenario initialization from the configured background and initial conditions. |
+| [cosmictiger/scenarios/benchmark.hpp](../cosmictiger/scenarios/benchmark.hpp) | Static particle benchmark case parsing and execution entry points. |
 | [cosmictiger/scenarios/diagnostics.hpp](../cosmictiger/scenarios/diagnostics.hpp) | Shared particle sampling and scenario diagnostic records. |
-| [cosmictiger/scenarios/disc.hpp](../cosmictiger/scenarios/disc.hpp) | Rotating-disc particle initial conditions. |
 | [cosmictiger/scenarios/exact_sod.hpp](../cosmictiger/scenarios/exact_sod.hpp) | Exact one-dimensional Sod Riemann solution and pressure-root calculation. |
-| [cosmictiger/scenarios/glass.hpp](../cosmictiger/scenarios/glass.hpp) | Glass particle relaxation setup and glass-file output. |
 | [cosmictiger/scenarios/gresho.hpp](../cosmictiger/scenarios/gresho.hpp) | Gresho vortex initial density, pressure, and rotational velocity. |
-| [cosmictiger/scenarios/hydro_wave.hpp](../cosmictiger/scenarios/hydro_wave.hpp) | Small-amplitude hydrodynamic wave initial conditions. |
-| [cosmictiger/scenarios/jeans_wave.hpp](../cosmictiger/scenarios/jeans_wave.hpp) | Self-gravitating Jeans-wave setup and distributed Fourier-mode diagnostics. |
-| [cosmictiger/scenarios/kelvin_helmholtz.hpp](../cosmictiger/scenarios/kelvin_helmholtz.hpp) | Shearing-layer Kelvin–Helmholtz initialization and thermodynamic state. |
+| [cosmictiger/scenarios/initializers.hpp](../cosmictiger/scenarios/initializers.hpp) | Shared entry points for SPH, cosmology, glass, and Plummer initialization and glass-file output. |
 | [cosmictiger/scenarios/kelvin_helmholtz_lattice.hpp](../cosmictiger/scenarios/kelvin_helmholtz_lattice.hpp) | Lattice packing and particle-count helpers for Kelvin–Helmholtz layers. |
-| [cosmictiger/scenarios/plummer.hpp](../cosmictiger/scenarios/plummer.hpp) | Sampling of Plummer density profiles and equilibrium particle velocities. |
-| [cosmictiger/scenarios/polytropic_star.hpp](../cosmictiger/scenarios/polytropic_star.hpp) | Lane–Emden integration, polytropic-star sampling, and final diagnostics. |
 | [cosmictiger/scenarios/rayleigh_taylor.hpp](../cosmictiger/scenarios/rayleigh_taylor.hpp) | Stratified Rayleigh–Taylor initial conditions and perturbations. |
 | [cosmictiger/scenarios/scenario.hpp](../cosmictiger/scenarios/scenario.hpp) | Scenario registration, dispatch, and collection of diagnostic particle samples. |
 | [cosmictiger/scenarios/sedov.hpp](../cosmictiger/scenarios/sedov.hpp) | Self-similar Sedov blast-wave reference solution, quadrature, and root finding. |
-| [cosmictiger/scenarios/sod.hpp](../cosmictiger/scenarios/sod.hpp) | Sod shock-tube initial conditions and comparison with the exact solution. |
 | [cosmictiger/scenarios/sphere.hpp](../cosmictiger/scenarios/sphere.hpp) | Relaxation of particle positions onto an approximately uniform spherical shell. |
 | [cosmictiger/sph/conduction.hpp](../cosmictiger/sph/conduction.hpp) | Pairwise artificial thermal-conduction coefficient and energy exchange. |
 | [cosmictiger/sph/cpu.hpp](../cosmictiger/sph/cpu.hpp) | CPU entry points and per-node dispatch for SPH computational passes. |
@@ -254,8 +242,7 @@ imply that an optional backend is enabled or that every declared path runs in pr
 | [src/cosmology/background.cpp](../src/cosmology/background.cpp) | Simulation background trajectory, conformal-time sampling, and shared background construction. |
 | [src/cosmology/background_plot.cpp](../src/cosmology/background_plot.cpp) | Rendering and writing plots of cosmological background evolution. |
 | [src/cosmology/boltzmann.cpp](../src/cosmology/boltzmann.cpp) | Linear Einstein–Boltzmann perturbation evolution and transfer-function integration. |
-| [src/cosmology/cosmology.cpp](../src/cosmology/cosmology.cpp) | Simulation-facing cosmological clock, expansion, growth, and halo-fit interfaces. |
-| [src/cosmology/evolution.cpp](../src/cosmology/evolution.cpp) | Expansion timestep limits, termination tests, and cosmological energy accounting. |
+| [src/cosmology/cosmology.cpp](../src/cosmology/cosmology.cpp) | Cosmological background evolution, clock queries, halo fitting, and configured run duration. |
 | [src/cosmology/fft.cpp](../src/cosmology/fft.cpp) | Distributed three-dimensional FFT storage, decomposition, transforms, and density-assignment filters. |
 | [src/cosmology/fftw_threads.cpp](../src/cosmology/fftw_threads.cpp) | Routing FFTW parallel loops through the application's threading runtime. |
 | [src/cosmology/friedmann.cpp](../src/cosmology/friedmann.cpp) | Friedmann background integration, dense trajectory sampling, and interval quadrature. |
@@ -266,15 +253,48 @@ imply that an optional backend is enabled or that every declared path runs in pr
 | [src/cuda/cuda_stream.cpp](../src/cuda/cuda_stream.cpp) | RAII CUDA streams with HPX-aware completion polling and asynchronous transfers. |
 | [src/gravity/error.cpp](../src/gravity/error.cpp) | Sampling and comparing production gravity against direct reference forces. |
 | [src/gravity/error_cuda.cu](../src/gravity/error_cuda.cu) | CUDA evaluation of direct-reference forces for gravity-error samples. |
-| [src/gravity/fmm_order.cpp](../src/gravity/fmm_order.cpp) | Build-selected FMM order, coefficient counts, and storage sizes. |
+| [src/gravity/global_fmm/distributed_tree.cpp](../src/gravity/global_fmm/distributed_tree.cpp) | Distributed global particle tree construction. |
+| [src/gravity/global_fmm/execution.cpp](../src/gravity/global_fmm/execution.cpp) | Distributed FMM task execution. |
+| [src/gravity/global_fmm/gpu_staging.cpp](../src/gravity/global_fmm/gpu_staging.cpp) | CUDA work and remote source staging. |
+| [src/gravity/global_fmm/remote_cache.cpp](../src/gravity/global_fmm/remote_cache.cpp) | Demand-fetched remote node/multipole cache and distributed particle source reads. |
 | [src/gravity/gravity.cpp](../src/gravity/gravity.cpp) | Particle/cell force kernels, softening helpers, and gravity work counters. |
+| [src/gravity/kernels/cartesian_tracefree_ewald_green_scalar.cpp](../src/gravity/kernels/cartesian_tracefree_ewald_green_scalar.cpp) | Generated host scalar definitions for Cartesian periodic Ewald Green tensor operations. |
+| [src/gravity/kernels/cartesian_tracefree_ewald_green_scalar.cu](../src/gravity/kernels/cartesian_tracefree_ewald_green_scalar.cu) | Generated CUDA device definitions for Cartesian periodic Ewald Green tensor operations. |
+| [src/gravity/kernels/cartesian_tracefree_ewald_green_simd.cpp](../src/gravity/kernels/cartesian_tracefree_ewald_green_simd.cpp) | Generated host SIMD definitions for Cartesian periodic Ewald Green tensor operations. |
+| [src/gravity/kernels/cartesian_tracefree_ewald_m2l_scalar.cpp](../src/gravity/kernels/cartesian_tracefree_ewald_m2l_scalar.cpp) | Generated host scalar definitions for Cartesian periodic Ewald multipole-to-local operations. |
+| [src/gravity/kernels/cartesian_tracefree_ewald_m2l_scalar.cu](../src/gravity/kernels/cartesian_tracefree_ewald_m2l_scalar.cu) | Generated CUDA device definitions for Cartesian periodic Ewald multipole-to-local operations. |
+| [src/gravity/kernels/cartesian_tracefree_ewald_m2l_simd.cpp](../src/gravity/kernels/cartesian_tracefree_ewald_m2l_simd.cpp) | Generated host SIMD definitions for Cartesian periodic Ewald multipole-to-local operations. |
+| [src/gravity/kernels/cartesian_tracefree_geometry_scalar.cpp](../src/gravity/kernels/cartesian_tracefree_geometry_scalar.cpp) | Generated host scalar definitions for Cartesian inverse-radius geometry operations. |
+| [src/gravity/kernels/cartesian_tracefree_geometry_scalar.cu](../src/gravity/kernels/cartesian_tracefree_geometry_scalar.cu) | Generated CUDA device definitions for Cartesian inverse-radius geometry operations. |
+| [src/gravity/kernels/cartesian_tracefree_geometry_simd.cpp](../src/gravity/kernels/cartesian_tracefree_geometry_simd.cpp) | Generated host SIMD definitions for Cartesian inverse-radius geometry operations. |
+| [src/gravity/kernels/cartesian_tracefree_l2l_scalar.cpp](../src/gravity/kernels/cartesian_tracefree_l2l_scalar.cpp) | Generated host scalar definitions for Cartesian local-to-local operations. |
+| [src/gravity/kernels/cartesian_tracefree_l2l_scalar.cu](../src/gravity/kernels/cartesian_tracefree_l2l_scalar.cu) | Generated CUDA device definitions for Cartesian local-to-local operations. |
+| [src/gravity/kernels/cartesian_tracefree_l2l_simd.cpp](../src/gravity/kernels/cartesian_tracefree_l2l_simd.cpp) | Generated host SIMD definitions for Cartesian local-to-local operations. |
+| [src/gravity/kernels/cartesian_tracefree_l2l_warp_scalar.cu](../src/gravity/kernels/cartesian_tracefree_l2l_warp_scalar.cu) | Generated CUDA device definitions for Cartesian warp-cooperative local-to-local operations. |
+| [src/gravity/kernels/cartesian_tracefree_l2p_scalar.cpp](../src/gravity/kernels/cartesian_tracefree_l2p_scalar.cpp) | Generated host scalar definitions for Cartesian local-to-particle operations. |
+| [src/gravity/kernels/cartesian_tracefree_l2p_scalar.cu](../src/gravity/kernels/cartesian_tracefree_l2p_scalar.cu) | Generated CUDA device definitions for Cartesian local-to-particle operations. |
+| [src/gravity/kernels/cartesian_tracefree_l2p_simd.cpp](../src/gravity/kernels/cartesian_tracefree_l2p_simd.cpp) | Generated host SIMD definitions for Cartesian local-to-particle operations. |
+| [src/gravity/kernels/cartesian_tracefree_m2l_scalar.cpp](../src/gravity/kernels/cartesian_tracefree_m2l_scalar.cpp) | Generated host scalar definitions for Cartesian multipole-to-local operations. |
+| [src/gravity/kernels/cartesian_tracefree_m2l_scalar.cu](../src/gravity/kernels/cartesian_tracefree_m2l_scalar.cu) | Generated CUDA device definitions for Cartesian multipole-to-local operations. |
+| [src/gravity/kernels/cartesian_tracefree_m2l_simd.cpp](../src/gravity/kernels/cartesian_tracefree_m2l_simd.cpp) | Generated host SIMD definitions for Cartesian multipole-to-local operations. |
+| [src/gravity/kernels/cartesian_tracefree_m2m_scalar.cpp](../src/gravity/kernels/cartesian_tracefree_m2m_scalar.cpp) | Generated host scalar definitions for Cartesian multipole-to-multipole operations. |
+| [src/gravity/kernels/cartesian_tracefree_m2m_scalar.cu](../src/gravity/kernels/cartesian_tracefree_m2m_scalar.cu) | Generated CUDA device definitions for Cartesian multipole-to-multipole operations. |
+| [src/gravity/kernels/cartesian_tracefree_m2m_simd.cpp](../src/gravity/kernels/cartesian_tracefree_m2m_simd.cpp) | Generated host SIMD definitions for Cartesian multipole-to-multipole operations. |
+| [src/gravity/kernels/cartesian_tracefree_m2p_scalar.cpp](../src/gravity/kernels/cartesian_tracefree_m2p_scalar.cpp) | Generated host scalar definitions for Cartesian multipole-to-particle operations. |
+| [src/gravity/kernels/cartesian_tracefree_m2p_scalar.cu](../src/gravity/kernels/cartesian_tracefree_m2p_scalar.cu) | Generated CUDA device definitions for Cartesian multipole-to-particle operations. |
+| [src/gravity/kernels/cartesian_tracefree_m2p_simd.cpp](../src/gravity/kernels/cartesian_tracefree_m2p_simd.cpp) | Generated host SIMD definitions for Cartesian multipole-to-particle operations. |
+| [src/gravity/kernels/cartesian_tracefree_p2l_scalar.cpp](../src/gravity/kernels/cartesian_tracefree_p2l_scalar.cpp) | Generated host scalar definitions for Cartesian particle-to-local operations. |
+| [src/gravity/kernels/cartesian_tracefree_p2l_scalar.cu](../src/gravity/kernels/cartesian_tracefree_p2l_scalar.cu) | Generated CUDA device definitions for Cartesian particle-to-local operations. |
+| [src/gravity/kernels/cartesian_tracefree_p2l_simd.cpp](../src/gravity/kernels/cartesian_tracefree_p2l_simd.cpp) | Generated host SIMD definitions for Cartesian particle-to-local operations. |
+| [src/gravity/kernels/cartesian_tracefree_p2m_scalar.cpp](../src/gravity/kernels/cartesian_tracefree_p2m_scalar.cpp) | Generated host scalar definitions for Cartesian particle-to-multipole operations. |
+| [src/gravity/kernels/cartesian_tracefree_p2m_scalar.cu](../src/gravity/kernels/cartesian_tracefree_p2m_scalar.cu) | Generated CUDA device definitions for Cartesian particle-to-multipole operations. |
+| [src/gravity/kernels/cartesian_tracefree_p2m_simd.cpp](../src/gravity/kernels/cartesian_tracefree_p2m_simd.cpp) | Generated host SIMD definitions for Cartesian particle-to-multipole operations. |
 | [src/gravity/kick.cpp](../src/gravity/kick.cpp) | Gravity tree walks, pooled interaction lists, and deferred SPH gas-opening state. |
 | [src/gravity/kick.cu](../src/gravity/kick.cu) | CUDA implementation: gravity tree walks, pooled interaction lists, and deferred SPH gas-opening state. |
 | [src/gravity/kick_executor.cpp](../src/gravity/kick_executor.cpp) | Submission of prepared gravity kick batches to CUDA execution. |
 | [src/gravity/kick_workspace.cpp](../src/gravity/kick_workspace.cpp) | Ownership and aggregation of gravity batch work, results, and device submissions. |
 | [src/gravity/reference_table.cpp](../src/gravity/reference_table.cpp) | Periodic gravity correction table indexing, symmetry, interpolation, and construction. |
-| [src/gravity/source_access.cpp](../src/gravity/source_access.cpp) | Local/remote gravity source-position access and reader registration. |
-| [src/gravity/sources.cpp](../src/gravity/sources.cpp) | FMM source partitions, registered source views, and particle-mass access. |
+| [src/gravity/sources.cpp](../src/gravity/sources.cpp) | Local gravity source views and callback-based remote position/species access. |
 | [src/gravity/tree_arena.cpp](../src/gravity/tree_arena.cpp) | Gravity-tree storage, multipole transport, node allocation, and remote-node bookkeeping. |
 | [src/gravity/tree_build.cpp](../src/gravity/tree_build.cpp) | Recursive construction of gravity trees and source multipoles. |
 | [src/io/checkpoint.cpp](../src/io/checkpoint.cpp) | Versioned checkpoint headers, manifests, compatibility checks, and distributed state save/restore. |
@@ -290,6 +310,7 @@ imply that an optional backend is enabled or that every declared path runs in pr
 | [src/particles/drift_cpu.cpp](../src/particles/drift_cpu.cpp) | CPU drift kernel with periodic positions and lightcone-crossing output. |
 | [src/particles/particle_partition.cpp](../src/particles/particle_partition.cpp) | Consistent swapping of particle fields and associated gas/star mappings. |
 | [src/particles/particles.cpp](../src/particles/particles.cpp) | Particle structure-of-arrays storage, caches, accessors, initialization, persistence, and species changes. |
+| [src/scenarios/benchmark.cpp](../src/scenarios/benchmark.cpp) | Static particle input, bounded force timing, and append-only benchmark result output. |
 | [src/scenarios/blast.cpp](../src/scenarios/blast.cpp) | Hydrodynamic blast-wave initial conditions and completion diagnostics. |
 | [src/scenarios/cosmology.cpp](../src/scenarios/cosmology.cpp) | Cosmological scenario initialization from the configured background and initial conditions. |
 | [src/scenarios/disc.cpp](../src/scenarios/disc.cpp) | Rotating-disc particle initial conditions. |
@@ -375,7 +396,20 @@ imply that an optional backend is enabled or that every declared path runs in pr
 | [tests/gravity/fmm_acceptance_cuda.cu](../tests/gravity/fmm_acceptance_cuda.cu) | Device parity for FMM acceptance, box geometry, and interaction selection. |
 | [tests/gravity/fmm_api.cpp](../tests/gravity/fmm_api.cpp) | Typed FMM facade and point-field behavior tests. |
 | [tests/gravity/fmm_geometry.cpp](../tests/gravity/fmm_geometry.cpp) | Exact periodic fixed-coordinate displacements, cell boundaries, and box-distance tests. |
+| [tests/gravity/global_fmm/fmm_tree.cpp](../tests/gravity/global_fmm/fmm_tree.cpp) | Distributed gravity-tree topology, serialization, source moments, and ownership regressions. |
+| [tests/gravity/global_fmm/fmm_walk.cpp](../tests/gravity/global_fmm/fmm_walk.cpp) | Distributed CPU/CUDA periodic gravity-walk and direct-reference force regressions. |
+| [tests/gravity/kernels/instrumentation/cartesian_tracefree_ewald_green.cpp](../tests/gravity/kernels/instrumentation/cartesian_tracefree_ewald_green.cpp) | Generated counting-scalar definitions for Cartesian periodic Ewald Green tensor arithmetic checks. |
+| [tests/gravity/kernels/instrumentation/cartesian_tracefree_ewald_m2l.cpp](../tests/gravity/kernels/instrumentation/cartesian_tracefree_ewald_m2l.cpp) | Generated counting-scalar definitions for Cartesian periodic Ewald multipole-to-local arithmetic checks. |
+| [tests/gravity/kernels/instrumentation/cartesian_tracefree_geometry.cpp](../tests/gravity/kernels/instrumentation/cartesian_tracefree_geometry.cpp) | Generated counting-scalar definitions for Cartesian inverse-radius geometry arithmetic checks. |
+| [tests/gravity/kernels/instrumentation/cartesian_tracefree_l2l.cpp](../tests/gravity/kernels/instrumentation/cartesian_tracefree_l2l.cpp) | Generated counting-scalar definitions for Cartesian local-to-local arithmetic checks. |
+| [tests/gravity/kernels/instrumentation/cartesian_tracefree_l2p.cpp](../tests/gravity/kernels/instrumentation/cartesian_tracefree_l2p.cpp) | Generated counting-scalar definitions for Cartesian local-to-particle arithmetic checks. |
+| [tests/gravity/kernels/instrumentation/cartesian_tracefree_m2l.cpp](../tests/gravity/kernels/instrumentation/cartesian_tracefree_m2l.cpp) | Generated counting-scalar definitions for Cartesian multipole-to-local arithmetic checks. |
+| [tests/gravity/kernels/instrumentation/cartesian_tracefree_m2m.cpp](../tests/gravity/kernels/instrumentation/cartesian_tracefree_m2m.cpp) | Generated counting-scalar definitions for Cartesian multipole-to-multipole arithmetic checks. |
+| [tests/gravity/kernels/instrumentation/cartesian_tracefree_m2p.cpp](../tests/gravity/kernels/instrumentation/cartesian_tracefree_m2p.cpp) | Generated counting-scalar definitions for Cartesian multipole-to-particle arithmetic checks. |
+| [tests/gravity/kernels/instrumentation/cartesian_tracefree_p2l.cpp](../tests/gravity/kernels/instrumentation/cartesian_tracefree_p2l.cpp) | Generated counting-scalar definitions for Cartesian particle-to-local arithmetic checks. |
+| [tests/gravity/kernels/instrumentation/cartesian_tracefree_p2m.cpp](../tests/gravity/kernels/instrumentation/cartesian_tracefree_p2m.cpp) | Generated counting-scalar definitions for Cartesian particle-to-multipole arithmetic checks. |
 | [tests/gravity/kick_device_profile.cu](../tests/gravity/kick_device_profile.cu) | CUDA kick profiling records and preservation of reference force results. |
+| [tests/gravity/opening_schedule.cpp](../tests/gravity/opening_schedule.cpp) | Opening-angle schedule parsing, invalid-input rejection, and interpolation checks. |
 | [tests/gravity/reference_table.cpp](../tests/gravity/reference_table.cpp) | Periodic correction-table symmetries and interpolation against reference values. |
 | [tests/gravity/tree_source_moments.cpp](../tests/gravity/tree_source_moments.cpp) | Source-moment precision, serialization, and cloud-transport checks. |
 | [tests/gresho.cpp](../tests/gresho.cpp) | Gresho vortex profile and initialization tests. |
@@ -428,6 +462,7 @@ imply that an optional backend is enabled or that every declared path runs in pr
 | [tests/sph/global_timestep_cases.hpp](../tests/sph/global_timestep_cases.hpp) | Shared raw global-timestep selection test cases. |
 | [tests/sph/kernels.cpp](../tests/sph/kernels.cpp) | Reference SPH kernel values and derivative helpers/tests. |
 | [tests/sph/kernels.hpp](../tests/sph/kernels.hpp) | Reference SPH kernel values and derivative helpers/tests. |
+| [tests/sph/midplane_cases.hpp](../tests/sph/midplane_cases.hpp) | Shared dimensional imposed-midplane force regressions for CPU/CUDA completion. |
 | [tests/sph/midpoint_cases.hpp](../tests/sph/midpoint_cases.hpp) | Shared coarse/fine midpoint targeting and viscosity endpoint tests. |
 | [tests/sph/monaghan/equations.cpp](../tests/sph/monaghan/equations.cpp) | Monaghan pair viscosity, conservation, and vector geometry tests. |
 | [tests/sph/morris_and_monaghan/viscosity.cpp](../tests/sph/morris_and_monaghan/viscosity.cpp) | Time-dependent viscosity growth and decay tests. |
@@ -480,18 +515,3 @@ imply that an optional backend is enabled or that every declared path runs in pr
 | [tools/halo_viewer/halo_viewer.py](../tools/halo_viewer/halo_viewer.py) | Local halo-catalogue viewer server and catalogue data access. |
 | [scripts/run_mpi.py](../scripts/run_mpi.py) | MPI launch wrapper for configured application/test runs. |
 | [scripts/plot_cosmology.py](../scripts/plot_cosmology.py) | Plotting utility for cosmological output. |
-
-## Restored global FMM
-
-| Source | Responsibility |
-| --- | --- |
-| [cosmictiger/gravity/global_fmm/distributed_tree.hpp](../cosmictiger/gravity/global_fmm/distributed_tree.hpp) | Distributed global particle tree construction. |
-| [src/gravity/global_fmm/distributed_tree.cpp](../src/gravity/global_fmm/distributed_tree.cpp) | Distributed global particle tree construction. |
-| [cosmictiger/gravity/global_fmm/execution.hpp](../cosmictiger/gravity/global_fmm/execution.hpp) | Distributed FMM task execution. |
-| [src/gravity/global_fmm/execution.cpp](../src/gravity/global_fmm/execution.cpp) | Distributed FMM task execution. |
-| [cosmictiger/gravity/global_fmm/remote_cache.hpp](../cosmictiger/gravity/global_fmm/remote_cache.hpp) | Remote node and multipole cache. |
-| [src/gravity/global_fmm/remote_cache.cpp](../src/gravity/global_fmm/remote_cache.cpp) | Remote node and multipole cache. |
-| [cosmictiger/gravity/global_fmm/particle_exchange.hpp](../cosmictiger/gravity/global_fmm/particle_exchange.hpp) | Remote particle source reads. |
-| [src/gravity/global_fmm/particle_exchange.cpp](../src/gravity/global_fmm/particle_exchange.cpp) | Remote particle source reads. |
-| [cosmictiger/gravity/global_fmm/gpu_staging.hpp](../cosmictiger/gravity/global_fmm/gpu_staging.hpp) | CUDA work and remote source staging. |
-| [src/gravity/global_fmm/gpu_staging.cpp](../src/gravity/global_fmm/gpu_staging.cpp) | CUDA work and remote source staging. |

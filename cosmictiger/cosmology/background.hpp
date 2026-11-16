@@ -1,3 +1,6 @@
+// Cached cosmological background histories and their diagnostic plot output.
+// Copyright (C) 2026 Dominic C. Marcello; BSL-1.0 (see LICENSE_1_0.txt).
+
 #pragma once
 
 #include <memory>
@@ -28,5 +31,9 @@ public:
 // Changed cosmological parameters or endpoint replace the cached table; readers
 // holding an earlier table retain their immutable history.
 std::shared_ptr<SimulationBackgroundTable const> simulationBackground(double finalConformalTime);
+
+// Write the full configured history, including the signed physical da/dt.
+// Rendering failures leave the text samples available and report a warning.
+void writeBackgroundPlot(double finalConformalTime);
 
 }    // namespace cosmology

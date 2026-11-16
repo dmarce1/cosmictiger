@@ -18,7 +18,7 @@
 #include <cosmictiger/core/particle_count.hpp>
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/math/math.hpp>
-#include <cosmictiger/scenarios/kelvin_helmholtz.hpp>
+#include <cosmictiger/scenarios/initializers.hpp>
 #include <cosmictiger/scenarios/kelvin_helmholtz_lattice.hpp>
 #include <cosmictiger/sph/geometry.hpp>
 #include <cosmictiger/sph/particles.hpp>

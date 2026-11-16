@@ -23,7 +23,7 @@
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/scenarios/diagnostics.hpp>
 #include <cosmictiger/scenarios/exact_sod.hpp>
-#include <cosmictiger/scenarios/sod.hpp>
+#include <cosmictiger/scenarios/initializers.hpp>
 #include <cosmictiger/sph/geometry.hpp>
 #include <cosmictiger/sph/particles.hpp>
 

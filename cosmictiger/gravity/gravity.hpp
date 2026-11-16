@@ -1,3 +1,4 @@
+// Gravity force outputs, CPU interaction interfaces, and shared kernel helpers.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -18,7 +19,7 @@
 #include <cosmictiger/cuda/cuda_memory.hpp>
 #include <cosmictiger/gravity/fmm_geometry.hpp>
 #include <cosmictiger/gravity/kick.hpp>
-#include <cosmictiger/gravity/source_access.hpp>
+#include <cosmictiger/gravity/sources.hpp>
 #include <cosmictiger/gravity/tree.hpp>
 #include <cosmictiger/math/fixed.hpp>
 #include <cosmictiger/math/kernel.hpp>

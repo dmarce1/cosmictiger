@@ -1,3 +1,6 @@
+// Initialize single-locality glass relaxation and save the relaxed particle positions.
+// Copyright (C) 2026 Dominic C. Marcello; BSL-1.0 (see LICENSE_1_0.txt).
+
 #include <cstdio>
 #include <ios>
 #include <stdexcept>
@@ -8,7 +11,7 @@
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/particles/particles.hpp>
-#include <cosmictiger/scenarios/glass.hpp>
+#include <cosmictiger/scenarios/initializers.hpp>
 
 namespace scenarios {
 

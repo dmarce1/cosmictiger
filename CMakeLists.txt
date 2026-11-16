@@ -196,7 +196,6 @@ set(cosmictiger_header_files
     cosmictiger/analysis/group_header.hpp
     cosmictiger/analysis/group_tree.hpp
     cosmictiger/analysis/groups.hpp
-    cosmictiger/analysis/groups_find.hpp
     cosmictiger/analysis/lightcone.hpp
     cosmictiger/analysis/lightcone_entry.hpp
     cosmictiger/analysis/power.hpp
@@ -214,7 +213,6 @@ set(cosmictiger_header_files
     cosmictiger/core/defs.hpp
     cosmictiger/core/driver.hpp
     cosmictiger/core/force_step.hpp
-    cosmictiger/core/diagnostic_output.hpp
     cosmictiger/core/fixed_capacity_vector.hpp
     cosmictiger/core/flops.hpp
     cosmictiger/core/hpx.hpp
@@ -231,7 +229,6 @@ set(cosmictiger_header_files
     cosmictiger/core/unordered_set_ts.hpp
     cosmictiger/cosmology/boltzmann.hpp
     cosmictiger/cosmology/background.hpp
-    cosmictiger/cosmology/background_plot.hpp
     cosmictiger/cosmology/evolution.hpp
     cosmictiger/cosmology/friedmann.hpp
     cosmictiger/cosmology/cosmology.hpp
@@ -274,7 +271,6 @@ set(cosmictiger_header_files
     cosmictiger/io/checkpoint.hpp
     cosmictiger/io/output.hpp
     cosmictiger/io/view.hpp
-    cosmictiger/math/complex.hpp
     cosmictiger/math/constants.hpp
     cosmictiger/math/fixed.hpp
     cosmictiger/math/fp16.hpp
@@ -298,19 +294,10 @@ set(cosmictiger_header_files
     cosmictiger/particles/particle_selection.hpp
     cosmictiger/particles/particles.hpp
     cosmictiger/scenarios/scenario.hpp
-    cosmictiger/scenarios/plummer.hpp
-    cosmictiger/scenarios/sod.hpp
-    cosmictiger/scenarios/blast.hpp
+    cosmictiger/scenarios/initializers.hpp
     cosmictiger/scenarios/rayleigh_taylor.hpp
     cosmictiger/math/cell_lattice.hpp
     cosmictiger/scenarios/kelvin_helmholtz_lattice.hpp
-    cosmictiger/scenarios/kelvin_helmholtz.hpp
-    cosmictiger/scenarios/disc.hpp
-    cosmictiger/scenarios/polytropic_star.hpp
-    cosmictiger/scenarios/hydro_wave.hpp
-    cosmictiger/scenarios/jeans_wave.hpp
-    cosmictiger/scenarios/cosmology.hpp
-    cosmictiger/scenarios/glass.hpp
     cosmictiger/scenarios/exact_sod.hpp
     cosmictiger/scenarios/sedov.hpp
     cosmictiger/sph/sph.hpp
@@ -328,15 +315,7 @@ set(cosmictiger_header_files
     cosmictiger/core/tree_id.hpp
     cosmictiger/gravity/fmm_box.hpp
     cosmictiger/gravity/fmm_geometry.hpp
-    cosmictiger/gravity/kick_context.hpp
 
-
-
-
-
-
-
-    cosmictiger/gravity/source_access.hpp
     cosmictiger/gravity/sources.hpp
     cosmictiger/gravity/tree_build.hpp
     cosmictiger/sph/viscosity/balsara.hpp
@@ -429,7 +408,7 @@ set_source_files_properties(src/cosmology/boltzmann.cpp PROPERTIES
 # Background and clock guards must remain effective in release builds.
 set_source_files_properties(src/core/driver.cpp src/gravity/error.cpp src/gravity/reference_table.cpp
     src/cosmology/friedmann.cpp src/cosmology/cosmology.cpp
-    src/cosmology/background.cpp src/cosmology/evolution.cpp PROPERTIES
+    src/cosmology/background.cpp PROPERTIES
     COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
 # Keep the diagnostic's compensated double sums intact on both host and device.
 set_source_files_properties(src/gravity/error_cuda.cu PROPERTIES COMPILE_OPTIONS
@@ -452,13 +431,7 @@ set(COSMICTIGER_GENERATED_FMM_FILES
     ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree/ewald_green.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree/ewald_m2l.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree/geometry.hpp
-    ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree/p2m.hpp
-    ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree/p2l.hpp
-    ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree/m2m.hpp
-    ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree/m2l.hpp
-    ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree/m2p.hpp
-    ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree/l2l.hpp
-    ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree/l2p.hpp
+    ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree/l2l_warp.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/operation_counts.json)
 set(cosmictiger_fmm_operator_stems

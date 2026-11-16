@@ -1,3 +1,4 @@
+// Stack-trace collection, signal handling, and diagnostic output paths.
 // Copyright (c) 2026 Octo-Tiger AUTHORS
 // Copyright (c) 2026 Dominic C. Marcello
 // Distributed under the Boost Software License, Version 1.0.
@@ -26,3 +27,8 @@ private:
 
 // The same symbolization backend is used for assertions and fatal signals.
 std::string stackTrace();
+
+// Standalone utilities keep the working-directory default. The simulation
+// configures this path after resolving its scenario output directory.
+void setStackTraceOutputPath(std::string const& filename);
+std::string stackTraceOutputPath();

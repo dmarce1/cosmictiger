@@ -1,4 +1,4 @@
-// CPU gravity-tree traversal and interaction scheduling.
+// CPU gravity-tree traversal, execution callbacks, and interaction scheduling.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -13,18 +13,38 @@
 #include <memory>
 
 #include <cosmictiger/core/containers.hpp>
+#include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/gravity/fmm_types.hpp>
 #include <cosmictiger/gravity/kick.hpp>
-#include <cosmictiger/gravity/kick_context.hpp>
+#include <cosmictiger/gravity/kick_workspace.hpp>
 #include <cosmictiger/gravity/tree.hpp>
 #include <cosmictiger/math/position.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 // Shared order-templated traversal and direct interactions. KickContext supplies
 // solver-specific task scheduling and completion handling.
 // Per-order instance translation units compile the arithmetic once per order.
 
 struct KickWorkspace;
+
+// Solver decisions occur once per task/node/leaf. Pair arithmetic stays in the
+// shared inlined operators; no interaction-level virtual dispatch is used.
+struct KickContext {
+    hpx::future<KickReturn> (*fork)(KickParameters, ExpansionBuffer const&, Vector3<Position>,
+        TreeId, Vector<TreeId>, Vector<TreeId>, std::shared_ptr<KickWorkspace>, bool) =
+        nullptr;    // Submit a subtree walk; the final flag requests asynchronous execution.
+    void (*beginReturn)(ParticleInteger) = nullptr;    // Begin collecting the local particle goal.
+    void (*coverParticles)(ParticleInteger) = nullptr;    // Count particles assigned to GPU work.
+    void (*accumulateReturn)(KickReturn const&, ParticleInteger, bool) =
+        nullptr;    // Add a leaf result and its particle count; the flag permits publication.
+    KickReturn (*waitReturn)() = nullptr;           // Wait for the completed local subtree result.
+    void (*publishReturn)(KickReturn) = nullptr;    // Publish the completed local subtree result.
+    KickGpuExecutor gpuExecutor = nullptr;          // Execute a staged batch of GPU interactions.
+};
+
+KickReturn kickTreeWalk(KickParameters, ExpansionBuffer, Vector3<Position>, TreeId, Vector<TreeId>,
+    Vector<TreeId>, std::shared_ptr<KickWorkspace>, KickContext const&);
 
 namespace detail {
 
@@ -62,21 +82,18 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
 #include <array>
 #include <cmath>
 
-#include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/gravity/fmm_acceptance.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/kernels/cartesian_tracefree_operators.hpp>
 #include <cosmictiger/gravity/kick_interaction_counts.hpp>
-#include <cosmictiger/gravity/kick_workspace.hpp>
 #include <cosmictiger/gravity/periodic_fmm.hpp>
 #include <cosmictiger/gravity/softening.hpp>
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/range.hpp>
 #include <cosmictiger/math/simd_math.hpp>
-#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_SPH
 #include <cosmictiger/sph/particles.hpp>

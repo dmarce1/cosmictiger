@@ -23,7 +23,6 @@
 #if COSMICTIGER_ENABLE_ROCKSTAR
 #include <cosmictiger/analysis/group_tree.hpp>
 #include <cosmictiger/analysis/groups.hpp>
-#include <cosmictiger/analysis/groups_find.hpp>
 #include <cosmictiger/analysis/lightcone.hpp>
 #endif
 #if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
@@ -42,7 +41,6 @@
 #include <cosmictiger/core/timer.hpp>
 #if COSMICTIGER_WITH_GRAVITY
 #include <cosmictiger/cosmology/background.hpp>
-#include <cosmictiger/cosmology/background_plot.hpp>
 #include <cosmictiger/cosmology/cosmology.hpp>
 #include <cosmictiger/cosmology/evolution.hpp>
 #include <cosmictiger/cosmology/fft.hpp>
@@ -50,7 +48,7 @@
 #include <cosmictiger/gravity/error.hpp>
 #include <cosmictiger/gravity/global_fmm/distributed_tree.hpp>
 #include <cosmictiger/gravity/global_fmm/execution.hpp>
-#include <cosmictiger/gravity/global_fmm/particle_exchange.hpp>
+#include <cosmictiger/gravity/global_fmm/remote_cache.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/kick_workspace.hpp>
@@ -67,9 +65,7 @@
 #include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_GRAVITY
 #include <cosmictiger/scenarios/benchmark.hpp>
-#include <cosmictiger/scenarios/cosmology.hpp>
-#include <cosmictiger/scenarios/glass.hpp>
-#include <cosmictiger/scenarios/plummer.hpp>
+#include <cosmictiger/scenarios/initializers.hpp>
 #endif
 #include <cosmictiger/scenarios/scenario.hpp>
 #if COSMICTIGER_WITH_SPH

@@ -1,3 +1,6 @@
+// Initialize the cosmological background, run interval, and particle distribution.
+// Copyright (C) 2026 Dominic C. Marcello; BSL-1.0 (see LICENSE_1_0.txt).
+
 #include <cosmictiger/core/driver.hpp>
 #include <cosmictiger/core/interrupt_profile.hpp>
 #include <cosmictiger/core/options.hpp>
@@ -5,7 +8,7 @@
 #include <cosmictiger/cosmology/cosmology.hpp>
 #include <cosmictiger/cosmology/evolution.hpp>
 #include <cosmictiger/cosmology/initialize.hpp>
-#include <cosmictiger/scenarios/cosmology.hpp>
+#include <cosmictiger/scenarios/initializers.hpp>
 
 namespace scenarios {
 

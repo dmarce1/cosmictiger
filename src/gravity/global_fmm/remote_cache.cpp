@@ -1,4 +1,4 @@
-// Demand-fetched remote tree records and positioned multipoles.
+// Demand-fetched remote tree records, positioned multipoles, and particle sources.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -20,6 +20,7 @@
 #include <cosmictiger/core/safe_io.hpp>
 #include <cosmictiger/gravity/global_fmm/remote_cache.hpp>
 #include <cosmictiger/gravity/tree_build.hpp>
+#include <cosmictiger/particles/particles.hpp>
 
 constexpr bool kVerbose = true;
 
@@ -78,6 +79,12 @@ void treeResetRemoteCache() {
 
 void treeEnableRemoteCache() {
     treeRegisterRemoteAccess(treeCacheRead, treeResetRemoteCache);
+}
+
+/// Read distributed gravity particle positions and species through the shared cache.
+void globalFmmReadSourcePositions(TreeNode const& source, Position* x, Position* y, Position* z,
+    char* types, ParticleInteger offset) {
+    particlesGlobalReadPos(source.globalParticleRange(), x, y, z, types, offset);
 }
 
 static TreeNode const* treeCacheRead(TreeId id) {

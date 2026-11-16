@@ -40,8 +40,7 @@
 #include <cosmictiger/particles/drift.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_GRAVITY
-#include <cosmictiger/scenarios/cosmology.hpp>
-#include <cosmictiger/scenarios/plummer.hpp>
+#include <cosmictiger/scenarios/initializers.hpp>
 #endif
 #include <tests/application_test.hpp>
 #include <tests/test.hpp>

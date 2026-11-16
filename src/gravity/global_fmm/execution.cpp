@@ -1,3 +1,4 @@
+// Schedule distributed gravity kicks, collect their results, and clear walk buffers.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -22,12 +23,12 @@
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/gravity/global_fmm/execution.hpp>
 #include <cosmictiger/gravity/global_fmm/gpu_staging.hpp>
-#include <cosmictiger/gravity/global_fmm/particle_exchange.hpp>
+#include <cosmictiger/gravity/global_fmm/remote_cache.hpp>
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/kick_interaction_counts.hpp>
 #include <cosmictiger/gravity/kick_walk.hpp>
 #include <cosmictiger/gravity/kick_workspace.hpp>
-#include <cosmictiger/gravity/source_access.hpp>
+#include <cosmictiger/gravity/sources.hpp>
 #include <cosmictiger/gravity/tree.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>

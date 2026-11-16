@@ -7,7 +7,7 @@
  */
 
 // Generated counting-scalar definitions. Tests only; not a library source.
-#include <cosmictiger/gravity/kernels/cartesian_tracefree/l2l.hpp>
+#include <cosmictiger/gravity/kernels/cartesian_tracefree.hpp>
 namespace cosmictiger::gravity::cartesian {
 template <class Real>
 void L2L(Expansion<Real> const& Li, Vector3<Real> const& distance, Real scaleRatio,

@@ -1,3 +1,4 @@
+// Find linked particle groups through distributed tree walks and leaf comparisons.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2021  Dominic C. Marcello
@@ -11,7 +12,6 @@
 #include <hpx/threading_base/annotated_function.hpp>
 
 #include <cosmictiger/analysis/group_tree.hpp>
-#include <cosmictiger/analysis/groups_find.hpp>
 #include <cosmictiger/analysis/rockstar_core.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 

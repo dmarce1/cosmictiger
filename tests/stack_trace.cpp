@@ -10,7 +10,6 @@
 #include <pthread.h>
 #include <sys/resource.h>
 
-#include <cosmictiger/core/diagnostic_output.hpp>
 #include <cosmictiger/core/stack_trace.hpp>
 
 namespace detail {

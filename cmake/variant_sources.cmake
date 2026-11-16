@@ -64,7 +64,6 @@ function(cosmictiger_feature_sources output)
             src/gravity/global_fmm/distributed_tree.cpp
             src/gravity/global_fmm/execution.cpp
             src/gravity/global_fmm/gpu_staging.cpp
-            src/gravity/global_fmm/particle_exchange.cpp
             src/gravity/global_fmm/remote_cache.cpp
             src/gravity/gravity.cpp
             src/gravity/kick.cpp
@@ -72,7 +71,6 @@ function(cosmictiger_feature_sources output)
             src/gravity/kick_workspace.cpp
             src/gravity/tree_build.cpp
             src/gravity/kick_executor.cpp
-            src/gravity/source_access.cpp
             src/gravity/sources.cpp
             src/gravity/tree_arena.cpp
         )

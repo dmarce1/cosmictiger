@@ -28,12 +28,12 @@
 #include <hpx/modules/program_options.hpp>
 
 #include <cosmictiger/core/defs.hpp>
-#include <cosmictiger/core/diagnostic_output.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/options_metadata.hpp>
 #include <cosmictiger/core/particle_count.hpp>
 #include <cosmictiger/core/safe_io.hpp>
+#include <cosmictiger/core/stack_trace.hpp>
 #include <cosmictiger/core/startup.hpp>
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/gravity/opening_schedule.hpp>

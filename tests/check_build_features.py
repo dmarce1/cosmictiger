@@ -162,7 +162,6 @@ def sourceSelectionErrors(sources, configuration):
         if not hasGravity(configuration) and source in {
                 "src/gravity/gravity.cpp", "src/gravity/kick.cpp", "src/gravity/kick.cu",
                 "src/gravity/kick_workspace.cpp", "src/gravity/kick_executor.cpp",
-                "src/gravity/source_access.cpp",
                 "src/gravity/sources.cpp", "src/gravity/tree_build.cpp", "src/gravity/tree_arena.cpp",
                 "tests/gravity/cartesian_kernels.cpp", "tests/gravity/cartesian_kernels_cuda.cu",
                 "tests/gravity/cartesian_l2l_cuda.cu", "tests/gravity/fmm_acceptance.cpp",

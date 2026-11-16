@@ -1,3 +1,6 @@
+// Write cosmological background samples and invoke the embedded plot renderer.
+// Copyright (C) 2026 Dominic C. Marcello; BSL-1.0 (see LICENSE_1_0.txt).
+
 #include <cerrno>
 #include <filesystem>
 #include <format>
@@ -15,7 +18,6 @@
 #include <cosmictiger/background_plot_script.hpp>
 #include <cosmictiger/core/safe_io.hpp>
 #include <cosmictiger/cosmology/background.hpp>
-#include <cosmictiger/cosmology/background_plot.hpp>
 #include <cosmictiger/io/output.hpp>
 
 extern char** environ;

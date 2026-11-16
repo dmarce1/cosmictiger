@@ -18,7 +18,7 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/particle_count.hpp>
 #include <cosmictiger/math/math.hpp>
-#include <cosmictiger/scenarios/jeans_wave.hpp>
+#include <cosmictiger/scenarios/initializers.hpp>
 #include <cosmictiger/sph/geometry.hpp>
 #include <cosmictiger/sph/particles.hpp>
 

@@ -20,8 +20,8 @@
 #include <cosmictiger/core/particle_count.hpp>
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/math.hpp>
-#include <cosmictiger/scenarios/blast.hpp>
 #include <cosmictiger/scenarios/diagnostics.hpp>
+#include <cosmictiger/scenarios/initializers.hpp>
 #include <cosmictiger/scenarios/sedov.hpp>
 #include <cosmictiger/sph/geometry.hpp>
 #include <cosmictiger/sph/particles.hpp>

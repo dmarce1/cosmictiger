@@ -1,3 +1,4 @@
+// Initialize polytropic gas stars and report their radial equilibrium diagnostics.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -21,7 +22,7 @@
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/scenarios/diagnostics.hpp>
-#include <cosmictiger/scenarios/polytropic_star.hpp>
+#include <cosmictiger/scenarios/initializers.hpp>
 #include <cosmictiger/scenarios/sphere.hpp>
 #include <cosmictiger/sph/geometry.hpp>
 #include <cosmictiger/sph/particles.hpp>

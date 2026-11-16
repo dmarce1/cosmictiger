@@ -1,3 +1,4 @@
+// Capture stack traces and install fatal-signal diagnostics with configurable output.
 // Copyright (c) 2026 Octo-Tiger AUTHORS
 // Copyright (c) 2026 Dominic C. Marcello
 // Adapted from Octo-Tiger stacktrace_fix, a0720ee02feebf776b797b2fdc74edf6bcc5bd83.
@@ -29,7 +30,6 @@
 #endif
 #endif
 
-#include <cosmictiger/core/diagnostic_output.hpp>
 #include <cosmictiger/core/stack_trace.hpp>
 
 namespace detail {

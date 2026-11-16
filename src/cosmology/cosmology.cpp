@@ -1,5 +1,5 @@
 /*
- CosmicTiger - A cosmological N-Body code
+ CosmicTiger - cosmological background evolution, clock queries, and run duration.
  Copyright (C) 2021  Dominic C. Marcello
 
  Distributed under the Boost Software License, Version 1.0.
@@ -15,6 +15,7 @@
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/cosmology/cosmology.hpp>
+#include <cosmictiger/cosmology/evolution.hpp>
 #include <cosmictiger/cosmology/friedmann.hpp>
 #include <cosmictiger/math/constants.hpp>
 #include <cosmictiger/math/math.hpp>
@@ -143,3 +144,24 @@ void cosmosNfwFit(Vector<double> radii, double& rs, double& rhoNfw) {
     rhoNfw = fit.density;
 }
 #endif
+
+namespace cosmology {
+
+/// Use an explicit run duration or derive the conformal interval to a valid later scale
+/// factor.
+double configuredDuration(double initialScale) {
+    auto const& options = getOptions();
+    if (options.run.endTime > 0.0) {
+        return options.run.endTime;
+    }
+    double const finalScale = 1.0 / (1.0 + options.cosmology.endRedshift);
+    if (!std::isfinite(initialScale) || !(initialScale > 0.0) || !std::isfinite(finalScale) ||
+        !(finalScale > initialScale)) {
+        throw std::invalid_argument("cosmology.endRedshift must be below startRedshift when "
+                                    "run.endTime=0; use a positive run.endTime to evolve "
+                                    "through turnaround and contraction");
+    }
+    return cosmosConformalTime(initialScale, finalScale);
+}
+
+}    // namespace cosmology

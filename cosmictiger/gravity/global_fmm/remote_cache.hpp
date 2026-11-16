@@ -1,4 +1,4 @@
-// Demand-fetched remote gravity-tree cache lifecycle.
+// Demand-fetched remote gravity-tree cache lifecycle and particle source reads.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -9,5 +9,10 @@
 
 #pragma once
 
+#include <cosmictiger/gravity/sources.hpp>
+
 void treeEnableRemoteCache();
 void treeResetRemoteCache();
+
+void globalFmmReadSourcePositions(
+    TreeNode const&, Position*, Position*, Position*, char*, ParticleInteger);

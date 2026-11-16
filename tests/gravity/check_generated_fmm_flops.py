@@ -198,8 +198,10 @@ def buildChecks(report):
     checks = []
     lines = ['#include <cstdio>', '']
     operators = ('p2m', 'p2l', 'm2m', 'm2l', 'm2p', 'l2l', 'l2p', 'ewald_m2l')
-    for name in operators:
-        lines.append(f'#include <cosmictiger/gravity/kernels/cartesian_tracefree/{name}.hpp>')
+    lines.extend([
+        '#include <cosmictiger/gravity/kernels/cartesian_tracefree.hpp>',
+        '#include <cosmictiger/gravity/kernels/cartesian_tracefree/ewald_m2l.hpp>',
+    ])
     for name in ('geometry',) + operators:
         lines.append(f'#include <tests/gravity/kernels/instrumentation/cartesian_tracefree_{name}.cpp>')
     appendAvailabilityChecks(lines)

@@ -1,4 +1,4 @@
-// Borrowed gravity source positions and species-dependent mass lookup.
+// Borrowed gravity sources, remote position access, and species-dependent mass lookup.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026 Dominic C. Marcello
@@ -11,6 +11,14 @@
 #include <type_traits>
 
 #include <cosmictiger/particles/particles.hpp>
+
+struct TreeNode;
+
+using GravityRemoteSourceReader = void (*)(
+    TreeNode const&, Position*, Position*, Position*, char*, ParticleInteger);
+void gravitySetRemoteSourceReader(GravityRemoteSourceReader reader);
+void gravityReadSourcePositions(
+    TreeNode const&, Position*, Position*, Position*, char*, ParticleInteger);
 
 // Non-owning position and species arrays used for local source arithmetic.
 struct FmmSourceView {

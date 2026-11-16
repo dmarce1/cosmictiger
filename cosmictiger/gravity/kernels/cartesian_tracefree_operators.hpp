@@ -1,3 +1,4 @@
+// Typed Cartesian FMM wrappers with application coordinate and potential conventions.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026 Dominic C. Marcello
@@ -15,14 +16,8 @@
 #include <cosmictiger/core/containers.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/gravity/fmm_types.hpp>
-#include <cosmictiger/gravity/kernels/cartesian_tracefree/l2l.hpp>
+#include <cosmictiger/gravity/kernels/cartesian_tracefree.hpp>
 #include <cosmictiger/gravity/kernels/cartesian_tracefree/l2l_warp.hpp>
-#include <cosmictiger/gravity/kernels/cartesian_tracefree/l2p.hpp>
-#include <cosmictiger/gravity/kernels/cartesian_tracefree/m2l.hpp>
-#include <cosmictiger/gravity/kernels/cartesian_tracefree/m2m.hpp>
-#include <cosmictiger/gravity/kernels/cartesian_tracefree/m2p.hpp>
-#include <cosmictiger/gravity/kernels/cartesian_tracefree/p2l.hpp>
-#include <cosmictiger/gravity/kernels/cartesian_tracefree/p2m.hpp>
 #include <cosmictiger/gravity/kernels/cartesian_tracefree_config.hpp>
 #include <cosmictiger/math/simd_math.hpp>
 #include <cosmictiger/math/vector3.hpp>

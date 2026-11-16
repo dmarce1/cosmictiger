@@ -12,16 +12,10 @@
 #if COSMICTIGER_WITH_SPH
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
-#include <cosmictiger/scenarios/blast.hpp>
 #include <cosmictiger/scenarios/diagnostics.hpp>
-#include <cosmictiger/scenarios/disc.hpp>
 #include <cosmictiger/scenarios/gresho.hpp>
-#include <cosmictiger/scenarios/hydro_wave.hpp>
-#include <cosmictiger/scenarios/jeans_wave.hpp>
-#include <cosmictiger/scenarios/kelvin_helmholtz.hpp>
-#include <cosmictiger/scenarios/polytropic_star.hpp>
+#include <cosmictiger/scenarios/initializers.hpp>
 #include <cosmictiger/scenarios/rayleigh_taylor.hpp>
-#include <cosmictiger/scenarios/sod.hpp>
 #include <cosmictiger/sph/particles.hpp>
 #endif
 
