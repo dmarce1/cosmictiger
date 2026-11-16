@@ -154,6 +154,19 @@ namespace detail {
         return std::chrono::duration<double>(end - begin).count();
     }
 
+    void writeBenchmarkColumns(
+        std::ostream& output, std::string const& line, char const* separator) {
+        // Fit full-width counters, column names and the existing scientific precision.
+        constexpr int kColumnWidth = std::numeric_limits<uint64_t>::digits10 + 1;
+        std::istringstream fields(line);
+        std::string field;
+        while (fields >> field) {
+            output << separator << std::format("{:>{}}", field, kColumnWidth);
+            separator = " ";
+        }
+        output << '\n';
+    }
+
     std::string appendBenchmarkResult(size_t caseNumber, std::string const& row) {
         auto const filename = outputPath(std::format("bench.{}.dat", caseNumber));
         std::ofstream output(filename, std::ios::app | std::ios::ate);
@@ -161,12 +174,14 @@ namespace detail {
             throw std::ios_base::failure("Cannot open benchmark results file: " + filename);
         }
         if (output.tellp() == std::streampos(0)) {
-            output << "# particles size theta bucket_size fmm_order localities threads backend "
-                      "repeats tree_nodes leaves particles_per_leaf softening tree_mean_s "
-                      "force_mean_s cleanup_mean_s min_s median_s mean_s max_s flops gflops "
-                      "load_s domain_s\n";
+            writeBenchmarkColumns(output,
+                "particles size theta bucket_size fmm_order localities threads backend "
+                "repeats tree_nodes leaves particles_per_leaf softening tree_mean_s "
+                "force_mean_s cleanup_mean_s min_s median_s mean_s max_s flops gflops "
+                "load_s domain_s",
+                "# ");
         }
-        output << row << '\n';
+        writeBenchmarkColumns(output, row, "  ");
         output.close();
         if (!output) {
             throw std::ios_base::failure("Cannot append benchmark results file: " + filename);
