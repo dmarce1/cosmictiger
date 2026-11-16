@@ -1,3 +1,4 @@
+// Verify two- and three-dimensional Rayleigh-Taylor layers, balance and exact symmetry.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026 Dominic C. Marcello
@@ -12,6 +13,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <iterator>
+#include <limits>
 #include <map>
 #include <set>
 #include <stdexcept>
@@ -21,14 +23,15 @@
 #include <gtest/gtest.h>
 
 #include <cosmictiger/core/options.hpp>
-#include <cosmictiger/math/vector3.hpp>
+#include <cosmictiger/core/particle_count.hpp>
 #include <cosmictiger/scenarios/rayleigh_taylor.hpp>
 #include <cosmictiger/sph/particles.hpp>
+#include <tests/sph/midplane_cases.hpp>
 
 // Ordinary host storage lets this test call the production initializer without
 // starting HPX, allocating managed memory, or running the evolution driver.
-Array<Position*, kDimensions> particlesX;
-Vector3<float>* particlesV;
+Array<Position*, kSpatialDimensions> particlesX;
+ParticleVector<float>* particlesV;
 char* particlesR;
 ParticleInteger* sphParticlesParticleIndices;
 float* sphParticlesEntropies;
@@ -40,9 +43,12 @@ float* sphParticlesSmoothingLengths;
 namespace detail {
 
 constexpr double kPi = 3.141592653589793238462643383279502884;
+constexpr int kVerticalAxis = kSpatialDimensions == 2 ? kYi : kZi;
+constexpr int kMirroredSideCount = 2;
+constexpr int kQuarterCount = 4;
 Options options;
-std::array<std::vector<Position>, kDimensions> positions;
-std::vector<Vector3<float>> velocities;
+std::array<std::vector<Position>, kSpatialDimensions> positions;
+std::vector<ParticleVector<float>> velocities;
 std::vector<char> rungs;
 std::vector<ParticleInteger> indices;
 std::vector<float> internalEnergies;
@@ -88,7 +94,7 @@ ParticleInteger particlesSize() {
 
 void sphParticlesResize(ParticleInteger count, bool) {
     ParticleInteger const oldCount = sphParticlesSize();
-    for (int dim = 0; dim < kDimensions; dim++) {
+    for (int dim = 0; dim < kSpatialDimensions; dim++) {
         detail::positions[dim].resize(count);
         particlesX[dim] = detail::positions[dim].data();
     }
@@ -109,11 +115,11 @@ void sphParticlesResize(ParticleInteger count, bool) {
 
 namespace detail {
 
-void testInitialization(int resolution, ParticleInteger expectedCount, double acceleration) {
+void testInitialization(size_t requestedCount, ParticleInteger expectedCount, double acceleration) {
     auto const& opts = getOptions();
     sphParticlesResize(0);
     Options configured{};
-    configured.run.gasParticleCount = size_t(resolution) * resolution * resolution;
+    configured.run.gasParticleCount = requestedCount;
     configured.hydro.enabled = true;
     configured.hydro.heatCapacityRatio = 5.0 / 3.0;
     configured.hydro.neighborNumber = 42.0;
@@ -127,68 +133,80 @@ void testInitialization(int resolution, ParticleInteger expectedCount, double ac
     double const mass = opts.initial.gasMass;
     ParticleInteger lightCount = 0;
     ParticleInteger heavyCount = 0;
-    std::set<std::array<PositionInteger, kDimensions>> occupied;
+    std::set<std::array<PositionInteger, kSpatialDimensions>> occupied;
     std::map<double, double> pressureByHeight;
     for (ParticleInteger i = 0; i < sphParticlesSize(); i++) {
         double const x = sphParticlesPosition(kXi, i).toDouble();
-        double const z = sphParticlesPosition(kZi, i).toDouble();
-        require(z > 0.0 && z < 1.0 && z != 0.25 && z != 0.5 && z != 0.75,
+        double const height = sphParticlesPosition(kVerticalAxis, i).toDouble();
+        require(height > 0.0 && height < 1.0 && height != 0.25 && height != 0.5 && height != 0.75,
             "particles lie inside material layers away from symmetry planes");
-        bool const heavy = z < 0.25 || z > 0.75;
+        bool const heavy = height < 0.25 || height > 0.75;
         double const density = heavy ? 2.0 : 1.0;
         if (heavy) {
             heavyCount++;
         } else {
             lightCount++;
         }
-        std::array<PositionInteger, kDimensions> key{};
-        for (int dim = 0; dim < kDimensions; dim++) {
+        std::array<PositionInteger, kSpatialDimensions> key{};
+        for (int dim = 0; dim < kSpatialDimensions; dim++) {
             key[dim] = sphParticlesPosition(dim, i).raw();
+            double const coordinate = sphParticlesPosition(dim, i).toDouble();
+            require(coordinate > 0.0 && coordinate < 1.0, "particle lies inside the unit box");
         }
         require(occupied.insert(key).second, "particle positions must be unique");
         double const energy = sphParticlesInternalEnergy(i);
         double const pressure = (configured.hydro.heatCapacityRatio - 1.0) * density * energy;
-        double const distance = std::abs(z - 0.5);
-        // Integrate the weight inward from P=1.5 at z=0 or z=1.
+        double const distance = std::abs(height - 0.5);
+        // Integrate the weight inward from P=1.5 at either vertical boundary.
         double const expectedPressure = heavy ?
             1.5 + 2.0 * acceleration * (0.5 - distance) :
             1.5 + 0.5 * acceleration + acceleration * (0.25 - distance);
         require(energy > 0.0 && pressure > 0.0, "positive thermodynamic state");
         requireClose("hydrostatic pressure", pressure, expectedPressure);
-        auto const [position, inserted] = pressureByHeight.emplace(z, pressure);
+        auto const [position, inserted] = pressureByHeight.emplace(height, pressure);
         if (!inserted) {
-            requireClose("pressure depends only on z", pressure, position->second);
+            requireClose("pressure depends only on height", pressure, position->second);
         }
         double const support = sphParticlesSmoothingLength(i);
+        double const supportVolume = kSpatialDimensions == 2 ?
+            kPi * support * support :
+            4.0 * kPi / 3.0 * support * support * support;
         requireClose("support radius encodes layer density",
-            mass * configured.hydro.neighborNumber /
-                (4.0 * kPi / 3.0 * support * support * support),
-            density);
-        requireClose("zero transverse x velocity", sphParticlesVelocity(kXi, i), 0.0);
-        requireClose("zero transverse y velocity", sphParticlesVelocity(kYi, i), 0.0);
+            mass * configured.hydro.neighborNumber / supportVolume, density);
+        for (int dim = 0; dim < kSpatialDimensions; dim++) {
+            if (dim != kVerticalAxis) {
+                requireClose("zero transverse velocity", sphParticlesVelocity(dim, i), 0.0);
+            }
+        }
         // Check the independent Fourier expansion of the documented legacy
         // seed, rather than repeating its nested cosine expression.
         double const phase = 2.0 * kPi * (x - 0.5);
         double const transverseSeed =
             1.0 + 0.5 * std::cos(phase) + std::cos(4.0 * phase) + 0.5 * std::cos(7.0 * phase);
-        double const expectedVelocity = 0.025 * transverseSeed * std::sin(2.0 * kPi * z);
-        requireClose(
-            "normal velocity perturbation", sphParticlesVelocity(kZi, i), expectedVelocity, 2.0e-8);
+        double const expectedVelocity = 0.025 * transverseSeed * std::sin(2.0 * kPi * height);
+        requireClose("normal velocity perturbation", sphParticlesVelocity(kVerticalAxis, i),
+            expectedVelocity, 2.0e-8);
         require(sphParticlesRung(i) == 0, "initial rung");
     }
     require(heavyCount == 2 * lightCount, "heavy and light particle counts have density ratio 2:1");
     requireClose("light layer mass", mass * lightCount, 0.5);
     requireClose("heavy layer mass", mass * heavyCount, 1.0);
     requireClose("total mass", mass * sphParticlesSize(), 1.5);
-    for (ParticleInteger i = 0; i < sphParticlesSize(); i += 2) {
-        require(sphParticlesPosition(kZi, i) < Position(0.5), "lower particle precedes its mirror");
-        require(sphParticlesPosition(kXi, i).raw() == sphParticlesPosition(kXi, i + 1).raw() &&
-                sphParticlesPosition(kYi, i).raw() == sphParticlesPosition(kYi, i + 1).raw(),
-            "mirrored pairs share transverse positions");
-        require(PositionInteger(sphParticlesPosition(kZi, i).raw() +
-                    sphParticlesPosition(kZi, i + 1).raw()) == 0U,
-            "mirrored z coordinates are exact in fixed point");
-        require(sphParticlesVelocity(kZi, i) == -sphParticlesVelocity(kZi, i + 1),
+    for (ParticleInteger i = 0; i < sphParticlesSize(); i += kMirroredSideCount) {
+        require(sphParticlesPosition(kVerticalAxis, i) < Position(0.5),
+            "lower particle precedes its mirror");
+        for (int dim = 0; dim < kSpatialDimensions; dim++) {
+            if (dim != kVerticalAxis) {
+                require(
+                    sphParticlesPosition(dim, i).raw() == sphParticlesPosition(dim, i + 1).raw(),
+                    "mirrored pairs share transverse positions");
+            }
+        }
+        require(PositionInteger(sphParticlesPosition(kVerticalAxis, i).raw() +
+                    sphParticlesPosition(kVerticalAxis, i + 1).raw()) == 0U,
+            "mirrored vertical coordinates are exact in fixed point");
+        require(
+            sphParticlesVelocity(kVerticalAxis, i) == -sphParticlesVelocity(kVerticalAxis, i + 1),
             "normal velocities are exactly odd about the midplane");
         require(sphParticlesInternalEnergy(i) == sphParticlesInternalEnergy(i + 1) &&
                 sphParticlesSmoothingLength(i) == sphParticlesSmoothingLength(i + 1),
@@ -198,11 +216,11 @@ void testInitialization(int resolution, ParticleInteger expectedCount, double ac
         current != pressureByHeight.end(); previous = current++) {
         double const first = previous->first;
         double const second = current->first;
-        int const firstLayer = int(4.0 * first);
-        if (firstLayer != int(4.0 * second)) {
+        int const firstLayer = int(kQuarterCount * first);
+        if (firstLayer != int(kQuarterCount * second)) {
             continue;
         }
-        double const density = (firstLayer == 0 || firstLayer == 3) ? 2.0 : 1.0;
+        double const density = (firstLayer == 0 || firstLayer == kQuarterCount - 1) ? 2.0 : 1.0;
         double const force = first < 0.5 ? acceleration : -acceleration;
         requireClose("hydrostatic pressure gradient",
             (current->second - previous->second) / (second - first), density * force, 2.0e-5);
@@ -210,42 +228,55 @@ void testInitialization(int resolution, ParticleInteger expectedCount, double ac
 }
 
 void testUnresolvedLattice() {
-    for (int resolution : {1, 2}) {
-        sphParticlesResize(0);
-        options.run.gasParticleCount = 0;
-        bool rejected = false;
-        try {
-            scenarios::initializeRayleighTaylor();
-        } catch (std::runtime_error const&) {
-            rejected = true;
-        }
-        require(rejected, "unresolved lattice must be rejected");
-        require(sphParticlesSize() == 0, "rejected lattice leaves no particles");
-    }
+    sphParticlesResize(0);
+    options.run.gasParticleCount = 0;
+    EXPECT_THROW(scenarios::initializeRayleighTaylor(), std::runtime_error);
+    require(sphParticlesSize() == 0, "rejected lattice leaves no particles");
 }
 
 }    // namespace detail
 
 TEST(RayleighTaylor, Resolution8) {
     for (double acceleration : {0.5, 1000.0}) {
-        detail::testInitialization(8, 768, acceleration);
+        detail::testInitialization(
+            particle_count::spatialPower(8), kSpatialDimensions == 2 ? 96 : 768, acceleration);
     }
 }
 
 TEST(RayleighTaylor, Resolution16) {
     for (double acceleration : {0.5, 1000.0}) {
-        detail::testInitialization(16, 6144, acceleration);
+        detail::testInitialization(
+            particle_count::spatialPower(16), kSpatialDimensions == 2 ? 384 : 6144, acceleration);
     }
 }
 
 TEST(RayleighTaylor, Resolution32) {
     for (double acceleration : {0.5, 1000.0}) {
-        detail::testInitialization(32, 32928, acceleration);
+        detail::testInitialization(
+            particle_count::spatialPower(32), kSpatialDimensions == 2 ? 1176 : 32928, acceleration);
     }
+}
+
+TEST(RayleighTaylor, CompleteCellRounding) {
+    constexpr ParticleInteger kCellPopulation = kSpatialDimensions == 2 ? 24 : 96;
+    detail::testInitialization(1, kCellPopulation, 0.5);
+    detail::testInitialization(kCellPopulation, kCellPopulation, 0.5);
+    detail::testInitialization(
+        kCellPopulation + 1, kCellPopulation * (kSpatialDimensions == 2 ? 4 : 8), 0.5);
 }
 
 TEST(RayleighTaylor, UnresolvedLattice) {
     detail::testUnresolvedLattice();
+}
+
+TEST(RayleighTaylor, RejectsParticleIndexOverflow) {
+    sphParticlesResize(0);
+    Options configured{};
+    configured.run.gasParticleCount = size_t(std::numeric_limits<ParticleInteger>::max());
+    configured.scenario.rayleighTaylor.zPlaneAcceleration = 0.5;
+    setOptions(configured);
+    EXPECT_THROW(scenarios::initializeRayleighTaylor(), std::overflow_error);
+    EXPECT_EQ(sphParticlesSize(), 0);
 }
 
 TEST(RayleighTaylor, RequiresDrivingAcceleration) {
@@ -258,4 +289,8 @@ TEST(RayleighTaylor, RequiresDrivingAcceleration) {
         EXPECT_THROW(scenarios::initializeRayleighTaylor(), std::invalid_argument);
         EXPECT_EQ(sphParticlesSize(), 0);
     }
+}
+
+TEST(RayleighTaylor, MidplaneAcceleration) {
+    detail::testRayleighTaylorMidplaneAcceleration();
 }

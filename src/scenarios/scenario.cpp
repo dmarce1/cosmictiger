@@ -1,3 +1,6 @@
+// Register the scenarios available in this build and gather gas diagnostics.
+// Copyright (C) 2026 Dominic C. Marcello; BSL-1.0 (see LICENSE_1_0.txt).
+
 #include <algorithm>
 #include <random>
 #include <stdexcept>
@@ -84,10 +87,8 @@ ScenarioDefinition const& definition(std::string const& name) {
 #if COSMICTIGER_WITH_SPH
         {"sod", false, true, true, 20, initializeSod},
         {"blast", false, true, true, 16, initializeBlast},
-#if COSMICTIGER_DIMENSION_COUNT == 3
-        {"rayleighTaylor", true, true, true, 256, initializeRayleighTaylor},
-#endif
 #if COSMICTIGER_DIMENSION_COUNT >= 2
+        {"rayleighTaylor", false, true, true, 256, initializeRayleighTaylor},
         {"kelvinHelmholtz", false, true, true, 1024, initializeKelvinHelmholtz},
 #endif
 #if COSMICTIGER_DIMENSION_COUNT == 3

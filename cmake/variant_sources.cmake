@@ -109,12 +109,12 @@ function(cosmictiger_feature_sources output)
             src/scenarios/sphere.cu
         )
         if(COSMICTIGER_DIMENSION_COUNT LESS 3)
-            list(REMOVE_ITEM cosmictiger_source_files src/scenarios/rayleigh_taylor.cpp
-                src/scenarios/disc.cpp src/scenarios/polytropic_star.cpp
+            list(REMOVE_ITEM cosmictiger_source_files src/scenarios/disc.cpp src/scenarios/polytropic_star.cpp
                 src/scenarios/sphere.cpp src/scenarios/sphere.cu)
         endif()
         if(COSMICTIGER_DIMENSION_COUNT LESS 2)
-            list(REMOVE_ITEM cosmictiger_source_files src/scenarios/kelvin_helmholtz.cpp
+            list(REMOVE_ITEM cosmictiger_source_files src/scenarios/rayleigh_taylor.cpp
+                src/scenarios/kelvin_helmholtz.cpp
                 src/scenarios/gresho.cpp)
         endif()
         if(COSMICTIGER_ENABLE_CHEMISTRY)

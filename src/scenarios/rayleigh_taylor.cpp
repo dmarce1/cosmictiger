@@ -1,3 +1,4 @@
+// Initialize mirrored Rayleigh-Taylor layers in two or three spatial dimensions.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -7,6 +8,7 @@
  */
 
 #include <cmath>
+#include <limits>
 #include <numbers>
 #include <stdexcept>
 
@@ -22,15 +24,31 @@ namespace scenarios {
 /// Initialize mirrored light/heavy gas layers with hydrostatic pressure and interface
 /// perturbations.
 ScenarioPlan initializeRayleighTaylor() {
+    static_assert(kSpatialDimensions >= 2);
+    constexpr int kVerticalAxis = kSpatialDimensions == 2 ? kYi : kZi;
+    constexpr int kMirroredSideCount = 2;
+    constexpr int kQuarterCount = 4;
+    constexpr int kHeavySiteCount = 2;
+    constexpr int kLightSiteCount = 1;
+    constexpr int kLayerSiteCount = kHeavySiteCount + kLightSiteCount;
+    constexpr double kHalfBox = 0.5;
+    constexpr double kQuarterBox = 0.25;
     auto opts = getOptions();
-    // Each complete mirrored light/heavy layer group contains 96 n³ particles.
-    int const quarterDim = particle_count::roundLattice(opts.run.gasParticleCount, 96).side;
+    auto const lattice =
+        particle_count::roundLattice(opts.run.gasParticleCount, kRayleighTaylorLatticeMultiplicity);
+    int const quarterDim = lattice.side;
     if (quarterDim == 0) {
         throw std::runtime_error("run.gasParticleCount must be positive");
     }
-    int const dim = 2 * quarterDim;
-    ParticleInteger const lightCount = ParticleInteger(4) * dim * dim * dim;
-    ParticleInteger const particleCount = 3 * lightCount;
+    if (lattice.count > size_t(std::numeric_limits<ParticleInteger>::max()) ||
+        quarterDim > std::numeric_limits<int>::max() / kQuarterCount) {
+        throw std::overflow_error("Rayleigh-Taylor particle count exceeds the supported range");
+    }
+    int const halfDim = kMirroredSideCount * quarterDim;
+    int const fullDim = kQuarterCount * quarterDim;
+    int const transverseDim = kSpatialDimensions == 3 ? fullDim : 1;
+    ParticleInteger const particleCount = lattice.count;
+    ParticleInteger const lightCount = particleCount / kLayerSiteCount;
     constexpr double kLightDensity = 1.0;
     constexpr double kHeavyDensity = 2.0;
     constexpr double kBoundaryPressure = 1.5;
@@ -41,38 +59,39 @@ ScenarioPlan initializeRayleighTaylor() {
             "The Rayleigh-Taylor scenario requires scenario.rayleighTaylor.zPlaneAcceleration > 0");
     }
     opts.run.gasParticleCount = particleCount;
-    opts.initial.gasMass = 0.5 * kLightDensity / lightCount;
+    opts.initial.gasMass = kHalfBox * kLightDensity / lightCount;
     setOptions(opts);
     double const mass = opts.initial.gasMass;
-    double const dx = 0.5 / dim;
+    double const dx = kHalfBox / halfDim;
     sphParticlesResize(particleCount);
     ParticleInteger index = 0;
-    for (int ix = 0; ix < 2 * dim; ix++) {
-        for (int iy = 0; iy < 2 * dim; iy++) {
-            for (int iz = 0; iz < dim; iz++) {
-                bool const heavy = iz < quarterDim;
+    for (int ix = 0; ix < fullDim; ix++) {
+        for (int transverseIndex = 0; transverseIndex < transverseDim; transverseIndex++) {
+            for (int verticalIndex = 0; verticalIndex < halfDim; verticalIndex++) {
+                bool const heavy = verticalIndex < quarterDim;
                 double const density = heavy ? kHeavyDensity : kLightDensity;
-                int const samples = heavy ? 2 : 1;
+                int const samples = heavy ? kHeavySiteCount : kLightSiteCount;
                 double const smoothingLength =
                     sph_geometry::supportRadius(mass, density, opts.hydro.neighborNumber);
                 for (int sample = 0; sample < samples; sample++) {
-                    double const offset = heavy ? 0.25 + 0.5 * sample : 0.5;
+                    double const offset = heavy ? kQuarterBox + kHalfBox * sample : kHalfBox;
                     Position const x((ix + offset) * dx);
-                    Position const y((iy + offset) * dx);
-                    Position const z((iz + offset) * dx);
-                    double const height = z.toDouble();
-                    double const distanceFromMiddle = 0.5 - height;
-                    // Integrate dP/dz = rho * a_z from the outer boundary.
+                    Position const vertical((verticalIndex + offset) * dx);
+                    double const height = vertical.toDouble();
+                    double const distanceFromMiddle = kHalfBox - height;
+                    // Integrate the vertical pressure gradient from the outer boundary:
+                    // dP/dy = rho * a_y in 2D; dP/dz = rho * a_z in 3D.
                     // This balances the imposed field; self-gravity is an independent option.
                     double const pressure = kBoundaryPressure +
                         acceleration *
-                            (kHeavyDensity * (0.5 - std::fmax(distanceFromMiddle, 0.25)) +
-                                kLightDensity * std::fmax(0.25 - distanceFromMiddle, 0.0));
+                            (kHeavyDensity *
+                                    (kHalfBox - std::fmax(distanceFromMiddle, kQuarterBox)) +
+                                kLightDensity * std::fmax(kQuarterBox - distanceFromMiddle, 0.0));
                     double const internalEnergy =
                         pressure / ((opts.hydro.heatCapacityRatio - 1.0) * density);
-                    double const transverse = x.toDouble() - 0.5;
+                    double const transverse = x.toDouble() - kHalfBox;
                     // Retain the legacy multiharmonic seed (d8e95728), made
-                    // antisymmetric in z by 5e926504. The transverse Fourier
+                    // antisymmetric in the vertical coordinate by 5e926504. The transverse Fourier
                     // weights are 1 + cos(4 phi) + (cos(phi)+cos(7 phi))/2,
                     // phi=2*pi*(x-0.5); kVelocityAmplitude is a scale, not its peak.
                     double const velocity = kVelocityAmplitude / 4.0 *
@@ -82,13 +101,19 @@ ScenarioPlan initializeRayleighTaylor() {
                         std::sin(2.0 * std::numbers::pi * height);
                     // Mirror in fixed-point coordinates so paired positions sum to one
                     // exactly. Scalars are even and the normal velocity is odd.
-                    for (int side = 0; side < 2; side++) {
+                    for (int side = 0; side < kMirroredSideCount; side++) {
                         sphParticlesPosition(kXi, index) = x;
-                        sphParticlesPosition(kYi, index) = y;
-                        sphParticlesPosition(kZi, index) = side == 0 ? z : Position(0.0) - z;
-                        sphParticlesVelocity(kXi, index) = 0.0f;
-                        sphParticlesVelocity(kYi, index) = 0.0f;
-                        sphParticlesVelocity(kZi, index) = side == 0 ? velocity : -velocity;
+                        if constexpr (kSpatialDimensions == 3) {
+                            sphParticlesPosition(kYi, index) =
+                                Position((transverseIndex + offset) * dx);
+                        }
+                        sphParticlesPosition(kVerticalAxis, index) =
+                            side == 0 ? vertical : Position(0.0) - vertical;
+                        for (int dim = 0; dim < kSpatialDimensions; dim++) {
+                            sphParticlesVelocity(dim, index) = 0.0f;
+                        }
+                        sphParticlesVelocity(kVerticalAxis, index) =
+                            side == 0 ? velocity : -velocity;
                         sphParticlesSmoothingLength(index) = smoothingLength;
                         sphParticlesSetInternalEnergy(index, internalEnergy);
                         sphParticlesRung(index) = 0;

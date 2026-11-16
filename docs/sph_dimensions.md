@@ -14,11 +14,18 @@ cmake -S . -B build/sph_2d \
 ```
 
 Lower-dimensional runs use `run.darkMatterParticleCount=0`. They support
-traditional or global SPH integration. Hydro wave, Sod and blast initializers
-are available in all dimensions; Kelvin–Helmholtz and Gresho require at least
-two. Disc, self-gravitating star, and the existing z-directed Rayleigh–Taylor
-initializer remain three-dimensional. Central gravity and the z-plane force
-are rejected in lower dimensions. The uniform y body force requires D >= 2.
+hierarchical integration with midpoint SPH. Hydro wave, Sod and blast initializers
+are available in all dimensions; Kelvin–Helmholtz, Gresho and Rayleigh–Taylor
+require at least two. Disc and self-gravitating star remain three-dimensional.
+Central gravity is rejected in lower dimensions. The uniform y body force
+requires D >= 2.
+
+Rayleigh–Taylor uses a fixed analytic acceleration toward the midplane, along
+y in 2D and z in 3D. The existing `scenario.rayleighTaylor.zPlaneAcceleration`
+key sets its magnitude in both dimensions. Its preset and scenario default
+disable self-gravity, so a gravity-free build is sufficient. The mirrored
+light/heavy layers, hydrostatic pressure and velocity perturbation use that
+same vertical axis; particle counts round up to 24 n² in 2D and 96 n³ in 3D.
 The existing glass input format is three-dimensional.
 
 These are Cartesian calculations, not radial reductions of spherical or

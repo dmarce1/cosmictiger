@@ -1,5 +1,6 @@
 /*
  CosmicTiger - A cosmological N-Body code
+ Shared CPU/CUDA SPH source data, force completion, and support calculations.
  Copyright (C) 2026  Dominic C. Marcello
 
  Distributed under the Boost Software License, Version 1.0.
@@ -106,11 +107,12 @@ struct SphRunData {
 /*
  * Preserve the force-source arithmetic order for both the unsplit kernels and
  * the post-gravity completion of a phase-zero pair pass. Locally derived sum of the sources:
- *   dv𞁑/dτ ← dv𞁑/dτ + (dv𞁑/dτ)_G + g_y ŷ + g_z ẑ − g𞁞 f(q𞁑𞁞) h𞁞⁻ᴰ r𞁑𞁞 − λ v𞁑,
+ *   dv𞁑/dτ ← dv𞁑/dτ + (dv𞁑/dτ)_G + g_y ŷ + gₘ n̂ − g𞁞 f(q𞁑𞁞) h𞁞⁻ᴰ r𞁑𞁞 − λ v𞁑,
  *   r𞁑𞁞 = x𞁑 − x𞁞,  q𞁑𞁞 = |r𞁑𞁞|/h𞁞.
  * Symbol directory:
  *   x𞁑, v𞁑 → position, velocity; dv𞁑/dτ → acceleration; (dv𞁑/dτ)_G → gravity acceleration
- *   g_y, g_z → uniform y acceleration, midplane z acceleration; λ → velocity damping rate
+ *   g_y, gₘ → uniform y acceleration, signed midplane acceleration; λ → velocity damping rate
+ *   n̂ → last active coordinate direction: ŷ in 2D, ẑ in 3D
  *   g𞁞 → central acceleration; h𞁞 → central smoothing length; h𞁞⁻¹ → its inverse
  *   x𞁞 → box center; r𞁑𞁞, |r𞁑𞁞| → separation from the center, its magnitude
  *   q𞁑𞁞 → normalized radius; f(q𞁑𞁞) → gravity kernel force factor; f𞁑𞁞 → central force factor
@@ -126,7 +128,8 @@ CUDA_EXPORT inline Vector3<float> sphCompleteAcceleration(SphRunParameters const
     flops += 3;
 #endif
     dv𞁑_dτ[kYi] += parameters.uniformAccelerationY;
-    dv𞁑_dτ[kZi] += parameters.midplaneAccelerationZ(x𞁑[kZi]);
+    constexpr int kMidplaneAxis = kSpatialDimensions - 1;
+    dv𞁑_dτ[kMidplaneAxis] += parameters.midplaneAcceleration(x𞁑[kMidplaneAxis]);
     flops += 2;
     flops.doublePrecision += sph_flops::positionConstructionFlops();
     if (g𞁞 != 0.0f) {

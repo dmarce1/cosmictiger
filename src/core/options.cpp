@@ -50,6 +50,7 @@
 #include <cosmictiger/math/position.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #include <cosmictiger/scenarios/kelvin_helmholtz_lattice.hpp>
+#include <cosmictiger/scenarios/rayleigh_taylor.hpp>
 #include <cosmictiger/scenarios/scenario.hpp>
 #include <cosmictiger/sph/geometry.hpp>
 #if !COSMICTIGER_WITH_GRAVITY && COSMICTIGER_WITH_SPH
@@ -677,7 +678,7 @@ bool processOptions(int argc, char* argv[]) {
 #elif COSMICTIGER_DIMENSION_COUNT == 1
         "physical scenario: sod, blast, hydroWave"
 #elif COSMICTIGER_DIMENSION_COUNT == 2
-        "physical scenario: sod, blast, kelvinHelmholtz, hydroWave, gresho"
+        "physical scenario: sod, blast, rayleighTaylor, kelvinHelmholtz, hydroWave, gresho"
 #else
         "physical scenario: sod, blast, rayleighTaylor, kelvinHelmholtz, disc, "
         "polytropicStar, hydroWave, gresho"
@@ -788,7 +789,7 @@ bool processOptions(int argc, char* argv[]) {
     po::options_description rayleighTaylorScenarioOpts("Rayleigh-Taylor scenario");
     rayleighTaylorScenarioOpts.add_options()("scenario.rayleighTaylor.zPlaneAcceleration",
         po::value<double>(&opts.scenario.rayleighTaylor.zPlaneAcceleration)->default_value(0.0),
-        "nonnegative acceleration magnitude toward the plane z=0.5");
+        "nonnegative imposed acceleration toward the midplane (y=0.5 in 2D, z=0.5 in 3D)");
 
     po::options_description outputOpts("Particle output");
     outputOpts.add_options()("output.silo",
@@ -1412,8 +1413,8 @@ bool processOptions(int argc, char* argv[]) {
                 opts.run.darkMatterParticleCount, multiplicity, glassTileSide);
         size_t const gasMultiplicity = opts.run.scenario == "sod" ?
             particle_count::kSodLatticeMultiplicity :
-            opts.run.scenario == "rayleighTaylor"                   ? 96 :
-            opts.run.scenario == "blast"                            ? 2 :
+            opts.run.scenario == "rayleighTaylor" ? scenarios::kRayleighTaylorLatticeMultiplicity :
+            opts.run.scenario == "blast"          ? 2 :
             opts.run.scenario == "gresho" && opts.initial.closePack ? 4 :
             opts.run.scenario == "cosmology"                        ? multiplicity :
                                                                       1;
@@ -1539,8 +1540,7 @@ bool processOptions(int argc, char* argv[]) {
         if (opts.scenario.cosmology.useGlass) {
             detail::throwOptionError("The glass input format is three-dimensional\n");
         }
-        if (opts.scenario.disc.centralAcceleration != 0.0 ||
-            opts.scenario.rayleighTaylor.zPlaneAcceleration != 0.0 || opts.gravity.enabled ||
+        if (opts.scenario.disc.centralAcceleration != 0.0 || opts.gravity.enabled ||
             opts.chemistry.enabled || opts.starFormation.enabled) {
             detail::throwOptionError("Lower-dimensional SPH requires gravity, central gravity, "
                                      "chemistry and stars disabled\n");
@@ -1551,6 +1551,10 @@ bool processOptions(int argc, char* argv[]) {
         }
         if (kSpatialDimensions == 1 && opts.hydro.yAcceleration != 0.0) {
             detail::throwOptionError("hydro.yAcceleration requires at least two dimensions\n");
+        }
+        if (kSpatialDimensions == 1 && opts.scenario.rayleighTaylor.zPlaneAcceleration != 0.0) {
+            detail::throwOptionError(
+                "scenario.rayleighTaylor.zPlaneAcceleration requires at least two dimensions\n");
         }
     }
     if (!detail::isFiniteOption(opts.hydro.heatCapacityRatio) ||

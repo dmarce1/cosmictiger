@@ -1976,6 +1976,22 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
         target_link_libraries(rayleigh_taylor_test PRIVATE HPX::hpx)
         cosmictiger_add_gtest(NAME rayleigh_taylor TARGET rayleigh_taylor_test
             PROPERTIES TIMEOUT 120)
+
+        # Exercise compact 2D storage and analytic forces without a gravity solver.
+        add_executable(rayleigh_taylor_2d_test tests/rayleigh_taylor.cpp src/scenarios/rayleigh_taylor.cpp)
+        target_include_directories(rayleigh_taylor_2d_test PRIVATE ${PROJECT_SOURCE_DIR})
+        target_compile_definitions(rayleigh_taylor_2d_test PRIVATE
+            COSMICTIGER_DIMENSION_COUNT=2 COSMICTIGER_WITH_GRAVITY=0
+            COSMICTIGER_ENABLE_GRAVITY=0 COSMICTIGER_ENABLE_SPH=1 COSMICTIGER_WITH_SPH=1
+            COSMICTIGER_ENABLE_ROCKSTAR=0 COSMICTIGER_ENABLE_CHEMISTRY=0
+            COSMICTIGER_ENABLE_STARS=0 COSMICTIGER_ENABLE_STAR_FORMATION=0
+            COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL=0
+            COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL=1
+            COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL=0
+            COSMICTIGER_POSITION_BITS=${COSMICTIGER_POSITION_BITS} ORDER=0)
+        target_link_libraries(rayleigh_taylor_2d_test PRIVATE HPX::hpx)
+        cosmictiger_add_gtest(NAME rayleigh_taylor_2d TARGET rayleigh_taylor_2d_test
+            PROPERTIES TIMEOUT 120)
     endif()
 
     add_executable(particle_selection_test tests/particle_selection.cpp)
@@ -2503,11 +2519,11 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
     get_property(cosmictiger_targets_after_tests DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
     list(REMOVE_ITEM cosmictiger_targets_after_tests ${cosmictiger_targets_before_tests})
     cosmictiger_finalize_test_layout(${cosmictiger_targets_after_tests})
-    # These standalone tests deliberately compile both position widths, rather
-    # than inheriting the configured application's position definition.
+    # These standalone tests deliberately select their own dimensions/capabilities
+    # or position widths instead of inheriting the application's definitions.
     list(REMOVE_ITEM cosmictiger_targets_after_tests
         gravity_error_cuda_reference_32_test gravity_error_cuda_reference_64_test
-        tree_source_moments_fixed32_test tree_source_moments_fixed64_test)
+        tree_source_moments_fixed32_test tree_source_moments_fixed64_test rayleigh_taylor_2d_test)
     foreach(test_target IN LISTS cosmictiger_targets_after_tests)
         get_target_property(test_type ${test_target} TYPE)
         if(NOT test_type STREQUAL "UTILITY")
@@ -2546,6 +2562,11 @@ if(BUILD_TESTING)
 endif()
 
 if(BUILD_TESTING AND COSMICTIGER_WITH_SPH AND COSMICTIGER_DIMENSION_COUNT GREATER_EQUAL 2)
+    add_test(NAME rayleigh_taylor_application COMMAND ${Python3_EXECUTABLE}
+        ${PROJECT_SOURCE_DIR}/tests/run_rayleigh_taylor.py $<TARGET_FILE:cosmictiger>
+        ${PROJECT_BINARY_DIR}/tests/rayleigh_taylor_application --dimension=${COSMICTIGER_DIMENSION_COUNT})
+    set_tests_properties(rayleigh_taylor_application PROPERTIES
+        PROCESSORS 2 TIMEOUT 180 RUN_SERIAL TRUE LABELS "scenarios;sph;cpu")
     add_test(NAME kelvin_helmholtz_packing_application COMMAND ${Python3_EXECUTABLE}
         ${PROJECT_SOURCE_DIR}/tests/run_kelvin_helmholtz_packings.py $<TARGET_FILE:cosmictiger>
         ${PROJECT_BINARY_DIR}/tests/kelvin_helmholtz_packings ${COSMICTIGER_DIMENSION_COUNT})

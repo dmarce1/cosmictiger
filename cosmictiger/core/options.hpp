@@ -1,3 +1,4 @@
+// Runtime configuration records and their distributed serialization.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -292,8 +293,7 @@ struct DiscScenario {
 };
 
 struct RayleighTaylorScenario {
-    // Magnitude of the external acceleration toward the plane z = 0.5.
-    double zPlaneAcceleration{};
+    double zPlaneAcceleration{};    // Imposed acceleration toward y=0.5 in 2D or z=0.5 in 3D.
 };
 
 struct BenchmarkScenario {

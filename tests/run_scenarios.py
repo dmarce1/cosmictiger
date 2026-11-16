@@ -23,7 +23,7 @@ SCENARIOS = (
     ("plummer", "plummer", True, False, False),
     ("sod", "sod", False, True, False),
     ("blast", "blast", False, True, False),
-    ("rayleigh_taylor", "rayleighTaylor", True, True, False),
+    ("rayleigh_taylor", "rayleighTaylor", False, True, False),
     ("kelvin_helmholtz", "kelvinHelmholtz", False, True, False),
     ("disc", "disc", True, True, False),
     ("polytropic_star", "polytropicStar", True, True, False),
@@ -221,8 +221,8 @@ def main():
     if int(setting((gresho_cubic / "run.log").read_text(), "Initialized particles")) != 8**3:
         raise RuntimeError("Gresho cubic particle count is incorrect")
 
-    exercise("rayleigh_taylor", "rayleighTaylor", False, True, False,
-             name="rayleighTaylor_no_gravity", overrides={"gravity.enabled": "false"})
+    exercise("rayleigh_taylor", "rayleighTaylor", True, True, False,
+             name="rayleighTaylor_self_gravity", overrides={"gravity.enabled": "true"})
     exercise("cosmology", "cosmology", False, True, True,
              name="cosmology_no_gravity", overrides={"gravity.enabled": "false"})
     # A CLI scenario override exercises dispatch independently of the INI name;

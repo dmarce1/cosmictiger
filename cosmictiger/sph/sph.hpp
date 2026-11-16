@@ -1,5 +1,6 @@
 /*
  CosmicTiger - A cosmological N-Body code
+ SPH pass parameters, reductions, and tree-neighbor interfaces.
  Copyright (C) 2026  Dominic C. Marcello
 
  Distributed under the Boost Software License, Version 1.0.
@@ -176,7 +177,7 @@ struct SphRunParameters {
     float minimumSmoothingLength;
     float maximumSmoothingLength;
     float uniformAccelerationY;    // Optional uniform force along y.
-    float zPlaneAcceleration;      // Magnitude of the force toward z = 0.5.
+    float zPlaneAcceleration;      // Magnitude toward the vertical midplane: y in 2D, z in 3D.
     float maximumTimestep = 1e30f;
     bool globalTimestep = false;
     // A midpoint hydro operator uses the current split-stage sources and owns
@@ -266,12 +267,13 @@ struct SphRunParameters {
         arc & zPlaneAcceleration;
         arc & conductionCoefficient;
     }
-    /// Return the configured acceleration toward z=0.5, with zero acceleration exactly
-    /// on the midplane.
+    /// Return the configured acceleration toward the vertical coordinate 0.5, with zero
+    /// acceleration exactly on the midplane.
     CUDA_EXPORT
-    float midplaneAccelerationZ(Position const z) const {
+    float midplaneAcceleration(Position const coordinate) const {
         Position const middle(0.5);
-        return z < middle ? zPlaneAcceleration : (z > middle ? -zPlaneAcceleration : 0.0f);
+        return coordinate < middle ? zPlaneAcceleration :
+                                     (coordinate > middle ? -zPlaneAcceleration : 0.0f);
     }
 };
 
