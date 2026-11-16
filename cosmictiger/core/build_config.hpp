@@ -1,3 +1,4 @@
+// Validate compiled physics capabilities and expose the integration scheme.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026 Dominic C. Marcello
@@ -26,10 +27,6 @@
 #endif
 #if COSMICTIGER_ENABLE_STARS && !COSMICTIGER_ENABLE_CHEMISTRY
 #error "The compiled stars capability requires chemistry"
-#endif
-
-#if COSMICTIGER_DIMENSION_COUNT < 3 && (COSMICTIGER_WITH_GRAVITY || !COSMICTIGER_ENABLE_SPH)
-#error "Lower-dimensional builds require SPH without gravity"
 #endif
 
 namespace integration {

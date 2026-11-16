@@ -1,3 +1,4 @@
+// Regression coverage for SPH dynamics with runtime spatial dimensions.
 /* CosmicTiger - shared CPU/CUDA midpoint SPH regressions; BSL-1.0. */
 #pragma once
 
@@ -186,7 +187,7 @@ void testMidpointHydroTargets(Fixture& fixture) {
         int const sink = fixture.sinkIndex(index);
         referenceAcceleration[index] = fixture.kickAcceleration(index);
         referenceEntropyRate[index] = data.sinkEntropyRate[sink];
-        for (int dimension = 0; dimension < kSpatialDimensions; ++dimension) {
+        for (int dimension = 0; dimension < spatialDimensions(); ++dimension) {
             impulseScale += std::abs(referenceAcceleration[index][dimension]);
         }
         data.sourceRungs[source] = data.sinkParticleRungs[fixture.particleIndex(index)] =
@@ -208,7 +209,7 @@ void testMidpointHydroTargets(Fixture& fixture) {
         bool const active = rungs[index] == 2;
         if (active) {
             auto const acceleration = fixture.kickAcceleration(index);
-            for (int dimension = 0; dimension < kSpatialDimensions; ++dimension) {
+            for (int dimension = 0; dimension < spatialDimensions(); ++dimension) {
                 midpointRequire(
                     std::abs(acceleration[dimension] - referenceAcceleration[index][dimension]) <=
                         32.0 * std::numeric_limits<float>::epsilon() * impulseScale,
@@ -228,7 +229,7 @@ void testMidpointHydroTargets(Fixture& fixture) {
                 data.sourceInternalEnergy[source] == 0.8f + 0.1f * index,
             "midpoint force changed the frozen source state");
     }
-    for (int dimension = 0; dimension < kSpatialDimensions; ++dimension) {
+    for (int dimension = 0; dimension < spatialDimensions(); ++dimension) {
         double total = 0.0;
         double absolute = 0.0;
         for (int index = 0; index < 4; ++index) {
@@ -299,7 +300,7 @@ void testEndpointMorrisInterval(Fixture& fixture) {
                 (data.adiabaticIndex - 1.0) * double(data.sourceInternalEnergy[source]));
             double const smoothingLength = data.sinkSmoothingLength[sink] /
                 selectedHydroKernel().smoothingLengthPerEffectiveRadius *
-                monaghan::kViscosityWidthScale;
+                monaghan::viscosityWidthScale();
             double const inverseDecayTime =
                 parameters.viscosityDecay * soundSpeed / (parameters.scaleFactor * smoothingLength);
             double const completedInterval = global ?

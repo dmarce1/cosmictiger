@@ -168,8 +168,6 @@ def sourceSelectionErrors(sources, configuration):
                 "tests/gravity/cartesian_l2l_cuda.cu", "tests/gravity/fmm_acceptance.cpp",
                 "tests/gravity/fmm_acceptance_cuda.cu", "tests/gravity/fmm_geometry.cpp"}:
             errors.append(f"tree algorithms disabled but compiles tree source: {source}")
-        if hasGravity(configuration) and source == "tests/sph/no_gravity.cpp":
-            errors.append(f"gravity-enabled build compiles SPH-only diagnostic regression: {source}")
         if not hasChemistry(configuration) and source in {
                 "src/chemistry/gadget4_cooling.cpp", "src/chemistry/gadget4_cooling.cu",
                 "src/chemistry/sph.cpp", "tests/sph/chemistry.cpp",

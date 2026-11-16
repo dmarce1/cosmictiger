@@ -138,7 +138,7 @@ def main():
     required = {"help", "configuration", "run.scenario", "run.endTime", "run.verbose",
                 "run.darkMatterParticleCount", "run.gasParticleCount", "compute.bucketSize",
                 "compute.sphBucketSize", "compute.sphTreeRebuildFraction", "compute.positionType",
-                "hydro.enabled", "hydro.method", "hydro.viscosityCoefficientMax", "hydro.vonNeumannRichtmyerCoefficient",
+                "hydro.enabled", "hydro.method", "hydro.dimensions", "hydro.viscosityCoefficientMax", "hydro.vonNeumannRichtmyerCoefficient",
                 "hydro.viscosityEpsilon", "hydro.conductionCoefficient",
                 "hydro.neighborNumber", "gravity.enabled",
                 "gravity.kernelFamily", "gravity.kernelDegree",

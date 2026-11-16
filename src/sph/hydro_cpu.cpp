@@ -1,5 +1,6 @@
 /*
  CosmicTiger - A cosmological N-Body code
+ SIMD CPU SPH pressure, viscosity, conduction, and timestep calculations.
  Copyright (C) 2026 Dominic C. Marcello
 
  Distributed under the Boost Software License, Version 1.0.
@@ -90,6 +91,9 @@ using sph_geometry::SpatialVector;
  *     h𞁓ₚᵣₑ = h𞁓 staged.
  */
 // clang-format on
+namespace detail {
+
+template <int dimension>
 SphRunReturn sphCpuHydro(
     SphRunParameters const& parameters, SphRunData const& data, int targetNodeIndex) {
     SphRunReturn result;
@@ -107,13 +111,11 @@ SphRunReturn sphCpuHydro(
     constexpr float kHydroAccelerationScale = 0.7115965735877551f;
     // Calibration of the reversible-work bound δt ≤ C_cfl u𞁑/(k_u |du𞁑/dτ|): k_u equals the
     // cubic Monaghan viscosity width scale, which reproduces the former cubic-spline bound.
-    constexpr float kThermalTimestepScale = float(kSpatialDimensions == 1 ?
-            0.8660254037844386 :
-            (kSpatialDimensions == 2 ? 0.8890008890013335 : 0.9128709291752769));
-    static_assert(kThermalTimestepScale == float(monaghan::kViscosityWidthScale));
+    float const thermalTimestepScale = float(monaghan::viscosityWidthScale<dimension>());
     float const smoothingLengthPerEffectiveRadius =
         selectedHydroKernel().smoothingLengthPerEffectiveRadius;
-    SimdFloat const h_M_over_h(monaghan::lengthPerSupport(smoothingLengthPerEffectiveRadius));
+    SimdFloat const h_M_over_h(
+        monaghan::lengthPerSupport<dimension>(smoothingLengthPerEffectiveRadius));
     SimdFloat const zero(0.0f);
     SimdFloat const one(1.0f);
     SimdFloat const half(0.5f);
@@ -153,12 +155,12 @@ SphRunReturn sphCpuHydro(
         ALWAYS_ASSERT(h𞁑 > 0.0f && ρ𞁑 > 0.0f && u𞁑 > 0.0f);
         float const P𞁑 = γ_minus_1 * ρ𞁑 * u𞁑;
         float const c𞁑 = std::sqrt(γ * γ_minus_1 * u𞁑);
-        SpatialVector<float> const v𞁑 = data.sourceVelocity(particleIndex);
+        SpatialVector<float> const v𞁑 = data.sourceVelocity<dimension>(particleIndex);
         SpatialVector<SimdFloat> const v𞁑Pack(v𞁑);
         float const α𞁑 = data.sourceBulkViscosityCoefficient[particleIndex];
         SimdFloat αPack(α𞁑);
         float const ih𞁑 = 1.0f / h𞁑;
-        flops += 6 + sph_flops::kInverseGradientScale;
+        flops += 6 + sph_flops::inverseGradientScaleFlops<dimension>();
         // clang-format off
         /*
          * Variational operator (cosmictiger/sph/variable_smoothing_lengths.hpp): every
@@ -179,7 +181,8 @@ SphRunReturn sphCpuHydro(
         float const Q𞁑𞁓_over_m𞁑 = variational::directedCoefficient(
             variational::pressureVolumeFactor(P𞁑, 1.0f, ρ𞁑), m𞁓, ζ𞁑);
         flops += 5;
-        float const ih_D_plus_1𞁑 = sph_geometry::inverseGradientScale(ih𞁑);    // h𞁑^-(D+1)
+        float const ih_D_plus_1𞁑 =
+            sph_geometry::inverseGradientScale<dimension>(ih𞁑);    // h𞁑^-(D+1)
         SpatialVector<SimdFloat> dv𞁑_dτPack(zero);    // lane partial sums of acceleration
         SimdFloat du𞁑_dτₕₑₐₜPack(zero);
         SimdFloat ΣC𞁑𞁓_over_aPack(zero);
@@ -191,7 +194,7 @@ SphRunReturn sphCpuHydro(
             // both supports, or at zero separation are excluded. Their inputs are replaced
             // before any division or square root; masking only the result can still trap.
             SpatialVector<SimdFloat> const r𞁑𞁓 =
-                detail::sphCpuSeparations(data, particleIndex, neighbors, first);
+                detail::sphCpuSeparations<dimension>(data, particleIndex, neighbors, first);
             SimdFloat const r2𞁑𞁓ₚᵣₑ = r𞁑𞁓.dot(r𞁑𞁓);
             SimdFloat const h𞁓ₚᵣₑ =
                 detail::sphCpuLoad(data.sourceSmoothingLength, neighbors, first, 1.0f);
@@ -208,8 +211,9 @@ SphRunReturn sphCpuHydro(
             }
             auto const interacts = supportsIntersect & (r2𞁑𞁓ₚᵣₑ > zero);
             // Fixed scales, dot operations and h𞁓² per lane; h𞁑² is scalar.
-            flops +=
-                (sph_flops::kVectorOperation + sph_flops::kDotProduct + 1) * SimdFloat::size() + 1;
+            flops += (sph_flops::separationFlops<dimension>() + sph_flops::kDotProduct + 1) *
+                    SimdFloat::size() +
+                1;
             if (!math::anyOf(interacts)) {
                 continue;
             }
@@ -237,13 +241,14 @@ SphRunReturn sphCpuHydro(
             SimdFloat const q𞁑 = abs_r𞁑𞁓 * SimdFloat(ih𞁑);
             SimdFloat const q𞁓 = abs_r𞁑𞁓 * ih𞁓;
             SimdFloat const F𞁑 = dkernelWDq(q𞁑) * SimdFloat(ih_D_plus_1𞁑) / abs_r𞁑𞁓;
-            SimdFloat const F𞁓 = dkernelWDq(q𞁓) * sph_geometry::inverseGradientScale(ih𞁓) / abs_r𞁑𞁓;
+            SimdFloat const F𞁓 =
+                dkernelWDq(q𞁓) * sph_geometry::inverseGradientScale<dimension>(ih𞁓) / abs_r𞁑𞁓;
             flops += sph_flops::densityKernelOperations(selectedHydroKernel(), q𞁑, true) +
                 sph_flops::densityKernelOperations(selectedHydroKernel(), q𞁓, true);
             SimdFloat const F𞁑𞁓 = math::select(interacts, half * (F𞁑 + F𞁓), zero);
             // v𞁑𞁓 = v𞁑 − v𞁓 from the stored peculiar velocities. The physical relative
             // velocity adds the Hubble flow (a da/dt) r𞁑𞁓 and enters only the viscosity.
-            SpatialVector<SimdFloat> const v𞁓 = detail::sphCpuLoad3(data.sourceVelocityX,
+            SpatialVector<SimdFloat> const v𞁓 = detail::sphCpuLoad3<dimension>(data.sourceVelocityX,
                 data.sourceVelocityY, data.sourceVelocityZ, neighbors, first, 0.0f);
             SpatialVector<SimdFloat> const v𞁑𞁓 =
                 math::select(interacts, v𞁑Pack - v𞁓, SpatialVector<SimdFloat>(zero));
@@ -324,12 +329,12 @@ SphRunReturn sphCpuHydro(
                             data.sourceRungs[neighborIndex])) {
                         continue;
                     }
-                    SpatialVector<float> const a𞁑𞁓 = -detail::sphCpuLane(f𞁑𞁓Pack, lane);
+                    SpatialVector<float> const a𞁑𞁓 = -detail::sphCpuLane<dimension>(f𞁑𞁓Pack, lane);
                     float const Ȧ𞁑𞁓 = sph_entropy::fromStoredEnergy(
                         float(du𞁑_dτₕₑₐₜ𞁑𞁓[lane]), ρ𞁑, γ, parameters.scaleFactor);
                     float const Ȧ𞁓𞁑 = sph_entropy::fromStoredEnergy(
                         float(du𞁓_dτₕₑₐₜ𞁑𞁓[lane]), float(ρ𞁓[lane]), γ, parameters.scaleFactor);
-                    flops += sphAccumulatePairKick(data.sourcePairUpdates[particleIndex],
+                    flops += sphAccumulatePairKick<dimension>(data.sourcePairUpdates[particleIndex],
                         data.sourcePairUpdates[neighborIndex], a𞁑𞁓, Ȧ𞁑𞁓, Ȧ𞁓𞁑, Δτ);
                     flops += 2 * sph_flops::entropyConversionFlops(γ);
                 }
@@ -339,12 +344,12 @@ SphRunReturn sphCpuHydro(
             du𞁑_dτₕₑₐₜPack += du𞁑_dτₕₑₐₜ𞁑𞁓;
             // Common geometry, pressure, and accumulation; the vector terms are v𞁑𞁓, v𞁑𞁓 · r𞁑𞁓,
             // the pair force and its sum.
-            flops += (38 + sph_flops::kInverseGradientScale + 3 * sph_flops::kVectorOperation +
-                         sph_flops::kDotProduct) *
+            flops += (38 + sph_flops::inverseGradientScaleFlops<dimension>() +
+                         3 * sph_flops::kVectorOperation + sph_flops::kDotProduct) *
                 SimdFloat::size();
             max𞁓μ𞁑𞁓Pack = math::max(max𞁓μ𞁑𞁓Pack, -μ𞁑𞁓);
         }
-        SpatialVector<float> dv𞁑_dτ = detail::sphCpuSum(dv𞁑_dτPack);
+        SpatialVector<float> dv𞁑_dτ = detail::sphCpuSum<dimension>(dv𞁑_dτPack);
         float du𞁑_dτ = simdSum(du𞁑_dτPack);
         float const ΣC𞁑𞁓_over_a =
             parameters.conductionCoefficient > 0.0f ? simdSum(ΣC𞁑𞁓_over_aPack) : 0.0f;
@@ -352,7 +357,7 @@ SphRunReturn sphCpuHydro(
             flops += SimdFloat::size() - 1;
         }
         // The acceleration components and the work; maxima are comparisons.
-        flops += (sph_flops::kVectorOperation + 1) * (SimdFloat::size() - 1);
+        flops += (spatialDimensions<dimension>() + 1) * (SimdFloat::size() - 1);
         // Corrections are derived, never checkpointed or migrated; slots that the density
         // pass has not rebuilt hold NaN, so a stale source cannot pass silently.
         if (!(sph_volume::isFiniteValue(dv𞁑_dτ.dot(dv𞁑_dτ)) && sph_volume::isFiniteValue(du𞁑_dτ) &&
@@ -373,24 +378,25 @@ SphRunReturn sphCpuHydro(
 #if COSMICTIGER_WITH_GRAVITY
         if (!parameters.midpointHydro && !parameters.deferAccelerationSources &&
             data.selfGravityEnabled) {
-            dv𞁑_dτ_G = data.sinkGravityAcceleration(sinkIndex);
+            dv𞁑_dτ_G = data.sinkGravityAcceleration<dimension>(sinkIndex);
         }
 #endif
         if (!parameters.deferAccelerationSources) {
-            dv𞁑_dτ = sphCompleteAcceleration(parameters, data.sourcePaddedPosition(particleIndex),
-                v𞁑, dv𞁑_dτ, dv𞁑_dτ_G, data.centralAcceleration, data.centralSmoothingLength, flops);
+            dv𞁑_dτ = sphCompleteAcceleration<dimension>(parameters,
+                data.sourcePaddedPosition(particleIndex), v𞁑, dv𞁑_dτ, dv𞁑_dτ_G,
+                data.centralAcceleration, data.centralSmoothingLength, flops);
         } else {
             ALWAYS_ASSERT(parameters.phase == 0);
         }
         if (applyPairKicks) {
             // External forces have no reciprocal gas endpoint. Integrate them
             // once on the target's own rung, separately from pair reductions.
-            SpatialVector<float> const dv𞁑_dτₑₓₜ =
-                sphCompleteAcceleration(parameters, data.sourcePaddedPosition(particleIndex), v𞁑,
-                    SpatialVector<float>(0.0f), SpatialVector<float>(0.0f),
-                    data.centralAcceleration, data.centralSmoothingLength, flops);
-            flops +=
-                sphAccumulateExternalKick(data.sourcePairUpdates[particleIndex], dv𞁑_dτₑₓₜ, Δτ);
+            SpatialVector<float> const dv𞁑_dτₑₓₜ = sphCompleteAcceleration<dimension>(parameters,
+                data.sourcePaddedPosition(particleIndex), v𞁑, SpatialVector<float>(0.0f),
+                SpatialVector<float>(0.0f), data.centralAcceleration, data.centralSmoothingLength,
+                flops);
+            flops += sphAccumulateExternalKick<dimension>(
+                data.sourcePairUpdates[particleIndex], dv𞁑_dτₑₓₜ, Δτ);
         }
         // E=a^2 u and homogeneous adiabatic work du/dt=-3 H P/rho give
         // dE/dtau=(2-3 P/(rho*u)) (da/dtau)/a E = (5-3 gamma) (da/dtau)/a E.
@@ -449,7 +455,7 @@ SphRunReturn sphCpuHydro(
             // Bound reversible work; the approach-speed CFL term controls viscous heating.
             if (du𞁑_dτ != 0.0f) {
                 δt = std::fmin(
-                    δt, parameters.courantFactor / kThermalTimestepScale * u𞁑 / std::fabs(du𞁑_dτ));
+                    δt, parameters.courantFactor / thermalTimestepScale * u𞁑 / std::fabs(du𞁑_dτ));
                 flops += 3;    // Two divisions and a product; abs is a sign operation.
             }
             // Derived forward-Euler diffusion bound: δt Σ𞁓 C𞁑𞁓/a ≤ 1/2.
@@ -513,7 +519,7 @@ SphRunReturn sphCpuHydro(
                                      std::fmax(iδt𞁞ᵥ, 1.0e-30f),
                                  parameters.courantFactor * parameters.scaleFactor /
                                      std::fmax(iδt_f, 1.0e-30f),
-                                 du𞁑_dτ != 0.0f ? parameters.courantFactor / kThermalTimestepScale *
+                                 du𞁑_dτ != 0.0f ? parameters.courantFactor / thermalTimestepScale *
                                          u𞁑 / std::fabs(du𞁑_dτ) :
                                                   parameters.maximumTimestep,
                                  h𞁑, ρ𞁑, u𞁑, du𞁑_dτ, abs_f𞁑, c𞁑, max𞁓μ𞁑𞁓, α, m𞁓 / (m𞁓 - ζ𞁑),
@@ -551,4 +557,19 @@ SphRunReturn sphCpuHydro(
     result.floatingPointOperations = FlopCount(flops);
     addCpuFlops(flops.counts());
     return result;
+}
+
+}    // namespace detail
+
+/// Select the dimension-specialized implementation once for this SPH leaf pass.
+SphRunReturn sphCpuHydro(
+    SphRunParameters const& parameters, SphRunData const& data, int targetNodeIndex) {
+    switch (spatialDimensions()) {
+    case 1:
+        return detail::sphCpuHydro<1>(parameters, data, targetNodeIndex);
+    case 2:
+        return detail::sphCpuHydro<2>(parameters, data, targetNodeIndex);
+    default:
+        return detail::sphCpuHydro<3>(parameters, data, targetNodeIndex);
+    }
 }

@@ -1,3 +1,4 @@
+// Runtime-selected density kernels and fixed three-dimensional gravity kernels.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -8,6 +9,7 @@
 
 #pragma once
 
+#include <iterator>
 #include <type_traits>
 
 #include <cosmictiger/core/defs.hpp>
@@ -15,18 +17,54 @@
 #include <cosmictiger/math/radial_density_kernel.hpp>
 #include <cosmictiger/math/radial_kernel.hpp>
 
-// Keep the established float table and arithmetic in 3D; hydro-only dimensions
-// use density/gradient tables, which have no Newtonian force/potential contract.
-using HydroKernelTable =
-    std::conditional_t<kSpatialDimensions == 3, radial_kernel::KernelTable<float>,
-        radial_kernel::DensityKernelTable<kSpatialDimensions, float>>;
-/// Build the selected density-kernel table for the configured spatial dimension.
-inline HydroKernelTable makeHydroKernelTable(radial_kernel::KernelSpec spec) {
-#if COSMICTIGER_DIMENSION_COUNT == 3
-    return radial_kernel::makeKernelTable<float>(spec);
-#else
-    return radial_kernel::makeDensityKernelTable<kSpatialDimensions, float>(spec);
-#endif
+// A common table holds dimension-dependent density coefficients. Gravity fields are
+// used only in 3D, where the original table construction and arithmetic are retained.
+using HydroKernelTable = radial_kernel::KernelTable<float>;
+
+inline bool isValidHydroKernel(radial_kernel::KernelSpec spec) {
+    switch (spatialDimensions()) {
+    case 1:
+        return radial_kernel::isValidDensity<1>(spec);
+    case 2:
+        return radial_kernel::isValidDensity<2>(spec);
+    default:
+        return radial_kernel::isValidDensity<3>(spec);
+    }
+}
+
+/// Build density coefficients in the selected runtime dimension.
+template <class TableReal = float>
+inline radial_kernel::KernelTable<TableReal> makeHydroKernelTable(radial_kernel::KernelSpec spec) {
+    if (spatialDimensions() == kDimensions) {
+        return radial_kernel::makeKernelTable<TableReal>(spec);
+    }
+    radial_kernel::KernelTable<TableReal> result{};
+    auto const copyDensity =
+        [&]<size_t dimension>(
+            radial_kernel::DensityKernelTable<dimension, TableReal> const& table) {
+            result.spec = table.spec;
+            result.degree = table.degree;
+            result.pieceCount = table.pieceCount;
+            result.smoothingLengthPerEffectiveRadius = table.smoothingLengthPerEffectiveRadius;
+            for (size_t piece = 0; piece < std::size(table.changePoints); ++piece) {
+                result.changePoints[piece] = table.changePoints[piece];
+            }
+            for (size_t piece = 0; piece < std::size(table.coefficients); ++piece) {
+                for (size_t i = 0; i < std::size(table.coefficients[piece]); ++i) {
+                    result.coefficients[piece][i] = table.coefficients[piece][i];
+                }
+                for (size_t i = 0; i < std::size(table.derivativeCoefficients[piece]); ++i) {
+                    result.derivativeCoefficients[piece][i] =
+                        table.derivativeCoefficients[piece][i];
+                }
+            }
+        };
+    if (spatialDimensions() == 1) {
+        copyDensity(radial_kernel::makeDensityKernelTable<1, TableReal>(spec));
+    } else {
+        copyDensity(radial_kernel::makeDensityKernelTable<2, TableReal>(spec));
+    }
+    return result;
 }
 
 namespace detail {

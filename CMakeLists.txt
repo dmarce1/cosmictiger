@@ -350,7 +350,7 @@ set(cosmictiger_header_files
 
 # Completed midpoint intervals apply cooling and star formation to entropy.
 set(cosmictiger_entropy_sources_ready ON)
-if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
+if(BUILD_TESTING)
     set(cosmictiger_rockstar_test_args)
     if(NOT COSMICTIGER_WITH_ROCKSTAR)
         list(APPEND cosmictiger_rockstar_test_args --without-rockstar)
@@ -583,7 +583,7 @@ if(HPX_WITH_PARCELPORT_MPI AND MPIEXEC_EXECUTABLE)
     endif()
 endif()
 
-if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
+if(BUILD_TESTING)
     foreach(profile_mode IN ITEMS enabled disabled host_only)
         add_executable(phase_profiler_${profile_mode}_test
             tests/phase_profiler.cpp src/core/profiler.cpp)
@@ -1977,21 +1977,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
         cosmictiger_add_gtest(NAME rayleigh_taylor TARGET rayleigh_taylor_test
             PROPERTIES TIMEOUT 120)
 
-        # Exercise compact 2D storage and analytic forces without a gravity solver.
-        add_executable(rayleigh_taylor_2d_test tests/rayleigh_taylor.cpp src/scenarios/rayleigh_taylor.cpp)
-        target_include_directories(rayleigh_taylor_2d_test PRIVATE ${PROJECT_SOURCE_DIR})
-        target_compile_definitions(rayleigh_taylor_2d_test PRIVATE
-            COSMICTIGER_DIMENSION_COUNT=2 COSMICTIGER_WITH_GRAVITY=0
-            COSMICTIGER_ENABLE_GRAVITY=0 COSMICTIGER_ENABLE_SPH=1 COSMICTIGER_WITH_SPH=1
-            COSMICTIGER_ENABLE_ROCKSTAR=0 COSMICTIGER_ENABLE_CHEMISTRY=0
-            COSMICTIGER_ENABLE_STARS=0 COSMICTIGER_ENABLE_STAR_FORMATION=0
-            COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL=0
-            COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL=1
-            COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL=0
-            COSMICTIGER_POSITION_BITS=${COSMICTIGER_POSITION_BITS} ORDER=0)
-        target_link_libraries(rayleigh_taylor_2d_test PRIVATE HPX::hpx)
-        cosmictiger_add_gtest(NAME rayleigh_taylor_2d TARGET rayleigh_taylor_2d_test
-            PROPERTIES TIMEOUT 120)
+
     endif()
 
     add_executable(particle_selection_test tests/particle_selection.cpp)
@@ -2230,8 +2216,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             endif()
 
             # linear Jeans wave on 1 locality, and on 2 and 4 against it.
-            if(COSMICTIGER_WITH_GRAVITY AND
-                    COSMICTIGER_DIMENSION_COUNT EQUAL 3)
+            if(COSMICTIGER_WITH_GRAVITY)
                 set(jeans_wave_mpi_args)
                 set(jeans_wave_processors 6)
                 if(cosmictiger_mpi_tests)
@@ -2515,7 +2500,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
 
 endif()
 
-if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
+if(BUILD_TESTING)
     get_property(cosmictiger_targets_after_tests DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
     list(REMOVE_ITEM cosmictiger_targets_after_tests ${cosmictiger_targets_before_tests})
     cosmictiger_finalize_test_layout(${cosmictiger_targets_after_tests})
@@ -2523,7 +2508,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
     # or position widths instead of inheriting the application's definitions.
     list(REMOVE_ITEM cosmictiger_targets_after_tests
         gravity_error_cuda_reference_32_test gravity_error_cuda_reference_64_test
-        tree_source_moments_fixed32_test tree_source_moments_fixed64_test rayleigh_taylor_2d_test)
+        tree_source_moments_fixed32_test tree_source_moments_fixed64_test)
     foreach(test_target IN LISTS cosmictiger_targets_after_tests)
         get_target_property(test_type ${test_target} TYPE)
         if(NOT test_type STREQUAL "UTILITY")
@@ -2537,41 +2522,58 @@ if(BUILD_TESTING AND COSMICTIGER_WITH_SPH)
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
     add_test(NAME sph_dimension_configuration COMMAND ${Python3_EXECUTABLE}
         ${PROJECT_SOURCE_DIR}/tests/check_sph_dimensions.py ${PROJECT_SOURCE_DIR})
-    if(COSMICTIGER_DIMENSION_COUNT LESS 3)
-        add_test(NAME sph_dimension_application COMMAND ${Python3_EXECUTABLE}
+    foreach(dimension RANGE 1 2)
+        add_test(NAME sph_dimension_${dimension}_application COMMAND ${Python3_EXECUTABLE}
             ${PROJECT_SOURCE_DIR}/tests/run_sph_dimensions.py $<TARGET_FILE:cosmictiger>
-            ${PROJECT_BINARY_DIR}/tests/dimensions ${COSMICTIGER_DIMENSION_COUNT}
+            ${PROJECT_BINARY_DIR}/tests/dimensions_${dimension} ${dimension}
             --integrator=${cosmictiger_default_integrator})
-        set_tests_properties(sph_dimension_application PROPERTIES PROCESSORS 2 TIMEOUT 300 RUN_SERIAL TRUE)
-    endif()
-    foreach(dimension RANGE 1 3)
-        add_executable(sph_dimension_${dimension}_test tests/sph/dimensions.cpp)
-        target_include_directories(sph_dimension_${dimension}_test PRIVATE ${PROJECT_SOURCE_DIR})
-        target_compile_definitions(sph_dimension_${dimension}_test PRIVATE COSMICTIGER_DIMENSION_COUNT=${dimension})
-        add_test(NAME sph_dimension_${dimension} COMMAND sph_dimension_${dimension}_test)
+        set_tests_properties(sph_dimension_${dimension}_application PROPERTIES PROCESSORS 2 TIMEOUT 300 RUN_SERIAL TRUE)
     endforeach()
+    add_executable(sph_dimension_test tests/sph/dimensions.cpp)
+    target_include_directories(sph_dimension_test PRIVATE ${PROJECT_SOURCE_DIR})
+    add_test(NAME sph_dimensions COMMAND sph_dimension_test)
+
 endif()
 
 # Cell-lattice geometry and selector validation do not depend on HPX or gravity.
 if(BUILD_TESTING)
     add_executable(cell_lattice_test tests/cell_lattice.cpp)
     target_include_directories(cell_lattice_test PRIVATE ${PROJECT_SOURCE_DIR})
-    target_compile_definitions(cell_lattice_test PRIVATE COSMICTIGER_DIMENSION_COUNT=${COSMICTIGER_DIMENSION_COUNT})
     add_test(NAME cell_lattice COMMAND cell_lattice_test)
     set_tests_properties(cell_lattice PROPERTIES TIMEOUT 30 LABELS "scenarios;cpu")
 endif()
 
-if(BUILD_TESTING AND COSMICTIGER_WITH_SPH AND COSMICTIGER_DIMENSION_COUNT GREATER_EQUAL 2)
+if(BUILD_TESTING AND COSMICTIGER_WITH_SPH)
     add_test(NAME rayleigh_taylor_application COMMAND ${Python3_EXECUTABLE}
         ${PROJECT_SOURCE_DIR}/tests/run_rayleigh_taylor.py $<TARGET_FILE:cosmictiger>
-        ${PROJECT_BINARY_DIR}/tests/rayleigh_taylor_application --dimension=${COSMICTIGER_DIMENSION_COUNT})
+        ${PROJECT_BINARY_DIR}/tests/rayleigh_taylor_application --dimension=3)
     set_tests_properties(rayleigh_taylor_application PROPERTIES
         PROCESSORS 2 TIMEOUT 180 RUN_SERIAL TRUE LABELS "scenarios;sph;cpu")
     add_test(NAME kelvin_helmholtz_packing_application COMMAND ${Python3_EXECUTABLE}
         ${PROJECT_SOURCE_DIR}/tests/run_kelvin_helmholtz_packings.py $<TARGET_FILE:cosmictiger>
-        ${PROJECT_BINARY_DIR}/tests/kelvin_helmholtz_packings ${COSMICTIGER_DIMENSION_COUNT})
+        ${PROJECT_BINARY_DIR}/tests/kelvin_helmholtz_packings 3)
     set_tests_properties(kelvin_helmholtz_packing_application PROPERTIES
         PROCESSORS 2 TIMEOUT 300 RUN_SERIAL TRUE LABELS "scenarios;sph;cpu")
+    add_test(NAME rayleigh_taylor_2d_application COMMAND ${Python3_EXECUTABLE}
+        ${PROJECT_SOURCE_DIR}/tests/run_rayleigh_taylor.py $<TARGET_FILE:cosmictiger>
+        ${PROJECT_BINARY_DIR}/tests/rayleigh_taylor_2d_application --dimension=2)
+    set_tests_properties(rayleigh_taylor_2d_application PROPERTIES
+        PROCESSORS 2 TIMEOUT 180 RUN_SERIAL TRUE LABELS "scenarios;sph;cpu")
+    add_test(NAME kelvin_helmholtz_2d_packing_application COMMAND ${Python3_EXECUTABLE}
+        ${PROJECT_SOURCE_DIR}/tests/run_kelvin_helmholtz_packings.py $<TARGET_FILE:cosmictiger>
+        ${PROJECT_BINARY_DIR}/tests/kelvin_helmholtz_2d_packings 2)
+    set_tests_properties(kelvin_helmholtz_2d_packing_application PROPERTIES
+        PROCESSORS 2 TIMEOUT 300 RUN_SERIAL TRUE LABELS "scenarios;sph;cpu")
+    file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/tests/sph_runtime_gravity_disabled")
+    add_test(NAME sph_runtime_gravity_disabled COMMAND $<TARGET_FILE:cosmictiger>
+        --run.test=sphOnlyDiagnostics --hydro.enabled=true --hydro.dimensions=3
+        --gravity.enabled=false --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
+        --chemistry.enabled=false --starFormation.enabled=false
+        --run.darkMatterParticleCount=0 --run.gasParticleCount=512
+        --hpx:threads=2 --hpx:bind=none)
+    set_tests_properties(sph_runtime_gravity_disabled PROPERTIES
+        WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/tests/sph_runtime_gravity_disabled"
+        PROCESSORS 2 TIMEOUT 180 RUN_SERIAL TRUE LABELS "sph;cpu;gravity_free")
 endif()
 
 if(BUILD_TESTING AND COSMICTIGER_WITH_GRAVITY)

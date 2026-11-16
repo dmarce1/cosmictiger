@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Configure a full-capability build; SPH dimensions are selected at runtime.
 set -x
 
 directory="${1:-release}"
@@ -13,7 +14,6 @@ rm -f CMakeCache.txt
 cmake \
     -DBUILD_TESTING=OFF \
     -DCMAKE_BUILD_TYPE="${directory^}" \
-    -DCOSMICTIGER_DIMENSION_COUNT=3 \
     -DCOSMICTIGER_DEVICE_PROFILE=ON \
     -DCOSMICTIGER_ENABLE_CHEMISTRY=ON \
     -DCOSMICTIGER_ENABLE_GRAVITY=ON \

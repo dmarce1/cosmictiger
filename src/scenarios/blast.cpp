@@ -1,3 +1,4 @@
+// Initialize thermal blasts and compare runtime-dimensional Sedov profiles.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -51,7 +52,7 @@ namespace detail {
             double r = sqrt(sqr(x, y, z));
             double rmax = sqrt(1.5);
             double d, velocity, p;
-            int ndim = kSpatialDimensions;
+            int ndim = spatialDimensions();
             sedov::solution(time, r, rmax, d, velocity, p, ndim, opts.hydro.heatCapacityRatio);
             double dif = fabs(rho - d);
             norm1 += sample.weight * d;
@@ -87,15 +88,15 @@ ScenarioPlan initializeBlast() {
     double const dx = 1.0 / ndim;
     double sigma = .015;
     for (int ix = 0; ix < ndim; ix++) {
-        for (int iy = 0; iy < (kSpatialDimensions >= 2 ? ndim : 1); iy++) {
-            for (int iz = 0; iz < (kSpatialDimensions >= 3 ? ndim : 1); iz++) {
+        for (int iy = 0; iy < (spatialDimensions() >= 2 ? ndim : 1); iy++) {
+            for (int iz = 0; iz < (spatialDimensions() >= 3 ? ndim : 1); iz++) {
                 double x = (ix + 0.5) * dx;
                 double y = (iy + 0.5) * dx;
                 double z = (iz + 0.5) * dx;
-                double r = sqrt(sqr(x - 0.5) + (kSpatialDimensions >= 2 ? sqr(y - 0.5) : 0.0) +
-                    (kSpatialDimensions >= 3 ? sqr(z - 0.5) : 0.0));
+                double r = sqrt(sqr(x - 0.5) + (spatialDimensions() >= 2 ? sqr(y - 0.5) : 0.0) +
+                    (spatialDimensions() >= 3 ? sqr(z - 0.5) : 0.0));
                 double eint = std::max(
-                    std::pow(2.0 * std::numbers::pi * sigma * sigma, -0.5 * kSpatialDimensions) *
+                    std::pow(2.0 * std::numbers::pi * sigma * sigma, -0.5 * spatialDimensions()) *
                         exp(-0.5 * sqr(r / sigma)),
                     1e-20);
                 double vx = 0.0;
@@ -105,17 +106,17 @@ ScenarioPlan initializeBlast() {
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
                 sphParticlesPosition(kXi, i) = x;
-                if constexpr (kSpatialDimensions > 1) {
-                    sphParticlesPosition(kYi, i) = kSpatialDimensions >= 2 ? y : 0.5;
+                if (spatialDimensions() > 1) {
+                    sphParticlesPosition(kYi, i) = spatialDimensions() >= 2 ? y : 0.5;
                 }
-                if constexpr (kSpatialDimensions > 2) {
-                    sphParticlesPosition(kZi, i) = kSpatialDimensions >= 3 ? z : 0.5;
+                if (spatialDimensions() > 2) {
+                    sphParticlesPosition(kZi, i) = spatialDimensions() >= 3 ? z : 0.5;
                 }
                 sphParticlesVelocity(kXi, i) = vx;
-                if constexpr (kSpatialDimensions > 1) {
+                if (spatialDimensions() > 1) {
                     sphParticlesVelocity(kYi, i) = vy;
                 }
-                if constexpr (kSpatialDimensions > 2) {
+                if (spatialDimensions() > 2) {
                     sphParticlesVelocity(kZi, i) = vz;
                 }
                 sphParticlesRung(i) = 0;
@@ -125,10 +126,10 @@ ScenarioPlan initializeBlast() {
                 x = (ix + 0.0) * dx;
                 y = (iy + 0.0) * dx;
                 z = (iz + 0.0) * dx;
-                r = sqrt(sqr(x - 0.5) + (kSpatialDimensions >= 2 ? sqr(y - 0.5) : 0.0) +
-                    (kSpatialDimensions >= 3 ? sqr(z - 0.5) : 0.0));
+                r = sqrt(sqr(x - 0.5) + (spatialDimensions() >= 2 ? sqr(y - 0.5) : 0.0) +
+                    (spatialDimensions() >= 3 ? sqr(z - 0.5) : 0.0));
                 eint = std::max(
-                    std::pow(2.0 * std::numbers::pi * sigma * sigma, -0.5 * kSpatialDimensions) *
+                    std::pow(2.0 * std::numbers::pi * sigma * sigma, -0.5 * spatialDimensions()) *
                         exp(-0.5 * sqr(r / sigma)),
                     1e-20);
                 vx = 0.0;
@@ -137,17 +138,17 @@ ScenarioPlan initializeBlast() {
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
                 sphParticlesPosition(kXi, i) = x;
-                if constexpr (kSpatialDimensions > 1) {
-                    sphParticlesPosition(kYi, i) = kSpatialDimensions >= 2 ? y : 0.5;
+                if (spatialDimensions() > 1) {
+                    sphParticlesPosition(kYi, i) = spatialDimensions() >= 2 ? y : 0.5;
                 }
-                if constexpr (kSpatialDimensions > 2) {
-                    sphParticlesPosition(kZi, i) = kSpatialDimensions >= 3 ? z : 0.5;
+                if (spatialDimensions() > 2) {
+                    sphParticlesPosition(kZi, i) = spatialDimensions() >= 3 ? z : 0.5;
                 }
                 sphParticlesVelocity(kXi, i) = vx;
-                if constexpr (kSpatialDimensions > 1) {
+                if (spatialDimensions() > 1) {
                     sphParticlesVelocity(kYi, i) = vy;
                 }
-                if constexpr (kSpatialDimensions > 2) {
+                if (spatialDimensions() > 2) {
                     sphParticlesVelocity(kZi, i) = vz;
                 }
                 sphParticlesRung(i) = 0;

@@ -108,15 +108,6 @@ function(cosmictiger_feature_sources output)
             src/scenarios/sphere.cpp
             src/scenarios/sphere.cu
         )
-        if(COSMICTIGER_DIMENSION_COUNT LESS 3)
-            list(REMOVE_ITEM cosmictiger_source_files src/scenarios/disc.cpp src/scenarios/polytropic_star.cpp
-                src/scenarios/sphere.cpp src/scenarios/sphere.cu)
-        endif()
-        if(COSMICTIGER_DIMENSION_COUNT LESS 2)
-            list(REMOVE_ITEM cosmictiger_source_files src/scenarios/rayleigh_taylor.cpp
-                src/scenarios/kelvin_helmholtz.cpp
-                src/scenarios/gresho.cpp)
-        endif()
         if(COSMICTIGER_ENABLE_CHEMISTRY)
             list(APPEND cosmictiger_source_files src/chemistry/sph.cpp)
         endif()
@@ -126,7 +117,7 @@ function(cosmictiger_feature_sources output)
         endif()
     endif()
 
-    if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
+    if(BUILD_TESTING)
         list(APPEND cosmictiger_source_files
             tests/test.cpp)
         if(COSMICTIGER_WITH_ROCKSTAR)
@@ -137,12 +128,10 @@ function(cosmictiger_feature_sources output)
             list(APPEND cosmictiger_source_files tests/gravity/global_fmm/fmm_tree.cpp
                 tests/gravity/global_fmm/fmm_walk.cpp)
         endif()
-        if(NOT COSMICTIGER_WITH_GRAVITY)
-            list(APPEND cosmictiger_source_files tests/sph/no_gravity.cpp)
-        endif()
         if(COSMICTIGER_WITH_SPH)
             list(APPEND cosmictiger_source_files
                 tests/sph/tree.cpp tests/sph/parent_tree.cpp tests/sph/ghosts.cpp tests/units_output.cpp
+                tests/sph/no_gravity.cpp
                 tests/distributed_output.cpp)
             if(COSMICTIGER_ENABLE_CHEMISTRY)
                 list(APPEND cosmictiger_source_files tests/sph/chemistry.cpp)

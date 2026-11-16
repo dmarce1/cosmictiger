@@ -1,3 +1,4 @@
+// Validate and install runtime-selected SPH and gravity kernel tables.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -14,8 +15,7 @@
 /// them to CUDA.
 void setKernelSelections(
     radial_kernel::KernelSpec gravity, radial_kernel::KernelSpec hydro, bool useCuda) {
-    if (!radial_kernel::isValid(gravity) ||
-        !radial_kernel::isValidDensity<kSpatialDimensions>(hydro)) {
+    if (!radial_kernel::isValid(gravity) || !isValidHydroKernel(hydro)) {
         throw std::invalid_argument("Unsupported radial kernel family or polynomial degree");
     }
     detail::gravityKernel = radial_kernel::makeKernelTable(gravity);

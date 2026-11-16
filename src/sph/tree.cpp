@@ -1,5 +1,6 @@
 /*
  CosmicTiger - A cosmological N-Body code
+ Build and maintain spatial trees and swept bounds for SPH neighbor searches.
  Copyright (C) 2026  Dominic C. Marcello
 
  Distributed under the Boost Software License, Version 1.0.
@@ -146,7 +147,7 @@ double sphTreeVolumeRatio(SphTreeNode const& node, sph_flops::Counter& flops) {
     // clang-format on
     double V_partition = 1.0;
     double V_swept = 1.0;
-    for (int dim = 0; dim < kSpatialDimensions; ++dim) {
+    for (int dim = 0; dim < spatialDimensions(); ++dim) {
         double const partitionSpan = node.box.end[dim].toDouble() - node.box.begin[dim].toDouble();
         double const sweptSpan =
             node.driftBox.end[dim].toDouble() - node.driftBox.begin[dim].toDouble();
@@ -154,7 +155,7 @@ double sphTreeVolumeRatio(SphTreeNode const& node, sph_flops::Counter& flops) {
         V_partition *= partitionSpan;
         V_swept *= sweptSpan;
     }
-    flops.doublePrecision += 8 * kSpatialDimensions + 1;
+    flops.doublePrecision += 8 * spatialDimensions() + 1;
     return V_swept / V_partition;
 }
 
@@ -587,12 +588,12 @@ static SphTreeCreateReturn sphTreeBuild(SphTreeCreateParameters params, size_t k
             } else if (particleCount > 2 * bucketCount) {
                 splitDimensions = 2;
             }
-            splitDimensions = std::min(splitDimensions, kSpatialDimensions);
+            splitDimensions = std::min(splitDimensions, spatialDimensions());
             int splitMask = 0;
             for (int split = 0; split < splitDimensions; ++split) {
                 int longestDimension = -1;
                 double longestSpan = -1.0;
-                for (int dim = 0; dim < kSpatialDimensions; ++dim) {
+                for (int dim = 0; dim < spatialDimensions(); ++dim) {
                     double const span = box.end[dim] - box.begin[dim];
                     flops.doublePrecision += 1;
                     if ((splitMask & (1 << dim)) == 0 && span > longestSpan) {
@@ -1043,4 +1044,3 @@ void sphTreeSetBoxes(TreeId id, SphBox const& ibox, SphBox const& obox) {
     nodes[id.index].outerBox = obox;
     nodes[id.index].innerBox = ibox;
 }
-

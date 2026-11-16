@@ -1,3 +1,4 @@
+// Conservative SPH pair ownership and compensated velocity and entropy increments.
 /* CosmicTiger - conservative SPH pair impulses; BSL-1.0. */
 #pragma once
 
@@ -128,8 +129,9 @@ static_assert(sizeof(SphCompensatedSum) == 2 * sizeof(float));
 
 // Event-local scratch; both the sum and compensation travel in reverse exchanges.
 struct SphPairUpdate {
-    SphCompensatedSum velocity[kSpatialDimensions] = {};
-    SphCompensatedSum entropy;
+    SphCompensatedSum velocity[kDimensions] =
+        {};                       // Velocity increments; inactive axes stay zero.
+    SphCompensatedSum entropy;    // Specific entropy increment for this pair event.
 
     /// Archive this record in the field order required by distributed transport.
     template <class Archive>
@@ -165,13 +167,14 @@ CUDA_EXPORT inline bool sphOwnsPairKick(SphPairSourceId const& target,
  *   Δv𞁑 → increment; a, b → target, neighbor.
  */
 // clang-format on
+template <int dimension = 0>
 CUDA_EXPORT inline FlopCount sphAccumulatePairKick(SphPairUpdate& a, SphPairUpdate& b,
     sph_geometry::SpatialVector<float> const& a𞁑𞁓, float Ȧ𞁑𞁓, float Ȧ𞁓𞁑, float Δτ) {
-    FlopCount operations = kSpatialDimensions + 2;    // Impulse and entropy products.
-    for (int dimension = 0; dimension < kSpatialDimensions; ++dimension) {
-        float const Δv𞁑 = Δτ * a𞁑𞁓[dimension];
-        operations += a.velocity[dimension].add(Δv𞁑);
-        operations += b.velocity[dimension].add(-Δv𞁑);
+    FlopCount operations = spatialDimensions<dimension>() + 2;    // Impulse and entropy products.
+    for (int axis = 0; axis < spatialDimensions<dimension>(); ++axis) {
+        float const Δv𞁑 = Δτ * a𞁑𞁓[axis];
+        operations += a.velocity[axis].add(Δv𞁑);
+        operations += b.velocity[axis].add(-Δv𞁑);
     }
     operations += a.entropy.add(Δτ * Ȧ𞁑𞁓);
     operations += b.entropy.add(Δτ * Ȧ𞁓𞁑);
@@ -180,11 +183,12 @@ CUDA_EXPORT inline FlopCount sphAccumulatePairKick(SphPairUpdate& a, SphPairUpda
 
 // Derived one-sided form of the kick above, Δv𞁑 = Δτ dv/dτ, for forces without a gas partner.
 // Δτ → timestep; dv/dτ → external acceleration. Code names: dv_dτ = dv/dτ.
+template <int dimension = 0>
 CUDA_EXPORT inline FlopCount sphAccumulateExternalKick(
     SphPairUpdate& target, sph_geometry::SpatialVector<float> const& dv_dτ, float Δτ) {
-    FlopCount operations = kSpatialDimensions;
-    for (int dimension = 0; dimension < kSpatialDimensions; ++dimension) {
-        operations += target.velocity[dimension].add(Δτ * dv_dτ[dimension]);
+    FlopCount operations = spatialDimensions<dimension>();
+    for (int axis = 0; axis < spatialDimensions<dimension>(); ++axis) {
+        operations += target.velocity[axis].add(Δτ * dv_dτ[axis]);
     }
     return operations;
 }

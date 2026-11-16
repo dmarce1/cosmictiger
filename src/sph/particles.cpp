@@ -1,5 +1,6 @@
 /*
  CosmicTiger - A cosmological N-Body code
+ Manage gas particle fields and versioned SPH checkpoint payloads.
  Copyright (C) 2026  Dominic C. Marcello
 
  Distributed under the Boost Software License, Version 1.0.
@@ -37,7 +38,6 @@
 #include <cosmictiger/chemistry/sph.hpp>
 #endif
 #include <cosmictiger/sph/particles.hpp>
-
 
 bool sphParticlesEntropyInitialized = false;
 double sphParticlesThermalScaleFactor = 1.0;
@@ -410,7 +410,7 @@ void sphParticlesLoad(FILE* fp) {
     }
     if (header[0] != 0x43545350U || header[1] != detail::sphCheckpointVersion() ||
         header[2] != sizeof(ParticleInteger) || header[3] != sizeof(float) || header[4] != 0U ||
-        header[5] != kSpatialDimensions || header[6] != sizeof(float) ||
+        header[5] != spatialDimensions() || header[6] != sizeof(float) ||
         savedCount != sphParticlesSize()) {
         throw std::runtime_error("Incompatible SPH checkpoint payload (requires matching "
                                  "integrator/viscosity/chemistry layout)");
@@ -459,7 +459,7 @@ void sphParticlesLoad(FILE* fp) {
 void sphParticlesSave(FILE* fp) {
     auto const& opts = getOptions();
     uint32_t header[7] = {0x43545350U, detail::sphCheckpointVersion(), sizeof(ParticleInteger),
-        sizeof(float), 0U, kSpatialDimensions, sizeof(float)};
+        sizeof(float), 0U, uint32_t(spatialDimensions()), sizeof(float)};
     ParticleInteger count = sphParticlesSize();
     FWRITE(header, sizeof(uint32_t), 7, fp);
     FWRITE(&count, sizeof(ParticleInteger), 1, fp);

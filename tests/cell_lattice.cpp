@@ -134,12 +134,12 @@ void packingPairs() {
 
 void rounding() {
     for (size_t sites : {1, 2, 3, 4}) {
-        if (sites > (size_t(1) << kSpatialDimensions)) {
+        if (sites > (size_t(1) << spatialDimensions())) {
             continue;
         }
         for (size_t requested : {1, 47, 48, 49, 999, 1000, 1001, 262144}) {
             auto const layout = particle_count::roundKelvinHelmholtz(requested, sites);
-            size_t const multiplicity = 3 * sites * (size_t(1) << (kSpatialDimensions - 1));
+            size_t const multiplicity = 3 * sites * (size_t(1) << (spatialDimensions() - 1));
             require(layout.count >= requested, "Population undershot request");
             require(layout.count == multiplicity * particle_count::spatialPower(layout.side),
                 "Wrong rounded count");
@@ -168,9 +168,12 @@ int main() {
     try {
         detail::allLattices();
         detail::packingPairs();
-        detail::rounding();
+        for (int dimensions = 1; dimensions <= kDimensions; ++dimensions) {
+            setSpatialDimensions(dimensions);
+            detail::rounding();
+        }
         std::cout << "All cell subsets, neighborhood symmetries, packing inputs and "
-                  << kSpatialDimensions << "D counts passed\n";
+                  << spatialDimensions() << "D counts passed\n";
     } catch (std::exception const& error) {
         std::cerr << error.what() << '\n';
         return 1;

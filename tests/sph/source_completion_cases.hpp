@@ -1,3 +1,4 @@
+// Regression coverage for SPH dynamics with runtime spatial dimensions.
 /* CosmicTiger - shared CPU/CUDA deferred source regressions; BSL-1.0. */
 #pragma once
 
@@ -61,7 +62,7 @@ void testDeferredSourceCompletion() {
     // The one pair and the external kicks deposit the same impulses in the same order.
     for (int i = 0; i < 2; ++i) {
         auto const acceleration = fixture.kickAcceleration(i);
-        for (int dim = 0; dim < kSpatialDimensions; ++dim) {
+        for (int dim = 0; dim < spatialDimensions(); ++dim) {
             if (acceleration[dim] != expectedAcceleration[i][dim]) {
                 throw std::runtime_error("Deferred SPH sources changed the pair or external kicks");
             }

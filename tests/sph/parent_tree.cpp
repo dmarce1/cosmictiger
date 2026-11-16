@@ -1,3 +1,4 @@
+// Regression coverage for SPH dynamics with runtime spatial dimensions.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -54,7 +55,7 @@ void walkTopology(
         walk.leafKeys.push_back(key);
         return;
     }
-    int const levels = children.size() == 2 ? 1 : kSpatialDimensions;
+    int const levels = children.size() == 2 ? 1 : spatialDimensions();
     int expectedFirst = rankRange.first;
     for (auto const& child : children) {
         requireParentTree(child.rankRange.first == expectedFirst &&
@@ -86,14 +87,14 @@ void checkParentTopology() {
                     rankCount, walk.leafKeys[rank], sphDomainLeafKey(rank, rankCount)));
         }
         // One full level per factor 2^D, then at most D - 1 binary levels.
-        int const fullArity = 1 << kSpatialDimensions;
+        int const fullArity = 1 << spatialDimensions();
         int fullLevels = 0;
         int remaining = rankCount;
         while (remaining >= fullArity) {
             remaining = (remaining + fullArity - 1) / fullArity;
             fullLevels++;
         }
-        requireParentTree(walk.maximumDepth <= fullLevels + kSpatialDimensions,
+        requireParentTree(walk.maximumDepth <= fullLevels + spatialDimensions(),
             std::format("{} ranks reach depth {}", rankCount, walk.maximumDepth));
     }
     // A collective started on rank 0 and forwarded along sphParentLocalityChildren reaches
@@ -119,10 +120,10 @@ void checkParentTopology() {
             requireParentTree(visits[rank] == 1,
                 std::format("rank {} of {} is reached {} times", rank, rankCount, visits[rank]));
         }
-        requireParentTree(hops <= TopologyWalk{}.maximumDepth + 2 * kSpatialDimensions + 8,
+        requireParentTree(hops <= TopologyWalk{}.maximumDepth + 2 * spatialDimensions() + 8,
             std::format("{} ranks need {} collective hops", rankCount, hops));
     }
-    if constexpr (kSpatialDimensions == 3) {
+    if (spatialDimensions() == 3) {
         // 64 ranks are two full 8-way levels; 8 ranks one; 7 ranks three binary levels.
         TopologyWalk eight;
         walkTopology(1, Pair<int>(0, 8), 0, 8, eight);

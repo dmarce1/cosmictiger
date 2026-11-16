@@ -16,7 +16,9 @@ namespace scenarios {
 
 // Derived complete-cell population: N = 6 * 4^(D-1) * n^D for the mirrored
 // light/heavy layers, with two heavy sites for each light site.
-inline constexpr size_t kRayleighTaylorLatticeMultiplicity = kSpatialDimensions == 2 ? 24 : 96;
+inline size_t rayleighTaylorLatticeMultiplicity() {
+    return spatialDimensions() == 2 ? 24 : 96;
+}
 
 // The imposed field is along y in 2D and z in 3D. The public
 // scenario.rayleighTaylor.zPlaneAcceleration key retains its historical spelling.

@@ -1,5 +1,6 @@
 /*
  CosmicTiger - A cosmological N-Body code
+ CPU SPH neighbor gathering and reductions over the active spatial axes.
  Copyright (C) 2026 Dominic C. Marcello
 
  Distributed under the Boost Software License, Version 1.0.
@@ -72,11 +73,12 @@ inline SimdFloat::mask_type sphCpuValidLanes(std::vector<int> const& neighbors, 
 }
 
 // A pack of neighbor vectors from the separate component arrays, over the active axes.
+template <int dimension = 0>
 inline sph_geometry::SpatialVector<SimdFloat> sphCpuLoad3(float const* x, float const* y,
     float const* z, std::vector<int> const& neighbors, size_t first, float padding) {
     float const* const components[kDimensions] = {x, y, z};
-    sph_geometry::SpatialVector<SimdFloat> result;
-    for (int dim = 0; dim < kSpatialDimensions; dim++) {
+    sph_geometry::SpatialVector<SimdFloat> result(SimdFloat(0.0f));
+    for (int dim = 0; dim < spatialDimensions<dimension>(); dim++) {
         result[dim] = sphCpuLoad(components[dim], neighbors, first, padding);
     }
     return result;
@@ -84,12 +86,13 @@ inline sph_geometry::SpatialVector<SimdFloat> sphCpuLoad3(float const* x, float 
 
 // Separations r𞁑𞁓 = x𞁑 - x𞁓 for one pack of neighbors, over the active axes.
 // x𞁑, x𞁓 → sink, neighbor coordinate along one axis; r𞁑𞁓 → separation (return value).
+template <int dimension = 0>
 inline sph_geometry::SpatialVector<SimdFloat> sphCpuSeparations(
     SphRunData const& data, int particleIndex, std::vector<int> const& neighbors, size_t first) {
     Position const* positions[kDimensions] = {
         data.sourcePositionX, data.sourcePositionY, data.sourcePositionZ};
-    sph_geometry::SpatialVector<SimdFloat> r𞁑𞁓;
-    for (int dim = 0; dim < kSpatialDimensions; dim++) {
+    sph_geometry::SpatialVector<SimdFloat> r𞁑𞁓(SimdFloat(0.0f));
+    for (int dim = 0; dim < spatialDimensions<dimension>(); dim++) {
         SignedPositionInteger const x𞁑 =
             static_cast<SignedPositionInteger>(positions[dim][particleIndex].raw());
         SimdPosition const x𞁓([&](auto lane) {
@@ -105,20 +108,22 @@ inline sph_geometry::SpatialVector<SimdFloat> sphCpuSeparations(
 }
 
 // The component-wise additive reduction of a vector of SIMD partial sums.
+template <int dimension = 0>
 inline sph_geometry::SpatialVector<float> sphCpuSum(
     sph_geometry::SpatialVector<SimdFloat> const& pack) {
-    sph_geometry::SpatialVector<float> sum;
-    for (int dim = 0; dim < kSpatialDimensions; dim++) {
+    sph_geometry::SpatialVector<float> sum(0.0f);
+    for (int dim = 0; dim < spatialDimensions<dimension>(); dim++) {
         sum[dim] = simdSum(pack[dim]);
     }
     return sum;
 }
 
 // One lane of a vector pack.
+template <int dimension = 0>
 inline sph_geometry::SpatialVector<float> sphCpuLane(
     sph_geometry::SpatialVector<SimdFloat> const& pack, size_t lane) {
-    sph_geometry::SpatialVector<float> value;
-    for (int dim = 0; dim < kSpatialDimensions; dim++) {
+    sph_geometry::SpatialVector<float> value(0.0f);
+    for (int dim = 0; dim < spatialDimensions<dimension>(); dim++) {
         value[dim] = float(pack[dim][lane]);
     }
     return value;

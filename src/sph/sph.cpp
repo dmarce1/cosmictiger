@@ -1,5 +1,6 @@
 /*
  CosmicTiger - A cosmological N-Body code
+ Coordinate SPH source staging, force passes, and conservative pair updates.
  Copyright (C) 2026  Dominic C. Marcello
 
  Distributed under the Boost Software License, Version 1.0.
@@ -41,7 +42,6 @@
 #include <cosmictiger/stars/star_formation.hpp>
 #endif
 
-
 struct SphTreeIdHash {
     /// Hash a tree-node identity by combining its node index and owning locality.
     inline size_t operator()(TreeId id) const {
@@ -51,8 +51,7 @@ struct SphTreeIdHash {
 };
 
 /// Test periodic box intersection while recording geometric arithmetic cost.
-inline bool rangeIntersect(
-    SphBox const& a, SphBox const& b, FlopCounter<>* flops = nullptr) {
+inline bool rangeIntersect(SphBox const& a, SphBox const& b, FlopCounter<>* flops = nullptr) {
     return a.periodicIntersects(b, flops);
 }
 
@@ -619,7 +618,7 @@ void sphFinishPairStages(bool restore) {
     }
     if (restore) {
         for (auto const& baseline : detail::pairBaselines) {
-            for (int dimension = 0; dimension < kSpatialDimensions; ++dimension) {
+            for (int dimension = 0; dimension < spatialDimensions(); ++dimension) {
                 sphParticlesVelocity(dimension, baseline.index) = baseline.velocity[dimension];
             }
             sphParticlesEntropy(baseline.index) = baseline.entropy;
@@ -648,7 +647,7 @@ void sphCommitPairUpdates(int stage) {
         // Restore exactly, rather than subtracting a rounded predictor. A
         // particle whose second-stage increment is zero still needs restoration.
         for (auto const& baseline : detail::pairBaselines) {
-            for (int dimension = 0; dimension < kSpatialDimensions; ++dimension) {
+            for (int dimension = 0; dimension < spatialDimensions(); ++dimension) {
                 sphParticlesVelocity(dimension, baseline.index) = baseline.velocity[dimension];
             }
             sphParticlesEntropy(baseline.index) = baseline.entropy;
@@ -665,7 +664,7 @@ void sphCommitPairUpdates(int stage) {
         SphPairUpdate total;
         size_t next = first;
         do {
-            for (int dimension = 0; dimension < kSpatialDimensions; ++dimension) {
+            for (int dimension = 0; dimension < spatialDimensions(); ++dimension) {
                 flops += total.velocity[dimension].merge(updates[next].update.velocity[dimension]);
             }
             flops += total.entropy.merge(updates[next].update.entropy);
@@ -679,11 +678,11 @@ void sphCommitPairUpdates(int stage) {
             baseline.proposedRung = char(sphParticlesProposedRung(gas));
             detail::pairBaselines.push_back(baseline);
         }
-        for (int dimension = 0; dimension < kSpatialDimensions; ++dimension) {
+        for (int dimension = 0; dimension < spatialDimensions(); ++dimension) {
             sphParticlesVelocity(dimension, gas) += total.velocity[dimension];
         }
         sphParticlesEntropy(gas) += total.entropy;
-        flops += kSpatialDimensions + 1;
+        flops += spatialDimensions() + 1;
         ALWAYS_ASSERT(std::isfinite(sphParticlesEntropy(gas)) && sphParticlesEntropy(gas) > 0.0f);
         first = next;
     }
@@ -704,7 +703,7 @@ void SphRunWorkspace::deliverPairUpdates() {
     for (size_t i = 0; i < hostPairUpdates.size(); ++i) {
         auto const& value = hostPairUpdates[i];
         bool nonzero = !value.entropy.isZero();
-        for (int dimension = 0; dimension < kSpatialDimensions; ++dimension) {
+        for (int dimension = 0; dimension < spatialDimensions(); ++dimension) {
             nonzero = nonzero || !value.velocity[dimension].isZero();
         }
         if (nonzero) {

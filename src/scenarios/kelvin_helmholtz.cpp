@@ -1,3 +1,4 @@
+// Initialize layered Kelvin-Helmholtz lattices in the runtime SPH dimension.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -88,9 +89,9 @@ namespace detail {
 ScenarioPlan initializeKelvinHelmholtz() {
     auto opts = getOptions();
     auto const packing =
-        parseKelvinHelmholtzPacking(opts.scenario.kelvinHelmholz.packing, kSpatialDimensions);
+        parseKelvinHelmholtzPacking(opts.scenario.kelvinHelmholz.packing, spatialDimensions());
     auto const layout = particle_count::roundKelvinHelmholtz(
-        opts.run.gasParticleCount, packing.low.sitesPerCell(kSpatialDimensions));
+        opts.run.gasParticleCount, packing.low.sitesPerCell(spatialDimensions()));
     int const n = layout.side;
     double const cellSpacing = 0.5 / n;
     constexpr double ρ_0 = 0.5;
@@ -103,8 +104,8 @@ ScenarioPlan initializeKelvinHelmholtz() {
     // modes below both fluids' limits, excluding DC and the Nyquist endpoint.
     // n -> half-box cells; p -> planes per cell; K -> maximum perturbation mode.
     int const K = n *
-            std::min(packing.low.planesPerCell(kSpatialDimensions, kYi),
-                packing.high.planesPerCell(kSpatialDimensions, kYi)) -
+            std::min(packing.low.planesPerCell(spatialDimensions(), kYi),
+                packing.high.planesPerCell(spatialDimensions(), kYi)) -
         1;
     struct ModeAmplitudes {
         double sine;
@@ -151,16 +152,16 @@ ScenarioPlan initializeKelvinHelmholtz() {
     terminal::detailPrint("Kelvin-Helmholtz realized densities: left=%e right=%e ratio=%e\n", ρ_0,
         kHighDensity, kHighDensity / ρ_0);
 
-    cell_lattice::CellLattice::CellCounts cells{n, 2 * n, kSpatialDimensions == 3 ? 2 * n : 1};
+    cell_lattice::CellLattice::CellCounts cells{n, 2 * n, spatialDimensions() == 3 ? 2 * n : 1};
     sphParticlesResize(layout.count);
     ParticleInteger particle = 0;
     auto const addLayer = [&](cell_lattice::CellLattice const& lattice, double originX,
                               double density, double streamwiseVelocity) {
         double const supportRadius =
             sph_geometry::supportRadius(opts.initial.gasMass, density, opts.hydro.neighborNumber);
-        lattice.generate(kSpatialDimensions, cells, cellSpacing, {originX, 0.0, 0.0},
+        lattice.generate(spatialDimensions(), cells, cellSpacing, {originX, 0.0, 0.0},
             [&](cell_lattice::CellLattice::Position const& position) {
-                for (int axis = 0; axis < kSpatialDimensions; ++axis) {
+                for (int axis = 0; axis < spatialDimensions(); ++axis) {
                     sphParticlesPosition(axis, particle) = position[axis];
                     sphParticlesVelocity(axis, particle) = 0.0;
                 }

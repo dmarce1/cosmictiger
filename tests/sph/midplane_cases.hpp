@@ -12,8 +12,10 @@
 namespace detail {
 
 inline void testRayleighTaylorMidplaneAcceleration() {
-    static_assert(kSpatialDimensions >= 2);
-    constexpr int kVerticalAxis = kSpatialDimensions - 1;
+    if (spatialDimensions() < 2) {
+        throw std::invalid_argument("Rayleigh-Taylor force requires at least two dimensions");
+    }
+    int const verticalAxis = spatialDimensions() - 1;
     SphRunParameters parameters;
     parameters.uniformAccelerationY = 0.0f;
     parameters.zPlaneAcceleration = 0.5f;
@@ -38,16 +40,16 @@ inline void testRayleighTaylorMidplaneAcceleration() {
         // Deliberately place the inactive z padding above the midplane in 2D, so selecting
         // the old z coordinate would either reverse or entirely lose the intended force.
         Vector3<Position> position(Position(0.75));
-        position[kVerticalAxis].raw() = coordinates[index];
+        position[verticalAxis].raw() = coordinates[index];
         auto const acceleration = force(position);
         sph_flops::Counter flops;
         auto const paddedAcceleration = sphCompleteAcceleration(parameters, position,
             Vector3<float>(0.0f), Vector3<float>(0.0f), Vector3<float>(0.0f), 0.0f, 1.0f, flops);
         for (int dim = 0; dim < kDimensions; ++dim) {
-            float const expectedComponent = dim == kVerticalAxis ? expected[index] : 0.0f;
+            float const expectedComponent = dim == verticalAxis ? expected[index] : 0.0f;
             check(paddedAcceleration[dim], expectedComponent,
                 "Midplane force used the wrong coordinate or padded component");
-            if (dim < kSpatialDimensions) {
+            if (dim < spatialDimensions()) {
                 check(acceleration[dim], expectedComponent,
                     "Spatial force completion lost the imposed midplane force");
             }
@@ -62,9 +64,9 @@ inline void testRayleighTaylorMidplaneAcceleration() {
     parameters.zPlaneAcceleration = 0.5f;
     parameters.uniformAccelerationY = 0.25f;
     auto const combined = force(position);
-    for (int dim = 0; dim < kSpatialDimensions; ++dim) {
+    for (int dim = 0; dim < spatialDimensions(); ++dim) {
         float const expectedComponent =
-            (dim == kYi ? 0.25f : 0.0f) + (dim == kVerticalAxis ? -0.5f : 0.0f);
+            (dim == kYi ? 0.25f : 0.0f) + (dim == verticalAxis ? -0.5f : 0.0f);
         check(combined[dim], expectedComponent,
             "Uniform y acceleration and midplane acceleration must add independently");
     }

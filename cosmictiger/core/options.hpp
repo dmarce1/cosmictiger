@@ -1,3 +1,4 @@
+// Application options and their inter-locality serialization contract.
 // Runtime configuration records and their distributed serialization.
 /*
  CosmicTiger - A cosmological N-Body code
@@ -223,6 +224,7 @@ struct Units {
 };
 
 struct Hydro {
+    int dimensions{3};    // Active Cartesian SPH axes, from 1 through 3.
     bool cuda{};
     bool enabled{};
     std::string method{"sph"};
@@ -354,6 +356,7 @@ struct Options {
         arc & hydro.balsaraSoundSpeedCoefficient;
         arc & hydro.viscosityDecay;
         arc & hydro.neighborNumber;
+        arc & hydro.dimensions;
         arc & hydro.minSmoothingLength;
         arc & hydro.maxSmoothingLength;
         arc & hydro.damping;

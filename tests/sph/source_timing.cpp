@@ -1,3 +1,4 @@
+// Regression coverage for SPH dynamics with runtime spatial dimensions.
 /* CosmicTiger - completed midpoint source interval regression; BSL-1.0. */
 
 #include <algorithm>
@@ -247,7 +248,7 @@ void sphSourceTimingTest() {
         std::sqrt(options.hydro.heatCapacityRatio * (options.hydro.heatCapacityRatio - 1.0) *
             1.0e12 * detail::kSourceScale * detail::kSourceScale / sourceParameters.energyScale);
     double const smoothingLength = options.hydro.minSmoothingLength /
-        selectedHydroKernel().smoothingLengthPerEffectiveRadius * monaghan::kViscosityWidthScale;
+        selectedHydroKernel().smoothingLengthPerEffectiveRadius * monaghan::viscosityWidthScale();
     options.hydro.viscosityDecay =
         detail::kSourceScale * smoothingLength / (soundSpeed * (baseTimestep / 4.0));
     setOptions(options);

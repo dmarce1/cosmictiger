@@ -1,5 +1,6 @@
 /*
  CosmicTiger - A cosmological N-Body code
+ CUDA SPH smoothing-length, density, and velocity-gradient preparation.
  Copyright (C) 2026  Dominic C. Marcello
 
  Distributed under the Boost Software License, Version 1.0.
@@ -40,6 +41,7 @@ struct DensityWorkspace {
 }    // namespace detail
 
 // h𞁑 → sink kernel smoothing length, solved in place.
+template <int dimension>
 __global__ void sphCudaSmoothingLengths(
     SphRunParameters parameters, SphRunCudaData data, SphReduction* reduction) {
     sph_flops::Counter flops = 0;
@@ -75,7 +77,8 @@ __global__ void sphCudaSmoothingLengths(
                 __syncthreads();
                 workspace.positions.resize(offset + total);
                 if (contains) {
-                    workspace.positions[offset + slot] = {data.sourcePosition(sourceParticleIndex)};
+                    workspace.positions[offset + slot] = {
+                        data.sourcePosition<dimension>(sourceParticleIndex)};
                 }
             }
         }
@@ -88,11 +91,12 @@ __global__ void sphCudaSmoothingLengths(
                 data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]]);
             if (active && !data.sinkFlags[sinkIndex].converged()) {
                 float& h𞁑 = data.sinkSmoothingLength[sinkIndex];
-                bool const converged = solveSphSmoothingLength<kSmoothingLengthsBlockSize>(h𞁑,
-                    parameters.minimumSmoothingLength, parameters.maximumSmoothingLength,
-                    data.targetNeighborCount, workspace.positions,
-                    data.sourcePosition(particleIndex), data.sourcePaddedPosition(particleIndex),
-                    targetNode.outerBox, flops);
+                bool const converged =
+                    solveSphSmoothingLength<dimension, kSmoothingLengthsBlockSize>(h𞁑,
+                        parameters.minimumSmoothingLength, parameters.maximumSmoothingLength,
+                        data.targetNeighborCount, workspace.positions,
+                        data.sourcePosition<dimension>(particleIndex),
+                        data.sourcePaddedPosition(particleIndex), targetNode.outerBox, flops);
                 if (threadIndex == 0) {
                     data.sinkFlags[sinkIndex].setConverged(converged);
                     if (converged) {
@@ -145,14 +149,15 @@ __global__ void sphCudaSmoothingLengths(
  * The curl stays a three-component record: a two-dimensional curl points along the inactive axis.
  */
 // clang-format on
+template <int dimension>
 __global__ void sphCudaDensityAndGradients(
     SphRunParameters parameters, SphRunCudaData data, SphReduction* reduction) {
     bool const evolveMorrisMonaghan = parameters.viscosityTimestep > 0.0;
     sph_flops::Counter flops = 2;    // γ − 1 and h_M/h.
     float const γ = data.adiabaticIndex;
     float const γ_minus_1 = γ - 1.0f;    // P/(ρu) for every particle.
-    float const h_M_over_h =
-        monaghan::lengthPerSupport(selectedHydroKernel().smoothingLengthPerEffectiveRadius);
+    float const h_M_over_h = monaghan::lengthPerSupport<dimension>(
+        selectedHydroKernel().smoothingLengthPerEffectiveRadius);
     int const threadIndex = threadIdx.x;
     int const blockSize = blockDim.x;
     __shared__ int targetNodeIndex;
@@ -192,11 +197,12 @@ __global__ void sphCudaDensityAndGradients(
                 workspace.positions.resize(offset + total);
                 workspace.particles.resize(offset + total);
                 if (contains) {
-                    workspace.positions[offset + slot] = {data.sourcePosition(sourceParticleIndex)};
+                    workspace.positions[offset + slot] = {
+                        data.sourcePosition<dimension>(sourceParticleIndex)};
                     auto& particle = workspace.particles[offset + slot];
                     particle.smoothingLength = data.sourceSmoothingLength[sourceParticleIndex];
                     particle.rung = data.sourceRungs[sourceParticleIndex];
-                    particle.velocity = data.sourceVelocity(sourceParticleIndex);
+                    particle.velocity = data.sourceVelocity<dimension>(sourceParticleIndex);
                 }
             }
         }
@@ -207,7 +213,7 @@ __global__ void sphCudaDensityAndGradients(
                 targetNode.sinkParticleRange.first - targetNode.particleRange.first + particleIndex;
             bool const active = parameters.isActiveRung(
                 data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]]);
-            SpatialVector<Position> const x𞁑 = data.sourcePosition(particleIndex);
+            SpatialVector<Position> const x𞁑 = data.sourcePosition<dimension>(particleIndex);
             float& h𞁑ₘₑₘ = data.sinkSmoothingLength[sinkIndex];
             int semiactive = active;
             if (!active) {
@@ -216,11 +222,12 @@ __global__ void sphCudaDensityAndGradients(
                     auto const& neighbor = workspace.positions[neighborIndex];
                     auto const& particle = workspace.particles[neighborIndex];
                     if (parameters.isActiveRung(particle.rung)) {
-                        auto const r𞁑𞁓 = distance(x𞁑, neighbor.position);
+                        auto const r𞁑𞁓 = distance<dimension>(x𞁑, neighbor.position);
                         float const r2𞁑𞁓 = r𞁑𞁓.dot(r𞁑𞁓);
                         float const h𞁓 = particle.smoothingLength;
                         // Fixed distances, squared norm, two supports.
-                        flops += sph_flops::kVectorOperation + sph_flops::kDotProduct + 2;
+                        flops +=
+                            sph_flops::separationFlops<dimension>() + sph_flops::kDotProduct + 2;
                         if (r2𞁑𞁓 < fmaxf(sqr(h𞁑ₘₑₘ), sqr(h𞁓))) {
                             semiactive++;
                         }
@@ -241,7 +248,7 @@ __global__ void sphCudaDensityAndGradients(
                 evolveMorrisMonaghan && active && !data.sinkFlags[sinkIndex].converged();
             bool converged = true;
             if (!active && !data.sinkFlags[sinkIndex].converged()) {
-                converged = solveSphSmoothingLength<kDensityAndGradientsBlockSize>(h𞁑ₘₑₘ,
+                converged = solveSphSmoothingLength<dimension, kDensityAndGradientsBlockSize>(h𞁑ₘₑₘ,
                     parameters.minimumSmoothingLength, parameters.maximumSmoothingLength,
                     data.targetNeighborCount, workspace.positions, x𞁑,
                     data.sourcePaddedPosition(particleIndex), targetNode.outerBox, flops);
@@ -269,10 +276,12 @@ __global__ void sphCudaDensityAndGradients(
 
             float const h𞁑 = h𞁑ₘₑₘ;
             float const ih𞁑 = 1.0f / h𞁑;
-            float const m𞁓_over_hᴰ𞁑 = data.gasMass * sph_geometry::inverseVolume(ih𞁑);
-            float const m𞁓ih_D_plus_1𞁑 = data.gasMass * sph_geometry::inverseGradientScale(ih𞁑);
+            float const m𞁓_over_hᴰ𞁑 = data.gasMass * sph_geometry::inverseVolume<dimension>(ih𞁑);
+            float const m𞁓ih_D_plus_1𞁑 =
+                data.gasMass * sph_geometry::inverseGradientScale<dimension>(ih𞁑);
             // Reciprocal and the mass/support-volume and mass/gradient-scale products.
-            flops += 3 + sph_flops::kInverseVolume + sph_flops::kInverseGradientScale;
+            flops += 3 + sph_flops::inverseVolumeFlops<dimension>() +
+                sph_flops::inverseGradientScaleFlops<dimension>();
             float ρ𞁑 = 0.0f;
             float ρ𞁑_div_v𞁑 = 0.0f;
             Vector3<float> ρ𞁑_curl_v𞁑(0.0f);    // padded: see the curl above
@@ -291,13 +300,13 @@ __global__ void sphCudaDensityAndGradients(
             for (int neighborIndex = threadIndex; neighborIndex < workspace.positions.size();
                 neighborIndex += blockSize) {
                 auto const& neighbor = workspace.positions[neighborIndex];
-                auto const r𞁑𞁓 = distance(x𞁑, neighbor.position);
+                auto const r𞁑𞁓 = distance<dimension>(x𞁑, neighbor.position);
                 float const abs_r𞁑𞁓 = r𞁑𞁓.norm();
                 float const q𞁑𞁓 = abs_r𞁑𞁓 * ih𞁑;    // |r𞁑𞁓|/h𞁑
                 float const w_q𞁑𞁓 = kernelW(q𞁑𞁓);
                 ρ𞁑 += m𞁓_over_hᴰ𞁑 * w_q𞁑𞁓;
                 // Fixed distances, norm, q𞁑𞁓, density product and sum.
-                flops += sph_flops::kVectorOperation + sph_flops::kNorm + 3 +
+                flops += sph_flops::separationFlops<dimension>() + sph_flops::kNorm + 3 +
                     sph_flops::densityKernelOperations(selectedHydroKernel(), q𞁑𞁓);
                 if (q𞁑𞁓 < 1.0f) {
                     ΣW += w_q𞁑𞁓;
@@ -318,7 +327,7 @@ __global__ void sphCudaDensityAndGradients(
                     // clang-format on
                     float const m𞁓F𞁑 = m𞁓ih_D_plus_1𞁑 * dkernelWDq(q𞁑𞁓) / abs_r𞁑𞁓;
                     auto const& particle = workspace.particles[neighborIndex];
-                    SpatialVector<float> const v𞁑 = data.sourceVelocity(particleIndex);
+                    SpatialVector<float> const v𞁑 = data.sourceVelocity<dimension>(particleIndex);
                     SpatialVector<float> const& v𞁓 = particle.velocity;
                     SpatialVector<float> const v𞁑𞁓 = v𞁑 - v𞁓;
                     // Kernel-gradient coefficient (2) and relative velocity.
@@ -328,8 +337,8 @@ __global__ void sphCudaDensityAndGradients(
                     flops += sph_flops::kVectorOperation;
                     ρ𞁑_div_v𞁑 -= v𞁑𞁓.dot(m𞁓grad𞁑W𞁑𞁓);
                     flops += sph_flops::kDotProduct + 1;
-                    ρ𞁑_curl_v𞁑 += sph_geometry::paddedVector(v𞁑𞁓).cross(
-                        sph_geometry::paddedVector(m𞁓grad𞁑W𞁑𞁓));
+                    ρ𞁑_curl_v𞁑 += sph_geometry::paddedVector<dimension>(v𞁑𞁓).cross(
+                        sph_geometry::paddedVector<dimension>(m𞁓grad𞁑W𞁑𞁓));
                     flops += 12;
                 }
             }
@@ -349,9 +358,9 @@ __global__ void sphCudaDensityAndGradients(
                 ALWAYS_ASSERT(h𞁑 > 0.0f && ρ𞁑 > 0.0f);
                 data.sinkDensity[sinkIndex] = ρ𞁑;
 
-                auto const gradH = sphGradHEvaluation(h𞁑, parameters.minimumSmoothingLength,
-                    parameters.maximumSmoothingLength, data.targetNeighborCount, data.gasMass, ΣW,
-                    Σqwʹ);
+                auto const gradH = sphGradHEvaluation<dimension>(h𞁑,
+                    parameters.minimumSmoothingLength, parameters.maximumSmoothingLength,
+                    data.targetNeighborCount, data.gasMass, ΣW, Σqwʹ);
                 flops += 8;    // Residual (2), and Ω, ζ, the weighted sums (6).
                 if (gradH.constraint != sph_volume::SupportConstraint::Free) {
                     atomicAdd(&reduction->heldSupports, 1);
@@ -431,3 +440,19 @@ __global__ void sphCudaDensityAndGradients(
     detail::recordSphGpuFlops(flops, reduction);
     (&workspace)->~DensityWorkspace();
 }
+
+// Emit all supported spatial specializations without exposing the kernel body in headers.
+template __global__ void sphCudaSmoothingLengths<1>(
+    SphRunParameters, SphRunCudaData, SphReduction*);
+template __global__ void sphCudaSmoothingLengths<2>(
+    SphRunParameters, SphRunCudaData, SphReduction*);
+template __global__ void sphCudaSmoothingLengths<3>(
+    SphRunParameters, SphRunCudaData, SphReduction*);
+
+// Emit all supported spatial specializations without exposing the kernel body in headers.
+template __global__ void sphCudaDensityAndGradients<1>(
+    SphRunParameters, SphRunCudaData, SphReduction*);
+template __global__ void sphCudaDensityAndGradients<2>(
+    SphRunParameters, SphRunCudaData, SphReduction*);
+template __global__ void sphCudaDensityAndGradients<3>(
+    SphRunParameters, SphRunCudaData, SphReduction*);

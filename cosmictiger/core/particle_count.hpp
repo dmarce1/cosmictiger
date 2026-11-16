@@ -1,3 +1,6 @@
+// Round runtime-dimensional particle populations to complete scenario lattices.
+// Copyright (C) 2026 Dominic C. Marcello; BSL-1.0 (see LICENSE_1_0.txt).
+
 #pragma once
 
 #include <algorithm>
@@ -11,13 +14,14 @@
 namespace particle_count {
 
 // Equal-mass Sod lattices retain the canonical density ratio of eight.
-constexpr size_t kSodLatticeMultiplicity =
-    kSpatialDimensions == 1 ? 18 : (kSpatialDimensions == 2 ? 36 : 72);
+inline size_t sodLatticeMultiplicity() {
+    return spatialDimensions() == 1 ? 18 : (spatialDimensions() == 2 ? 36 : 72);
+}
 
 // Saturating integer lattice measure; avoids floating-point rounding at boundaries.
 inline size_t spatialPower(size_t side) {
     size_t count = 1;
-    for (int dim = 0; dim < kSpatialDimensions; ++dim) {
+    for (int dim = 0; dim < spatialDimensions(); ++dim) {
         if (side != 0 && count > std::numeric_limits<size_t>::max() / side) {
             return std::numeric_limits<size_t>::max();
         }
@@ -27,8 +31,8 @@ inline size_t spatialPower(size_t side) {
 }
 
 struct Lattice {
-    int side;
-    size_t count;
+    int side;        // Cells per active spatial axis.
+    size_t count;    // Total particles in complete lattice cells.
 };
 
 // Derived geometry: N = m nᴰ. Find the smallest whole-cell lattice with
@@ -64,10 +68,10 @@ inline Lattice roundLattice(size_t requested, size_t multiplicity = 1, int tileS
 }
 
 struct KelvinHelmholtzLayout {
-    int side;
-    size_t count;
-    size_t lowCount;
-    size_t highCount;
+    int side;            // Cells per active spatial axis.
+    size_t count;        // Total particles in complete lattice cells.
+    size_t lowCount;     // Particles in the low-density half-box.
+    size_t highCount;    // Particles in the high-density half-box.
 };
 
 // Derived common-cell geometry, with n cells across each half-box:
@@ -75,11 +79,11 @@ struct KelvinHelmholtzLayout {
 // s_low -> low sites per cell; n -> side. Round upward using whole shared cells;
 // neither fluid changes cell size to approximate the density ratio.
 inline KelvinHelmholtzLayout roundKelvinHelmholtz(size_t requested, size_t s_low) {
-    constexpr size_t kHalfBoxFactor = size_t(1) << (kSpatialDimensions - 1);
-    if (s_low == 0 || s_low > (size_t(1) << kSpatialDimensions)) {
+    size_t const halfBoxFactor = size_t(1) << (spatialDimensions() - 1);
+    if (s_low == 0 || s_low > (size_t(1) << spatialDimensions())) {
         throw std::invalid_argument("Invalid Kelvin-Helmholtz cell population");
     }
-    auto const lattice = roundLattice(requested, 3 * s_low * kHalfBoxFactor);
+    auto const lattice = roundLattice(requested, 3 * s_low * halfBoxFactor);
     if (lattice.side > std::numeric_limits<int>::max() / 2) {
         throw std::overflow_error("Kelvin-Helmholtz cell count exceeds the supported range");
     }

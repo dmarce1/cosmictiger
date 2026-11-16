@@ -1,4 +1,5 @@
 /*
+ Application regression registry and shared numerical test fixtures.
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
 
@@ -242,7 +243,7 @@ struct ApplicationTest {
 };
 
 ApplicationTest const applicationTests[] = {
-#if !COSMICTIGER_WITH_GRAVITY
+#if COSMICTIGER_WITH_SPH
     {"sphOnlyDiagnostics", sphOnlyDiagnosticsTest},
 #endif
 #if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_STAR_FORMATION

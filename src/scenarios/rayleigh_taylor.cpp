@@ -24,8 +24,10 @@ namespace scenarios {
 /// Initialize mirrored light/heavy gas layers with hydrostatic pressure and interface
 /// perturbations.
 ScenarioPlan initializeRayleighTaylor() {
-    static_assert(kSpatialDimensions >= 2);
-    constexpr int kVerticalAxis = kSpatialDimensions == 2 ? kYi : kZi;
+    if (spatialDimensions() < 2) {
+        throw std::invalid_argument("Rayleigh-Taylor requires hydro.dimensions=2 or 3");
+    }
+    int const verticalAxis = spatialDimensions() == 2 ? kYi : kZi;
     constexpr int kMirroredSideCount = 2;
     constexpr int kQuarterCount = 4;
     constexpr int kHeavySiteCount = 2;
@@ -34,8 +36,8 @@ ScenarioPlan initializeRayleighTaylor() {
     constexpr double kHalfBox = 0.5;
     constexpr double kQuarterBox = 0.25;
     auto opts = getOptions();
-    auto const lattice =
-        particle_count::roundLattice(opts.run.gasParticleCount, kRayleighTaylorLatticeMultiplicity);
+    auto const lattice = particle_count::roundLattice(
+        opts.run.gasParticleCount, rayleighTaylorLatticeMultiplicity());
     int const quarterDim = lattice.side;
     if (quarterDim == 0) {
         throw std::runtime_error("run.gasParticleCount must be positive");
@@ -46,7 +48,7 @@ ScenarioPlan initializeRayleighTaylor() {
     }
     int const halfDim = kMirroredSideCount * quarterDim;
     int const fullDim = kQuarterCount * quarterDim;
-    int const transverseDim = kSpatialDimensions == 3 ? fullDim : 1;
+    int const transverseDim = spatialDimensions() == 3 ? fullDim : 1;
     ParticleInteger const particleCount = lattice.count;
     ParticleInteger const lightCount = particleCount / kLayerSiteCount;
     constexpr double kLightDensity = 1.0;
@@ -103,16 +105,16 @@ ScenarioPlan initializeRayleighTaylor() {
                     // exactly. Scalars are even and the normal velocity is odd.
                     for (int side = 0; side < kMirroredSideCount; side++) {
                         sphParticlesPosition(kXi, index) = x;
-                        if constexpr (kSpatialDimensions == 3) {
+                        if (spatialDimensions() == 3) {
                             sphParticlesPosition(kYi, index) =
                                 Position((transverseIndex + offset) * dx);
                         }
-                        sphParticlesPosition(kVerticalAxis, index) =
+                        sphParticlesPosition(verticalAxis, index) =
                             side == 0 ? vertical : Position(0.0) - vertical;
-                        for (int dim = 0; dim < kSpatialDimensions; dim++) {
+                        for (int dim = 0; dim < spatialDimensions(); dim++) {
                             sphParticlesVelocity(dim, index) = 0.0f;
                         }
-                        sphParticlesVelocity(kVerticalAxis, index) =
+                        sphParticlesVelocity(verticalAxis, index) =
                             side == 0 ? velocity : -velocity;
                         sphParticlesSmoothingLength(index) = smoothingLength;
                         sphParticlesSetInternalEnergy(index, internalEnergy);

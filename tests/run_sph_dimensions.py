@@ -19,6 +19,7 @@ args = parser.parse_args()
 root = args.workdir.resolve()
 root.mkdir(parents=True, exist_ok=True)
 common = [str(args.executable.resolve()), "--hpx:threads=2", "--hpx:bind=none",
+          f"--hydro.dimensions={args.dimension}", "--gravity.cuda=false",
           "--run.darkMatterParticleCount=0",
           f"--run.gasParticleCount={128 if args.dimension == 1 else 1024}",
           "--gravity.enabled=false", "--chemistry.enabled=false", "--starFormation.enabled=false",
@@ -27,14 +28,15 @@ common = [str(args.executable.resolve()), "--hpx:threads=2", "--hpx:bind=none",
           "--run.endTime=0.001", "--run.numberOfOutputs=3", "--checkpoint.intervalSeconds=0"]
 environment = dict(os.environ, OMP_NUM_THREADS="1", OPENBLAS_NUM_THREADS="1")
 
-def run(name, scenario="hydroWave", options=(), succeeds=True, directory=None):
+def run(name, scenario="hydroWave", options=(), succeeds=True, directory=None, dimension_from_ini=False):
     if directory is None:
         directory = root / name
         if directory.exists():
             shutil.rmtree(directory)
     directory.mkdir(exist_ok=True)
     overrides = {option.split("=", 1)[0] for option in options}
-    base = [option for option in common if option.split("=", 1)[0] not in overrides]
+    base = [option for option in common if option.split("=", 1)[0] not in overrides
+            and not (dimension_from_ini and option.startswith("--hydro.dimensions="))]
     result = subprocess.run(base + [f"--run.scenario={scenario}", *options], cwd=directory,
                             env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             text=True, timeout=120)
@@ -58,6 +60,17 @@ def state(directory):
     for dim in range(args.dimension):
         assert abs(sum(result.velocities[dim::args.dimension])) / result.count < 2e-5
     return result
+
+# Verify INI selection and explicit command-line precedence using the same binary.
+config = root / "dimensions.ini"
+config.write_text(f"[hydro]\ndimensions = {args.dimension}\n")
+state(run("ini_dimension", options=(f"--configuration={config}",), dimension_from_ini=True))
+config.write_text(f"[hydro]\ndimensions = {3 - args.dimension}\n")
+state(run("cli_dimension_override", options=(f"--configuration={config}",)))
+for invalid in ("0", "4", "-1", "2.5"):
+    run("invalid_dimension_" + invalid, options=(f"--hydro.dimensions={invalid}",), succeeds=False)
+for forbidden in ("gravity.enabled", "chemistry.enabled", "starFormation.enabled"):
+    run("rejected_" + forbidden, options=(f"--{forbidden}=true",), succeeds=False)
 
 # Equal alpha bounds hold alpha fixed; the default bounds evolve it.
 constant = ("--hydro.viscosityCoefficientMin=1", "--hydro.viscosityCoefficientMax=1")

@@ -1,5 +1,6 @@
 /*
  CosmicTiger - A cosmological N-Body code
+ CUDA SPH pressure, viscosity, conduction, and timestep calculations.
  Copyright (C) 2026  Dominic C. Marcello
 
  Distributed under the Boost Software License, Version 1.0.
@@ -103,6 +104,7 @@ struct HydroWorkspace {
  *     dv𞁑_dτₑₓₜ = (dv𞁑/dτ)ₑₓₜ; five_minus_3γ = 5 − 3γ.
  */
 // clang-format on
+template <int dimension>
 __global__ void sphCudaHydro(
     SphRunParameters parameters, SphRunCudaData data, SphReduction* reduction) {
     // Inverse scale factor, gas mass scaling, γ − 1 and h_M/h.
@@ -124,13 +126,11 @@ __global__ void sphCudaHydro(
     constexpr float kHydroAccelerationScale = 0.7115965735877551f;
     // Calibration of the reversible-work bound δt ≤ C_cfl u𞁑/(k_u |du𞁑/dτ|): k_u equals the
     // cubic Monaghan viscosity width scale, which reproduces the former cubic-spline bound.
-    constexpr float kThermalTimestepScale = float(kSpatialDimensions == 1 ?
-            0.8660254037844386 :
-            (kSpatialDimensions == 2 ? 0.8890008890013335 : 0.9128709291752769));
-    static_assert(kThermalTimestepScale == float(monaghan::kViscosityWidthScale));
+    float const thermalTimestepScale = float(monaghan::viscosityWidthScale<dimension>());
     float const smoothingLengthPerEffectiveRadius =
         selectedHydroKernel().smoothingLengthPerEffectiveRadius;
-    float const h_M_over_h = monaghan::lengthPerSupport(smoothingLengthPerEffectiveRadius);
+    float const h_M_over_h =
+        monaghan::lengthPerSupport<dimension>(smoothingLengthPerEffectiveRadius);
     float const m𞁓 = data.gasMass;    // every gas particle has the same mass
     float const m𞁓_over_a = m𞁓 * ia;
     float const ε = parameters.viscosityEpsilon;    // η²/h² of Monaghan (1992), p. 551
@@ -174,9 +174,9 @@ __global__ void sphCudaHydro(
                 workspace.neighbors.resize(offset + total);
                 if (contains) {
                     auto& neighbor = workspace.neighbors[offset + slot];
-                    neighbor.position = data.sourcePosition(sourceParticleIndex);
+                    neighbor.position = data.sourcePosition<dimension>(sourceParticleIndex);
                     neighbor.smoothingLength = data.sourceSmoothingLength[sourceParticleIndex];
-                    neighbor.velocity = data.sourceVelocity(sourceParticleIndex);
+                    neighbor.velocity = data.sourceVelocity<dimension>(sourceParticleIndex);
                     neighbor.internalEnergy = data.sourceInternalEnergy[sourceParticleIndex];
                     neighbor.density = data.sourceDensity[sourceParticleIndex];
                     neighbor.balsaraFactor = data.sourceBalsaraFactor[sourceParticleIndex];
@@ -218,11 +218,12 @@ __global__ void sphCudaHydro(
             ALWAYS_ASSERT(h𞁑 > 0.0f && ρ𞁑 > 0.0f && u𞁑 > 0.0f);
             float const P𞁑 = γ_minus_1 * ρ𞁑 * u𞁑;
             float const c𞁑 = sqrtf(γ * γ_minus_1 * u𞁑);
-            SpatialVector<Position> const x𞁑 = data.sourcePosition(particleIndex);
-            SpatialVector<float> const v𞁑 = data.sourceVelocity(particleIndex);
+            SpatialVector<Position> const x𞁑 = data.sourcePosition<dimension>(particleIndex);
+            SpatialVector<float> const v𞁑 = data.sourceVelocity<dimension>(particleIndex);
             float const ih𞁑 = 1.0f / h𞁑;
-            float const ih_D_plus_1𞁑 = sph_geometry::inverseGradientScale(ih𞁑);    // h𞁑^-(D+1)
-            flops += 6 + sph_flops::kInverseGradientScale;
+            float const ih_D_plus_1𞁑 =
+                sph_geometry::inverseGradientScale<dimension>(ih𞁑);    // h𞁑^-(D+1)
+            flops += 6 + sph_flops::inverseGradientScaleFlops<dimension>();
             // clang-format off
             /*
              * Variational operator (cosmictiger/sph/variable_smoothing_lengths.hpp): every
@@ -255,12 +256,12 @@ __global__ void sphCudaHydro(
                 neighborIndex += blockSize) {
                 auto const& neighbor = workspace.neighbors[neighborIndex];
                 // Particle b. Pairs outside both supports or at zero separation are skipped.
-                auto const r𞁑𞁓 = distance(x𞁑, neighbor.position);
+                auto const r𞁑𞁓 = distance<dimension>(x𞁑, neighbor.position);
                 float const r2𞁑𞁓 = r𞁑𞁓.dot(r𞁑𞁓);    // |r𞁑𞁓|²
                 float const h𞁓 = neighbor.smoothingLength;
                 // Distances, dot, support squares.
-                flops +=
-                    sph_flops::kVectorOperation + sph_flops::kDotProduct + (r2𞁑𞁓 == 0.0f ? 0 : 2);
+                flops += sph_flops::separationFlops<dimension>() + sph_flops::kDotProduct +
+                    (r2𞁑𞁓 == 0.0f ? 0 : 2);
                 bool const supportsIntersect = r2𞁑𞁓 < fmaxf(h𞁑 * h𞁑, h𞁓 * h𞁓);
                 if (parameters.midpointHydro && parameters.phase == 1 && supportsIntersect) {
                     maximumNeighborRung = max(maximumNeighborRung, neighbor.rung);
@@ -289,7 +290,8 @@ __global__ void sphCudaHydro(
                 float const q𞁑 = abs_r𞁑𞁓 * ih𞁑;
                 float const q𞁓 = abs_r𞁑𞁓 * ih𞁓;
                 float const F𞁑 = dkernelWDq(q𞁑) * ih_D_plus_1𞁑 / abs_r𞁑𞁓;
-                float const F𞁓 = dkernelWDq(q𞁓) * sph_geometry::inverseGradientScale(ih𞁓) / abs_r𞁑𞁓;
+                float const F𞁓 =
+                    dkernelWDq(q𞁓) * sph_geometry::inverseGradientScale<dimension>(ih𞁓) / abs_r𞁑𞁓;
                 float const F𞁑𞁓 = 0.5f * (F𞁑 + F𞁓);
                 // v𞁑𞁓 = v𞁑 − v𞁓 from the stored peculiar velocities. The physical relative
                 // velocity adds the Hubble flow (a da/dt) r𞁑𞁓 and enters only the viscosity.
@@ -357,7 +359,7 @@ __global__ void sphCudaHydro(
                         sph_entropy::fromStoredEnergy(du𞁑_dτₕₑₐₜ𞁑𞁓, ρ𞁑, γ, parameters.scaleFactor);
                     float const Ȧ𞁓𞁑 =
                         sph_entropy::fromStoredEnergy(du𞁓_dτₕₑₐₜ𞁑𞁓, ρ𞁓, γ, parameters.scaleFactor);
-                    flops += sphAccumulatePairKick(data.sourcePairUpdates[particleIndex],
+                    flops += sphAccumulatePairKick<dimension>(data.sourcePairUpdates[particleIndex],
                         data.sourcePairUpdates[neighbor.sourceIndex], a𞁑𞁓, Ȧ𞁑𞁓, Ȧ𞁓𞁑, Δτ);
                     flops += 2 * sph_flops::entropyConversionFlops(γ);
                 }
@@ -365,13 +367,13 @@ __global__ void sphCudaHydro(
                 du𞁑_dτₕₑₐₜ += du𞁑_dτₕₑₐₜ𞁑𞁓;
                 // Common geometry, pressure, and accumulation; the vector terms are v𞁑𞁓,
                 // v𞁑𞁓 · r𞁑𞁓, the pair force and its sum.
-                flops += 38 + sph_flops::kInverseGradientScale + 3 * sph_flops::kVectorOperation +
-                    sph_flops::kDotProduct;
+                flops += 38 + sph_flops::inverseGradientScaleFlops<dimension>() +
+                    3 * sph_flops::kVectorOperation + sph_flops::kDotProduct;
                 max𞁓μ𞁑𞁓 = fmaxf(max𞁓μ𞁑𞁓, -μ𞁑𞁓);
                 flops += sph_flops::densityKernelOperations(selectedHydroKernel(), q𞁑, true) +
                     sph_flops::densityKernelOperations(selectedHydroKernel(), q𞁓, true);
             }
-            for (int dim = 0; dim < kSpatialDimensions; ++dim) {
+            for (int dim = 0; dim < spatialDimensions<dimension>(); ++dim) {
                 sharedReduceAdd<float, kHydroBlockSize>(dv𞁑_dτ[dim]);
             }
             sharedReduceAdd<float, kHydroBlockSize>(du𞁑_dτ);
@@ -386,7 +388,7 @@ __global__ void sphCudaHydro(
                 sharedReduceMax<kHydroBlockSize>(maximumNeighborRung);
             }
             flops +=
-                (sph_flops::kVectorOperation + 2) * detail::sphReductionFlops<kHydroBlockSize>();
+                (spatialDimensions<dimension>() + 2) * detail::sphReductionFlops<kHydroBlockSize>();
             if (threadIndex == 0) {
                 // Corrections are derived, never checkpointed or migrated; slots that the
                 // density pass has not rebuilt hold NaN, so a stale source cannot pass silently.
@@ -403,22 +405,22 @@ __global__ void sphCudaHydro(
 #if COSMICTIGER_WITH_GRAVITY
                 if (!parameters.midpointHydro && !parameters.deferAccelerationSources &&
                     data.selfGravityEnabled) {
-                    dv𞁑_dτ_G = data.sinkGravityAcceleration(sinkIndex);
+                    dv𞁑_dτ_G = data.sinkGravityAcceleration<dimension>(sinkIndex);
                 }
 #endif
                 if (!parameters.deferAccelerationSources) {
-                    dv𞁑_dτ = sphCompleteAcceleration(parameters,
+                    dv𞁑_dτ = sphCompleteAcceleration<dimension>(parameters,
                         data.sourcePaddedPosition(particleIndex), v𞁑, dv𞁑_dτ, dv𞁑_dτ_G,
                         data.centralAcceleration, data.centralSmoothingLength, flops);
                 } else {
                     ALWAYS_ASSERT(parameters.phase == 0);
                 }
                 if (applyPairKicks) {
-                    SpatialVector<float> const dv𞁑_dτₑₓₜ = sphCompleteAcceleration(parameters,
-                        data.sourcePaddedPosition(particleIndex), v𞁑, SpatialVector<float>(0.0f),
-                        SpatialVector<float>(0.0f), data.centralAcceleration,
-                        data.centralSmoothingLength, flops);
-                    flops += sphAccumulateExternalKick(
+                    SpatialVector<float> const dv𞁑_dτₑₓₜ = sphCompleteAcceleration<dimension>(
+                        parameters, data.sourcePaddedPosition(particleIndex), v𞁑,
+                        SpatialVector<float>(0.0f), SpatialVector<float>(0.0f),
+                        data.centralAcceleration, data.centralSmoothingLength, flops);
+                    flops += sphAccumulateExternalKick<dimension>(
                         data.sourcePairUpdates[particleIndex], dv𞁑_dτₑₓₜ, Δτ);
                 }
                 // E=a^2 u and homogeneous work du/dt=-3 H P/rho give
@@ -474,7 +476,7 @@ __global__ void sphCudaHydro(
                     if (du𞁑_dτ != 0.0f) {
                         flops += 3;
                         δt = fminf(δt,
-                            parameters.courantFactor / kThermalTimestepScale * u𞁑 / fabsf(du𞁑_dτ));
+                            parameters.courantFactor / thermalTimestepScale * u𞁑 / fabsf(du𞁑_dτ));
                     }
                     // Derived positivity bound, matching the CPU sum over all neighbors.
                     if (ΣC𞁑𞁓_over_a > 0.0f) {
@@ -535,7 +537,7 @@ __global__ void sphCudaHydro(
                                 fmaxf(iδt𞁞ᵥ, 1.0e-30f),
                             parameters.courantFactor * parameters.scaleFactor /
                                 fmaxf(iδt_f, 1.0e-30f),
-                            du𞁑_dτ != 0.0f ? parameters.courantFactor / kThermalTimestepScale * u𞁑 /
+                            du𞁑_dτ != 0.0f ? parameters.courantFactor / thermalTimestepScale * u𞁑 /
                                     fabsf(du𞁑_dτ) :
                                              parameters.maximumTimestep,
                             h𞁑, ρ𞁑, u𞁑, du𞁑_dτ, abs_f𞁑, c𞁑, max𞁓μ𞁑𞁓, α, m𞁓 / (m𞁓 - ζ𞁑),
@@ -587,3 +589,8 @@ __global__ void sphCudaHydro(
     detail::recordSphGpuFlops(flops, reduction);
     (&workspace)->~HydroWorkspace();
 }
+
+// Emit all supported spatial specializations without exposing the kernel body in headers.
+template __global__ void sphCudaHydro<1>(SphRunParameters, SphRunCudaData, SphReduction*);
+template __global__ void sphCudaHydro<2>(SphRunParameters, SphRunCudaData, SphReduction*);
+template __global__ void sphCudaHydro<3>(SphRunParameters, SphRunCudaData, SphReduction*);

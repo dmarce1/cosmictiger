@@ -1,5 +1,6 @@
 /*
  CosmicTiger - A cosmological N-Body code
+ SIMD CPU SPH smoothing-length, density, and velocity-gradient preparation.
  Copyright (C) 2026 Dominic C. Marcello
 
  Distributed under the Boost Software License, Version 1.0.
@@ -51,6 +52,7 @@ namespace detail {
  *   Code names: abs_r𞁑𞁓 = |r𞁑𞁓|; ih𞁑 = h𞁑⁻¹; dΣW_dh𞁑 = dΣW/dh𞁑.
  */
 // clang-format on
+template <int dimension>
 bool solveSphCpuSmoothingLength(SphRunParameters const& parameters, SphRunData const& data,
     SphTreeNode const& targetNode, std::vector<int> const& neighbors, int particleIndex, float& h𞁑,
     sph_flops::Counter& flops) {
@@ -64,14 +66,14 @@ bool solveSphCpuSmoothingLength(SphRunParameters const& parameters, SphRunData c
     abs_r𞁑𞁓.reserve((neighbors.size() + SimdFloat::size() - 1) / SimdFloat::size());
     for (size_t first = 0; first < neighbors.size(); first += SimdFloat::size()) {
         SpatialVector<SimdFloat> const r𞁑𞁓 =
-            sphCpuSeparations(data, particleIndex, neighbors, first);
+            sphCpuSeparations<dimension>(data, particleIndex, neighbors, first);
         abs_r𞁑𞁓.push_back(r𞁑𞁓.norm());
         // Fixed scales, dot, root.
-        flops += (sph_flops::kVectorOperation + sph_flops::kNorm) * SimdFloat::size();
+        flops += (sph_flops::separationFlops<dimension>() + sph_flops::kNorm) * SimdFloat::size();
     }
     float lower = hₘᵢₙ;
     float upper = hₘₐₓ;
-    float const ΣWₛₑₜ = sphTargetKernelSum(data.targetNeighborCount);
+    float const ΣWₛₑₜ = sphTargetKernelSum<dimension>(data.targetNeighborCount);
     flops += 1;
     for (int iteration = 0; iteration < 128; ++iteration) {
         for (int dim = 0; dim < kDimensions; ++dim) {
@@ -112,8 +114,9 @@ bool solveSphCpuSmoothingLength(SphRunParameters const& parameters, SphRunData c
                 int const sinkIndex = targetNode.sinkParticleRange.first -
                     targetNode.particleRange.first + particleIndex;
                 float const ih𞁑 = 1.0f / h𞁑;
-                data.sinkDensity[sinkIndex] = data.gasMass * sph_geometry::inverseVolume(ih𞁑) * ΣW;
-                flops += 3 + sph_flops::kInverseVolume;
+                data.sinkDensity[sinkIndex] =
+                    data.gasMass * sph_geometry::inverseVolume<dimension>(ih𞁑) * ΣW;
+                flops += 3 + sph_flops::inverseVolumeFlops<dimension>();
             }
         };
         float const residual = ΣW - ΣWₛₑₜ;
@@ -200,12 +203,13 @@ void recordSphCpuGradH(SphGradHEvaluation const& gradH, float h𞁑, float ρ�
 // Whether an active neighbor touches particle a: r𞁑𞁓² < max(h𞁑², h𞁓²).
 // Symbol directory: r𞁑𞁓 → separation; r𞁑𞁓² → squared separation;
 // h𞁑, h𞁓 → sink, neighbor kernel smoothing length. Code names: r2𞁑𞁓 = r𞁑𞁓²; h2𞁑 = h𞁑².
+template <int dimension>
 bool sphCpuHasActiveNeighbor(SphRunParameters const& parameters, SphRunData const& data,
     std::vector<int> const& neighbors, int particleIndex, float h𞁑, sph_flops::Counter& flops) {
     SimdFloat const h2𞁑(h𞁑 * h𞁑);
     flops += 1;
     for (size_t first = 0; first < neighbors.size(); first += SimdFloat::size()) {
-        auto const r𞁑𞁓 = sphCpuSeparations(data, particleIndex, neighbors, first);
+        auto const r𞁑𞁓 = sphCpuSeparations<dimension>(data, particleIndex, neighbors, first);
         auto const r2𞁑𞁓 = r𞁑𞁓.dot(r𞁑𞁓);
         auto const h𞁓 = sphCpuLoad(data.sourceSmoothingLength, neighbors, first, 0.0f);
         SimdFloat const neighborRung([&](auto lane) {
@@ -216,7 +220,8 @@ bool sphCpuHasActiveNeighbor(SphRunParameters const& parameters, SphRunData cons
             (neighborRung <= SimdFloat(float(parameters.maximumRung)));
         auto const intersects = r2𞁑𞁓 < math::max(h2𞁑, sqr(h𞁓));
         // Fixed scales, dot operations, support square.
-        flops += (sph_flops::kVectorOperation + sph_flops::kDotProduct + 1) * SimdFloat::size();
+        flops += (sph_flops::separationFlops<dimension>() + sph_flops::kDotProduct + 1) *
+            SimdFloat::size();
         if (math::anyOf(sphCpuValidLanes(neighbors, first) && active && intersects)) {
             return true;
         }
@@ -227,6 +232,9 @@ bool sphCpuHasActiveNeighbor(SphRunParameters const& parameters, SphRunData cons
 }    // namespace detail
 
 // h𞁑 → sink kernel smoothing length, solved in place.
+namespace detail {
+
+template <int dimension>
 SphRunReturn sphCpuSmoothingLengths(
     SphRunParameters const& parameters, SphRunData const& data, int targetNodeIndex) {
     SphRunReturn result;
@@ -241,7 +249,7 @@ SphRunReturn sphCpuSmoothingLengths(
             parameters.isActiveRung(data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]]);
         if (active && !data.sinkFlags[sinkIndex].converged()) {
             float& h𞁑 = data.sinkSmoothingLength[sinkIndex];
-            bool const converged = detail::solveSphCpuSmoothingLength(
+            bool const converged = detail::solveSphCpuSmoothingLength<dimension>(
                 parameters, data, targetNode, neighbors, particleIndex, h𞁑, flops);
             data.sinkFlags[sinkIndex].setConverged(converged);
             if (converged) {
@@ -286,6 +294,7 @@ SphRunReturn sphCpuSmoothingLengths(
  * The curl stays a three-component record: a two-dimensional curl points along the inactive axis.
  */
 // clang-format on
+template <int dimension>
 SphRunReturn sphCpuDensityAndGradients(
     SphRunParameters const& parameters, SphRunData const& data, int targetNodeIndex) {
     SphRunReturn result;
@@ -293,8 +302,8 @@ SphRunReturn sphCpuDensityAndGradients(
     sph_flops::Counter flops = 2;    // γ − 1 and h_M/h.
     float const γ = data.adiabaticIndex;
     float const γ_minus_1 = γ - 1.0f;    // P/(ρu) for every gas particle
-    float const h_M_over_h =
-        monaghan::lengthPerSupport(selectedHydroKernel().smoothingLengthPerEffectiveRadius);
+    float const h_M_over_h = monaghan::lengthPerSupport<dimension>(
+        selectedHydroKernel().smoothingLengthPerEffectiveRadius);
     auto const& targetNode = data.treeNodes[data.targetNodeIndices[targetNodeIndex]];
     auto const neighbors = detail::sphCpuNeighbors(data, targetNode, true, flops);
     for (int particleIndex = targetNode.particleRange.first;
@@ -305,7 +314,7 @@ SphRunReturn sphCpuDensityAndGradients(
             parameters.isActiveRung(data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]]);
         float& h𞁑ₘₑₘ = data.sinkSmoothingLength[sinkIndex];
         bool const semiactive = active ||
-            detail::sphCpuHasActiveNeighbor(
+            detail::sphCpuHasActiveNeighbor<dimension>(
                 parameters, data, neighbors, particleIndex, h𞁑ₘₑₘ, flops);
         data.sinkFlags[sinkIndex].setSemiactive(semiactive);
         if (!semiactive) {
@@ -314,7 +323,7 @@ SphRunReturn sphCpuDensityAndGradients(
         bool const updateMorrisMonaghan =
             evolveMorrisMonaghan && active && !data.sinkFlags[sinkIndex].converged();
         if (!active && !data.sinkFlags[sinkIndex].converged() &&
-            !detail::solveSphCpuSmoothingLength(
+            !detail::solveSphCpuSmoothingLength<dimension>(
                 parameters, data, targetNode, neighbors, particleIndex, h𞁑ₘₑₘ, flops)) {
             data.sinkFlags[sinkIndex].setConverged(false);
             result.needsAnotherPass = true;
@@ -335,10 +344,12 @@ SphRunReturn sphCpuDensityAndGradients(
         // clang-format on
         float const h𞁑 = h𞁑ₘₑₘ;
         float const ih𞁑 = 1.0f / h𞁑;
-        SimdFloat const m𞁓_over_hᴰ𞁑(data.gasMass * sph_geometry::inverseVolume(ih𞁑));
-        SimdFloat const m𞁓ih_D_plus_1𞁑(data.gasMass * sph_geometry::inverseGradientScale(ih𞁑));
+        SimdFloat const m𞁓_over_hᴰ𞁑(data.gasMass * sph_geometry::inverseVolume<dimension>(ih𞁑));
+        SimdFloat const m𞁓ih_D_plus_1𞁑(
+            data.gasMass * sph_geometry::inverseGradientScale<dimension>(ih𞁑));
         // Reciprocal and the mass/support-volume and mass/gradient-scale products.
-        flops += 3 + sph_flops::kInverseVolume + sph_flops::kInverseGradientScale;
+        flops += 3 + sph_flops::inverseVolumeFlops<dimension>() +
+            sph_flops::inverseGradientScaleFlops<dimension>();
         SimdFloat ρ𞁑Pack(0.0f);
         SimdFloat ρ𞁑_div_v𞁑Pack(0.0f);
         Vector3<SimdFloat> ρ𞁑_curl_v𞁑Pack(SimdFloat(0.0f));    // padded: see the curl above
@@ -357,14 +368,15 @@ SphRunReturn sphCpuDensityAndGradients(
         SimdFloat ΣqwʹPack(0.0f);
         for (size_t first = 0; first < neighbors.size(); first += SimdFloat::size()) {
             SpatialVector<SimdFloat> const r𞁑𞁓 =
-                detail::sphCpuSeparations(data, particleIndex, neighbors, first);
+                detail::sphCpuSeparations<dimension>(data, particleIndex, neighbors, first);
             SimdFloat const abs_r𞁑𞁓 = r𞁑𞁓.norm();
             SimdFloat const q𞁑𞁓 = abs_r𞁑𞁓 * SimdFloat(ih𞁑);
             SimdFloat const w_q𞁑𞁓 = kernelW(q𞁑𞁓);
             ρ𞁑Pack += math::select(
                 detail::sphCpuValidLanes(neighbors, first), m𞁓_over_hᴰ𞁑 * w_q𞁑𞁓, SimdFloat(0.0f));
             // Fixed scales, norm, q𞁑𞁓, density product and sum.
-            flops += (sph_flops::kVectorOperation + sph_flops::kNorm + 3) * SimdFloat::size() +
+            flops += (sph_flops::separationFlops<dimension>() + sph_flops::kNorm + 3) *
+                    SimdFloat::size() +
                 sph_flops::densityKernelOperations(selectedHydroKernel(), q𞁑𞁓);
             auto const inside = detail::sphCpuValidLanes(neighbors, first) && q𞁑𞁓 < SimdFloat(1.0f);
             ΣWPack += math::select(inside, w_q𞁑𞁓, SimdFloat(0.0f));
@@ -388,8 +400,8 @@ SphRunReturn sphCpuDensityAndGradients(
                 m𞁓ih_D_plus_1𞁑 * dkernelWDq(q𞁑𞁓) /
                     math::select(contributes, abs_r𞁑𞁓, SimdFloat(1.0f)),
                 SimdFloat(0.0f));
-            SpatialVector<SimdFloat> const v𞁑(data.sourceVelocity(particleIndex));
-            SpatialVector<SimdFloat> const v𞁓 = detail::sphCpuLoad3(data.sourceVelocityX,
+            SpatialVector<SimdFloat> const v𞁑(data.sourceVelocity<dimension>(particleIndex));
+            SpatialVector<SimdFloat> const v𞁓 = detail::sphCpuLoad3<dimension>(data.sourceVelocityX,
                 data.sourceVelocityY, data.sourceVelocityZ, neighbors, first, 0.0f);
             SpatialVector<SimdFloat> const v𞁑𞁓 =
                 math::select(contributes, v𞁑 - v𞁓, SpatialVector<SimdFloat>(SimdFloat(0)));
@@ -400,8 +412,8 @@ SphRunReturn sphCpuDensityAndGradients(
             flops += sph_flops::kVectorOperation * SimdFloat::size();
             ρ𞁑_div_v𞁑Pack -= v𞁑𞁓.dot(m𞁓grad𞁑W𞁑𞁓);
             flops += (sph_flops::kDotProduct + 1) * SimdFloat::size();
-            ρ𞁑_curl_v𞁑Pack +=
-                sph_geometry::paddedVector(v𞁑𞁓).cross(sph_geometry::paddedVector(m𞁓grad𞁑W𞁑𞁓));
+            ρ𞁑_curl_v𞁑Pack += sph_geometry::paddedVector<dimension>(v𞁑𞁓).cross(
+                sph_geometry::paddedVector<dimension>(m𞁓grad𞁑W𞁑𞁓));
             flops += 12 * SimdFloat::size();
         }
         float const ρ𞁑 = simdSum(ρ𞁑Pack);
@@ -410,7 +422,7 @@ SphRunReturn sphCpuDensityAndGradients(
         data.sinkDensity[sinkIndex] = ρ𞁑;
         float const ΣW = simdSum(ΣWPack);
         float const Σqwʹ = simdSum(ΣqwʹPack);
-        auto const gradH = sphGradHEvaluation(h𞁑, parameters.minimumSmoothingLength,
+        auto const gradH = sphGradHEvaluation<dimension>(h𞁑, parameters.minimumSmoothingLength,
             parameters.maximumSmoothingLength, data.targetNeighborCount, data.gasMass, ΣW, Σqwʹ);
         /*
          * Reductions, residual (2), and Ω, ζ, the weighted sums (6).
@@ -463,4 +475,32 @@ SphRunReturn sphCpuDensityAndGradients(
     result.floatingPointOperations = FlopCount(flops);
     addCpuFlops(flops.counts());
     return result;
+}
+
+}    // namespace detail
+
+/// Select the dimension-specialized implementation once for this SPH leaf pass.
+SphRunReturn sphCpuSmoothingLengths(
+    SphRunParameters const& parameters, SphRunData const& data, int targetNodeIndex) {
+    switch (spatialDimensions()) {
+    case 1:
+        return detail::sphCpuSmoothingLengths<1>(parameters, data, targetNodeIndex);
+    case 2:
+        return detail::sphCpuSmoothingLengths<2>(parameters, data, targetNodeIndex);
+    default:
+        return detail::sphCpuSmoothingLengths<3>(parameters, data, targetNodeIndex);
+    }
+}
+
+/// Select the dimension-specialized implementation once for this SPH leaf pass.
+SphRunReturn sphCpuDensityAndGradients(
+    SphRunParameters const& parameters, SphRunData const& data, int targetNodeIndex) {
+    switch (spatialDimensions()) {
+    case 1:
+        return detail::sphCpuDensityAndGradients<1>(parameters, data, targetNodeIndex);
+    case 2:
+        return detail::sphCpuDensityAndGradients<2>(parameters, data, targetNodeIndex);
+    default:
+        return detail::sphCpuDensityAndGradients<3>(parameters, data, targetNodeIndex);
+    }
 }

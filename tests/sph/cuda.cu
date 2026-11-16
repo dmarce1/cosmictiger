@@ -1,3 +1,4 @@
+// Regression coverage for SPH dynamics with runtime spatial dimensions.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -352,7 +353,7 @@ public:
             "kick acceleration requires an enabled kick observation");
         auto const& update = data_.sourcePairUpdates[sourceIndex(index)];
         SpatialVector<float> acceleration;
-        for (int dim = 0; dim < kSpatialDimensions; ++dim) {
+        for (int dim = 0; dim < spatialDimensions(); ++dim) {
             acceleration[dim] =
                 float(compensatedKickSum(update.velocity[dim]) / params_.hydroKickTimestep);
         }
@@ -408,7 +409,7 @@ public:
             if (data_.sourcePairUpdates) {
                 auto const& update = data_.sourcePairUpdates[i];
                 require(std::isfinite(float(update.entropy)), "finite active-kernel entropy kick");
-                for (int dim = 0; dim < kSpatialDimensions; dim++) {
+                for (int dim = 0; dim < spatialDimensions(); dim++) {
                     require(std::isfinite(float(update.velocity[dim])),
                         "finite active-kernel pair kick");
                 }
@@ -432,12 +433,12 @@ public:
         double absoluteForce = 0.0;
         for (int i = 0; i < count_; i++) {
             auto const acceleration = kickAcceleration(i);
-            for (int dim = 0; dim < kSpatialDimensions; dim++) {
+            for (int dim = 0; dim < spatialDimensions(); dim++) {
                 momentum[dim] += data_.gasMass * acceleration[dim];
                 absoluteForce += std::abs(data_.gasMass * acceleration[dim]);
             }
         }
-        for (int dim = 0; dim < kSpatialDimensions; dim++) {
+        for (int dim = 0; dim < spatialDimensions(); dim++) {
             requireClose("active-kernel total momentum rate", momentum[dim], 0.0,
                 3.0e-5 * std::max(1.0, absoluteForce));
         }
@@ -596,7 +597,7 @@ void compareCpuCudaPhase(Fixture& fixture, int runType, int phase = 0) {
             double const kickTimestep = fixture.params_.hydroKickTimestep;
             auto const& cpu = pairUpdates[i];
             auto const& gpu = data.sourcePairUpdates[i];
-            for (int dim = 0; dim < kSpatialDimensions; dim++) {
+            for (int dim = 0; dim < spatialDimensions(); dim++) {
                 requireClose("CPU/CUDA kick acceleration",
                     compensatedKickSum(cpu.velocity[dim]) / kickTimestep,
                     compensatedKickSum(gpu.velocity[dim]) / kickTimestep, 5.0e-5);
@@ -899,7 +900,7 @@ void testVariableViscosityPairs() {
             requireClose("variable pair alpha and beta heating", heating[i],
                 fixture.dissipativeHeating(i), 1.0e-5);
             auto const acceleration = fixture.kickAcceleration(i);
-            for (int dim = 0; dim < kSpatialDimensions; ++dim) {
+            for (int dim = 0; dim < spatialDimensions(); ++dim) {
                 requireClose("symmetric variable pair alpha and beta force", force[i][dim],
                     acceleration[dim], 1.0e-5);
             }
@@ -974,7 +975,7 @@ void testLattice() {
         requireClose(
             "uniform gas at rest generates no entropy", fixture.dissipativeHeating(i), 0.0, 2.0e-5);
         auto const acceleration = fixture.kickAcceleration(i);
-        for (int dim = 0; dim < kSpatialDimensions; dim++) {
+        for (int dim = 0; dim < spatialDimensions(); dim++) {
             requireClose("uniform gas force", acceleration[dim], 0.0, 2.0e-4);
         }
     }
@@ -1533,7 +1534,7 @@ TEST_F(SphCudaTest, BalsaraSymmetricForceAndHeating) {
         detail::requireClose(
             "Balsara pair heating", fixture.dissipativeHeating(i), 0.5 * fullHeating[i], 5.0e-6);
         auto const acceleration = fixture.kickAcceleration(i);
-        for (int dim = 0; dim < kSpatialDimensions; ++dim) {
+        for (int dim = 0; dim < spatialDimensions(); ++dim) {
             detail::requireClose("Balsara pair force", acceleration[dim],
                 pressureForce[i][dim] + 0.5f * (fullForce[i][dim] - pressureForce[i][dim]), 5.0e-6);
         }
@@ -1782,9 +1783,9 @@ TEST_F(SphCudaTest, DISABLED_NeighborStagingBenchmark) {
     }
     cudaDeviceProp device{};
     detail::checkCuda(cudaGetDeviceProperties(&device, 0), "benchmark device properties");
-    void const* const kernels[] = {(void const*) sphCudaSmoothingLengths,
-        (void const*) sphCudaDensityAndGradients, (void const*) sphCudaHydro,
-        (void const*) sphCudaRungs};
+    void const* const kernels[] = {(void const*) sphCudaSmoothingLengths<3>,
+        (void const*) sphCudaDensityAndGradients<3>, (void const*) sphCudaHydro<3>,
+        (void const*) sphCudaRungs<3>};
     int const blockSizes[] = {kSmoothingLengthsBlockSize, kDensityAndGradientsBlockSize,
         kHydroBlockSize, kRungsBlockSize};
     char const* const names[] = {"smoothing", "density", "hydro", "rungs"};

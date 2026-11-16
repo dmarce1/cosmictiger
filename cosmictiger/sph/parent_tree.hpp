@@ -1,5 +1,6 @@
 /*
  CosmicTiger - A cosmological N-Body code
+ Distributed SPH parent-tree topology and locality collective interfaces.
  Copyright (C) 2026  Dominic C. Marcello
 
  Distributed under the Boost Software License, Version 1.0.
@@ -21,7 +22,7 @@
  *
  * Topology. The domain decomposition bisects the rank range [first, second) at
  * (first + second)/2 with child keys (key << 1) + i. A parent node regroups
- * kSpatialDimensions binary levels into one node of 2^kSpatialDimensions children while
+ * spatialDimensions() binary levels into one node of 2^spatialDimensions() children while
  * it still covers that many ranks, and keeps single binary levels below that, so a node
  * of n ranks has 2^D children for n >= 2^D, 2 children for 2 <= n < 2^D, and is a leaf
  * for n = 1. Every child keeps its own domain key, so domainsRange(child.key) is its box.
@@ -37,8 +38,8 @@ struct SphParentChild {
 };
 
 // Number of children of a node covering rankCount ranks: 2^D, 2, or 0 for a leaf.
-constexpr int sphParentArity(int rankCount) {
-    int const fullArity = 1 << kSpatialDimensions;
+inline int sphParentArity(int rankCount) {
+    int const fullArity = 1 << spatialDimensions();
     return rankCount >= fullArity ? fullArity : (rankCount >= 2 ? 2 : 0);
 }
 

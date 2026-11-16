@@ -1,24 +1,35 @@
 # Spatial dimensions for SPH
 
-`COSMICTIGER_DIMENSION_COUNT` is a CMake cache string, default `3`. Only `1`,
-`2`, and `3` are accepted. Values below three require SPH and reject every
-compiled gravity solver, even if gravity would be disabled at runtime.
-For example:
+`hydro.dimensions` selects 1D, 2D, or 3D SPH at startup; the default is `3`.
+The same executable supports all three choices. For example:
 
 ```sh
-cmake -S . -B build/sph_2d \
-  -DCOSMICTIGER_DIMENSION_COUNT=2 \
-  -DCOSMICTIGER_ENABLE_GRAVITY=OFF \
-  -DCOSMICTIGER_ENABLE_CHEMISTRY=OFF \
-  -DCOSMICTIGER_ENABLE_STARS=OFF
+./release/cosmictiger --run.scenario=hydroWave --hydro.dimensions=2 \
+  --run.gasParticleCount=4096 --run.darkMatterParticleCount=0 \
+  --gravity.enabled=false --gravity.cuda=false \
+  --chemistry.enabled=false --starFormation.enabled=false
 ```
 
-Lower-dimensional runs use `run.darkMatterParticleCount=0`. They support
+Use `--hydro.dimensions=1` for 1D or `--hydro.dimensions=3` for 3D. The same
+setting is accepted as `dimensions=2` in an INI `[hydro]` section. Values outside
+1–3 are rejected. Dimensions are selected before particle allocation and remain
+fixed during a run, including checkpoint restart.
+
+The former `COSMICTIGER_DIMENSION_COUNT` CMake selector is retired. A cached
+value of `3` is removed automatically; a different value produces migration
+instructions. Remove it with `cmake -U COSMICTIGER_DIMENSION_COUNT` and pass
+`--hydro.dimensions` when launching the executable. Physics capabilities may
+still be selected at build time, but a build with gravity and chemistry can
+run lower-dimensional SPH when those physics are disabled at runtime.
+
+Lower-dimensional runs require `hydro.enabled=true`,
+`run.darkMatterParticleCount=0`, `gravity.enabled=false`, `gravity.cuda=false`,
+`chemistry.enabled=false`, and `starFormation.enabled=false`. They support
 hierarchical integration with midpoint SPH. Hydro wave, Sod and blast initializers
 are available in all dimensions; Kelvin–Helmholtz, Gresho and Rayleigh–Taylor
-require at least two. Disc and self-gravitating star remain three-dimensional.
-Central gravity is rejected in lower dimensions. The uniform y body force
-requires D >= 2.
+require at least two. Disc, self-gravitating star, Jeans wave, cosmology and other
+gravity scenarios remain three-dimensional. Central gravity is rejected in lower
+dimensions. The uniform y body force requires D >= 2.
 
 Rayleigh–Taylor uses a fixed analytic acceleration toward the midplane, along
 y in 2D and z in 3D. The existing `scenario.rayleighTaylor.zPlaneAcceleration`
@@ -34,34 +45,41 @@ and star formation require three-dimensional volumetric source physics.
 
 ## Geometry and storage
 
-`kSpatialDimensions` is the configured D. Positions allocate D coordinate arrays;
-velocities, retained SPH stage accelerations, pair increments, particle migration
-records, and position/velocity cache payloads contain D components. `ParticleVector`
-is an alias to the existing `math::Vector<Real, D>` (and to `Vector3<Real>` for
-D=3, preserving the existing 3D ABI). No additional vector class is introduced.
+`spatialDimensions()` returns the selected runtime D. `kDimensions` is the fixed
+XYZ capacity, three. Particle velocity vectors, transport records and workspace
+vectors retain that capacity; only the active D position-component arrays are
+allocated. Only active coordinates participate in hydrodynamics, kernel
+normalization, lattice counts, and domain and SPH tree partitioning. Inactive
+coordinates read as 0.5 and inactive velocities as zero.
 
-`kDimensions` retains the value three for existing Cartesian geometry, temporary
-force-workspace arrays, and visualization adapters. These adapters synthesize
-inactive coordinates as 0.5 and velocities as zero; particles do not store them.
+The CPU SPH entry points dispatch once per leaf pass to source-local templates
+for D=1, 2, or 3. CUDA dispatch selects the corresponding compiled kernel before
+launch, and particle drift follows the same pattern. Shared template bodies keep
+dimension-dependent loop bounds and scaling fixed within those kernels; common
+control flow, storage and public interfaces remain shared. The runtime selection
+also chooses density-kernel normalization and coefficients. The 3D path retains
+the existing gravity-kernel table construction and arithmetic.
+
 Silo velocity fields include only active components: `vx` in 1D, `vx`/`vy` in
 2D, and `vx`/`vy`/`vz` in 3D, for both native and converted units.
-Domain and SPH tree partitioning use only active axes. Corrected velocity and
-acceleration moments use `math::Matrix`, and their inverse uses
-`math::SymmetricMatrix`, both of order D. Temporary gradient interfaces retain
-zero inactive entries.
 
 Checkpoints encode D in physics-code bits 28–29 (zero means the historical
 3D format). Bit 30 identifies compact lower-dimensional particle records.
-A different-dimensional executable, or an old lower-dimensional XYZ-padded
-checkpoint, is rejected before particle payloads load. Three-dimensional records
-and their layout tag are unchanged. Output includes `dimension_count` and
-`build.dimensionCount` metadata. CGS density has units g/cm^D; the entropy
-conversion uses that density scale. Cosmological-unit output is unavailable
-below three dimensions.
+Checkpoint serialization packs active components while in-memory records retain
+XYZ capacity. Restart with a different `hydro.dimensions`, or an old
+lower-dimensional XYZ-padded checkpoint, is rejected before particle payloads
+load. Three-dimensional records and their layout tag are unchanged. Output
+includes `dimension_count` and the compatibility field `build.dimensionCount`,
+both reporting the selected runtime dimension. CGS density has units g/cm^D;
+the entropy conversion uses that density scale. Cosmological-unit output is
+unavailable below three dimensions.
 
-For fixed32 positions, position-plus-velocity storage is 8D bytes per particle:
-8 bytes in 1D, 16 in 2D, and 24 in 3D. For fixed64 it is 12D bytes. Scalar particle
-attributes and geometry/workspace overhead are additional.
+For fixed32 positions, compact checkpoint position-plus-velocity payloads use
+8D bytes per particle: 8 bytes in 1D, 16 in 2D, and 24 in 3D. For fixed64 the
+payload uses 12D bytes. In memory, fixed32 position-plus-velocity storage uses
+4D + 12 bytes per particle, and fixed64 uses 8D + 12 bytes: active position arrays
+plus the XYZ velocity vector. Scalar particle attributes, transport records and
+geometry/workspace overhead are additional.
 
 ## Equations
 
@@ -113,12 +131,35 @@ this change does not introduce lower-dimensional cosmology.
 
 ## Validation targets
 
-`sph_dimension_1`, `sph_dimension_2`, and `sph_dimension_3` test all supported
-kernel normalizations, float tables, support derivatives, cubic viscosity
-lengths, discrete variational forces against finite differences of thermal
-energy, and exact affine-gradient reconstruction. `check_sph_dimensions.py`
-checks default/invalid dimensions and rejects each gravity solver independently.
-Existing application fixtures assume 3D and remain registered in 3D builds.
+The dimensional mathematical tests exercise runtime selections of D=1/2/3 in
+one executable: kernel normalizations, float tables, support derivatives, cubic
+viscosity lengths, discrete variational forces against finite differences of
+thermal energy, and exact affine-gradient reconstruction. Rayleigh–Taylor tests
+exercise both D=2 and D=3 using parameterized cases in one executable. Application
+checks must also cover dimensional command-line validation, lower-dimensional
+scenario evolution, and checkpoint restart with matching and mismatched dimensions.
+
+Runtime-selection validation (November 16, 2026):
+
+- 82 focused CPU CTests passed, covering dimensional mathematics, SPH, drift,
+  2D/3D Rayleigh–Taylor and Kelvin–Helmholtz applications, and gravity-disabled
+  diagnostics. The allocation regression also rejects dimension changes while
+  particle storage exists, including retained capacity with zero particles.
+- Both lower-dimensional application suites passed using the same release
+  executable with CPU backends: CLI/INI selection, invalid-input rejection,
+  scenarios, Silo output, compact checkpoints, and restart. Restart positions
+  and thermodynamics matched exactly; the largest velocity difference was
+  `4.7e-10` in 2D.
+- Two-locality CPU runs passed in 1D and 2D, including compact checkpoint
+  decoding, particle counts, finite thermodynamics, and momentum checks.
+  All 76 Python build-graph checks passed.
+- The full CUDA release compiled and device-linked for SM86, and the CUDA
+  regression translation unit compiled. GPU execution was deferred while
+  War Thunder was ON. These are focused checks, without a full-suite,
+  sanitizer, performance, or long-time convergence claim.
+
+The historical results below describe the earlier compile-time implementation;
+they do not by themselves validate the runtime-selection changes.
 
 Focused implementation validation (November 5, 2026):
 

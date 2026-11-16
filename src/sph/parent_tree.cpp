@@ -1,5 +1,6 @@
 /*
  CosmicTiger - A cosmological N-Body code
+ Construct and traverse the dimension-dependent distributed SPH parent tree.
  Copyright (C) 2026  Dominic C. Marcello
 
  Distributed under the Boost Software License, Version 1.0.
@@ -83,9 +84,9 @@ std::vector<SphParentChild> sphParentChildren(std::uint64_t key, Pair<int> rankR
     if (arity == 0) {
         return children;
     }
-    // One binary level for a binary node, kSpatialDimensions levels for a full node. Every
+    // One binary level for a binary node, spatialDimensions() levels for a full node. Every
     // group still holds at least one rank, because a full node covers at least 2^D ranks.
-    int const levels = arity == 2 ? 1 : kSpatialDimensions;
+    int const levels = arity == 2 ? 1 : spatialDimensions();
     children.push_back(SphParentChild{key, rankRange});
     for (int level = 0; level < levels; level++) {
         std::vector<SphParentChild> next;

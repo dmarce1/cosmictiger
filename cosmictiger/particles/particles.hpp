@@ -55,19 +55,20 @@ inline constexpr GroupInteger kNoParticleGroup = static_cast<GroupInteger>(0x7FF
 #define PARTICLES_EXTERN extern
 #endif
 
-// Native particle/checkpoint vectors contain exactly the active dimensions.
-static_assert(sizeof(ParticleVector<float>) == sizeof(Array<float, kSpatialDimensions>));
-static_assert(alignof(ParticleVector<float>) == alignof(Array<float, kSpatialDimensions>));
-static_assert(sizeof(ParticleVector<Position>) == sizeof(Array<Position, kSpatialDimensions>));
-static_assert(alignof(ParticleVector<Position>) == alignof(Array<Position, kSpatialDimensions>));
+// Native vectors retain the 3D ABI; checkpoints pack only active components.
+static_assert(sizeof(ParticleVector<float>) == sizeof(Array<float, kDimensions>));
+static_assert(alignof(ParticleVector<float>) == alignof(Array<float, kDimensions>));
+static_assert(sizeof(ParticleVector<Position>) == sizeof(Array<Position, kDimensions>));
+static_assert(alignof(ParticleVector<Position>) == alignof(Array<Position, kDimensions>));
 static_assert(std::is_trivially_copyable_v<ParticleVector<float>>);
 static_assert(std::is_standard_layout_v<ParticleVector<float>>);
 static_assert(std::is_trivially_copyable_v<ParticleVector<Position>>);
 static_assert(std::is_standard_layout_v<ParticleVector<Position>>);
 
 struct GroupParticle {
-    ParticleVector<Position> position;
-    GroupInteger groupNumber;
+    ParticleVector<Position> position{
+        Position(0.5)};          // Unit-box position; inactive axes are centered.
+    GroupInteger groupNumber;    // Global group identifier.
     /// Archive `position`, `groupNumber` in transport order.
     template <class A>
     void serialize(A&& arc, unsigned) {
@@ -77,9 +78,10 @@ struct GroupParticle {
 };
 
 struct OutputParticle {
-    ParticleVector<Position> position;
-    ParticleVector<float> velocity;
-    char rung;
+    ParticleVector<Position> position{
+        Position(0.5)};                      // Unit-box position; inactive axes are centered.
+    ParticleVector<float> velocity{0.0f};    // Stored velocity; inactive components are zero.
+    char rung;                               // Particle timestep rung.
     /// Archive this record in the field order required by distributed transport.
     template <class A>
     void serialize(A&& a, unsigned) {
@@ -127,22 +129,23 @@ snapshot. This can be different from npart if one is dealing with a multi-file s
 /*****************************/
 
 struct Particle {
-    ParticleVector<Position> position;
-    ParticleVector<float> velocity;
-    GroupInteger groupNumber;
-    ParticleInteger catalogIndex;
-    char rung;
-    char isTracer;
-    char type;
-    ParticleInteger gravitySample = -1;
-    StarFormationState starFormation;
+    ParticleVector<Position> position{
+        Position(0.5)};                      // Unit-box position; inactive axes are centered.
+    ParticleVector<float> velocity{0.0f};    // Stored velocity; inactive components are zero.
+    GroupInteger groupNumber;        // Global group identifier when group analysis is enabled.
+    ParticleInteger catalogIndex;    // Associated gas-record index, or kNoParticleIndex.
+    char rung;                       // Particle timestep rung.
+    char isTracer;                   // Nonzero when selected for tracer output.
+    char type;                       // Particle species identifier.
+    ParticleInteger gravitySample = -1;    // Gravity-error sample slot; negative means unselected.
+    StarFormationState starFormation;      // Stable identity and star-formation history.
     /// Archive this record in the field order required by distributed transport.
     template <class A>
     void serialize(A&& a, unsigned) {
         auto const& options = getOptions();
         static bool doGroups = options.analysis.groups;
         static bool doTracers = options.analysis.tracers;
-        for (int dim = 0; dim < kSpatialDimensions; dim++) {
+        for (int dim = 0; dim < spatialDimensions(); dim++) {
             a& position[dim];
             a& velocity[dim];
         }
@@ -169,18 +172,15 @@ struct Particle {
 // A randomly selected particle's position and tree-computed gravity, gathered by
 // particlesSample() for comparison against a direct-summation reference.
 struct ParticleSample {
-    // Particle position.
-    ParticleVector<Position> position;
-    // Gravitational acceleration from the last kick; zero unless the analysis options
-    // save particle accelerations.
-    ParticleVector<float> acceleration;
-    // Gravitational potential from the last kick; zero unless the analysis options save
-    // particle potentials.
-    float potential;
+    ParticleVector<Position> position{
+        Position(0.5)};    // Unit-box position; inactive axes are centered.
+    ParticleVector<float> acceleration{
+        0.0f};          // Last-kick acceleration, zero without diagnostics.
+    float potential;    // Last-kick potential, zero without diagnostics.
     /// Archive this record in the field order required by distributed transport.
     template <class A>
     void serialize(A&& a, unsigned) {
-        for (int dim = 0; dim < kSpatialDimensions; dim++) {
+        for (int dim = 0; dim < spatialDimensions(); dim++) {
             a& position[dim];
             a& acceleration[dim];
         }
@@ -201,10 +201,10 @@ struct ParticleSample {
 #define CHECK_PART_BOUNDS(i)
 #endif
 
-PARTICLES_EXTERN Array<Position*, kSpatialDimensions> particlesX;
+PARTICLES_EXTERN Array<Position*, kDimensions> particlesX;
 PARTICLES_EXTERN ParticleVector<float>* particlesV;
 PARTICLES_EXTERN char* particlesR;
-PARTICLES_EXTERN Array<float*, kSpatialDimensions> particlesGravityAccelerations;
+PARTICLES_EXTERN Array<float*, kDimensions> particlesGravityAccelerations;
 
 PARTICLES_EXTERN float* particlesP;
 PARTICLES_EXTERN std::atomic<GroupInteger>* particlesGrp
@@ -345,7 +345,7 @@ inline float& particlesPot(ParticleInteger index) {
 /// bounds.
 inline Position& particlesPos(int dim, ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
-    ALWAYS_ASSERT(dim >= 0 && dim < kSpatialDimensions);
+    ALWAYS_ASSERT(dim >= 0 && dim < spatialDimensions());
     return particlesX[dim][index];
 }
 
@@ -353,22 +353,22 @@ inline Position& particlesPos(int dim, ParticleInteger index) {
 /// bounds.
 inline float& particlesVel(int dim, ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
-    ALWAYS_ASSERT(dim >= 0 && dim < kSpatialDimensions);
+    ALWAYS_ASSERT(dim >= 0 && dim < spatialDimensions());
     return particlesV[index][dim];
 }
 
 // Cartesian adapters are for three-axis geometry/visualization scratch only;
-// inactive coordinates and velocities have no particle allocation.
+// inactive position arrays are absent and inactive stored velocities are zero.
 inline Position particlesPositionValue(int dim, ParticleInteger index) {
-    return dim < kSpatialDimensions ? particlesPos(dim, index) : Position(0.5);
+    return dim < spatialDimensions() ? particlesPos(dim, index) : Position(0.5);
 }
 /// Return a velocity component, or zero for an inactive spatial dimension.
 inline float particlesVelocityValue(int dim, ParticleInteger index) {
-    return dim < kSpatialDimensions ? particlesVel(dim, index) : 0.0f;
+    return dim < spatialDimensions() ? particlesVel(dim, index) : 0.0f;
 }
 /// Expose a position-component array at an offset, or null for an inactive dimension.
 inline Position* particlesPositionData(int dim, ParticleInteger offset = 0) {
-    return dim < kSpatialDimensions ? particlesX[dim] + offset : nullptr;
+    return dim < spatialDimensions() ? particlesX[dim] + offset : nullptr;
 }
 
 /// Expose the contiguous stored particle-velocity vectors.
@@ -388,6 +388,7 @@ inline char& particlesRung(ParticleInteger index) {
 /// allocated.
 inline float& particlesGravityAcceleration(int dim, ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
+    ALWAYS_ASSERT(dim >= 0 && dim < spatialDimensions());
     return particlesGravityAccelerations[dim][index];
 }
 
@@ -429,10 +430,10 @@ inline void particlesCaptureGravitySample(ParticleInteger index, float gx, float
         ParticleInteger const slot = particlesGravitySample(index);
         if (slot >= 0) {
             particlesGravitySampleAccelerations[slot][kXi] = gx;
-            if constexpr (kSpatialDimensions > 1) {
+            if (spatialDimensions() > 1) {
                 particlesGravitySampleAccelerations[slot][kYi] = gy;
             }
-            if constexpr (kSpatialDimensions > 2) {
+            if (spatialDimensions() > 2) {
                 particlesGravitySampleAccelerations[slot][kZi] = gz;
             }
         }
@@ -453,7 +454,7 @@ inline Particle particlesGetParticle(ParticleInteger index) {
     static bool doTracers = opts.analysis.tracers;
     CHECK_PART_BOUNDS(index);
     Particle p;
-    for (int dim = 0; dim < kSpatialDimensions; dim++) {
+    for (int dim = 0; dim < spatialDimensions(); dim++) {
         p.position[dim] = particlesPos(dim, index);
         p.velocity[dim] = particlesVel(dim, index);
     }
@@ -485,7 +486,7 @@ inline void particlesSetParticle(Particle p, ParticleInteger index) {
     static bool doGroups = opts.analysis.groups;
     static bool doTracers = opts.analysis.tracers;
     CHECK_PART_BOUNDS(index);
-    for (int dim = 0; dim < kSpatialDimensions; dim++) {
+    for (int dim = 0; dim < spatialDimensions(); dim++) {
         particlesPos(dim, index) = p.position[dim];
         particlesVel(dim, index) = p.velocity[dim];
     }

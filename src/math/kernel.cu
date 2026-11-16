@@ -1,3 +1,4 @@
+// Upload spatial dimensionality and the selected kernels to CUDA constant memory.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -14,6 +15,7 @@
 #include <cosmictiger/math/kernel.hpp>
 
 namespace detail {
+__device__ __constant__ int deviceSpatialDimensionCount = kDimensions;
 __device__ __constant__ HydroKernelTable deviceHydroKernel;
 __device__ __constant__ radial_kernel::KernelTable<double> deviceGravityKernel;
 __device__ __constant__ radial_kernel::KernelTable<float> deviceSphGravityKernel;
@@ -21,8 +23,12 @@ __device__ __constant__ radial_kernel::KernelTable<float> deviceSphGravityKernel
 
 /// Copy the selected gravity and hydrodynamic kernel tables into device constant memory.
 void uploadKernelSelections() {
-    auto status = cudaMemcpyToSymbol(
-        detail::deviceGravityKernel, &detail::gravityKernel, sizeof(detail::gravityKernel));
+    auto status = cudaMemcpyToSymbol(detail::deviceSpatialDimensionCount,
+        &detail::spatialDimensionCount, sizeof(detail::spatialDimensionCount));
+    if (status == cudaSuccess) {
+        status = cudaMemcpyToSymbol(
+            detail::deviceGravityKernel, &detail::gravityKernel, sizeof(detail::gravityKernel));
+    }
     if (status == cudaSuccess) {
         status = cudaMemcpyToSymbol(detail::deviceSphGravityKernel, &detail::sphGravityKernel,
             sizeof(detail::sphGravityKernel));

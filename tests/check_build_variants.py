@@ -513,9 +513,9 @@ class BuildConfigHeaderTest(unittest.TestCase):
                               text=True, capture_output=True)
 
     def definitions(self):
-        return {"COSMICTIGER_DIMENSION_COUNT": 3, **{"COSMICTIGER_ENABLE_" + name: int(name == "INTEGRATOR_HIERARCHICAL")
+        return {"COSMICTIGER_ENABLE_" + name: int(name == "INTEGRATOR_HIERARCHICAL")
                 for name in ("SPH", "CHEMISTRY", "STARS", "STAR_FORMATION", "ROCKSTAR",
-                             "INTEGRATOR_TRADITIONAL", "INTEGRATOR_HIERARCHICAL", "INTEGRATOR_GLOBAL")}}
+                             "INTEGRATOR_TRADITIONAL", "INTEGRATOR_HIERARCHICAL", "INTEGRATOR_GLOBAL")}
 
     def testExplicitCapabilitiesCompile(self):
         result = self.compile(self.definitions())
@@ -523,7 +523,7 @@ class BuildConfigHeaderTest(unittest.TestCase):
 
     def testEveryMissingCapabilityFails(self):
         definitions = self.definitions()
-        for missing in definitions.keys() - {"COSMICTIGER_DIMENSION_COUNT"}:
+        for missing in definitions:
             with self.subTest(missing=missing):
                 result = self.compile({key: value for key, value in definitions.items() if key != missing})
                 self.assertNotEqual(result.returncode, 0)

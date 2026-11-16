@@ -1,3 +1,4 @@
+// Versioned checkpoint headers, compatibility validation and particle-state persistence.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -592,8 +593,9 @@ uint32_t checkpointPhysicsCode(Options const& opts) {
     return (opts.hydro.enabled ? kVariationalSph | kCompactSphLayout | kScalarViscosityLayout |
                        kRosswogViscosityLayout :
                                  0U) |
-        (gravityCode << 8) | (hydroCode << 16) | (uint32_t(3 - kSpatialDimensions) << 28) |
-        (kSpatialDimensions < 3 ? (1U << 30) : 0U);
+        (gravityCode << 8) | (hydroCode << 16) |
+        (uint32_t(kDimensions - opts.hydro.dimensions) << 28) |
+        (opts.hydro.dimensions < kDimensions ? (1U << 30) : 0U);
 }
 
 // Pre-header dark-matter checkpoints hold only particle state and the legacy
@@ -798,15 +800,15 @@ DriverParameters readDriverState(FILE* fp) {
     if (magic == kCheckpointMagic) {
         FREAD(&header, sizeof(header), 1, fp);
         unsigned const savedDimensions = 3 - ((header.reserved >> 28) & 3);
-        if (savedDimensions != kSpatialDimensions) {
+        if (savedDimensions != spatialDimensions()) {
             throw std::runtime_error(
-                std::format("Checkpoint spatial dimension {} does not match this build ({})",
-                    savedDimensions, kSpatialDimensions));
+                std::format("Checkpoint spatial dimension {} does not match hydro.dimensions ({})",
+                    savedDimensions, spatialDimensions()));
         }
         bool const compactDimensions = (header.reserved & (1U << 30)) != 0U;
-        if (compactDimensions != (kSpatialDimensions < 3)) {
+        if (compactDimensions != (spatialDimensions() < 3)) {
             throw std::runtime_error("Checkpoint particle storage differs: lower-dimensional "
-                                     "builds require compact D-component particle records");
+                                     "runs require compact D-component particle records");
         }
         if ((header.flags &
                 (kRetiredParticleMesh | kParticleMeshInterval | kParticleMultipoleMesh |
@@ -1335,7 +1337,7 @@ void checkpointStateTest() {
         constexpr ParticleInteger kCount = 4;
         particlesResize(kCount);
         for (ParticleInteger particle = 0; particle < kCount; ++particle) {
-            for (int dim = 0; dim < kDimensions; ++dim) {
+            for (int dim = 0; dim < spatialDimensions(); ++dim) {
                 PositionInteger const raw = (PositionInteger(1) << (kPositionBits - 1)) +
                     PositionInteger(17 * particle + dim + 1);
                 particlesPos(dim, particle).raw() = raw;
@@ -1351,7 +1353,7 @@ void checkpointStateTest() {
         }
         particlesSave(fp);
         for (ParticleInteger particle = 0; particle < kCount; ++particle) {
-            for (int dim = 0; dim < kDimensions; ++dim) {
+            for (int dim = 0; dim < spatialDimensions(); ++dim) {
                 particlesPos(dim, particle).raw() = 0;
             }
         }
@@ -1359,7 +1361,7 @@ void checkpointStateTest() {
         particlesLoad(fp);
         ALWAYS_ASSERT(particlesSize() == kCount);
         for (ParticleInteger particle = 0; particle < kCount; ++particle) {
-            for (int dim = 0; dim < kDimensions; ++dim) {
+            for (int dim = 0; dim < spatialDimensions(); ++dim) {
                 PositionInteger const expected = (PositionInteger(1) << (kPositionBits - 1)) +
                     PositionInteger(17 * particle + dim + 1);
                 ALWAYS_ASSERT(particlesPos(dim, particle).raw() == expected);

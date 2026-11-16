@@ -1,3 +1,4 @@
+// Distributed particle views, field expressions and physical-unit metadata.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -262,10 +263,10 @@ void writeViewCommandLine(DBfile* db) {
 }
 
 class ViewUnitConversion {
-    units::UnitScales scales_;
-    units::CosmologicalContext context_;
-    bool cosmological_;
-    bool lab_;
+    units::UnitScales scales_;              // Code-unit scales in physical CGS units.
+    units::CosmologicalContext context_;    // Scale factor and reduced Hubble parameter.
+    bool cosmological_;                     // Select cosmological display units instead of CGS.
+    bool lab_;    // Select proper rather than comoving coordinates and densities.
 
     /// Convert a physical quantity to the selected cosmological display convention or
     /// its native physical value.
@@ -307,12 +308,12 @@ public:
     }
 
     /// Convert stored density to the selected frame and units, accounting for the
-    /// build's spatial dimension.
+    /// runtime spatial dimension.
     double density(double value) const {
-        if constexpr (kSpatialDimensions < 3) {
+        if (spatialDimensions() < 3) {
             auto const& options = getOptions();
             return value * options.units.massG /
-                std::pow(options.units.lengthCm, kSpatialDimensions);
+                std::pow(options.units.lengthCm, spatialDimensions());
         }
         units::StoredDensity const density(value);
         return lab_ ? displayValue(units::toProperDensity(density, scales_, context_)) :
@@ -325,7 +326,7 @@ public:
         auto const& options = getOptions();
         double energyScale = scales_.specificEnergyScale().value();
         double densityScale = scales_.densityScale().value() *
-            std::pow(options.units.lengthCm, 3 - kSpatialDimensions);
+            std::pow(options.units.lengthCm, 3 - spatialDimensions());
         if (cosmological_) {
             energyScale *= 1e-10;
             densityScale *= std::pow(constants::kMpcToCm, 3) /
@@ -439,8 +440,8 @@ void writeParticleExpressions(
             converted ? (lab ? 1.0 : std::pow(a, -3.0 * γ)) : std::pow(a, 5.0 - 3.0 * γ);
         char const* pressureUnit = !converted ? "code" :
             cosmological                      ? "(km/s)^2*(Msun/h)/(Mpc/h)^3" :
-            kSpatialDimensions == 1           ? "erg/cm" :
-            kSpatialDimensions == 2           ? "erg/cm^2" :
+            spatialDimensions() == 1          ? "erg/cm" :
+            spatialDimensions() == 2          ? "erg/cm^2" :
                                                 "erg/cm^3";
         writeViewExpression(db, "pressure",
             field("entropyTracer") + " * (" + field("density") + " ^ " + number(γ) + ") * " +
@@ -635,11 +636,11 @@ void writeViewSpecies(DBfile* db, ViewDirectoryMetadata& metadata, char const* s
     DBFreeOptlist(options);
     writeViewField(db, metadata, "xVelocity", mesh, particles, velocityUnit,
         [&conversion](Particle const& particle) { return conversion.velocity(particle.vx); });
-    if constexpr (kSpatialDimensions > 1) {
+    if (spatialDimensions() > 1) {
         writeViewField(db, metadata, "yVelocity", mesh, particles, velocityUnit,
             [&conversion](Particle const& particle) { return conversion.velocity(particle.vy); });
     }
-    if constexpr (kSpatialDimensions > 2) {
+    if (spatialDimensions() > 2) {
         writeViewField(db, metadata, "zVelocity", mesh, particles, velocityUnit,
             [&conversion](Particle const& particle) { return conversion.velocity(particle.vz); });
     }
@@ -716,12 +717,12 @@ void writeConvertedView(DBfile* db, ViewDirectoryMetadata& metadata, ViewParticl
     char const* massUnit = cosmological ? "Msun/h" : "g";
     char const* densityUnit = cosmological ?
         "(Msun/h)/(Mpc/h)^3" :
-        (kSpatialDimensions == 1 ? "g/cm" : (kSpatialDimensions == 2 ? "g/cm^2" : "g/cm^3"));
+        (spatialDimensions() == 1 ? "g/cm" : (spatialDimensions() == 2 ? "g/cm^2" : "g/cm^3"));
     char const* entropyUnit = cosmological ?
         "(km/s)^2/((Msun/h)/(Mpc/h)^3)^(gamma-1)" :
-        (kSpatialDimensions == 1 ? "(erg/g)/(g/cm)^(gamma-1)" :
-                                   (kSpatialDimensions == 2 ? "(erg/g)/(g/cm^2)^(gamma-1)" :
-                                                              "(erg/g)/(g/cm^3)^(gamma-1)"));
+        (spatialDimensions() == 1 ? "(erg/g)/(g/cm)^(gamma-1)" :
+                                    (spatialDimensions() == 2 ? "(erg/g)/(g/cm^2)^(gamma-1)" :
+                                                                "(erg/g)/(g/cm^3)^(gamma-1)"));
     ViewUnitConversion const conversion(a, cosmological, lab);
     writeViewText(db, "unit_system", cosmological ? "cosmological" : "cgs");
     writeViewText(db, "frame", lab ? "lab" : "comoving");
@@ -1014,7 +1015,7 @@ void writeParticleMetadata(DBfile* db) {
 #if COSMICTIGER_WITH_SPH
     writeViewText(db, "gas_geometry", "SPH particle point mesh");
     writeViewText(db, "gas_field_convention", "Node-centered SPH particle values.");
-    writeViewInteger(db, "dimension_count", kSpatialDimensions);
+    writeViewInteger(db, "dimension_count", spatialDimensions());
     writeViewText(db, "gas_entropy_convention", "entropyTracer = P_physical / rho_physical^gamma");
     writeViewText(db, "gas_rung_convention",
         "Committed integration timestepRung after hydro, enabled gravity and timestep limits.");
@@ -1042,11 +1043,11 @@ void writeCodeParticleView(DBfile* db, ViewDirectoryMetadata& metadata,
             [](Position const& value) { return value.toDouble(); }, options);
         writeViewField(db, metadata, "xVelocity", "mesh", darkMatter, "code",
             [](auto const& p) { return p.vx; });
-        if constexpr (kSpatialDimensions > 1) {
+        if (spatialDimensions() > 1) {
             writeViewField(db, metadata, "yVelocity", "mesh", darkMatter, "code",
                 [](auto const& p) { return p.vy; });
         }
-        if constexpr (kSpatialDimensions > 2) {
+        if (spatialDimensions() > 2) {
             writeViewField(db, metadata, "zVelocity", "mesh", darkMatter, "code",
                 [](auto const& p) { return p.vz; });
         }
@@ -1064,11 +1065,11 @@ void writeCodeParticleView(DBfile* db, ViewDirectoryMetadata& metadata,
             options);
         writeViewField(
             db, metadata, "xVelocity", "mesh", stars, "code", [](auto const& p) { return p.vx; });
-        if constexpr (kSpatialDimensions > 1) {
+        if (spatialDimensions() > 1) {
             writeViewField(db, metadata, "yVelocity", "mesh", stars, "code",
                 [](auto const& p) { return p.vy; });
         }
-        if constexpr (kSpatialDimensions > 2) {
+        if (spatialDimensions() > 2) {
             writeViewField(db, metadata, "zVelocity", "mesh", stars, "code",
                 [](auto const& p) { return p.vz; });
         }
@@ -1085,11 +1086,11 @@ void writeCodeParticleView(DBfile* db, ViewDirectoryMetadata& metadata,
             options);
         writeViewField(
             db, metadata, "xVelocity", "mesh", gas, "code", [](auto const& p) { return p.vx; });
-        if constexpr (kSpatialDimensions > 1) {
+        if (spatialDimensions() > 1) {
             writeViewField(
                 db, metadata, "yVelocity", "mesh", gas, "code", [](auto const& p) { return p.vy; });
         }
-        if constexpr (kSpatialDimensions > 2) {
+        if (spatialDimensions() > 2) {
             writeViewField(
                 db, metadata, "zVelocity", "mesh", gas, "code", [](auto const& p) { return p.vz; });
         }

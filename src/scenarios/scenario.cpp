@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <vector>
 
+#include <cosmictiger/core/defs.hpp>
 #include <cosmictiger/scenarios/scenario.hpp>
 
 #if COSMICTIGER_WITH_SPH
@@ -87,22 +88,16 @@ ScenarioDefinition const& definition(std::string const& name) {
 #if COSMICTIGER_WITH_SPH
         {"sod", false, true, true, 20, initializeSod},
         {"blast", false, true, true, 16, initializeBlast},
-#if COSMICTIGER_DIMENSION_COUNT >= 2
         {"rayleighTaylor", false, true, true, 256, initializeRayleighTaylor},
         {"kelvinHelmholtz", false, true, true, 1024, initializeKelvinHelmholtz},
-#endif
-#if COSMICTIGER_DIMENSION_COUNT == 3
         {"disc", true, true, true, 1024, initializeDisc},
         {"polytropicStar", true, true, true, 275, initializePolytropicStar},
-#endif
         {"hydroWave", false, true, true, 64, initializeHydroWave},
 #if COSMICTIGER_WITH_GRAVITY
         // SPH coupled to global FMM self-gravity: the Jeans dispersion relation.
         {"jeansWave", true, true, true, 32, initializeJeansWave},
 #endif
-#if COSMICTIGER_DIMENSION_COUNT >= 2
         {"gresho", false, true, true, 16, initializeGresho},
-#endif
 #endif
 #if COSMICTIGER_WITH_GRAVITY
         {"cosmology", true, COSMICTIGER_WITH_SPH != 0, false, 64, nullptr},
@@ -111,6 +106,15 @@ ScenarioDefinition const& definition(std::string const& name) {
     };
     for (auto const& scenario : definitions) {
         if (name == scenario.name) {
+            if (scenario.gravity && spatialDimensions() != kDimensions) {
+                throw std::invalid_argument(
+                    "run.scenario=" + name + " requires hydro.dimensions=3");
+            }
+            if (spatialDimensions() < 2 &&
+                (name == "rayleighTaylor" || name == "kelvinHelmholtz" || name == "gresho")) {
+                throw std::invalid_argument(
+                    "run.scenario=" + name + " requires hydro.dimensions=2 or 3");
+            }
             return scenario;
         }
     }

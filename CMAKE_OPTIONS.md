@@ -26,10 +26,13 @@ direct formulas. See [matrix algorithms and measurements](docs/matrix.md).
 
 ## Project options
 
+SPH dimensions are selected at runtime with `--hydro.dimensions=1`, `2`, or `3`
+(default 3). `COSMICTIGER_DIMENSION_COUNT` is retired; see
+[dimensional SPH](docs/sph_dimensions.md) for cache migration and examples.
+
 | Option | Fresh default | Purpose |
 | --- | --- | --- |
 | `COSMICTIGER_ENABLE_GRAVITY` | `ON` | Compile the global periodic FMM, including direct leaf particle pairs. |
-| `COSMICTIGER_DIMENSION_COUNT` | `3` | Spatial dimensions: 1, 2, or 3. Below 3 requires SPH, gravity OFF, chemistry OFF, and stars OFF. See [dimensional SPH](docs/sph_dimensions.md). |
 | `COSMICTIGER_ENABLE_SPH` | `ON` | Compile SPH and hydro problems. |
 | `COSMICTIGER_ENABLE_CHEMISTRY` | `ON` | Compile equilibrium cooling when SPH is also enabled. Inactive with SPH disabled. |
 | `COSMICTIGER_ENABLE_STARS` | `OFF` | Compile GADGET-4 multiphase star formation. Requires equilibrium cooling; inactive with SPH disabled. |

@@ -26,6 +26,7 @@ def main():
     environment = dict(os.environ, OMP_NUM_THREADS='1', OPENBLAS_NUM_THREADS='1', CUDA_VISIBLE_DEVICES='')
     common = [str(args.executable.resolve()), '--hpx:threads=2', '--hpx:bind=none',
               '--run.scenario=kelvinHelmholtz', '--run.darkMatterParticleCount=0', '--gravity.enabled=false',
+              f'--hydro.dimensions={dimension}', '--gravity.cuda=false',
               '--hydro.enabled=true', '--hydro.cuda=false', '--drift.cuda=false',
               '--chemistry.enabled=false', '--starFormation.enabled=false',
               '--hydro.kernelFamily=wendland', '--hydro.kernelDegree=5', '--hydro.neighborNumber=32',

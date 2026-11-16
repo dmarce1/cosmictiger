@@ -1,3 +1,4 @@
+// Initialize and diagnose three-dimensional self-gravitating Jeans waves.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -166,21 +167,21 @@ ScenarioPlan initializeJeansWave() {
     double const dx = 1.0 / side;
     ParticleInteger index = 0;
     for (ParticleInteger ix = 0; ix < side; ix++) {
-        for (ParticleInteger iy = 0; iy < (kSpatialDimensions >= 2 ? side : 1); iy++) {
-            for (ParticleInteger iz = 0; iz < (kSpatialDimensions >= 3 ? side : 1); iz++) {
+        for (ParticleInteger iy = 0; iy < (spatialDimensions() >= 2 ? side : 1); iy++) {
+            for (ParticleInteger iz = 0; iz < (spatialDimensions() >= 3 ? side : 1); iz++) {
                 double const x0 = (ix + 0.5) * dx;
                 double const x = x0 + A / k * std::sin(k * x0);
                 double const compression = 1.0 + A * std::cos(k * x0);
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(index) = h;
                 sphParticlesPosition(kXi, index) = x - std::floor(x);
-                if constexpr (kSpatialDimensions > 1) {
+                if (spatialDimensions() > 1) {
                     sphParticlesPosition(kYi, index) = (iy + 0.5) * dx;
                 }
-                if constexpr (kSpatialDimensions > 2) {
+                if (spatialDimensions() > 2) {
                     sphParticlesPosition(kZi, index) = (iz + 0.5) * dx;
                 }
-                for (int dim = 0; dim < kSpatialDimensions; ++dim) {
+                for (int dim = 0; dim < spatialDimensions(); ++dim) {
                     sphParticlesVelocity(dim, index) = 0.0f;
                 }
                 sphParticlesRung(index) = 0;

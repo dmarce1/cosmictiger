@@ -1,3 +1,4 @@
+// Silo particle snapshots and projected output fields.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -83,8 +84,8 @@ void outputParticles(std::string const filename, Vector<OutputParticle> const& p
     Vector<double> z(parts.size());
     for (int i = 0; i < parts.size(); i++) {
         x[i] = parts[i].position[kXi].toDouble();
-        y[i] = kSpatialDimensions > 1 ? parts[i].position[kYi].toDouble() : 0.5;
-        z[i] = kSpatialDimensions > 2 ? parts[i].position[kZi].toDouble() : 0.5;
+        y[i] = spatialDimensions() > 1 ? parts[i].position[kYi].toDouble() : 0.5;
+        z[i] = spatialDimensions() > 2 ? parts[i].position[kZi].toDouble() : 0.5;
     }
     int const numberOfParticles = parts.size();
     double* coords[kDimensions] = {x.data(), y.data(), z.data()};
@@ -94,7 +95,7 @@ void outputParticles(std::string const filename, Vector<OutputParticle> const& p
     x = decltype(x)();
     y = decltype(y)();
     z = decltype(z)();
-    for (int dim = 0; dim < kSpatialDimensions; dim++) {
+    for (int dim = 0; dim < spatialDimensions(); dim++) {
         Vector<float> velocities(parts.size());
         for (int i = 0; i < parts.size(); i++) {
             velocities[i] = parts[i].velocity[dim];

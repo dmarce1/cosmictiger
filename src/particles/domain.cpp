@@ -1,3 +1,4 @@
+// Distributed particle-domain partitioning and species-aware migration.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -211,7 +212,7 @@ Vector<size_t> domainsCountBelow(Vector<double> bounds, int depth) {
                             hpxHardwareConcurrency() / (size_t) particlesSize(),
                         (size_t) 1);
                     Vector<hpx::future<void>> futs;
-                    int const xdim = depth % kSpatialDimensions;
+                    int const xdim = depth % spatialDimensions();
                     Position const xmid(detail::domainSplitPosition(bounds[i]));
                     std::atomic<size_t> count(0);
                     auto const func = [numberOfThreads, rng, xdim, xmid, &count](int proc) {
@@ -253,7 +254,7 @@ void domainsReboundSort(Vector<double> bounds, int depth) {
             futs.push_back(hpx::async(hpx::annotated_function(
                 [i, &bounds, depth, &mids]() {
                     mids[i] = particlesPartition(localDomains[i].particleRange,
-                        detail::domainSplitPosition(bounds[i]), depth % kSpatialDimensions);
+                        detail::domainSplitPosition(bounds[i]), depth % spatialDimensions());
                 },
                 "particles.domainsReboundSort")));
         }
@@ -266,8 +267,8 @@ void domainsReboundSort(Vector<double> bounds, int depth) {
             DomainLocal right;
             left = localDomains[i];
             right = localDomains[i];
-            left.box.end[depth % kSpatialDimensions] = right.box.begin[depth % kSpatialDimensions] =
-                bounds[i];
+            left.box.end[depth % spatialDimensions()] =
+                right.box.begin[depth % spatialDimensions()] = bounds[i];
             left.particleRange.second = right.particleRange.first = mids[i];
             left.processRange.second = right.processRange.first =
                 (localDomains[i].processRange.first + localDomains[i].processRange.second) / 2;
@@ -377,12 +378,12 @@ void domainsRebound() {
                 DomainGlobal right;
                 left = domains[i];
                 right = domains[i];
-                left.box.end[depth % kSpatialDimensions] =
-                    right.box.begin[depth % kSpatialDimensions] = bounds[i];
+                left.box.end[depth % spatialDimensions()] =
+                    right.box.begin[depth % spatialDimensions()] = bounds[i];
                 left.processRange.second = right.processRange.first =
                     (domains[i].processRange.first + domains[i].processRange.second) / 2;
-                int const leftdim = (depth + 1) % kSpatialDimensions;
-                int const rightdim = (depth + 1) % kSpatialDimensions;
+                int const leftdim = (depth + 1) % spatialDimensions();
+                int const rightdim = (depth + 1) % spatialDimensions();
                 left.totalCount = counts[i];
                 right.totalCount = domains[i].totalCount - counts[i];
                 left.midhi = left.box.end[leftdim];
@@ -736,7 +737,7 @@ void domainsEnd() {
         futs.push_back(hpx::async<DomainsEndAction>(c));
     }
     auto const particleCompare = [](Particle a, Particle b) {
-        for (ParticleInteger dim = 0; dim < kSpatialDimensions; dim++) {
+        for (ParticleInteger dim = 0; dim < spatialDimensions(); dim++) {
             if (a.position[dim] < b.position[dim]) {
                 return true;
             } else if (a.position[dim] > b.position[dim]) {
@@ -949,7 +950,7 @@ static void domainsCheck() {
 static int findParticleDomain(Vector3<double> const& position, size_t key, int depth) {
     auto const& entry = boxesByKey[key];
     if (entry.rank == -1) {
-        int const xdim = depth % kSpatialDimensions;
+        int const xdim = depth % spatialDimensions();
         key <<= 1;
         if (position[xdim] >= entry.midx) {
             key += 1;

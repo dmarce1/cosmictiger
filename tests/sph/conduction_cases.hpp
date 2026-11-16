@@ -1,3 +1,4 @@
+// Regression coverage for SPH dynamics with runtime spatial dimensions.
 /* CosmicTiger - shared CPU/CUDA artificial-conduction regressions; BSL-1.0. */
 #pragma once
 
@@ -63,7 +64,7 @@ void testConductionPair(Fixture& fixture) {
             double const hotSupport = data.sourceSmoothingLength[hot];
             double const coldSupport = data.sourceSmoothingLength[cold];
             double const pairLength = 0.5 * (hotSupport + coldSupport) *
-                monaghan::kViscosityWidthScale /
+                monaghan::viscosityWidthScale() /
                 selectedHydroKernel().smoothingLengthPerEffectiveRadius;
             double const denominator =
                 radius * radius + parameters.viscosityEpsilon * pairLength * pairLength;
@@ -96,7 +97,7 @@ void testConductionPair(Fixture& fixture) {
                 totalEnergyRate += energyRate;
                 // The one pair deposits the same impulse in the same order either way.
                 auto const acceleration = fixture.kickAcceleration(index);
-                for (int dimension = 0; dimension < kSpatialDimensions; ++dimension) {
+                for (int dimension = 0; dimension < spatialDimensions(); ++dimension) {
                     pairKickRequire(
                         acceleration[dimension] == pressureAccelerations[index][dimension],
                         "conduction directly changed the pressure force");
@@ -222,7 +223,7 @@ void testDissipativeRateSuperposition(Fixture& fixture, bool morrisAndMonaghan =
                 "external sources changed the entropy rate");
             pairKickClose(fixture.kickAcceleration(index)[1], hydroAccelerations[index][1] + 0.25f,
                 "external acceleration was not applied to the integrator");
-            for (int dimension = 0; dimension < kSpatialDimensions; ++dimension) {
+            for (int dimension = 0; dimension < spatialDimensions(); ++dimension) {
                 if (mode == 0) {
                     pressureAccelerations[index][dimension] = hydroAccelerations[index][dimension];
                 }

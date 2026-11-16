@@ -1,5 +1,6 @@
 /*
  CosmicTiger - A cosmological N-Body code
+ Exchange and stage SPH ghost particles with padded inactive coordinates.
  Copyright (C) 2026  Dominic C. Marcello
 
  Distributed under the Boost Software License, Version 1.0.
@@ -334,8 +335,8 @@ void packGroup(std::vector<char>& out, int group, ParticleInteger begin, Particl
         case kGroupPositions: {
             GhostPosition value;
             value.x = sphParticlesPositionValue(kXi, i);
-            value.y = kSpatialDimensions > 1 ? sphParticlesPositionValue(kYi, i) : Position(0.5);
-            value.z = kSpatialDimensions > 2 ? sphParticlesPositionValue(kZi, i) : Position(0.5);
+            value.y = spatialDimensions() > 1 ? sphParticlesPositionValue(kYi, i) : Position(0.5);
+            value.z = spatialDimensions() > 2 ? sphParticlesPositionValue(kZi, i) : Position(0.5);
             put(value);
         } break;
         case kGroupInternalEnergy:
@@ -350,8 +351,8 @@ void packGroup(std::vector<char>& out, int group, ParticleInteger begin, Particl
         case kGroupVelocity: {
             GhostVelocity value;
             value.vx = sphParticlesVelocityValue(kXi, i);
-            value.vy = kSpatialDimensions > 1 ? sphParticlesVelocityValue(kYi, i) : 0.0f;
-            value.vz = kSpatialDimensions > 2 ? sphParticlesVelocityValue(kZi, i) : 0.0f;
+            value.vy = spatialDimensions() > 1 ? sphParticlesVelocityValue(kYi, i) : 0.0f;
+            value.vz = spatialDimensions() > 2 ? sphParticlesVelocityValue(kZi, i) : 0.0f;
             put(value);
         } break;
         case kGroupDensity: {

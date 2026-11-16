@@ -54,8 +54,9 @@ static GroupParticle const* particlesGroupCacheReadLine(LineIdType lineId);
 void particlesGroupCacheFree();
 
 struct ParticlesCacheEntry {
-    ParticleVector<Position> position;
-    char type;
+    ParticleVector<Position> position{
+        Position(0.5)};    // Unit-box position; inactive axes are centered.
+    char type;             // Particle species identifier.
     /// Archive `type`, `position` in transport order.
     template <class A>
     void serialize(A&& arc, unsigned) {
@@ -230,10 +231,10 @@ void particlesDisplace(double dx, double dy, double dz) {
                     y = fmod(y + dy, 1.0);
                     z = fmod(z + dz, 1.0);
                     particlesPos(kXi, i) = x;
-                    if constexpr (kSpatialDimensions > 1) {
+                    if (spatialDimensions() > 1) {
                         particlesPos(kYi, i) = y;
                     }
-                    if constexpr (kSpatialDimensions > 2) {
+                    if (spatialDimensions() > 2) {
                         particlesPos(kZi, i) = z;
                     }
                 }
@@ -415,12 +416,12 @@ Vector<OutputParticle> particlesGetSample(Range<double> const& box) {
     }
     for (ParticleInteger i = 0; i < particlesSize(); i++) {
         Vector3<double> position(0.5);
-        for (int dim = 0; dim < kSpatialDimensions; dim++) {
+        for (int dim = 0; dim < spatialDimensions(); dim++) {
             position[dim] = positionDomainCoordinate(particlesPositionValue(dim, i));
         }
         if (box.contains(position)) {
             OutputParticle data;
-            for (int dim = 0; dim < kSpatialDimensions; dim++) {
+            for (int dim = 0; dim < spatialDimensions(); dim++) {
                 data.position[dim] = particlesPositionValue(dim, i);
                 data.velocity[dim] = particlesVelocityValue(dim, i);
             }
@@ -445,7 +446,7 @@ Vector<OutputParticle> particlesGetTracers() {
     for (ParticleInteger i = 0; i < particlesSize(); i++) {
         if (particlesTracer(i)) {
             OutputParticle data;
-            for (int dim = 0; dim < kSpatialDimensions; dim++) {
+            for (int dim = 0; dim < spatialDimensions(); dim++) {
                 data.position[dim] = particlesPositionValue(dim, i);
                 data.velocity[dim] = particlesVelocityValue(dim, i);
             }
@@ -680,7 +681,7 @@ void particlesMemadviseCpu() {
         }
     };
     CudaStream stream(deviceid);
-    for (int dim = 0; dim < kSpatialDimensions; dim++) {
+    for (int dim = 0; dim < spatialDimensions(); dim++) {
         stream.prefetchAsync(&particlesPos(dim, begin), count * sizeof(Position), cudaCpuDeviceId);
     }
     stream.prefetchAsync(
@@ -704,13 +705,13 @@ void particlesGlobalReadPosAndGroup(ParticleGlobalRange range, Position* x, Posi
             ParticleInteger const dif = offset - range.range.first;
             ParticleInteger const sz = range.range.second - range.range.first;
             std::memcpy(x + offset, &particlesPos(kXi, range.range.first), sizeof(Position) * sz);
-            if constexpr (kSpatialDimensions > 1) {
+            if (spatialDimensions() > 1) {
                 std::memcpy(y + offset, particlesPositionData(kYi, range.range.first),
                     sizeof(Position) * sz);
             } else {
                 std::fill_n(y + offset, sz, Position(0.5));
             }
-            if constexpr (kSpatialDimensions > 2) {
+            if (spatialDimensions() > 2) {
                 std::memcpy(z + offset, particlesPositionData(kZi, range.range.first),
                     sizeof(Position) * sz);
             } else {
@@ -734,9 +735,9 @@ void particlesGlobalReadPosAndGroup(ParticleGlobalRange range, Position* x, Posi
                     ParticleInteger const srcIndex = i - lineId.index;
                     x[destIndex] = ptr[srcIndex].position[kXi];
                     y[destIndex] =
-                        kSpatialDimensions > 1 ? ptr[srcIndex].position[kYi] : Position(0.5);
+                        spatialDimensions() > 1 ? ptr[srcIndex].position[kYi] : Position(0.5);
                     z[destIndex] =
-                        kSpatialDimensions > 2 ? ptr[srcIndex].position[kZi] : Position(0.5);
+                        spatialDimensions() > 2 ? ptr[srcIndex].position[kZi] : Position(0.5);
                     groupNumbers[destIndex] = ptr[srcIndex].groupNumber;
                     destIndex++;
                 }
@@ -890,13 +891,13 @@ void particlesGlobalReadPos(ParticleGlobalRange range, Position* x, Position* y,
             ParticleInteger const dif = offset - range.range.first;
             ParticleInteger const sz = range.range.second - range.range.first;
             std::memcpy(x + offset, &particlesPos(kXi, range.range.first), sizeof(Position) * sz);
-            if constexpr (kSpatialDimensions > 1) {
+            if (spatialDimensions() > 1) {
                 std::memcpy(y + offset, particlesPositionData(kYi, range.range.first),
                     sizeof(Position) * sz);
             } else {
                 std::fill_n(y + offset, sz, Position(0.5));
             }
-            if constexpr (kSpatialDimensions > 2) {
+            if (spatialDimensions() > 2) {
                 std::memcpy(z + offset, particlesPositionData(kZi, range.range.first),
                     sizeof(Position) * sz);
             } else {
@@ -929,9 +930,9 @@ void particlesGlobalReadPos(ParticleGlobalRange range, Position* x, Position* y,
                     ParticleInteger const srcIndex = i - lineId.index;
                     x[destIndex] = ptr[srcIndex].position[kXi];
                     y[destIndex] =
-                        kSpatialDimensions > 1 ? ptr[srcIndex].position[kYi] : Position(0.5);
+                        spatialDimensions() > 1 ? ptr[srcIndex].position[kYi] : Position(0.5);
                     z[destIndex] =
-                        kSpatialDimensions > 2 ? ptr[srcIndex].position[kZi] : Position(0.5);
+                        spatialDimensions() > 2 ? ptr[srcIndex].position[kZi] : Position(0.5);
                     if (types) {
                         if (opts.hydro.enabled) {
                             types[destIndex] = ptr[srcIndex].type;
@@ -962,7 +963,7 @@ static Vector<ParticlesCacheEntry> particlesFetchCacheLine(ParticleInteger index
     ParticleInteger const end = std::min(particlesSize(), begin + lineSize);
     for (ParticleInteger i = begin; i < end; i++) {
         auto& ln = line[i - begin];
-        for (int dim = 0; dim < kSpatialDimensions; dim++) {
+        for (int dim = 0; dim < spatialDimensions(); dim++) {
             ln.position[dim] = particlesPositionValue(dim, i);
         }
         if (opts.hydro.enabled) {
@@ -985,7 +986,7 @@ static Vector<GroupParticle> particlesGroupFetchCacheLine(ParticleInteger index)
     ParticleInteger const begin = (index / lineSize) * lineSize;
     ParticleInteger const end = std::min(particlesSize(), begin + lineSize);
     for (ParticleInteger i = begin; i < end; i++) {
-        for (int dim = 0; dim < kSpatialDimensions; dim++) {
+        for (int dim = 0; dim < spatialDimensions(); dim++) {
             line[i - begin].position[dim] = particlesPositionValue(dim, i);
         }
         line[i - begin].groupNumber = particlesGroup(i);
@@ -1097,17 +1098,16 @@ static void particlesEnsureStarFormationStorage() {
     }
 }
 
-#if !COSMICTIGER_WITH_GRAVITY
 /// Zero retained force-output fields for particle slots without a gravity pass to populate
 /// them.
 static void particlesClearGravityDiagnostics(ParticleInteger begin, ParticleInteger end) {
     auto const& opts = getOptions();
-    if (begin >= end) {
+    if (opts.gravity.enabled || begin >= end) {
         return;
     }
-    // These output arrays have no force pass to populate them in an SPH-only build.
+    // Runtime gravity-disabled runs have no force pass to populate these output arrays.
     if (saveParticleAcceleration(opts.analysis)) {
-        for (int dim = 0; dim < kSpatialDimensions; ++dim) {
+        for (int dim = 0; dim < spatialDimensions(); ++dim) {
             std::fill_n(particlesGravityAccelerations[dim] + begin, end - begin, 0.0f);
         }
     }
@@ -1115,7 +1115,6 @@ static void particlesClearGravityDiagnostics(ParticleInteger begin, ParticleInte
         std::fill_n(particlesP + begin, end - begin, 0.0f);
     }
 }
-#endif
 
 /// Grow enabled particle arrays together and initialize metadata for newly exposed particle
 /// slots.
@@ -1130,7 +1129,7 @@ static void particlesResizeStorage(ParticleInteger sz, bool lock) {
             newCapacity = size_t(105) * newCapacity / size_t(100);
         }
 
-        for (int dim = 0; dim < kSpatialDimensions; dim++) {
+        for (int dim = 0; dim < spatialDimensions(); dim++) {
             particlesArrayResize(particlesX[dim], newCapacity, true);
         }
         particlesArrayResize(particlesV, newCapacity, true);
@@ -1142,7 +1141,7 @@ static void particlesResizeStorage(ParticleInteger sz, bool lock) {
             }
         }
         if (saveParticleAcceleration(opts.analysis)) {
-            for (int dim = 0; dim < kSpatialDimensions; dim++) {
+            for (int dim = 0; dim < spatialDimensions(); dim++) {
                 particlesArrayResize(particlesGravityAccelerations[dim], newCapacity, true);
             }
         }
@@ -1181,6 +1180,11 @@ static void particlesResizeStorage(ParticleInteger sz, bool lock) {
     ParticleInteger const oldsz = size;
     size = sz;
     if (sz > oldsz) {
+        for (ParticleInteger i = oldsz; i < sz; ++i) {
+            for (int dim = spatialDimensions(); dim < kDimensions; ++dim) {
+                particlesV[i][dim] = 0.0f;
+            }
+        }
         if (opts.analysis.groups) {
             std::fill(particlesLgrp + oldsz, particlesLgrp + sz, kNoParticleGroup);
         }
@@ -1188,9 +1192,7 @@ static void particlesResizeStorage(ParticleInteger sz, bool lock) {
             std::fill(particlesTr + oldsz, particlesTr + sz, char{0});
         }
     }
-#if !COSMICTIGER_WITH_GRAVITY
     particlesClearGravityDiagnostics(oldsz, sz);
-#endif
     if (particlesGravitySampleIndices != nullptr) {
         for (ParticleInteger i = oldsz; i < sz; ++i) {
             particlesGravitySample(i) = -1;
@@ -1345,7 +1347,8 @@ void particlesGravitySamplesBegin(size_t sampleCount) {
         }
         float const unset = std::numeric_limits<float>::quiet_NaN();
         for (size_t i = 0; i < sampleCount; ++i) {
-            for (int dim = 0; dim < kSpatialDimensions; ++dim) {
+            accelerations[i] = ParticleVector<float>(0.0f);
+            for (int dim = 0; dim < spatialDimensions(); ++dim) {
                 accelerations[i][dim] = unset;
             }
         }
@@ -1363,7 +1366,7 @@ void particlesFree() {
     for (auto hook : particleReleaseHooks) {
         hook();
     }
-    for (int dim = 0; dim < kSpatialDimensions; dim++) {
+    for (int dim = 0; dim < spatialDimensions(); dim++) {
         freeManagedMemory(particlesX[dim]);
     }
     freeManagedMemory(particlesV);
@@ -1378,7 +1381,7 @@ void particlesFree() {
         free(particlesLgrp);
     }
     if (saveParticleAcceleration(opts.analysis)) {
-        for (int dim = 0; dim < kSpatialDimensions; dim++) {
+        for (int dim = 0; dim < spatialDimensions(); dim++) {
             freeManagedMemory(particlesGravityAccelerations[dim]);
         }
     }
@@ -1423,7 +1426,7 @@ void particlesRandomInit() {
                 std::mt19937_64 generator(seed);
 #endif
                 for (ParticleInteger i = begin; i < end; i++) {
-                    for (int dim = 0; dim < kSpatialDimensions; dim++) {
+                    for (int dim = 0; dim < spatialDimensions(); dim++) {
 #if COSMICTIGER_WITH_GRAVITY
                         particlesPos(dim, i) = gsl_rng_uniform(rndgen);
 #else
@@ -1452,7 +1455,7 @@ Pair<Vector3<double>, double> particlesEnclosingSphere(Pair<ParticleInteger> rng
 
     auto const func1 = [numberOfThreads, rng](int proc) {
         Range<double> box;
-        for (int dim = 0; dim < kSpatialDimensions; dim++) {
+        for (int dim = 0; dim < spatialDimensions(); dim++) {
             box.begin[dim] = 1.0;
             box.end[dim] = 0.0;
         }
@@ -1460,7 +1463,7 @@ Pair<Vector3<double>, double> particlesEnclosingSphere(Pair<ParticleInteger> rng
         auto const end =
             (size_t) (proc + 1) * (rng.second - rng.first) * numberOfThreads + rng.first;
         for (ParticleInteger i = begin; i < end; i++) {
-            for (int dim = 0; dim < kSpatialDimensions; dim++) {
+            for (int dim = 0; dim < spatialDimensions(); dim++) {
                 auto const x = particlesPositionValue(dim, i).toDouble();
                 box.begin[dim] = std::min(box.begin[dim], x);
                 box.end[dim] = std::max(box.end[dim], x);
@@ -1476,13 +1479,13 @@ Pair<Vector3<double>, double> particlesEnclosingSphere(Pair<ParticleInteger> rng
     auto box = func1(0);
     for (auto& fut : futs1) {
         auto thisBox = fut.get();
-        for (int dim = 0; dim < kSpatialDimensions; dim++) {
+        for (int dim = 0; dim < spatialDimensions(); dim++) {
             box.begin[dim] = std::min(box.begin[dim], thisBox.begin[dim]);
             box.end[dim] = std::max(box.end[dim], thisBox.end[dim]);
         }
     }
     Vector3<double> xc(0.5);
-    for (int dim = 0; dim < kSpatialDimensions; dim++) {
+    for (int dim = 0; dim < spatialDimensions(); dim++) {
         xc[dim] = 0.5 * (box.begin[dim] + box.end[dim]);
     }
     auto const func2 = [numberOfThreads, rng, xc](int proc) {
@@ -1492,7 +1495,7 @@ Pair<Vector3<double>, double> particlesEnclosingSphere(Pair<ParticleInteger> rng
             (size_t) (proc + 1) * (rng.second - rng.first) * numberOfThreads + rng.first;
         for (ParticleInteger i = begin; i < end; i++) {
             double r2 = 0.0;
-            for (int dim = 0; dim < kSpatialDimensions; dim++) {
+            for (int dim = 0; dim < spatialDimensions(); dim++) {
                 double const x = particlesPositionValue(dim, i).toDouble();
                 r2 += sqr(x - xc[dim]);
             }
@@ -1666,11 +1669,11 @@ Vector<ParticleSample> particlesSample(int cnt) {
         ParticleSample sample{};
         ParticleInteger const index =
             ((size_t) gsl_rng_get(rndgen) * (size_t) gsl_rng_get(rndgen)) % particlesSize();
-        for (int dim = 0; dim < kSpatialDimensions; dim++) {
+        for (int dim = 0; dim < spatialDimensions(); dim++) {
             sample.position[dim] = particlesPositionValue(dim, index);
         }
         if (saveParticleAcceleration(analysis)) {
-            for (int dim = 0; dim < kSpatialDimensions; dim++) {
+            for (int dim = 0; dim < spatialDimensions(); dim++) {
                 sample.acceleration[dim] = particlesGravityAcceleration(dim, index);
             }
         }
@@ -1780,10 +1783,18 @@ void particlesLoad(FILE* fp) {
     // They are intentionally absent from checkpoints, including same-process reloads.
     particlesGravitySamplesBegin(0);
     std::cout << std::format("particles_size  = {:d}\n", particlesSize()) << std::flush;
-    for (int dim = 0; dim < kSpatialDimensions; ++dim) {
+    for (int dim = 0; dim < spatialDimensions(); ++dim) {
         FREAD(&particlesPos(dim, 0), sizeof(Position), particlesSize(), fp);
     }
-    FREAD(particlesVelData(), sizeof(ParticleVector<float>), particlesSize(), fp);
+    if (spatialDimensions() == kDimensions) {
+        FREAD(particlesVelData(), sizeof(ParticleVector<float>), particlesSize(), fp);
+    } else {
+        // Keep the compact lower-dimensional checkpoint ABI despite padded in-memory vectors.
+        for (ParticleInteger i = 0; i < particlesSize(); ++i) {
+            particlesV[i] = ParticleVector<float>(0.0f);
+            FREAD(particlesV[i].data(), sizeof(float), spatialDimensions(), fp);
+        }
+    }
     FREAD(&particlesRung(0), sizeof(char), particlesSize(), fp);
     if (opts.analysis.groups) {
         FREAD(&particlesLastgroup(0), sizeof(GroupInteger), particlesSize(), fp);
@@ -1808,10 +1819,8 @@ void particlesLoad(FILE* fp) {
     rungBegins.resize(rungCount);
     FREAD(&rungBegin, sizeof(ParticleInteger), 1, fp);
     FREAD(rungBegins.data(), sizeof(ParticleInteger), rungBegins.size(), fp);
-#if !COSMICTIGER_WITH_GRAVITY
     // Force diagnostics are absent from the checkpoint, including same-process reloads.
     particlesClearGravityDiagnostics(0, particlesSize());
-#endif
 }
 
 /// Write enabled particle arrays and rung traversal state to a checkpoint stream.
@@ -1825,10 +1834,17 @@ void particlesSave(FILE* fp) {
         fwrite(&sphSize, sizeof(ParticleInteger), 1, fp);
     }
 #endif
-    for (int dim = 0; dim < kSpatialDimensions; ++dim) {
+    for (int dim = 0; dim < spatialDimensions(); ++dim) {
         fwrite(&particlesPos(dim, 0), sizeof(Position), particlesSize(), fp);
     }
-    fwrite(particlesVelData(), sizeof(ParticleVector<float>), particlesSize(), fp);
+    if (spatialDimensions() == kDimensions) {
+        fwrite(particlesVelData(), sizeof(ParticleVector<float>), particlesSize(), fp);
+    } else {
+        // Match the packed D-component vectors written by the former dimension-specific builds.
+        for (ParticleInteger i = 0; i < particlesSize(); ++i) {
+            fwrite(particlesV[i].data(), sizeof(float), spatialDimensions(), fp);
+        }
+    }
     fwrite(&particlesRung(0), sizeof(char), particlesSize(), fp);
     if (opts.analysis.groups) {
         fwrite(&particlesLastgroup(0), sizeof(GroupInteger), particlesSize(), fp);
@@ -1951,8 +1967,8 @@ void particlesGlobalReadVels(
                 for (ParticleInteger i = begin; i < end; i++) {
                     ParticleInteger const srcIndex = i - lineId.index;
                     vx[destIndex] = ptr[srcIndex][kXi];
-                    vy[destIndex] = kSpatialDimensions > 1 ? ptr[srcIndex][kYi] : 0.0f;
-                    vz[destIndex] = kSpatialDimensions > 2 ? ptr[srcIndex][kZi] : 0.0f;
+                    vy[destIndex] = spatialDimensions() > 1 ? ptr[srcIndex][kYi] : 0.0f;
+                    vz[destIndex] = spatialDimensions() > 2 ? ptr[srcIndex][kZi] : 0.0f;
                     destIndex++;
                 }
             }
@@ -1976,7 +1992,7 @@ static Vector<ParticleVector<float>> particlesFetchCacheLineVels(ParticleInteger
     ParticleInteger const end = std::min(particlesSize(), begin + lineSize);
     for (ParticleInteger i = begin; i < end; i++) {
         auto& ln = line[i - begin];
-        for (int dim = 0; dim < kSpatialDimensions; dim++) {
+        for (int dim = 0; dim < spatialDimensions(); dim++) {
             ln[dim] = particlesVelocityValue(dim, i);
         }
     }
@@ -2053,7 +2069,7 @@ Vector<Position> particlesGetLocal(Vector<Pair<ParticleInteger>> const& ranges) 
         sz += r.second - r.first;
     }
 
-    rc.resize(kSpatialDimensions * sz);
+    rc.resize(spatialDimensions() * sz);
 
     auto const func1 = [&ranges, &rc, sz]() {
         std::shared_lock<SharedMutexType> lock(sharedMutex);
@@ -2061,7 +2077,7 @@ Vector<Position> particlesGetLocal(Vector<Pair<ParticleInteger>> const& ranges) 
         for (int j = 0; j < ranges.size() / 2; j++) {
             auto const& r = ranges[j];
             auto const count = r.second - r.first;
-            for (int dim = 0; dim < kSpatialDimensions; dim++) {
+            for (int dim = 0; dim < spatialDimensions(); dim++) {
                 memcpy(&rc[i + dim * sz], &particlesPos(dim, r.first), count * sizeof(Position));
             }
             i += count;
@@ -2074,7 +2090,7 @@ Vector<Position> particlesGetLocal(Vector<Pair<ParticleInteger>> const& ranges) 
             auto const& r = ranges[j];
             auto const count = r.second - r.first;
             i -= count;
-            for (int dim = 0; dim < kSpatialDimensions; dim++) {
+            for (int dim = 0; dim < spatialDimensions(); dim++) {
                 memcpy(&rc[i + dim * sz], &particlesPos(dim, r.first), count * sizeof(Position));
             }
         }
@@ -2153,7 +2169,7 @@ GadgetIoHeader particlesReadGadget4(std::string fnameBase) {
     auto const header = detail::readGadgetHeader(fp, fname);
     auto checkBlock = [&] {
         FREAD(&size, sizeof(size), 1, fp);
-        uint64_t const bytes = uint64_t(header.npart[1]) * 3 * sizeof(float);
+        uint64_t const bytes = uint64_t(header.npart[1]) * kDimensions * sizeof(float);
         if (size < 0 || uint64_t(size) != bytes) {
             throw std::runtime_error(
                 std::format("Invalid Gadget position/velocity block in {}", fname.c_str()));
@@ -2164,26 +2180,30 @@ GadgetIoHeader particlesReadGadget4(std::string fnameBase) {
 
     checkBlock();
     for (ParticleInteger i = 0; i < numberOfParticles; i++) {
-        for (int dim = 0; dim < kSpatialDimensions; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             float pos;
             FREAD(&pos, sizeof(float), 1, fp);
             pos /= header.boxSize;
-            particlesPos(dim, i) = pos;
+            if (dim < spatialDimensions()) {
+                particlesPos(dim, i) = pos;
+            }
         }
     }
     checkBlock();
 
     checkBlock();
     for (ParticleInteger i = 0; i < numberOfParticles; i++) {
-        for (int dim = 0; dim < kSpatialDimensions; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             float vel;
             FREAD(&vel, sizeof(float), 1, fp);
-            particlesVel(dim, i) = vel;
+            if (dim < spatialDimensions()) {
+                particlesVel(dim, i) = vel;
+            }
         }
     }
     auto const a = 1.0 / (header.redshift + 1.0);
     for (ParticleInteger i = 0; i < numberOfParticles; i++) {
-        for (int dim = 0; dim < kSpatialDimensions; dim++) {
+        for (int dim = 0; dim < spatialDimensions(); dim++) {
             particlesVel(dim, i) *=
                 sqrt(a) * a * 1e5 * opts.units.timeSeconds / opts.units.lengthCm;
         }

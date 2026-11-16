@@ -1,3 +1,4 @@
+// Regression coverage for SPH dynamics with runtime spatial dimensions.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -305,7 +306,7 @@ public:
             "kick acceleration requires an enabled kick observation");
         auto const& update = data_.sourcePairUpdates[sourceIndex(index)];
         SpatialVector<float> acceleration;
-        for (int dim = 0; dim < kSpatialDimensions; ++dim) {
+        for (int dim = 0; dim < spatialDimensions(); ++dim) {
             acceleration[dim] =
                 float(compensatedKickSum(update.velocity[dim]) / params_.hydroKickTimestep);
         }
@@ -405,7 +406,7 @@ public:
             if (data_.sourcePairUpdates) {
                 auto const& update = data_.sourcePairUpdates[sourceIndex(i)];
                 require(isFinite(float(update.entropy)), "finite active-kernel entropy kick");
-                for (int dim = 0; dim < kSpatialDimensions; dim++) {
+                for (int dim = 0; dim < spatialDimensions(); dim++) {
                     require(
                         isFinite(float(update.velocity[dim])), "finite active-kernel pair kick");
                 }
@@ -431,12 +432,12 @@ public:
         double absoluteForce = 0.0;
         for (int i = 0; i < count_; i++) {
             auto const acceleration = kickAcceleration(i);
-            for (int dim = 0; dim < kSpatialDimensions; dim++) {
+            for (int dim = 0; dim < spatialDimensions(); dim++) {
                 momentum[dim] += data_.gasMass * acceleration[dim];
                 absoluteForce += std::abs(data_.gasMass * acceleration[dim]);
             }
         }
-        for (int dim = 0; dim < kSpatialDimensions; dim++) {
+        for (int dim = 0; dim < spatialDimensions(); dim++) {
             requireClose("active-kernel total momentum rate", momentum[dim], 0.0,
                 3.0e-5 * std::max(1.0, absoluteForce));
         }
@@ -580,7 +581,7 @@ void testVariableViscosityPairs() {
             requireClose("variable pair alpha and beta heating", heating[i],
                 fixture.dissipativeHeating(i), 1.0e-5);
             auto const acceleration = fixture.kickAcceleration(i);
-            for (int dim = 0; dim < kSpatialDimensions; ++dim) {
+            for (int dim = 0; dim < spatialDimensions(); ++dim) {
                 requireClose("symmetric variable pair alpha and beta force", force[i][dim],
                     acceleration[dim], 1.0e-5);
             }
@@ -655,7 +656,7 @@ void testLattice() {
         requireClose(
             "uniform gas at rest generates no entropy", fixture.dissipativeHeating(i), 0.0, 2.0e-5);
         auto const acceleration = fixture.kickAcceleration(i);
-        for (int dim = 0; dim < kSpatialDimensions; dim++) {
+        for (int dim = 0; dim < spatialDimensions(); dim++) {
             requireClose("uniform gas force", acceleration[dim], 0.0, 2.0e-4);
         }
     }
@@ -1214,7 +1215,7 @@ void testPeriodicTailsAndOffsets() {
             compact.dissipativeHeating(i), 1.0e-6);
         auto const shiftedAcceleration = shifted.kickAcceleration(i);
         auto const compactAcceleration = compact.kickAcceleration(i);
-        for (int dim = 0; dim < kSpatialDimensions; dim++) {
+        for (int dim = 0; dim < spatialDimensions(); dim++) {
             requireClose("offset-invariant force", shiftedAcceleration[dim],
                 compactAcceleration[dim], 1.0e-6);
         }
@@ -1241,7 +1242,7 @@ void testActivity() {
         data.sinkEntropyRate[sink] = -12.0f;
     }
     // The out-of-range inactive source must receive no recoil either.
-    for (int dim = 0; dim < kSpatialDimensions; dim++) {
+    for (int dim = 0; dim < spatialDimensions(); dim++) {
         data.sourcePairUpdates[fixture.sourceIndex(2)].velocity[dim].add(-13.0f);
     }
     auto result = sphCpuSmoothingLengths(fixture.params_, data, 0);
@@ -1276,13 +1277,13 @@ void testActivity() {
     require(activeAcceleration[kXi] < 0.0f, "active particle feels its semiactive neighbor");
     require(isFinite(data.sinkEntropyRate[fixture.sinkIndex(0)]),
         "excluded zero-density neighbor leaves finite heating");
-    for (int dim = 0; dim < kSpatialDimensions; dim++) {
+    for (int dim = 0; dim < spatialDimensions(); dim++) {
         require(isFinite(activeAcceleration[dim]),
             "excluded zero-density neighbor leaves finite force");
     }
     // The active owner kicks its one pair: the semiactive endpoint receives the opposite
     // impulse and the out-of-range source none.
-    for (int dim = 0; dim < kSpatialDimensions; dim++) {
+    for (int dim = 0; dim < spatialDimensions(); dim++) {
         require(compensatedKickSum(data.sourcePairUpdates[fixture.sourceIndex(1)].velocity[dim]) ==
                 -compensatedKickSum(data.sourcePairUpdates[fixture.sourceIndex(0)].velocity[dim]),
             "semiactive neighbor misses the owner's recoil");
@@ -1578,7 +1579,7 @@ double compareAccelerations(Fixture const& fixture, VariationalReference const& 
     double accelerationError = 0.0;
     for (int i = 0; i < fixture.count_; i++) {
         auto const acceleration = fixture.kickAcceleration(i);
-        for (int dim = 0; dim < kSpatialDimensions; dim++) {
+        for (int dim = 0; dim < spatialDimensions(); dim++) {
             accelerationScale =
                 std::max(accelerationScale, std::abs(reference.acceleration[i][dim]));
             accelerationError = std::max(
@@ -1795,7 +1796,7 @@ void testVariationalUniformLattice() {
             requireClose("homogeneous expansion generates no entropy",
                 fixture.dissipativeHeating(i), 0.0, 2.0e-5);
             auto const acceleration = fixture.kickAcceleration(i);
-            for (int dim = 0; dim < kSpatialDimensions; dim++) {
+            for (int dim = 0; dim < spatialDimensions(); dim++) {
                 requireClose("uniform variational force", acceleration[dim], 0.0, 2.0e-4);
             }
         }
@@ -2361,7 +2362,7 @@ TEST_F(SphCpuTest, BalsaraSymmetricForceAndHeating) {
         EXPECT_GT(fullHeating[i], 0.0);
         EXPECT_NEAR(fixture.dissipativeHeating(i), 0.5 * fullHeating[i], 2.0e-6);
         auto const acceleration = fixture.kickAcceleration(i);
-        for (int dim = 0; dim < kSpatialDimensions; ++dim) {
+        for (int dim = 0; dim < spatialDimensions(); ++dim) {
             EXPECT_NEAR(acceleration[dim],
                 pressureForce[i][dim] + 0.5f * (fullForce[i][dim] - pressureForce[i][dim]),
                 2.0e-6f);

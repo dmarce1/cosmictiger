@@ -1,3 +1,4 @@
+// Parse, validate, distribute, and report runtime simulation options.
 // Runtime option parsing, validation and diagnostic reporting.
 /*
  CosmicTiger - A cosmological N-Body code
@@ -105,8 +106,7 @@ radial_kernel::KernelSpec kernelSpec(std::string const& family, int degree, bool
         throw std::invalid_argument("kernelFamily must be spline, wendland, or ferrers");
     }
     radial_kernel::KernelSpec const spec{kind, degree};
-    if (!(hydro ? radial_kernel::isValidDensity<kSpatialDimensions>(spec) :
-                  radial_kernel::isValid(spec))) {
+    if (!(hydro ? isValidHydroKernel(spec) : radial_kernel::isValid(spec))) {
         throw std::invalid_argument(
             "kernelDegree must be 2..9 for spline, 2/5/8 for "
             "wendland (1/4/7 in 1D), or 2/4/6/8 for ferrers (density polynomial degree)");
@@ -299,6 +299,45 @@ void validateStarFormation(Options const& opts) {
     }
 }
 
+/// Validate runtime dimension capabilities for CLI, restart, and programmatic callers.
+void validateSpatialDimensions(Options const& opts) {
+    if (opts.hydro.dimensions < 1 || opts.hydro.dimensions > kDimensions) {
+        throw std::invalid_argument("hydro.dimensions must be 1, 2, or 3");
+    }
+    if (opts.hydro.dimensions < kDimensions) {
+        if (!opts.hydro.enabled) {
+            throw std::invalid_argument("Lower-dimensional runs require hydro.enabled=true");
+        }
+        if (opts.analysis.groups || opts.analysis.power || opts.lightcone.enabled) {
+            throw std::invalid_argument(
+                "Lower-dimensional runs require groups, power spectra, and lightcones disabled");
+        }
+        if (opts.output.units == "cosmological" || opts.output.units == "both") {
+            throw std::invalid_argument(
+                "Lower-dimensional SPH supports code or CGS output, not cosmological units\n");
+        }
+        if (opts.scenario.cosmology.useGlass) {
+            throw std::invalid_argument("The glass input format is three-dimensional\n");
+        }
+        if (opts.scenario.disc.centralAcceleration != 0.0 || opts.gravity.enabled ||
+            opts.chemistry.enabled || opts.starFormation.enabled) {
+            throw std::invalid_argument("Lower-dimensional SPH requires gravity, central gravity, "
+                                        "chemistry and stars disabled\n");
+        }
+        if (opts.run.darkMatterParticleCount != 0) {
+            throw std::invalid_argument(
+                "Lower-dimensional SPH requires run.darkMatterParticleCount=0\n");
+        }
+        if (opts.hydro.dimensions == 1 && opts.hydro.yAcceleration != 0.0) {
+            throw std::invalid_argument("hydro.yAcceleration requires at least two dimensions\n");
+        }
+        if (opts.hydro.dimensions == 1 && opts.scenario.rayleighTaylor.zPlaneAcceleration != 0.0) {
+            throw std::invalid_argument(
+                "scenario.rayleighTaylor.zPlaneAcceleration requires at least two dimensions\n");
+        }
+    }
+}
+
 }    // namespace detail
 
 /// Print one resolved option using its value type when option display is enabled.
@@ -353,9 +392,15 @@ Options const& getOptions() {
 /// Validate and propagate resolved options, updating dependent kernels and output settings.
 void setOptions(Options const& requested) {
     Options opts = requested;
+    if (particlesX[kXi] != nullptr && opts.hydro.dimensions != spatialDimensions()) {
+        throw std::invalid_argument(
+            "hydro.dimensions cannot be changed after particle storage allocation");
+    }
+    detail::validateSpatialDimensions(opts);
+    setSpatialDimensions(opts.hydro.dimensions);
     opts.run.hierarchicalGravity = opts.gravity.enabled;
     scenarios::parseKelvinHelmholtzPacking(
-        opts.scenario.kelvinHelmholz.packing, kSpatialDimensions);
+        opts.scenario.kelvinHelmholz.packing, spatialDimensions());
     detail::validateRockstar(opts);
     detail::validateCudaBackends(opts);
     detail::validateHydroMethod(opts);
@@ -449,11 +494,11 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
     double const gasResolution =
         std::pow(double(options.run.gasParticleCount != 0 ? options.run.gasParticleCount :
                                                             options.initial.numberOfParticles),
-            1.0 / kSpatialDimensions);
+            1.0 / options.hydro.dimensions);
     double const timestepEta = options.gravity.timestepEta;
     return {
         {"run.timeIntegrator", options.run.timeIntegrator},
-        {"build.dimensionCount", kSpatialDimensions},
+        {"build.dimensionCount", options.hydro.dimensions},
         {"build.gravity", gravity::kBuildHasGravity},
         {"build.chemistry", bool(COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_CHEMISTRY)},
         {"build.starFormation", bool(COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_STAR_FORMATION)},
@@ -580,6 +625,7 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"chemistry.minimumSpecificEnergy", options.chemistry.minimumSpecificEnergy},
         {"hydro.enabled", options.hydro.enabled},
         {"hydro.method", options.hydro.method},
+        {"hydro.dimensions", options.hydro.dimensions},
         {"hydro.kernelFamily", options.hydro.kernelFamily},
         {"hydro.kernelDegree", options.hydro.kernelDegree},
         {"hydro.yAcceleration", options.hydro.yAcceleration},
@@ -675,10 +721,6 @@ bool processOptions(int argc, char* argv[]) {
 #if COSMICTIGER_WITH_GRAVITY
         "physical scenario: benchmark, plummer, sod, blast, rayleighTaylor, kelvinHelmholtz, disc, "
         "polytropicStar, hydroWave, jeansWave, gresho, cosmology, glass"
-#elif COSMICTIGER_DIMENSION_COUNT == 1
-        "physical scenario: sod, blast, hydroWave"
-#elif COSMICTIGER_DIMENSION_COUNT == 2
-        "physical scenario: sod, blast, rayleighTaylor, kelvinHelmholtz, hydroWave, gresho"
 #else
         "physical scenario: sod, blast, rayleighTaylor, kelvinHelmholtz, disc, "
         "polytropicStar, hydroWave, gresho"
@@ -971,7 +1013,9 @@ bool processOptions(int argc, char* argv[]) {
     hydroOpts.add_options()("hydro.enabled",
         po::value<bool>(&opts.hydro.enabled)->default_value(false), "enable gas hydrodynamics")(
         "hydro.method", po::value<std::string>(&opts.hydro.method)->default_value("sph"),
-        "hydrodynamic method: sph")("hydro.kernelFamily",
+        "hydrodynamic method: sph")("hydro.dimensions",
+        po::value<int>(&opts.hydro.dimensions)->default_value(3),
+        "active Cartesian SPH dimensions: 1, 2, or 3")("hydro.kernelFamily",
         po::value<std::string>(&opts.hydro.kernelFamily)->default_value("spline"),
         "density kernel family: spline, wendland, or ferrers")("hydro.kernelDegree",
         po::value<int>(&opts.hydro.kernelDegree)->default_value(3),
@@ -1146,6 +1190,7 @@ bool processOptions(int argc, char* argv[]) {
         detail::throwOptionError("run.test requires a build configured with BUILD_TESTING=ON\n");
     }
 #endif
+    setSpatialDimensions(opts.hydro.dimensions);
     terminal::setVerbose(opts.run.verbose);
     auto const isExplicit = [&](char const* key) { return vm.count(key) && !vm[key].defaulted(); };
     bool const hasBoxLength = isExplicit("units.boxLength");
@@ -1327,7 +1372,7 @@ bool processOptions(int argc, char* argv[]) {
         }
     }
     double const selfNeighborFloor =
-        sph_geometry::kUnitBallVolume * radial_kernel::value(hydroTable, 0.0);
+        sph_geometry::unitBallVolume() * radial_kernel::value(hydroTable, 0.0);
     if (opts.output.directory.empty()) {
         detail::throwOptionError("output.directory must not be empty\n");
     }
@@ -1392,7 +1437,7 @@ bool processOptions(int argc, char* argv[]) {
     }
     // Validate explicit selectors even for other scenarios, before allocating particles.
     opts.scenario.kelvinHelmholz.packing = scenarios::parseKelvinHelmholtzPacking(
-        opts.scenario.kelvinHelmholz.packing, kSpatialDimensions)
+        opts.scenario.kelvinHelmholz.packing, spatialDimensions())
                                                .name();
     int glassTileSide = 1;
     if (opts.scenario.cosmology.useGlass) {
@@ -1412,8 +1457,8 @@ bool processOptions(int argc, char* argv[]) {
             particle_count::roundLattice(
                 opts.run.darkMatterParticleCount, multiplicity, glassTileSide);
         size_t const gasMultiplicity = opts.run.scenario == "sod" ?
-            particle_count::kSodLatticeMultiplicity :
-            opts.run.scenario == "rayleighTaylor" ? scenarios::kRayleighTaylorLatticeMultiplicity :
+            particle_count::sodLatticeMultiplicity() :
+            opts.run.scenario == "rayleighTaylor" ? scenarios::rayleighTaylorLatticeMultiplicity() :
             opts.run.scenario == "blast"          ? 2 :
             opts.run.scenario == "gresho" && opts.initial.closePack ? 4 :
             opts.run.scenario == "cosmology"                        ? multiplicity :
@@ -1422,9 +1467,9 @@ bool processOptions(int argc, char* argv[]) {
             particle_count::roundLattice(opts.run.gasParticleCount, gasMultiplicity, glassTileSide);
         if (opts.run.scenario == "kelvinHelmholtz") {
             auto const packing = scenarios::parseKelvinHelmholtzPacking(
-                opts.scenario.kelvinHelmholz.packing, kSpatialDimensions);
+                opts.scenario.kelvinHelmholz.packing, spatialDimensions());
             auto const layout = particle_count::roundKelvinHelmholtz(
-                opts.run.gasParticleCount, packing.low.sitesPerCell(kSpatialDimensions));
+                opts.run.gasParticleCount, packing.low.sitesPerCell(spatialDimensions()));
             gasLayout = {2 * layout.side, layout.count};
         } else if (opts.run.scenario == "disc" || opts.run.scenario == "polytropicStar") {
             gasLayout.count = opts.run.gasParticleCount;
@@ -1450,7 +1495,7 @@ bool processOptions(int argc, char* argv[]) {
     double const gasResolution =
         std::pow(double(opts.run.gasParticleCount != 0 ? opts.run.gasParticleCount :
                                                          opts.initial.numberOfParticles),
-            1.0 / kSpatialDimensions);
+            1.0 / spatialDimensions());
     if (!detail::isFiniteOption(opts.run.rungMergeFraction) || opts.run.rungMergeFraction < 0.0 ||
         opts.run.rungMergeFraction > 1.0) {
         detail::throwOptionError("run.rungMergeFraction must be finite and between 0 and 1\n");
@@ -1532,31 +1577,8 @@ bool processOptions(int argc, char* argv[]) {
         detail::throwOptionError(
             "the maximum quadratic viscosity coefficient must be finite in single precision\n");
     }
-    if constexpr (kSpatialDimensions < 3) {
-        if (opts.output.units == "cosmological" || opts.output.units == "both") {
-            detail::throwOptionError(
-                "Lower-dimensional SPH supports code or CGS output, not cosmological units\n");
-        }
-        if (opts.scenario.cosmology.useGlass) {
-            detail::throwOptionError("The glass input format is three-dimensional\n");
-        }
-        if (opts.scenario.disc.centralAcceleration != 0.0 || opts.gravity.enabled ||
-            opts.chemistry.enabled || opts.starFormation.enabled) {
-            detail::throwOptionError("Lower-dimensional SPH requires gravity, central gravity, "
-                                     "chemistry and stars disabled\n");
-        }
-        if (opts.run.darkMatterParticleCount != 0) {
-            detail::throwOptionError(
-                "Lower-dimensional SPH requires run.darkMatterParticleCount=0\n");
-        }
-        if (kSpatialDimensions == 1 && opts.hydro.yAcceleration != 0.0) {
-            detail::throwOptionError("hydro.yAcceleration requires at least two dimensions\n");
-        }
-        if (kSpatialDimensions == 1 && opts.scenario.rayleighTaylor.zPlaneAcceleration != 0.0) {
-            detail::throwOptionError(
-                "scenario.rayleighTaylor.zPlaneAcceleration requires at least two dimensions\n");
-        }
-    }
+    detail::validateSpatialDimensions(opts);
+
     if (!detail::isFiniteOption(opts.hydro.heatCapacityRatio) ||
         opts.hydro.heatCapacityRatio <= 1.0) {
         detail::throwOptionError("hydro.heatCapacityRatio must be finite and greater than one\n");
@@ -1904,7 +1926,7 @@ bool processOptions(int argc, char* argv[]) {
         detail::displayOptions = true;
         terminal::section("Run configuration");
         show("run.scenario", opts.run.scenario);
-        show("build.dimensionCount", kSpatialDimensions);
+        show("build.dimensionCount", spatialDimensions());
         if (!opts.configuration.empty()) {
             show("configuration", opts.configuration);
         }

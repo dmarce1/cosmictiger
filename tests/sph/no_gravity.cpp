@@ -1,4 +1,4 @@
-/* CosmicTiger - SPH-only saved-force regression; BSL-1.0. */
+/* CosmicTiger - SPH storage, fixed-dimension and saved-force regressions; BSL-1.0. */
 
 #include <bit>
 #include <cmath>
@@ -16,12 +16,15 @@
 #include <cosmictiger/sph/particles.hpp>
 
 void sphOnlyDiagnosticsTest() {
-    static_assert(!COSMICTIGER_WITH_GRAVITY && COSMICTIGER_WITH_SPH);
+    static_assert(COSMICTIGER_WITH_SPH);
     if (particlesSize() != 0 || sphParticlesSize() != 0 || hpxSize() != 1) {
         throw std::runtime_error("SPH-only diagnostics fixture requires empty single-rank state");
     }
     auto options = getOptions();
     options.hydro.enabled = true;
+    // Exercise the runtime-off path even when gravity support is compiled into the binary.
+    options.gravity.enabled = false;
+    options.gravity.cuda = false;
     options.chemistry.enabled = false;
     options.analysis.saveForce = true;
     options.analysis.groups = false;
@@ -62,6 +65,36 @@ void sphOnlyDiagnosticsTest() {
     };
     sphParticlesResize(kParticleCount);
     checkDiagnostics(0, kParticleCount, "new allocation");
+    auto const rejectDimensionChange = [&options]() {
+        int const originalDimensions = spatialDimensions();
+        auto* const originalPositions = particlesX[kXi];
+        auto changed = options;
+        changed.hydro.dimensions = originalDimensions == 1 ? 2 : 1;
+        bool rejected = false;
+        try {
+            setOptions(changed);
+        } catch (std::invalid_argument const& error) {
+            rejected = std::string(error.what()) ==
+                "hydro.dimensions cannot be changed after particle storage allocation";
+            if (!rejected) {
+                throw;
+            }
+        }
+        if (!rejected || spatialDimensions() != originalDimensions ||
+            getOptions().hydro.dimensions != originalDimensions ||
+            particlesX[kXi] != originalPositions) {
+            throw std::runtime_error("Rejected dimension change altered allocated particle state");
+        }
+    };
+    rejectDimensionChange();
+    // A zero logical count retains allocated capacity and must retain its dimensionality.
+    sphParticlesResize(0);
+    if (particlesSize() != 0 || particlesX[kXi] == nullptr) {
+        throw std::runtime_error("Dimension-change fixture did not retain empty storage capacity");
+    }
+    rejectDimensionChange();
+    sphParticlesResize(kParticleCount);
+    checkDiagnostics(0, kParticleCount, "empty retained allocation");
     poisonDiagnostics();
     // Reusing capacity must initialize newly added logical particles as well.
     sphParticlesResize(kParticleCount / 2);

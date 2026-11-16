@@ -1,3 +1,4 @@
+// Check particle drift arithmetic, lightcones, and runtime active-axis dispatch.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -427,3 +428,31 @@ TEST(DriftCpu, MovingLightcone) {
     detail::testMovingLightcone();
 }
 #endif
+
+TEST(DriftCpu, RuntimeDimensionsIgnoreInactiveArrays) {
+    constexpr size_t kCount = 2 * NativeSimdVector<double>::size() + 1;
+    for (int dimensions : {1, 2}) {
+        SCOPED_TRACE(dimensions);
+        setSpatialDimensions(kDimensions);
+        detail::Fixture reference(kCount);
+        detail::Fixture actual = reference;
+        auto const original = actual;
+        DriftParameters parameters;
+        parameters.timestep = 0.001;
+        parameters.rung = 1;
+        reference.run(0, kCount, parameters);
+        setSpatialDimensions(dimensions);
+        cpuDriftKernel(actual.positions[kXi].data(),
+            dimensions > 1 ? actual.positions[kYi].data() : nullptr, nullptr,
+            actual.velocities.data(), actual.rungs.data(), nullptr, kCount, parameters, nullptr);
+        setSpatialDimensions(kDimensions);
+        for (size_t particle = 0; particle < kCount; ++particle) {
+            for (int axis = 0; axis < kDimensions; ++axis) {
+                auto const& expected = axis < dimensions ? reference : original;
+                EXPECT_EQ(actual.positions[axis][particle].raw(),
+                    expected.positions[axis][particle].raw());
+                EXPECT_EQ(actual.velocities[particle][axis], expected.velocities[particle][axis]);
+            }
+        }
+    }
+}

@@ -1,3 +1,4 @@
+// Precision-separated SPH operation counts for runtime spatial dimensions.
 /* CosmicTiger - SPH source-operation counts; BSL-1.0. */
 #pragma once
 
@@ -74,16 +75,27 @@ CUDA_EXPORT constexpr FlopCount positionConstructionFlops() {
 #endif
 }
 
-// Spatial-vector costs over D = kSpatialDimensions active axes. A separation, sum, difference
-// or scalar product costs one operation per axis; a·b takes D products and D − 1 sums, and
-// |a| one more root. Padded Vector3 arithmetic always executes all three components.
-inline constexpr FlopCount kVectorOperation = kSpatialDimensions;
-inline constexpr FlopCount kDotProduct = 2 * kSpatialDimensions - 1;
+// Vector arithmetic executes the fixed-capacity components, including inactive zeros.
+// A dot product takes D products and D - 1 sums, and a norm adds one square root.
+inline constexpr FlopCount kVectorOperation = kDimensions;
+inline constexpr FlopCount kDotProduct = 2 * kDimensions - 1;
 inline constexpr FlopCount kNorm = kDotProduct + 1;
 
+/// Fixed-point separation scales only the active axes; unused components are zero-filled.
+template <int dimension = 0>
+CUDA_EXPORT constexpr FlopCount separationFlops() {
+    return spatialDimensions<dimension>();
+}
+
 // Products of sph_geometry::inverseVolume and inverseGradientScale.
-inline constexpr FlopCount kInverseVolume = kSpatialDimensions - 1;
-inline constexpr FlopCount kInverseGradientScale = kSpatialDimensions == 1 ? 1 : 2;
+template <int dimension = 0>
+CUDA_EXPORT constexpr FlopCount inverseVolumeFlops() {
+    return spatialDimensions<dimension>() - 1;
+}
+template <int dimension = 0>
+CUDA_EXPORT constexpr FlopCount inverseGradientScaleFlops() {
+    return spatialDimensions<dimension>() == 1 ? 1 : 2;
+}
 
 // Costs of the expressions in sph/viscosity/monaghan.hpp. Selection and unary signs
 // are free; both expressions passed to math::select are evaluated. The pair length

@@ -1,5 +1,6 @@
 /*
  CosmicTiger - A cosmological N-Body code
+ Monaghan SPH viscosity algebra with runtime-dimensional kernel-width calibration.
  Copyright (C) 2026  Dominic C. Marcello
 
  Distributed under the Boost Software License, Version 1.0.
@@ -34,15 +35,18 @@ namespace monaghan {
 
 // Dimension-dependent cubic calibration (h/2); in 3D sqrt(5/6). Converts the common effective
 // kernel radius (2 sigma) to the historical cubic-spline smoothing length used for viscosity.
-inline constexpr double kViscosityWidthScale =
-    (kSpatialDimensions == 1 ? 0.8660254037844386 :
-                               (kSpatialDimensions == 2 ? 0.8890008890013335 : 0.9128709291752769));
+template <int dimension = 0>
+CUDA_EXPORT constexpr double viscosityWidthScale() {
+    return spatialDimensions<dimension>() == 1 ?
+        0.8660254037844386 :
+        (spatialDimensions<dimension>() == 2 ? 0.8890008890013335 : 0.9128709291752769);
+}
 
 // clang-format off
 /*
  * Derived conversion from the stored smoothing length h to the Monaghan (1992) smoothing
  * length h_M: h̃ = h/C_H is the common effective radius of docs/kernels.md and
- * h_M = k_M h̃ with the calibration k_M = kViscosityWidthScale, so
+ * h_M = k_M h̃ with the calibration k_M = viscosityWidthScale(), so
  *   h_M/h = k_M/C_H,
  * one factor per kernel launch (1/2 for the cubic spline of Monaghan (1992), section 7).
  * Symbol directory:
@@ -50,12 +54,12 @@ inline constexpr double kViscosityWidthScale =
  *   h_M → Monaghan (1992) smoothing length
  *   C_H → smoothing length per effective radius; k_M → viscosity width scale
  *   h_M/h → Monaghan to stored smoothing-length ratio (return value).
- *   Code names: smoothingLengthPerEffectiveRadius = C_H; kViscosityWidthScale = k_M.
+ *   Code names: smoothingLengthPerEffectiveRadius = C_H; viscosityWidthScale() = k_M.
  */
 // clang-format on
-template <typename Real>
+template <int dimension = 0, typename Real>
 CUDA_EXPORT constexpr Real lengthPerSupport(Real smoothingLengthPerEffectiveRadius) {
-    return Real(kViscosityWidthScale) / smoothingLengthPerEffectiveRadius;
+    return Real(viscosityWidthScale<dimension>()) / smoothingLengthPerEffectiveRadius;
 }
 
 // clang-format off

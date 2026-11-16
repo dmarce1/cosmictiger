@@ -1,3 +1,4 @@
+// Dispatch each CUDA SPH pass once to its compiled spatial specialization.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -15,7 +16,11 @@
 
 /// Execute the selected staged SPH device pass and collect reductions before releasing
 /// managed scratch storage.
-SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, CudaStream& stream) {
+namespace detail {
+
+template <int dimension>
+SphRunReturn sphRunCudaDimension(
+    SphRunParameters parameters, SphRunCudaData data, CudaStream& stream) {
     SphRunReturn result;
     SphReduction* reduction;
     CUDA_CHECK(cudaMallocManaged(&reduction, sizeof(SphReduction)));
@@ -56,13 +61,13 @@ SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, CudaSt
     if (first) {
         first = false;
         CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&smoothingBlockCount,
-            (void const*) sphCudaSmoothingLengths, kSmoothingLengthsBlockSize, 0));
+            (void const*) sphCudaSmoothingLengths<dimension>, kSmoothingLengthsBlockSize, 0));
         CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&densityBlockCount,
-            (void const*) sphCudaDensityAndGradients, kDensityAndGradientsBlockSize, 0));
+            (void const*) sphCudaDensityAndGradients<dimension>, kDensityAndGradientsBlockSize, 0));
         CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-            &hydroBlockCount, (void const*) sphCudaHydro, kHydroBlockSize, 0));
+            &hydroBlockCount, (void const*) sphCudaHydro<dimension>, kHydroBlockSize, 0));
         CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-            &rungBlockCount, (void const*) sphCudaRungs, kRungsBlockSize, 0));
+            &rungBlockCount, (void const*) sphCudaRungs<dimension>, kRungsBlockSize, 0));
         smoothingBlockCount *= cudaSmpCount();
         densityBlockCount *= cudaSmpCount();
         hydroBlockCount *= cudaSmpCount();
@@ -71,8 +76,9 @@ SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, CudaSt
     timer.start();
     switch (parameters.runType) {
     case kSphRunSmoothingLengths: {
-        sphCudaSmoothingLengths<<<smoothingBlockCount, kSmoothingLengthsBlockSize, 0,
-            stream.nativeHandle()>>>(parameters, data, reduction);
+        sphCudaSmoothingLengths<dimension>
+            <<<smoothingBlockCount, kSmoothingLengthsBlockSize, 0, stream.nativeHandle()>>>(
+                parameters, data, reduction);
         stream.checkLaunch();
         stream.wait();
         result.needsAnotherPass = reduction->pendingChanges;
@@ -80,8 +86,9 @@ SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, CudaSt
         result.maximumSmoothingLength = reduction->maximumSmoothingLength;
     } break;
     case kSphRunDensityAndGradients: {
-        sphCudaDensityAndGradients<<<densityBlockCount, kDensityAndGradientsBlockSize, 0,
-            stream.nativeHandle()>>>(parameters, data, reduction);
+        sphCudaDensityAndGradients<dimension>
+            <<<densityBlockCount, kDensityAndGradientsBlockSize, 0, stream.nativeHandle()>>>(
+                parameters, data, reduction);
         stream.checkLaunch();
         stream.wait();
         result.needsAnotherPass = reduction->pendingChanges;
@@ -93,7 +100,7 @@ SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, CudaSt
         result.illConditionedSupports = reduction->illConditionedSupports;
     } break;
     case kSphRunRungs: {
-        sphCudaRungs<<<rungBlockCount, kRungsBlockSize, 0, stream.nativeHandle()>>>(
+        sphCudaRungs<dimension><<<rungBlockCount, kRungsBlockSize, 0, stream.nativeHandle()>>>(
             parameters, data, reduction);
         stream.checkLaunch();
         stream.wait();
@@ -104,7 +111,7 @@ SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, CudaSt
         result.needsAnotherPass = reduction->pendingChanges;
     } break;
     case kSphRunHydro: {
-        sphCudaHydro<<<hydroBlockCount, kHydroBlockSize, 0, stream.nativeHandle()>>>(
+        sphCudaHydro<dimension><<<hydroBlockCount, kHydroBlockSize, 0, stream.nativeHandle()>>>(
             parameters, data, reduction);
         stream.checkLaunch();
         stream.wait();
@@ -129,4 +136,17 @@ SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, CudaSt
         "SPH GFLOP/s = %e\n", double(reduction->floatingPointOperations) * 1.0e-9 / timer.read());
 
     return result;
+}
+
+}    // namespace detail
+
+SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, CudaStream& stream) {
+    switch (spatialDimensions()) {
+    case 1:
+        return detail::sphRunCudaDimension<1>(parameters, data, stream);
+    case 2:
+        return detail::sphRunCudaDimension<2>(parameters, data, stream);
+    default:
+        return detail::sphRunCudaDimension<3>(parameters, data, stream);
+    }
 }

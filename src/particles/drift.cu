@@ -1,3 +1,4 @@
+// CUDA particle drift and optional lightcone crossing output.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -32,6 +33,9 @@ __managed__ ListType* listPtr;
 
 /// Drift selected particles with periodic position updates, optional damping, and lightcone
 /// crossing capture.
+namespace detail {
+
+template <int dimension>
 __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __restrict__ const y,
     Position* __restrict__ const z, ParticleVector<float>* const vels, char const* const rungs,
     char const* const types, ParticleInteger count, int rung, double a, double dt, double tau0,
@@ -77,17 +81,17 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
                 vz = double(vel[kZi]) * ainv;
 #endif
                 x0 = x[i].toDouble();
-                y0 = kSpatialDimensions > 1 ? y[i].toDouble() : 0.5;
-                z0 = kSpatialDimensions > 2 ? z[i].toDouble() : 0.5;
+                y0 = dimension > 1 ? y[i].toDouble() : 0.5;
+                z0 = dimension > 2 ? z[i].toDouble() : 0.5;
                 displacementX = double(vel[kXi]) * c1;
-                displacementY = kSpatialDimensions > 1 ? double(vel[kYi]) * c1 : 0.0;
-                displacementZ = kSpatialDimensions > 2 ? double(vel[kZi]) * c1 : 0.0;
+                displacementY = dimension > 1 ? double(vel[kYi]) * c1 : 0.0;
+                displacementZ = dimension > 2 ? double(vel[kZi]) * c1 : 0.0;
                 x1 = x0 + displacementX;
                 y1 = y0 + displacementY;
                 z1 = z0 + displacementZ;
                 if (drag != 0.0) {
                     double const c0 = 1.0 / (1.0 + drag * dt);
-                    for (int dim = 0; dim < kSpatialDimensions; dim++) {
+                    for (int dim = 0; dim < dimension; dim++) {
                         vel[dim] *= c0;
                     }
                 }
@@ -166,20 +170,20 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
             if constexpr (kPositionBits == 64) {
                 // Preserve sub-double motion and the original low position bits.
                 x[i] += Position(displacementX);
-                if constexpr (kSpatialDimensions > 1) {
+                if constexpr (dimension > 1) {
                     y[i] += Position(displacementY);
                 }
-                if constexpr (kSpatialDimensions > 2) {
+                if constexpr (dimension > 2) {
                     z[i] += Position(displacementZ);
                 }
             } else {
                 x[i].raw() +=
                     static_cast<PositionInteger>(llrint(remainder(displacementX, 1.0) * 0x1p32));
-                if constexpr (kSpatialDimensions > 1) {
+                if constexpr (dimension > 1) {
                     y[i].raw() += static_cast<PositionInteger>(
                         llrint(remainder(displacementY, 1.0) * 0x1p32));
                 }
-                if constexpr (kSpatialDimensions > 2) {
+                if constexpr (dimension > 2) {
                     z[i].raw() += static_cast<PositionInteger>(
                         llrint(remainder(displacementZ, 1.0) * 0x1p32));
                 }
@@ -190,7 +194,8 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
 
 /// Launch the CUDA particle drift and flush any generated lightcone entries after
 /// completion.
-void cudaDrift(
+template <int dimension>
+void cudaDriftDimension(
     int rung, double a, double dt, double tau0, double tau1, double tauMax, double drag) {
     auto const& opts = getOptions();
 #if !defined(COSMICTIGER_ENABLE_ROCKSTAR) || COSMICTIGER_ENABLE_ROCKSTAR
@@ -200,9 +205,9 @@ void cudaDrift(
     Timer tm1;
     tm1.start();
     CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &numberOfBlocks, (void const*) cudaDriftKernel, kDriftBlockSize, 0));
+        &numberOfBlocks, (void const*) cudaDriftKernel<dimension>, kDriftBlockSize, 0));
     cudaFuncAttributes attr;
-    CUDA_CHECK(cudaFuncGetAttributes(&attr, (void const*) cudaDriftKernel));
+    CUDA_CHECK(cudaFuncGetAttributes(&attr, (void const*) cudaDriftKernel<dimension>));
     numberOfBlocks *= cudaSmpCount();
     auto const rng = rung < 0 ? Pair<ParticleInteger>(0, particlesSize()) : particlesCurrentRange();
     if (rng.first == rng.second) {
@@ -235,8 +240,9 @@ void cudaDrift(
     char const* const types = opts.hydro.enabled ? particlesTy + rng.first : nullptr;
     drag = opts.run.scenario == "glass" ? std::numbers::pi : 0.0;
     CudaStream stream(cudaGetDevice());
-    cudaDriftKernel<<<numberOfBlocks, kDriftBlockSize, 0, stream.nativeHandle()>>>(x, y, z, vels,
-        rungs, types, cnt, rung, a, dt, tau0, tau1, tauMax, doLc, opts.lightcone.mapSize, drag);
+    cudaDriftKernel<dimension><<<numberOfBlocks, kDriftBlockSize, 0, stream.nativeHandle()>>>(x, y,
+        z, vels, rungs, types, cnt, rung, a, dt, tau0, tau1, tauMax, doLc, opts.lightcone.mapSize,
+        drag);
     stream.checkLaunch();
     stream.wait();
 #if !defined(COSMICTIGER_ENABLE_ROCKSTAR) || COSMICTIGER_ENABLE_ROCKSTAR
@@ -253,4 +259,18 @@ void cudaDrift(
 
 #endif
     tm1.stop();
+}
+
+}    // namespace detail
+
+void cudaDrift(
+    int rung, double a, double dt, double tau0, double tau1, double tauMax, double drag) {
+    switch (spatialDimensions()) {
+    case 1:
+        return detail::cudaDriftDimension<1>(rung, a, dt, tau0, tau1, tauMax, drag);
+    case 2:
+        return detail::cudaDriftDimension<2>(rung, a, dt, tau0, tau1, tauMax, drag);
+    default:
+        return detail::cudaDriftDimension<3>(rung, a, dt, tau0, tau1, tauMax, drag);
+    }
 }

@@ -279,9 +279,10 @@ The conversion utilities use the same grouping style:
 
 ## SPH
 
-`COSMICTIGER_DIMENSION_COUNT` defaults to 3; SPH-only builds also support
-1D and 2D Cartesian flow. See [dimensional SPH](docs/sph_dimensions.md) for
-build flags, equations, and supported scenarios.
+`--hydro.dimensions=1`, `2`, or `3` selects Cartesian SPH dimensionality at
+runtime in the same executable; the default is 3. Lower-dimensional runs disable
+self-gravity, chemistry, and stars. See [dimensional SPH](docs/sph_dimensions.md)
+for command-line examples, equations, and supported scenarios.
 
 The gas solver reconstructs density and evolves canonical entropy, using the
 [variational pressure operator](docs/variational_sph.md) with grad-H corrections

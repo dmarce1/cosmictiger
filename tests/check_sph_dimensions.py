@@ -1,4 +1,4 @@
-"""Check the dimension capability contract without configuring dependencies."""
+"""Check retirement of the compile-time SPH dimension selector."""
 import pathlib
 import subprocess
 import sys
@@ -6,26 +6,32 @@ import tempfile
 
 source = pathlib.Path(sys.argv[1]).resolve()
 features = source / "cmake/features.cmake"
-solvers = ("GRAVITY",)
 with tempfile.TemporaryDirectory(prefix="sph_dimension_config_") as directory:
     script = pathlib.Path(directory) / "check.cmake"
-    script.write_text(f'include("{features}")\n')
-    common = ["cmake", "-DCOSMICTIGER_ENABLE_CHEMISTRY=OFF", "-DCOSMICTIGER_ENABLE_STARS=OFF"]
-    common += [f"-DCOSMICTIGER_ENABLE_{solver}=OFF" for solver in solvers]
-    cases = [(str(dimension), {}, True) for dimension in (1, 2, 3)]
-    cases += [(value, {}, False) for value in ("0", "4", "-1", "2.0", "", "ON", "1;2")]
-    for dimension in (1, 2):
-        cases += [(str(dimension), {solver: "ON"}, False) for solver in solvers]
-        cases += [(str(dimension), {"SPH": "OFF"}, False),
-                  (str(dimension), {"CHEMISTRY": "ON"}, False)]
-    cases += [("3", {solver: "ON"}, True) for solver in solvers]
+    script.write_text(f'''include("{features}")
+if(DEFINED COSMICTIGER_DIMENSION_COUNT OR DEFINED CACHE{{COSMICTIGER_DIMENSION_COUNT}})
+    message(FATAL_ERROR "Retired dimension selector remained defined")
+endif()
+''')
+    capabilities = ({}, {"GRAVITY": "OFF", "CHEMISTRY": "OFF", "STARS": "OFF"},
+                    {"SPH": "OFF", "GRAVITY": "ON"})
+    cases = [(dimension, changes, True) for dimension in (None, "3")
+             for changes in capabilities]
+    cases += [(value, {}, False) for value in ("1", "2", "0", "4", "-1", "2.0", "", "ON", "1;2")]
     for dimension, changes, succeeds in cases:
-        command = common + [f"-DCOSMICTIGER_DIMENSION_COUNT={dimension}"]
+        command = ["cmake"]
+        if dimension is not None:
+            command.append(f"-DCOSMICTIGER_DIMENSION_COUNT={dimension}")
         command += [f"-DCOSMICTIGER_ENABLE_{key}={value}" for key, value in changes.items()]
         result = subprocess.run(command + ["-P", str(script)], capture_output=True, text=True)
+        output = result.stdout + result.stderr
         if (result.returncode == 0) != succeeds:
-            raise RuntimeError(f"Unexpected configure result D={dimension}, {changes}:\n{result.stdout}\n{result.stderr}")
-    result = subprocess.run(common + ["-P", str(script)], capture_output=True, text=True, check=True)
-    if "spatial dimensions: 3" not in result.stdout:
-        raise RuntimeError("Default dimension is not 3")
-    print(f"{len(cases) + 1} dimension capability checks passed")
+            raise RuntimeError(f"Unexpected configure result D={dimension}, {changes}:\n{output}")
+        if succeeds:
+            if "SPH dimensions: runtime selection (1, 2, or 3)" not in output:
+                raise RuntimeError(f"Missing runtime dimension guidance:\n{output}")
+            if dimension == "3" and "Removing retired COSMICTIGER_DIMENSION_COUNT=3" not in output:
+                raise RuntimeError(f"Missing migration notice:\n{output}")
+        elif "COSMICTIGER_DIMENSION_COUNT is retired" not in output or "--hydro.dimensions" not in output:
+            raise RuntimeError(f"Missing migration error:\n{output}")
+    print(f"{len(cases)} dimension-selector migration checks passed")

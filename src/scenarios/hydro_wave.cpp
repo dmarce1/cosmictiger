@@ -1,3 +1,4 @@
+// Initialize periodic hydrodynamic waves in the runtime SPH dimension.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -35,8 +36,8 @@ ScenarioPlan initializeHydroWave() {
     ParticleInteger i = 0;
     double const dx = 1.0 / ndim;
     for (int ix = 0; ix < ndim; ix++) {
-        for (int iy = 0; iy < (kSpatialDimensions >= 2 ? ndim : 1); iy++) {
-            for (int iz = 0; iz < (kSpatialDimensions >= 3 ? ndim : 1); iz++) {
+        for (int iy = 0; iy < (spatialDimensions() >= 2 ? ndim : 1); iy++) {
+            for (int iz = 0; iz < (spatialDimensions() >= 3 ? ndim : 1); iz++) {
                 double x = (ix + 0.5) * dx;
                 double y = (iy + 0.5) * dx;
                 double z = (iz + 0.5) * dx;
@@ -51,17 +52,17 @@ ScenarioPlan initializeHydroWave() {
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
                 sphParticlesPosition(kXi, i) = x;
-                if constexpr (kSpatialDimensions > 1) {
-                    sphParticlesPosition(kYi, i) = kSpatialDimensions >= 2 ? y : 0.5;
+                if (spatialDimensions() > 1) {
+                    sphParticlesPosition(kYi, i) = spatialDimensions() >= 2 ? y : 0.5;
                 }
-                if constexpr (kSpatialDimensions > 2) {
-                    sphParticlesPosition(kZi, i) = kSpatialDimensions >= 3 ? z : 0.5;
+                if (spatialDimensions() > 2) {
+                    sphParticlesPosition(kZi, i) = spatialDimensions() >= 3 ? z : 0.5;
                 }
                 sphParticlesVelocity(kXi, i) = 0.f;
-                if constexpr (kSpatialDimensions > 1) {
+                if (spatialDimensions() > 1) {
                     sphParticlesVelocity(kYi, i) = 0.f;
                 }
-                if constexpr (kSpatialDimensions > 2) {
+                if (spatialDimensions() > 2) {
                     sphParticlesVelocity(kZi, i) = 0.f;
                 }
                 sphParticlesRung(i) = 0;

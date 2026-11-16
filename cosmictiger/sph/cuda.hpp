@@ -1,5 +1,6 @@
 /*
  CosmicTiger - A cosmological N-Body code
+ CUDA SPH launch data, neighbor buffers, and smoothing-length solves.
  Copyright (C) 2026  Dominic C. Marcello
 
  Distributed under the Boost Software License, Version 1.0.
@@ -71,12 +72,16 @@ SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, CudaSt
 
 #ifdef __CUDACC__
 
+template <int dimension = kDimensions>
 __global__ void sphCudaSmoothingLengths(
     SphRunParameters parameters, SphRunCudaData data, SphReduction* reduction);
+template <int dimension = kDimensions>
 __global__ void sphCudaDensityAndGradients(
     SphRunParameters parameters, SphRunCudaData data, SphReduction* reduction);
+template <int dimension = kDimensions>
 __global__ void sphCudaHydro(
     SphRunParameters parameters, SphRunCudaData data, SphReduction* reduction);
+template <int dimension = kDimensions>
 __global__ void sphCudaRungs(
     SphRunParameters parameters, SphRunCudaData data, SphReduction* reduction);
 #endif
@@ -144,7 +149,7 @@ __device__ inline void recordSphGpuFlops(sph_flops::Counter const& flops, SphRed
  */
 // clang-format on
 
-template <int blockSize, class Neighbors>
+template <int dimension, int blockSize, class Neighbors>
 inline __device__ bool solveSphSmoothingLength(float& h𞁑, float hₘᵢₙ, float hₘₐₓ, float Nₛₑₜ,
     Neighbors const& neighbors, sph_geometry::SpatialVector<Position> const& x𞁑,
     Vector3<Position> const& paddedX_a, SphBox const& neighborSearchBox,
@@ -158,7 +163,7 @@ inline __device__ bool solveSphSmoothingLength(float& h𞁑, float hₘᵢₙ, f
     __syncthreads();
     float lower = hₘᵢₙ;
     float upper = hₘₐₓ;
-    float const ΣWₛₑₜ = sphTargetKernelSum(Nₛₑₜ);
+    float const ΣWₛₑₜ = sphTargetKernelSum<dimension>(Nₛₑₜ);
     flops += 1;
     for (int iteration = 0; iteration < 128; iteration++) {
         int boxExceeded = false;
@@ -187,10 +192,10 @@ inline __device__ bool solveSphSmoothingLength(float& h𞁑, float hₘᵢₙ, f
         for (int neighborIndex = threadIndex; neighborIndex < neighbors.size();
             neighborIndex += runtimeBlockSize) {
             auto const& neighbor = neighbors[neighborIndex];
-            auto const r𞁑𞁓 = distance(x𞁑, neighbor.position);
+            auto const r𞁑𞁓 = distance<dimension>(x𞁑, neighbor.position);
             float const q𞁑𞁓 = r𞁑𞁓.norm() * ih𞁑;
             // Fixed distances, dot, root, normalized radius.
-            flops += sph_flops::kVectorOperation + sph_flops::kNorm + 1;
+            flops += sph_flops::separationFlops<dimension>() + sph_flops::kNorm + 1;
             if (q𞁑𞁓 < 1.0f) {
                 ΣW += kernelW(q𞁑𞁓);
                 dΣW_dh𞁑 -= q𞁑𞁓 * dkernelWDq(q𞁑𞁓) * ih𞁑;

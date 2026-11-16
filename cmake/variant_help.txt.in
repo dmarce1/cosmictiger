@@ -1,4 +1,4 @@
-Spatial dimensions: @COSMICTIGER_DIMENSION_COUNT@
+SPH spatial dimensions: runtime --hydro.dimensions=1, 2, or 3 (default 3)
 CosmicTiger build targets
 
   cosmictiger       Build the application with the enabled capabilities.

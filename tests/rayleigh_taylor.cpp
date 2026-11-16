@@ -30,7 +30,7 @@
 
 // Ordinary host storage lets this test call the production initializer without
 // starting HPX, allocating managed memory, or running the evolution driver.
-Array<Position*, kSpatialDimensions> particlesX;
+Array<Position*, kDimensions> particlesX;
 ParticleVector<float>* particlesV;
 char* particlesR;
 ParticleInteger* sphParticlesParticleIndices;
@@ -43,11 +43,13 @@ float* sphParticlesSmoothingLengths;
 namespace detail {
 
 constexpr double kPi = 3.141592653589793238462643383279502884;
-constexpr int kVerticalAxis = kSpatialDimensions == 2 ? kYi : kZi;
+int verticalAxis() {
+    return spatialDimensions() == 2 ? kYi : kZi;
+}
 constexpr int kMirroredSideCount = 2;
 constexpr int kQuarterCount = 4;
 Options options;
-std::array<std::vector<Position>, kSpatialDimensions> positions;
+std::array<std::vector<Position>, kDimensions> positions;
 std::vector<ParticleVector<float>> velocities;
 std::vector<char> rungs;
 std::vector<ParticleInteger> indices;
@@ -75,6 +77,7 @@ Options const& getOptions() {
 }
 
 void setOptions(Options const& options) {
+    setSpatialDimensions(options.hydro.dimensions);
     detail::options = options;
 }
 
@@ -94,7 +97,7 @@ ParticleInteger particlesSize() {
 
 void sphParticlesResize(ParticleInteger count, bool) {
     ParticleInteger const oldCount = sphParticlesSize();
-    for (int dim = 0; dim < kSpatialDimensions; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         detail::positions[dim].resize(count);
         particlesX[dim] = detail::positions[dim].data();
     }
@@ -119,6 +122,7 @@ void testInitialization(size_t requestedCount, ParticleInteger expectedCount, do
     auto const& opts = getOptions();
     sphParticlesResize(0);
     Options configured{};
+    configured.hydro.dimensions = spatialDimensions();
     configured.run.gasParticleCount = requestedCount;
     configured.hydro.enabled = true;
     configured.hydro.heatCapacityRatio = 5.0 / 3.0;
@@ -133,11 +137,11 @@ void testInitialization(size_t requestedCount, ParticleInteger expectedCount, do
     double const mass = opts.initial.gasMass;
     ParticleInteger lightCount = 0;
     ParticleInteger heavyCount = 0;
-    std::set<std::array<PositionInteger, kSpatialDimensions>> occupied;
+    std::set<std::array<PositionInteger, kDimensions>> occupied;
     std::map<double, double> pressureByHeight;
     for (ParticleInteger i = 0; i < sphParticlesSize(); i++) {
         double const x = sphParticlesPosition(kXi, i).toDouble();
-        double const height = sphParticlesPosition(kVerticalAxis, i).toDouble();
+        double const height = sphParticlesPosition(verticalAxis(), i).toDouble();
         require(height > 0.0 && height < 1.0 && height != 0.25 && height != 0.5 && height != 0.75,
             "particles lie inside material layers away from symmetry planes");
         bool const heavy = height < 0.25 || height > 0.75;
@@ -147,8 +151,8 @@ void testInitialization(size_t requestedCount, ParticleInteger expectedCount, do
         } else {
             lightCount++;
         }
-        std::array<PositionInteger, kSpatialDimensions> key{};
-        for (int dim = 0; dim < kSpatialDimensions; dim++) {
+        std::array<PositionInteger, kDimensions> key{};
+        for (int dim = 0; dim < spatialDimensions(); dim++) {
             key[dim] = sphParticlesPosition(dim, i).raw();
             double const coordinate = sphParticlesPosition(dim, i).toDouble();
             require(coordinate > 0.0 && coordinate < 1.0, "particle lies inside the unit box");
@@ -168,13 +172,13 @@ void testInitialization(size_t requestedCount, ParticleInteger expectedCount, do
             requireClose("pressure depends only on height", pressure, position->second);
         }
         double const support = sphParticlesSmoothingLength(i);
-        double const supportVolume = kSpatialDimensions == 2 ?
+        double const supportVolume = spatialDimensions() == 2 ?
             kPi * support * support :
             4.0 * kPi / 3.0 * support * support * support;
         requireClose("support radius encodes layer density",
             mass * configured.hydro.neighborNumber / supportVolume, density);
-        for (int dim = 0; dim < kSpatialDimensions; dim++) {
-            if (dim != kVerticalAxis) {
+        for (int dim = 0; dim < spatialDimensions(); dim++) {
+            if (dim != verticalAxis()) {
                 requireClose("zero transverse velocity", sphParticlesVelocity(dim, i), 0.0);
             }
         }
@@ -184,7 +188,7 @@ void testInitialization(size_t requestedCount, ParticleInteger expectedCount, do
         double const transverseSeed =
             1.0 + 0.5 * std::cos(phase) + std::cos(4.0 * phase) + 0.5 * std::cos(7.0 * phase);
         double const expectedVelocity = 0.025 * transverseSeed * std::sin(2.0 * kPi * height);
-        requireClose("normal velocity perturbation", sphParticlesVelocity(kVerticalAxis, i),
+        requireClose("normal velocity perturbation", sphParticlesVelocity(verticalAxis(), i),
             expectedVelocity, 2.0e-8);
         require(sphParticlesRung(i) == 0, "initial rung");
     }
@@ -193,20 +197,20 @@ void testInitialization(size_t requestedCount, ParticleInteger expectedCount, do
     requireClose("heavy layer mass", mass * heavyCount, 1.0);
     requireClose("total mass", mass * sphParticlesSize(), 1.5);
     for (ParticleInteger i = 0; i < sphParticlesSize(); i += kMirroredSideCount) {
-        require(sphParticlesPosition(kVerticalAxis, i) < Position(0.5),
+        require(sphParticlesPosition(verticalAxis(), i) < Position(0.5),
             "lower particle precedes its mirror");
-        for (int dim = 0; dim < kSpatialDimensions; dim++) {
-            if (dim != kVerticalAxis) {
+        for (int dim = 0; dim < spatialDimensions(); dim++) {
+            if (dim != verticalAxis()) {
                 require(
                     sphParticlesPosition(dim, i).raw() == sphParticlesPosition(dim, i + 1).raw(),
                     "mirrored pairs share transverse positions");
             }
         }
-        require(PositionInteger(sphParticlesPosition(kVerticalAxis, i).raw() +
-                    sphParticlesPosition(kVerticalAxis, i + 1).raw()) == 0U,
+        require(PositionInteger(sphParticlesPosition(verticalAxis(), i).raw() +
+                    sphParticlesPosition(verticalAxis(), i + 1).raw()) == 0U,
             "mirrored vertical coordinates are exact in fixed point");
         require(
-            sphParticlesVelocity(kVerticalAxis, i) == -sphParticlesVelocity(kVerticalAxis, i + 1),
+            sphParticlesVelocity(verticalAxis(), i) == -sphParticlesVelocity(verticalAxis(), i + 1),
             "normal velocities are exactly odd about the midplane");
         require(sphParticlesInternalEnergy(i) == sphParticlesInternalEnergy(i + 1) &&
                 sphParticlesSmoothingLength(i) == sphParticlesSmoothingLength(i + 1),
@@ -236,42 +240,57 @@ void testUnresolvedLattice() {
 
 }    // namespace detail
 
-TEST(RayleighTaylor, Resolution8) {
+class RayleighTaylor : public testing::TestWithParam<int> {
+protected:
+    void SetUp() override {
+        setSpatialDimensions(GetParam());
+        detail::options.hydro.dimensions = GetParam();
+    }
+
+    void TearDown() override {
+        sphParticlesResize(0);
+        setSpatialDimensions(kDimensions);
+        detail::options.hydro.dimensions = kDimensions;
+    }
+};
+
+TEST_P(RayleighTaylor, Resolution8) {
     for (double acceleration : {0.5, 1000.0}) {
         detail::testInitialization(
-            particle_count::spatialPower(8), kSpatialDimensions == 2 ? 96 : 768, acceleration);
+            particle_count::spatialPower(8), spatialDimensions() == 2 ? 96 : 768, acceleration);
     }
 }
 
-TEST(RayleighTaylor, Resolution16) {
+TEST_P(RayleighTaylor, Resolution16) {
     for (double acceleration : {0.5, 1000.0}) {
         detail::testInitialization(
-            particle_count::spatialPower(16), kSpatialDimensions == 2 ? 384 : 6144, acceleration);
+            particle_count::spatialPower(16), spatialDimensions() == 2 ? 384 : 6144, acceleration);
     }
 }
 
-TEST(RayleighTaylor, Resolution32) {
+TEST_P(RayleighTaylor, Resolution32) {
     for (double acceleration : {0.5, 1000.0}) {
-        detail::testInitialization(
-            particle_count::spatialPower(32), kSpatialDimensions == 2 ? 1176 : 32928, acceleration);
+        detail::testInitialization(particle_count::spatialPower(32),
+            spatialDimensions() == 2 ? 1176 : 32928, acceleration);
     }
 }
 
-TEST(RayleighTaylor, CompleteCellRounding) {
-    constexpr ParticleInteger kCellPopulation = kSpatialDimensions == 2 ? 24 : 96;
-    detail::testInitialization(1, kCellPopulation, 0.5);
-    detail::testInitialization(kCellPopulation, kCellPopulation, 0.5);
+TEST_P(RayleighTaylor, CompleteCellRounding) {
+    ParticleInteger const cellPopulation = scenarios::rayleighTaylorLatticeMultiplicity();
+    detail::testInitialization(1, cellPopulation, 0.5);
+    detail::testInitialization(cellPopulation, cellPopulation, 0.5);
     detail::testInitialization(
-        kCellPopulation + 1, kCellPopulation * (kSpatialDimensions == 2 ? 4 : 8), 0.5);
+        cellPopulation + 1, cellPopulation * (spatialDimensions() == 2 ? 4 : 8), 0.5);
 }
 
-TEST(RayleighTaylor, UnresolvedLattice) {
+TEST_P(RayleighTaylor, UnresolvedLattice) {
     detail::testUnresolvedLattice();
 }
 
-TEST(RayleighTaylor, RejectsParticleIndexOverflow) {
+TEST_P(RayleighTaylor, RejectsParticleIndexOverflow) {
     sphParticlesResize(0);
     Options configured{};
+    configured.hydro.dimensions = spatialDimensions();
     configured.run.gasParticleCount = size_t(std::numeric_limits<ParticleInteger>::max());
     configured.scenario.rayleighTaylor.zPlaneAcceleration = 0.5;
     setOptions(configured);
@@ -279,10 +298,11 @@ TEST(RayleighTaylor, RejectsParticleIndexOverflow) {
     EXPECT_EQ(sphParticlesSize(), 0);
 }
 
-TEST(RayleighTaylor, RequiresDrivingAcceleration) {
+TEST_P(RayleighTaylor, RequiresDrivingAcceleration) {
     for (double acceleration : {0.0, -0.5}) {
         sphParticlesResize(0);
         Options configured{};
+        configured.hydro.dimensions = spatialDimensions();
         configured.run.gasParticleCount = 512;
         configured.scenario.rayleighTaylor.zPlaneAcceleration = acceleration;
         setOptions(configured);
@@ -291,6 +311,8 @@ TEST(RayleighTaylor, RequiresDrivingAcceleration) {
     }
 }
 
-TEST(RayleighTaylor, MidplaneAcceleration) {
+TEST_P(RayleighTaylor, MidplaneAcceleration) {
     detail::testRayleighTaylorMidplaneAcceleration();
 }
+
+INSTANTIATE_TEST_SUITE_P(RuntimeDimensions, RayleighTaylor, testing::Values(2, 3));

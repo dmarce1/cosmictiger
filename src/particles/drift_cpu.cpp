@@ -1,3 +1,4 @@
+// CPU particle drift over the runtime-selected spatial axes.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026 Dominic C. Marcello
@@ -80,9 +81,12 @@ void appendDriftLightconeEntries(Vector3<double> const& before, Vector3<double> 
 
 /// Drift the selected CPU particle range with periodic fixed-point updates and optional
 /// damping/lightcone capture.
-void cpuDriftKernel(Position* x, Position* y, Position* z, ParticleVector<float>* velocities,
-    char const* rungs, char const* types, size_t count, DriftParameters const& parameters,
-    std::vector<LightconeEntry>* entries) {
+namespace detail {
+
+template <int dimension>
+void cpuDriftKernelDimension(Position* x, Position* y, Position* z,
+    ParticleVector<float>* velocities, char const* rungs, char const* types, size_t count,
+    DriftParameters const& parameters, std::vector<LightconeEntry>* entries) {
     if (count == 0) {
         return;
     }
@@ -103,7 +107,7 @@ void cpuDriftKernel(Position* x, Position* y, Position* z, ParticleVector<float>
         using DriftPack = NativeSimdVector<double>;
         constexpr size_t kWidth = DriftPack::size();
         for (; count - index >= kWidth; index += kWidth) {
-            for (int dim = 0; dim < kSpatialDimensions; ++dim) {
+            for (int dim = 0; dim < dimension; ++dim) {
                 DriftPack const velocity([&](auto lane) {
                     size_t const particle = index + lane;
                     return parameters.rung < 0 || rungs[particle] == parameters.rung ?
@@ -134,13 +138,13 @@ void cpuDriftKernel(Position* x, Position* y, Position* z, ParticleVector<float>
         if (parameters.rung >= 0 && rungs[index] != parameters.rung) {
             continue;
         }
-        Vector3<double> before;
-        Vector3<double> after;
-        Vector3<double> displacement;
+        Vector3<double> before(0.5);
+        Vector3<double> after(0.5);
+        Vector3<double> displacement(0.0);
 #if !defined(COSMICTIGER_ENABLE_ROCKSTAR) || COSMICTIGER_ENABLE_ROCKSTAR
         auto const driftVelocity = velocities[index];
 #endif
-        for (int dim = 0; dim < kSpatialDimensions; ++dim) {
+        for (int dim = 0; dim < dimension; ++dim) {
             double const velocity = velocities[index][dim];
             before[dim] = positions[dim][index].toDouble();
             after[dim] = std::fma(velocity, driftFactor, before[dim]);
@@ -156,7 +160,7 @@ void cpuDriftKernel(Position* x, Position* y, Position* z, ParticleVector<float>
                 before, after, driftVelocity, velocities[index], type, parameters, *entries);
         }
 #endif
-        for (int dim = 0; dim < kSpatialDimensions; ++dim) {
+        for (int dim = 0; dim < dimension; ++dim) {
             if constexpr (kPositionBits == 64) {
                 positions[dim][index] += Position(displacement[dim]);
             } else {
@@ -164,5 +168,23 @@ void cpuDriftKernel(Position* x, Position* y, Position* z, ParticleVector<float>
                     std::llrint(std::remainder(displacement[dim], 1.0) * 0x1p32));
             }
         }
+    }
+}
+
+}    // namespace detail
+
+void cpuDriftKernel(Position* x, Position* y, Position* z, ParticleVector<float>* velocities,
+    char const* rungs, char const* types, size_t count, DriftParameters const& parameters,
+    std::vector<LightconeEntry>* entries) {
+    switch (spatialDimensions()) {
+    case 1:
+        return detail::cpuDriftKernelDimension<1>(
+            x, y, z, velocities, rungs, types, count, parameters, entries);
+    case 2:
+        return detail::cpuDriftKernelDimension<2>(
+            x, y, z, velocities, rungs, types, count, parameters, entries);
+    default:
+        return detail::cpuDriftKernelDimension<3>(
+            x, y, z, velocities, rungs, types, count, parameters, entries);
     }
 }

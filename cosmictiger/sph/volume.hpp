@@ -1,5 +1,6 @@
 /*
  CosmicTiger - A cosmological N-Body code
+ SPH weighted-volume and grad-H algebra for the active spatial dimension.
  Copyright (C) 2026  Dominic C. Marcello
 
  Distributed under the Boost Software License, Version 1.0.
@@ -64,10 +65,10 @@ inline constexpr float kMinimumWellConditionedOmega = 0.1f;
  *   Code names: wʹ = w′; ih = h⁻¹.
  */
 // clang-format on
-template <typename Real>
+template <int dimension = 0, typename Real>
 CUDA_EXPORT inline Real kernelSupportDerivative(Real w, Real wʹ, Real q, Real ih) {
-    return -(math::broadcast<Real>(kSpatialDimensions) * w + q * wʹ) *
-        sph_geometry::inverseGradientScale(ih);
+    return -(math::broadcast<Real>(spatialDimensions<dimension>()) * w + q * wʹ) *
+        sph_geometry::inverseGradientScale<dimension>(ih);
 }
 
 // grad_i W(rᵢⱼ, h) = F rᵢⱼ with F = w'(q)/(h^(D+1) r); the caller supplies r > 0.
@@ -81,9 +82,9 @@ CUDA_EXPORT inline Real kernelSupportDerivative(Real w, Real wʹ, Real q, Real i
  *   Code names: wʹ = w′; ih = h⁻¹.
  */
 // clang-format on
-template <typename Real>
+template <int dimension = 0, typename Real>
 CUDA_EXPORT inline Real kernelGradientFactor(Real wʹ, Real ih, Real r) {
-    return wʹ * sph_geometry::inverseGradientScale(ih) / r;
+    return wʹ * sph_geometry::inverseGradientScale<dimension>(ih) / r;
 }
 
 // One sink's neighbor sums at fixed h, including the self term.
@@ -142,9 +143,9 @@ CUDA_EXPORT inline SupportSums<Real> equalWeightSupportSums(Real Σw, Real Σqw�
  *   Code names: ih = h⁻¹.
  */
 // clang-format on
-template <typename Real>
+template <int dimension = 0, typename Real>
 CUDA_EXPORT inline Real numberDensity(SupportSums<Real> const& sums, Real ih) {
-    return sums.numberSum * sph_geometry::inverseVolume(ih);
+    return sums.numberSum * sph_geometry::inverseVolume<dimension>(ih);
 }
 
 // clang-format off
@@ -157,10 +158,11 @@ CUDA_EXPORT inline Real numberDensity(SupportSums<Real> const& sums, Real ih) {
  *   Code names: ih = h⁻¹.
  */
 // clang-format on
-template <typename Real>
+template <int dimension = 0, typename Real>
 CUDA_EXPORT inline Real numberDensityDerivative(SupportSums<Real> const& sums, Real ih) {
-    return -(math::broadcast<Real>(kSpatialDimensions) * sums.numberSum + sums.numberMoment) *
-        sph_geometry::inverseGradientScale(ih);
+    return -(math::broadcast<Real>(spatialDimensions<dimension>()) * sums.numberSum +
+               sums.numberMoment) *
+        sph_geometry::inverseGradientScale<dimension>(ih);
 }
 
 // clang-format off
@@ -173,9 +175,9 @@ CUDA_EXPORT inline Real numberDensityDerivative(SupportSums<Real> const& sums, R
  *   Code names: ih = h⁻¹.
  */
 // clang-format on
-template <typename Real>
+template <int dimension = 0, typename Real>
 CUDA_EXPORT inline Real weightedDensity(SupportSums<Real> const& sums, Real ih) {
-    return sums.weightedSum * sph_geometry::inverseVolume(ih);
+    return sums.weightedSum * sph_geometry::inverseVolume<dimension>(ih);
 }
 
 // clang-format off
@@ -188,10 +190,11 @@ CUDA_EXPORT inline Real weightedDensity(SupportSums<Real> const& sums, Real ih) 
  *   Code names: ih = h⁻¹.
  */
 // clang-format on
-template <typename Real>
+template <int dimension = 0, typename Real>
 CUDA_EXPORT inline Real weightedDensityDerivative(SupportSums<Real> const& sums, Real ih) {
-    return -(math::broadcast<Real>(kSpatialDimensions) * sums.weightedSum + sums.weightedMoment) *
-        sph_geometry::inverseGradientScale(ih);
+    return -(math::broadcast<Real>(spatialDimensions<dimension>()) * sums.weightedSum +
+               sums.weightedMoment) *
+        sph_geometry::inverseGradientScale<dimension>(ih);
 }
 
 // Vᵢ = xᵢ / yᵢ.
@@ -236,9 +239,10 @@ CUDA_EXPORT inline Real volumeDensity(Real mᵢ, Real xᵢ, Real yᵢ) {
  *   Σw → number sum; Σqw′ → number moment; Ωᵢ → return value.
  */
 // clang-format on
-template <typename Real>
+template <int dimension = 0, typename Real>
 CUDA_EXPORT inline Real supportJacobian(SupportSums<Real> const& sums) {
-    return -sums.numberMoment / (math::broadcast<Real>(kSpatialDimensions) * sums.numberSum);
+    return -sums.numberMoment /
+        (math::broadcast<Real>(spatialDimensions<dimension>()) * sums.numberSum);
 }
 
 // ζᵢ = h/(D n Ω) dy/dh = (D sum x w + sum x q w') / sum q w', in units of x.
@@ -254,9 +258,10 @@ CUDA_EXPORT inline Real supportJacobian(SupportSums<Real> const& sums) {
  *   Σqw′ → number moment; ζᵢ → return value.
  */
 // clang-format on
-template <typename Real>
+template <int dimension = 0, typename Real>
 CUDA_EXPORT inline Real weightedSupportCorrection(SupportSums<Real> const& sums) {
-    return (math::broadcast<Real>(kSpatialDimensions) * sums.weightedSum + sums.weightedMoment) /
+    return (math::broadcast<Real>(spatialDimensions<dimension>()) * sums.weightedSum +
+               sums.weightedMoment) /
         sums.numberMoment;
 }
 
@@ -308,13 +313,14 @@ struct GradHCorrection {
 
 /// Return free-support grad-h factors, or neutral corrections for a constrained smoothing
 /// length.
-template <typename Real>
+template <int dimension = 0, typename Real>
 CUDA_EXPORT inline GradHCorrection<Real> gradHCorrection(
     SupportSums<Real> const& sums, SupportConstraint constraint) {
     if (constraint != SupportConstraint::Free) {
         return GradHCorrection<Real>{math::broadcast<Real>(1), math::broadcast<Real>(0)};
     }
-    return GradHCorrection<Real>{supportJacobian(sums), weightedSupportCorrection(sums)};
+    return GradHCorrection<Real>{
+        supportJacobian<dimension>(sums), weightedSupportCorrection<dimension>(sums)};
 }
 
 // Inspect the exponent bits: -ffast-math may fold std::isfinite to true.

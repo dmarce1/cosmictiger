@@ -1,3 +1,4 @@
+// Initialize Gresho vortices in two or three runtime spatial dimensions.
 #include <cmath>
 #include <limits>
 #include <stdexcept>
@@ -29,8 +30,8 @@ ScenarioPlan initializeGresho() {
     sphParticlesResize(count);
     ParticleInteger i = 0;
     for (ParticleInteger ix = 0; ix < ndim; ix++) {
-        for (ParticleInteger iy = 0; iy < (kSpatialDimensions >= 2 ? ndim : 1); iy++) {
-            for (ParticleInteger iz = 0; iz < (kSpatialDimensions >= 3 ? ndim : 1); iz++) {
+        for (ParticleInteger iy = 0; iy < (spatialDimensions() >= 2 ? ndim : 1); iy++) {
+            for (ParticleInteger iz = 0; iz < (spatialDimensions() >= 3 ? ndim : 1); iz++) {
                 for (int phase = 0; phase < (opts.initial.closePack ? 4 : 1); ++phase) {
                     auto const position =
                         greshoLatticePosition(ix, iy, iz, phase, ndim, opts.initial.closePack);
@@ -42,17 +43,17 @@ ScenarioPlan initializeGresho() {
                         radius > 0.0 ? state.azimuthalVelocity / radius : 0.0;
                     sphParticlesSmoothingLength(i) = smoothingLength;
                     sphParticlesPosition(kXi, i) = position[0];
-                    if constexpr (kSpatialDimensions > 1) {
-                        sphParticlesPosition(kYi, i) = kSpatialDimensions >= 2 ? position[1] : 0.5;
+                    if (spatialDimensions() > 1) {
+                        sphParticlesPosition(kYi, i) = spatialDimensions() >= 2 ? position[1] : 0.5;
                     }
-                    if constexpr (kSpatialDimensions > 2) {
-                        sphParticlesPosition(kZi, i) = kSpatialDimensions >= 3 ? position[2] : 0.5;
+                    if (spatialDimensions() > 2) {
+                        sphParticlesPosition(kZi, i) = spatialDimensions() >= 3 ? position[2] : 0.5;
                     }
                     sphParticlesVelocity(kXi, i) = -angularVelocity * offsetY;
-                    if constexpr (kSpatialDimensions > 1) {
+                    if (spatialDimensions() > 1) {
                         sphParticlesVelocity(kYi, i) = angularVelocity * offsetX;
                     }
-                    if constexpr (kSpatialDimensions > 2) {
+                    if (spatialDimensions() > 2) {
                         sphParticlesVelocity(kZi, i) = 0.0;
                     }
                     sphParticlesRung(i) = 0;

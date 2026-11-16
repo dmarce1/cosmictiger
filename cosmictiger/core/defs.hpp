@@ -1,4 +1,4 @@
-
+// Shared compile-time capacities and runtime spatial dimension selection.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -11,6 +11,9 @@
 #define DEFS_HPP_
 
 #include <cstddef>
+#include <stdexcept>
+
+#include <cosmictiger/cuda/cuda_export.hpp>
 
 // #define LONG_LONG_PART_INT
 
@@ -25,14 +28,42 @@ inline constexpr int kSphTreeNodeAllocationSize = 4;
 #define DOMAINS_CHECK
 #endif
 
-// Legacy Cartesian geometry/scratch uses three axes. Particle storage and
-// spatial operators use kSpatialDimensions; standalone math consumers default to 3D.
-#ifndef COSMICTIGER_DIMENSION_COUNT
-#define COSMICTIGER_DIMENSION_COUNT 3
-#endif
-inline constexpr int kSpatialDimensions = COSMICTIGER_DIMENSION_COUNT;
-static_assert(kSpatialDimensions >= 1 && kSpatialDimensions <= 3);
+// Fixed XYZ storage capacity; active Cartesian axes are selected once at startup.
 inline constexpr int kDimensions = 3;
+namespace detail {
+inline int spatialDimensionCount = kDimensions;
+#ifdef __CUDACC__
+extern __device__ __constant__ int deviceSpatialDimensionCount;
+#endif
+}    // namespace detail
+
+CUDA_EXPORT inline int spatialDimensions() {
+#ifdef __CUDA_ARCH__
+    return detail::deviceSpatialDimensionCount;
+#else
+    return detail::spatialDimensionCount;
+#endif
+}
+
+// Zero selects runtime dispatch for shared callers; source-local kernels instantiate
+// only dimensions 1, 2, and 3 so their inner loops and scaling are compile-time fixed.
+template <int dimension>
+CUDA_EXPORT constexpr int spatialDimensions() {
+    static_assert(dimension >= 0 && dimension <= kDimensions);
+    if constexpr (dimension == 0) {
+        return spatialDimensions();
+    } else {
+        return dimension;
+    }
+}
+
+// Set on every locality before particle allocation and upload with the kernel tables.
+inline void setSpatialDimensions(int dimensions) {
+    if (dimensions < 1 || dimensions > kDimensions) {
+        throw std::invalid_argument("hydro.dimensions must be 1, 2, or 3");
+    }
+    detail::spatialDimensionCount = dimensions;
+}
 inline constexpr int kXi = 0;
 inline constexpr int kYi = 1;
 inline constexpr int kZi = 2;

@@ -1,3 +1,4 @@
+// Shared fixed-capacity particle vectors and species identifiers.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026 Dominic C. Marcello
@@ -8,15 +9,12 @@
 
 #pragma once
 
-#include <type_traits>
-
 #include <cosmictiger/core/defs.hpp>
 #include <cosmictiger/math/vector3.hpp>
 
-// Preserve the exact 3D ABI; lower-dimensional records contain only active axes.
+// Preserve the exact 3D ABI while selecting the active axes at run time.
 template <class Real>
-using ParticleVector = std::conditional_t<kSpatialDimensions == 3, Vector3<Real>,
-    math::Vector<Real, kSpatialDimensions>>;
+using ParticleVector = Vector3<Real>;
 
 // Particle species stored in particlesType(). Kept apart from particles.hpp so
 // lightweight headers shared with CUDA kernels can name a species.

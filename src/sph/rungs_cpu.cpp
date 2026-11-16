@@ -1,5 +1,6 @@
 /*
  CosmicTiger - A cosmological N-Body code
+ SIMD CPU SPH neighbor-rung limiting over the active spatial axes.
  Copyright (C) 2026 Dominic C. Marcello
 
  Distributed under the Boost Software License, Version 1.0.
@@ -13,6 +14,9 @@
 // Symbol directory: L𞁑 → sink rung; max L𞁓 → maximum neighbor rung;
 // h𞁑, h𞁓 → sink, neighbor kernel smoothing length; r𞁑𞁓 → separation;
 // r𞁑𞁓² → squared separation. Code names: r2𞁑𞁓 = r𞁑𞁓²; h2𞁑 = h𞁑².
+namespace detail {
+
+template <int dimension>
 SphRunReturn sphCpuRungs(SphRunParameters const&, SphRunData const& data, int targetNodeIndex) {
     SphRunReturn result;
     sph_flops::Counter flops;
@@ -28,7 +32,8 @@ SphRunReturn sphCpuRungs(SphRunParameters const&, SphRunData const& data, int ta
         flops += 1;
         SimdFloat maximumNeighborRungs(0.0f);
         for (size_t first = 0; first < neighbors.size(); first += SimdFloat::size()) {
-            auto const r𞁑𞁓 = detail::sphCpuSeparations(data, particleIndex, neighbors, first);
+            auto const r𞁑𞁓 =
+                detail::sphCpuSeparations<dimension>(data, particleIndex, neighbors, first);
             auto const r2𞁑𞁓 = r𞁑𞁓.dot(r𞁑𞁓);
             auto const h𞁓 = detail::sphCpuLoad(data.sourceSmoothingLength, neighbors, first, 0.0f);
             SimdFloat const neighborRungs([&](auto lane) {
@@ -38,7 +43,8 @@ SphRunReturn sphCpuRungs(SphRunParameters const&, SphRunData const& data, int ta
             auto const intersects =
                 detail::sphCpuValidLanes(neighbors, first) && r2𞁑𞁓 <= math::max(h2𞁑, sqr(h𞁓));
             // Fixed scales, dot, h𞁓², including arithmetic in padded SIMD lanes.
-            flops += (sph_flops::kVectorOperation + sph_flops::kDotProduct + 1) * SimdFloat::size();
+            flops += (sph_flops::separationFlops<dimension>() + sph_flops::kDotProduct + 1) *
+                SimdFloat::size();
             maximumNeighborRungs = math::max(
                 maximumNeighborRungs, math::select(intersects, neighborRungs, SimdFloat(0.0f)));
         }
@@ -56,4 +62,19 @@ SphRunReturn sphCpuRungs(SphRunParameters const&, SphRunData const& data, int ta
     result.floatingPointOperations = FlopCount(flops);
     addCpuFlops(flops.counts());
     return result;
+}
+
+}    // namespace detail
+
+/// Select the dimension-specialized implementation once for this SPH leaf pass.
+SphRunReturn sphCpuRungs(
+    SphRunParameters const& parameters, SphRunData const& data, int targetNodeIndex) {
+    switch (spatialDimensions()) {
+    case 1:
+        return detail::sphCpuRungs<1>(parameters, data, targetNodeIndex);
+    case 2:
+        return detail::sphCpuRungs<2>(parameters, data, targetNodeIndex);
+    default:
+        return detail::sphCpuRungs<3>(parameters, data, targetNodeIndex);
+    }
 }

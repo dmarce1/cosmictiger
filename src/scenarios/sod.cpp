@@ -1,3 +1,4 @@
+// Initialize equal-mass Sod shock tubes in the runtime SPH dimension.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -88,24 +89,24 @@ ScenarioPlan initializeSod() {
     double p1 = 1.0;
     auto& sod = detail::initialState;
     ParticleInteger const rightDim = particle_count::roundLattice(
-        totalNumberOfParticles, particle_count::kSodLatticeMultiplicity)
+        totalNumberOfParticles, particle_count::sodLatticeMultiplicity())
                                          .side;
     ParticleInteger const leftDim =
-        (kSpatialDimensions == 1 ? 8 : (kSpatialDimensions == 2 ? 4 : 2)) * rightDim;
+        (spatialDimensions() == 1 ? 8 : (spatialDimensions() == 2 ? 4 : 2)) * rightDim;
     // In 2D a rectangular lattice realizes exactly rho_left/rho_right = 8:
     // 2(4n)(4n) left particles versus 2(n)(2n) right particles.
-    ParticleInteger const leftTransverseSide = kSpatialDimensions == 2 ? leftDim : 2 * leftDim;
+    ParticleInteger const leftTransverseSide = spatialDimensions() == 2 ? leftDim : 2 * leftDim;
     if (leftDim < 1 || rightDim < 1) {
         throw std::runtime_error("The Sod scenario needs a resolved lattice in both layers; "
                                  "increase run.gasParticleCount");
     }
-    ParticleInteger numberOfLeftParticles = kSpatialDimensions == 2 ?
+    ParticleInteger numberOfLeftParticles = spatialDimensions() == 2 ?
         2 * leftDim * leftTransverseSide :
         particle_count::spatialPower(2 * leftDim);
     ParticleInteger numberOfRightParticles = particle_count::spatialPower(2 * rightDim);
     totalNumberOfParticles = numberOfLeftParticles + numberOfRightParticles;
     double dx = 0.5 / leftDim;
-    double dy = kSpatialDimensions == 2 ? 1.0 / leftTransverseSide : dx;
+    double dy = spatialDimensions() == 2 ? 1.0 / leftTransverseSide : dx;
     ParticleInteger i = 0;
     auto opts = options;
     opts.run.gasParticleCount = totalNumberOfParticles;
@@ -124,8 +125,8 @@ ScenarioPlan initializeSod() {
     terminal::detailPrint(
         "Sod dimensions are %i and %i rho0 %e rho1 %e\n", 2 * rightDim, 2 * leftDim, rho0, rho1);
     for (int ix = 0; ix < leftDim; ix++) {
-        for (int iy = 0; iy < (kSpatialDimensions >= 2 ? leftTransverseSide : 1); iy++) {
-            for (int iz = 0; iz < (kSpatialDimensions >= 3 ? 2 * leftDim : 1); iz++) {
+        for (int iy = 0; iy < (spatialDimensions() >= 2 ? leftTransverseSide : 1); iy++) {
+            for (int iz = 0; iz < (spatialDimensions() >= 3 ? 2 * leftDim : 1); iz++) {
                 double x = (ix) *dx;
                 double y = iy * dy;
                 double z = (iz) *dx;
@@ -134,19 +135,19 @@ ScenarioPlan initializeSod() {
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
                 sphParticlesPosition(kXi, i) = x + rand1() * dx * kEta;
-                if constexpr (kSpatialDimensions > 1) {
+                if (spatialDimensions() > 1) {
                     sphParticlesPosition(kYi, i) =
-                        kSpatialDimensions >= 2 ? y + rand1() * dx * kEta : 0.5;
+                        spatialDimensions() >= 2 ? y + rand1() * dx * kEta : 0.5;
                 }
-                if constexpr (kSpatialDimensions > 2) {
+                if (spatialDimensions() > 2) {
                     sphParticlesPosition(kZi, i) =
-                        kSpatialDimensions >= 3 ? z + rand1() * dx * kEta : 0.5;
+                        spatialDimensions() >= 3 ? z + rand1() * dx * kEta : 0.5;
                 }
                 sphParticlesVelocity(kXi, i) = vx0;
-                if constexpr (kSpatialDimensions > 1) {
+                if (spatialDimensions() > 1) {
                     sphParticlesVelocity(kYi, i) = vy0;
                 }
-                if constexpr (kSpatialDimensions > 2) {
+                if (spatialDimensions() > 2) {
                     sphParticlesVelocity(kZi, i) = vz0;
                 }
                 sphParticlesRung(i) = 0;
@@ -159,19 +160,19 @@ ScenarioPlan initializeSod() {
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
                 sphParticlesPosition(kXi, i) = x + rand1() * dx * kEta;
-                if constexpr (kSpatialDimensions > 1) {
+                if (spatialDimensions() > 1) {
                     sphParticlesPosition(kYi, i) =
-                        kSpatialDimensions >= 2 ? y + rand1() * dx * kEta : 0.5;
+                        spatialDimensions() >= 2 ? y + rand1() * dx * kEta : 0.5;
                 }
-                if constexpr (kSpatialDimensions > 2) {
+                if (spatialDimensions() > 2) {
                     sphParticlesPosition(kZi, i) =
-                        kSpatialDimensions >= 3 ? z + rand1() * dx * kEta : 0.5;
+                        spatialDimensions() >= 3 ? z + rand1() * dx * kEta : 0.5;
                 }
                 sphParticlesVelocity(kXi, i) = vx0;
-                if constexpr (kSpatialDimensions > 1) {
+                if (spatialDimensions() > 1) {
                     sphParticlesVelocity(kYi, i) = vy0;
                 }
-                if constexpr (kSpatialDimensions > 2) {
+                if (spatialDimensions() > 2) {
                     sphParticlesVelocity(kZi, i) = vz0;
                 }
                 sphParticlesRung(i) = 0;
@@ -185,8 +186,8 @@ ScenarioPlan initializeSod() {
     dy = dx;
     for (int ix0 = rightDim; ix0 < 2 * rightDim; ix0++) {
         int ix = ix0;
-        for (int iy = 0; iy < (kSpatialDimensions >= 2 ? 2 * rightDim : 1); iy++) {
-            for (int iz = 0; iz < (kSpatialDimensions >= 3 ? 2 * rightDim : 1); iz++) {
+        for (int iy = 0; iy < (spatialDimensions() >= 2 ? 2 * rightDim : 1); iy++) {
+            for (int iz = 0; iz < (spatialDimensions() >= 3 ? 2 * rightDim : 1); iz++) {
                 double x = (ix) *dx;
                 double y = iy * dy;
                 double z = (iz) *dx;
@@ -195,19 +196,19 @@ ScenarioPlan initializeSod() {
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
                 sphParticlesPosition(kXi, i) = x + rand1() * dx * kEta;
-                if constexpr (kSpatialDimensions > 1) {
+                if (spatialDimensions() > 1) {
                     sphParticlesPosition(kYi, i) =
-                        kSpatialDimensions >= 2 ? y + rand1() * dx * kEta : 0.5;
+                        spatialDimensions() >= 2 ? y + rand1() * dx * kEta : 0.5;
                 }
-                if constexpr (kSpatialDimensions > 2) {
+                if (spatialDimensions() > 2) {
                     sphParticlesPosition(kZi, i) =
-                        kSpatialDimensions >= 3 ? z + rand1() * dx * kEta : 0.5;
+                        spatialDimensions() >= 3 ? z + rand1() * dx * kEta : 0.5;
                 }
                 sphParticlesVelocity(kXi, i) = 0;
-                if constexpr (kSpatialDimensions > 1) {
+                if (spatialDimensions() > 1) {
                     sphParticlesVelocity(kYi, i) = 0;
                 }
-                if constexpr (kSpatialDimensions > 2) {
+                if (spatialDimensions() > 2) {
                     sphParticlesVelocity(kZi, i) = 0;
                 }
 
@@ -222,19 +223,19 @@ ScenarioPlan initializeSod() {
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
                 sphParticlesPosition(kXi, i) = x + rand1() * dx * kEta;
-                if constexpr (kSpatialDimensions > 1) {
+                if (spatialDimensions() > 1) {
                     sphParticlesPosition(kYi, i) =
-                        kSpatialDimensions >= 2 ? y + rand1() * dx * kEta : 0.5;
+                        spatialDimensions() >= 2 ? y + rand1() * dx * kEta : 0.5;
                 }
-                if constexpr (kSpatialDimensions > 2) {
+                if (spatialDimensions() > 2) {
                     sphParticlesPosition(kZi, i) =
-                        kSpatialDimensions >= 3 ? z + rand1() * dx * kEta : 0.5;
+                        spatialDimensions() >= 3 ? z + rand1() * dx * kEta : 0.5;
                 }
                 sphParticlesVelocity(kXi, i) = 0;
-                if constexpr (kSpatialDimensions > 1) {
+                if (spatialDimensions() > 1) {
                     sphParticlesVelocity(kYi, i) = 0;
                 }
-                if constexpr (kSpatialDimensions > 2) {
+                if (spatialDimensions() > 2) {
                     sphParticlesVelocity(kZi, i) = 0;
                 }
 

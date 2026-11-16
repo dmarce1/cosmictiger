@@ -1,5 +1,6 @@
 /*
  CosmicTiger - A cosmological N-Body code
+ CUDA SPH neighbor-rung limiting over the active spatial axes.
  Copyright (C) 2026  Dominic C. Marcello
 
  Distributed under the Boost Software License, Version 1.0.
@@ -32,6 +33,7 @@ struct RungsWorkspace {
 // h𞁑, h𞁓 → sink, neighbor kernel smoothing length; x𞁑, x𞁓 → sink, neighbor position;
 // paddedX_b → neighbor position as the record of the box tests; r𞁑𞁓 → separation;
 // r𞁑𞁓² → squared separation. Code names: r2𞁑𞁓 = r𞁑𞁓²; h2𞁑 = h𞁑².
+template <int dimension>
 __global__ void sphCudaRungs(SphRunParameters, SphRunCudaData data, SphReduction* reduction) {
     int const threadIndex = threadIdx.x;
     int const blockSize = blockDim.x;
@@ -86,7 +88,7 @@ __global__ void sphCudaRungs(SphRunParameters, SphRunCudaData data, SphReduction
                 if (contains) {
                     ASSERT(neighborIndex < total);
                     int const k = offset + neighborIndex;
-                    workspace.positions[k] = data.sourcePosition(sourceParticleIndex);
+                    workspace.positions[k] = data.sourcePosition<dimension>(sourceParticleIndex);
                     workspace.smoothingLength[k] = data.sourceSmoothingLength[sourceParticleIndex];
                     workspace.rungs[k] = rung;
                 }
@@ -97,7 +99,7 @@ __global__ void sphCudaRungs(SphRunParameters, SphRunCudaData data, SphReduction
             __syncthreads();
             int const sinkIndex =
                 targetNode.sinkParticleRange.first - targetNode.particleRange.first + particleIndex;
-            auto const x𞁑 = data.sourcePosition(particleIndex);
+            auto const x𞁑 = data.sourcePosition<dimension>(particleIndex);
             auto const h𞁑 = data.sinkSmoothingLength[sinkIndex];
             int const sinkRung = data.sourceRungs[particleIndex];
             auto const h2𞁑 = sqr(h𞁑);
@@ -109,14 +111,14 @@ __global__ void sphCudaRungs(SphRunParameters, SphRunCudaData data, SphReduction
                 if (neighborIndex < workspace.positions.size()) {
                     auto const x𞁓 = workspace.positions[neighborIndex];
                     int const neighborRung = workspace.rungs[neighborIndex];
-                    auto const r𞁑𞁓 = distance(x𞁑, x𞁓);
+                    auto const r𞁑𞁓 = distance<dimension>(x𞁑, x𞁓);
                     float const r2𞁑𞁓 = r𞁑𞁓.dot(r𞁑𞁓);
                     float const h𞁓 = workspace.smoothingLength[neighborIndex];
                     if (r2𞁑𞁓 <= fmaxf(h2𞁑, sqr(h𞁓))) {
                         maximumNeighborRung = max(maximumNeighborRung, neighborRung);
                     }
                     // Fixed distances, dot, h𞁓².
-                    flops += sph_flops::kVectorOperation + sph_flops::kDotProduct + 1;
+                    flops += sph_flops::separationFlops<dimension>() + sph_flops::kDotProduct + 1;
                 }
             }
             sharedReduceMax<kRungsBlockSize>(maximumNeighborRung);
@@ -143,3 +145,8 @@ __global__ void sphCudaRungs(SphRunParameters, SphRunCudaData data, SphReduction
     detail::recordSphGpuFlops(flops, reduction);
     (&workspace)->~RungsWorkspace();
 }
+
+// Emit all supported spatial specializations without exposing the kernel body in headers.
+template __global__ void sphCudaRungs<1>(SphRunParameters, SphRunCudaData, SphReduction*);
+template __global__ void sphCudaRungs<2>(SphRunParameters, SphRunCudaData, SphReduction*);
+template __global__ void sphCudaRungs<3>(SphRunParameters, SphRunCudaData, SphReduction*);

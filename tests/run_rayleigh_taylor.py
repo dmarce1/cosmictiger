@@ -85,9 +85,10 @@ def main():
               f"--run.endTime={duration}", "--run.maxIterations=2", "--run.numberOfOutputs=3",
               "--run.verbose=true", "--output.directory=.", "--output.silo=false",
               "--checkpoint.intervalSeconds=0", "--analysis.saveForce=true",
+              f"--hydro.dimensions={args.dimension}", "--gravity.cuda=false",
               "--hydro.cuda=false", "--drift.cuda=false"]
-    # Select CPU hydro/drift while leaving gravity.enabled, gravity.cuda, and
-    # hydro.enabled untouched so the preset and scenario select the physics.
+    # Select CPU backends and the runtime dimension while leaving gravity.enabled
+    # and hydro.enabled untouched so the preset and scenario select the physics.
     cases = (("preset", [f"--configuration={preset}"]),
              ("scenario_defaults", ["--run.scenario=rayleighTaylor",
                                      f"--scenario.rayleighTaylor.zPlaneAcceleration={acceleration}"]))
@@ -95,7 +96,8 @@ def main():
         directory = prepareCase(root, name)
         output = runSimulation([str(executable), *options, *common], directory, "run.log", timeout=180)
         for key, value in (("run.scenario", "rayleighTaylor"),
-                           ("build.dimensionCount", args.dimension), ("gravity.enabled", "F"),
+                           ("build.dimensionCount", args.dimension),
+                           ("hydro.dimensions", args.dimension), ("gravity.enabled", "F"),
                            ("hydro.enabled", "T"), ("gravity.cuda", "F"),
                            ("hydro.cuda", "F"), ("drift.cuda", "F")):
             checkOption(output, key, value, name)

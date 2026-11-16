@@ -80,20 +80,23 @@ struct SphRunData {
     float centralSmoothingLength;    // Support radius of the selected gravity kernel.
 
     // One particle's vectors, read in one call from the component arrays above.
+    template <int dimension = 0>
     CUDA_EXPORT sph_geometry::SpatialVector<Position> sourcePosition(ParticleInteger index) const {
-        return sph_geometry::loadSpatialVector(
+        return sph_geometry::loadSpatialVector<dimension>(
             sourcePositionX, sourcePositionY, sourcePositionZ, index);
     }
     /// Gather the source's active velocity components into one spatial vector.
+    template <int dimension = 0>
     CUDA_EXPORT sph_geometry::SpatialVector<float> sourceVelocity(ParticleInteger index) const {
-        return sph_geometry::loadSpatialVector(
+        return sph_geometry::loadSpatialVector<dimension>(
             sourceVelocityX, sourceVelocityY, sourceVelocityZ, index);
     }
     /// Gather the sink's active gravity-acceleration components into one spatial
     /// vector.
+    template <int dimension = 0>
     CUDA_EXPORT sph_geometry::SpatialVector<float> sinkGravityAcceleration(
         ParticleInteger index) const {
-        return sph_geometry::loadSpatialVector(
+        return sph_geometry::loadSpatialVector<dimension>(
             sinkGravityAccelerationX, sinkGravityAccelerationY, sinkGravityAccelerationZ, index);
     }
     // Box tests and source assembly take padded records, with the stored inactive-axis padding.
@@ -120,6 +123,7 @@ struct SphRunData {
  *     abs_r𞁑𞁞 = |r𞁑𞁞|.
  */
 // clang-format on
+template <int dimension = 0>
 CUDA_EXPORT inline Vector3<float> sphCompleteAcceleration(SphRunParameters const& parameters,
     Vector3<Position> const& x𞁑, Vector3<float> const& v𞁑, Vector3<float> dv𞁑_dτ,
     Vector3<float> const& dv𞁑_dτ_G, float g𞁞, float h𞁞, sph_flops::Counter& flops) {
@@ -128,8 +132,8 @@ CUDA_EXPORT inline Vector3<float> sphCompleteAcceleration(SphRunParameters const
     flops += 3;
 #endif
     dv𞁑_dτ[kYi] += parameters.uniformAccelerationY;
-    constexpr int kMidplaneAxis = kSpatialDimensions - 1;
-    dv𞁑_dτ[kMidplaneAxis] += parameters.midplaneAcceleration(x𞁑[kMidplaneAxis]);
+    int const midplaneAxis = spatialDimensions<dimension>() - 1;
+    dv𞁑_dτ[midplaneAxis] += parameters.midplaneAcceleration(x𞁑[midplaneAxis]);
     flops += 2;
     flops.doublePrecision += sph_flops::positionConstructionFlops();
     if (g𞁞 != 0.0f) {
@@ -139,7 +143,7 @@ CUDA_EXPORT inline Vector3<float> sphCompleteAcceleration(SphRunParameters const
         float const ih𞁞 = 1.0f / h𞁞;
         float const q𞁑𞁞 = abs_r𞁑𞁞 * ih𞁞;
         float const f𞁑𞁞 = g𞁞 * radial_kernel::forceFactor(selectedGravityKernel<float>(), q𞁑𞁞) *
-            sph_geometry::inverseVolume(ih𞁞);
+            sph_geometry::inverseVolume<dimension>(ih𞁞);
         dv𞁑_dτ -= f𞁑𞁞 * r𞁑𞁞;
         flops += 21 + sph_flops::forceKernelOperations(selectedGravityKernel<float>(), q𞁑𞁞);
         flops.doublePrecision += 3 * sph_flops::positionConstructionFlops();
@@ -151,16 +155,17 @@ CUDA_EXPORT inline Vector3<float> sphCompleteAcceleration(SphRunParameters const
 
 // The one boundary between the spatial-vector kernels and the padded assembly above, which
 // also takes the padded position x𞁑. The result keeps the active axes.
+template <int dimension = 0>
 CUDA_EXPORT inline sph_geometry::SpatialVector<float> sphCompleteAcceleration(
     SphRunParameters const& parameters, Vector3<Position> const& x𞁑,
     sph_geometry::SpatialVector<float> const& v𞁑, sph_geometry::SpatialVector<float> const& dv𞁑_dτ,
     sph_geometry::SpatialVector<float> const& dv𞁑_dτ_G, float g𞁞, float h𞁞,
     sph_flops::Counter& flops) {
-    Vector3<float> const padded = sphCompleteAcceleration(parameters, x𞁑,
-        sph_geometry::paddedVector(v𞁑), sph_geometry::paddedVector(dv𞁑_dτ),
-        sph_geometry::paddedVector(dv𞁑_dτ_G), g𞁞, h𞁞, flops);
-    sph_geometry::SpatialVector<float> result;
-    for (int dim = 0; dim < kSpatialDimensions; ++dim) {
+    Vector3<float> const padded = sphCompleteAcceleration<dimension>(parameters, x𞁑,
+        sph_geometry::paddedVector<dimension>(v𞁑), sph_geometry::paddedVector<dimension>(dv𞁑_dτ),
+        sph_geometry::paddedVector<dimension>(dv𞁑_dτ_G), g𞁞, h𞁞, flops);
+    sph_geometry::SpatialVector<float> result(0.0f);
+    for (int dim = 0; dim < spatialDimensions<dimension>(); ++dim) {
         result[dim] = padded[dim];
     }
     return result;
@@ -174,8 +179,9 @@ inline constexpr float kSphHalfBoxSmoothingLength = 0.5f;
 
 // Target of the smoothing-length solves: ΣW = Σ𞁓 w(q𞁑𞁓) = 3 Nₛₑₜ/(4π).
 // Nₛₑₜ → target neighbor count.
+template <int dimension = 0>
 CUDA_EXPORT inline float sphTargetKernelSum(float Nₛₑₜ) {
-    return Nₛₑₜ * float(1.0 / sph_geometry::kUnitBallVolume);
+    return Nₛₑₜ * float(1.0 / sph_geometry::unitBallVolume<dimension>());
 }
 
 struct SphGradHEvaluation {
@@ -190,14 +196,15 @@ struct SphGradHEvaluation {
 // Symbol directory: h𞁑, hₘᵢₙ, hₘₐₓ → smoothing length and its bounds; Nₛₑₜ → target neighbor
 // count; ΣWₛₑₜ → target kernel sum; m → gas mass; Σ𞁓 q𞁑𞁓 w′ → kernel derivative moment.
 // Code names: Σqwʹ = Σ𞁓 q𞁑𞁓 w′.
+template <int dimension = 0>
 CUDA_EXPORT inline SphGradHEvaluation sphGradHEvaluation(
     float h𞁑, float hₘᵢₙ, float hₘₐₓ, float Nₛₑₜ, float m, float ΣW, float Σqwʹ) {
-    float const ΣWₛₑₜ = sphTargetKernelSum(Nₛₑₜ);
+    float const ΣWₛₑₜ = sphTargetKernelSum<dimension>(Nₛₑₜ);
     SphGradHEvaluation result;
     result.relativeResidual = (ΣW - ΣWₛₑₜ) / ΣWₛₑₜ;
     result.constraint = sph_volume::classifySupport(
         h𞁑, hₘᵢₙ, hₘₐₓ, result.relativeResidual, kSphSmoothingLengthTolerance);
-    result.correction = sph_volume::gradHCorrection(
+    result.correction = sph_volume::gradHCorrection<dimension>(
         sph_volume::equalWeightSupportSums(ΣW, Σqwʹ, m), result.constraint);
     return result;
 }
@@ -205,8 +212,8 @@ CUDA_EXPORT inline SphGradHEvaluation sphGradHEvaluation(
 // A source can reach any sink in this box through a periodic image. Expanding
 // the unwrapped interval before testing avoids inconsistent endpoint wrapping.
 // x𞁓 → padded source position; h𞁓 → source smoothing length.
-CUDA_EXPORT inline bool sphSupportIntersects(SphBox const& sinkBox,
-    Vector3<Position> const& x𞁓, float h𞁓, sph_flops::Counter* flops = nullptr) {
+CUDA_EXPORT inline bool sphSupportIntersects(SphBox const& sinkBox, Vector3<Position> const& x𞁓,
+    float h𞁓, sph_flops::Counter* flops = nullptr) {
     SphBox expanded = sinkBox;
     for (int dim = 0; dim < kDimensions; dim++) {
         expanded.begin[dim] -= RangeFixed(h𞁓);
