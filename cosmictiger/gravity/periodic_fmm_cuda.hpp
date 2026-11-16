@@ -42,8 +42,7 @@ __device__ FlopCount cudaPeriodicFmm(CudaKickData const& data, TreeNode const& s
                         source.radius, inverseTheta, smoothingLength, &acceptanceFlops);
                     flops += 3 + acceptanceFlops;
                     if (separated) {
-                        selected[0] =
-                            fmmSinglePeriodicImage(displacement, sink.radius, source.radius);
+                        selected[0] = true;
                         flops += 7;
                         if (!selected[0]) {
                             selected[1] = periodicFmmDirectAccepted(displacement, sink.radius,

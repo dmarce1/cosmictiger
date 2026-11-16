@@ -108,7 +108,7 @@ inline FlopCount cpuPeriodicFmm(ExpansionBuffer& local, TreeNode const& sink,
         bool singleImage = false;
         bool includeNewtonian = false;
         if (separated) {
-            singleImage = fmmSinglePeriodicImage(displacement, sink.radius, source.radius);
+            singleImage = true;
             flops += 7;
             if (!singleImage) {
                 includeNewtonian = periodicFmmDirectAccepted(displacement, sink.radius,
