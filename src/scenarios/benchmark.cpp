@@ -156,8 +156,7 @@ namespace detail {
 
     void writeBenchmarkColumns(
         std::ostream& output, std::string const& line, char const* separator) {
-        // Fit full-width counters, column names and the existing scientific precision.
-        constexpr int kColumnWidth = std::numeric_limits<uint64_t>::digits10 + 1;
+        constexpr int kColumnWidth = 9;
         std::istringstream fields(line);
         std::string field;
         while (fields >> field) {
@@ -173,13 +172,21 @@ namespace detail {
         if (!output) {
             throw std::ios_base::failure("Cannot open benchmark results file: " + filename);
         }
-        if (output.tellp() == std::streampos(0)) {
-            writeBenchmarkColumns(output,
-                "particles size theta bucket_size fmm_order localities threads backend "
-                "repeats tree_nodes leaves particles_per_leaf softening tree_mean_s "
-                "force_mean_s cleanup_mean_s min_s median_s mean_s max_s flops gflops "
-                "load_s domain_s",
-                "# ");
+        std::ostringstream header;
+        writeBenchmarkColumns(header,
+            "particles theta bucket order ranks threads backend leaves tree_s force_s mean_s gflops",
+            "# ");
+        // Start a new section when appending to results with the old, wider schema.
+        std::ifstream previous(filename);
+        std::string line;
+        std::string lastHeader;
+        while (std::getline(previous, line)) {
+            if (line.starts_with('#')) {
+                lastHeader = line + '\n';
+            }
+        }
+        if (lastHeader != header.str()) {
+            output << header.str();
         }
         writeBenchmarkColumns(output, row, "  ");
         output.close();
@@ -392,16 +399,11 @@ void runBenchmark() {
                          treeLeaves, double(count) / double(treeLeaves), solveFlops)
                   << std::flush;
         auto const resultsFile = detail::appendBenchmarkResult(test + 1,
-            std::format("{} {} {:.9g} {} {} {} {} {} {} {} {} {:.9e} {:.9e} {:.9e} {:.9e} {:.9e} "
-                        "{:.9e} {:.9e} {:.9e} {:.9e} {} {:.9e} {:.9e} {:.9e}",
-                count, benchmark.size, options.gravity.openingAngle, options.compute.bucketSize,
-                kFmmOrder, hpxSize(), hpxHardwareConcurrency(),
-                options.gravity.cuda ? "cuda" : "cpu", benchmark.repeats, treeNodes, treeLeaves,
-                double(count) / double(treeLeaves), options.gravity.smoothingLength,
-                treeTotal / times.size(), forceTotal / times.size(), cleanupTotal / times.size(),
-                times.front(), median, sum / times.size(), times.back(), solveFlops,
-                double(totalCounts.total()) / sum * 1.0e-9, detail::seconds(loadStart, loadEnd),
-                domainSeconds));
+            std::format("{} {:.3g} {} {} {} {} {} {} {:.6f} {:.6f} {:.6f} {:.1f}", count,
+                options.gravity.openingAngle, options.compute.bucketSize, kFmmOrder, hpxSize(),
+                hpxHardwareConcurrency(), options.gravity.cuda ? "cuda" : "cpu", treeLeaves,
+                treeTotal / times.size(), forceTotal / times.size(), sum / times.size(),
+                double(totalCounts.total()) / sum * 1.0e-9));
         std::cout << "  Results appended to: " << resultsFile << "\n\n" << std::flush;
     }
 }

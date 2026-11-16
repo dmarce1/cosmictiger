@@ -41,13 +41,13 @@ particles divided by all leaves, including empty leaves).
 After each input file's repetitions finish, one summary row is appended to
 `output.directory/bench.1.dat`, `bench.2.dat`, etc., in `benchmark.testFiles` order.
 Existing results are preserved across launches. A new or empty file receives a
-single column header beginning with `#`; later rows do not repeat the header.
-Rows contain the particle count, tiling size, opening angle, bucket size, FMM
-order, localities, coordinator worker-thread count, backend, repeat count, tree
-and leaf counts, particles per leaf, gravity softening, phase mean times, total
-minimum/median/mean/maximum times, FLOPs per solve, aggregate GFLOP/s and excluded
-loading/decomposition times. All times are seconds. Only the coordinator writes
-the distributed results, outside the timed repetitions.
+column header beginning with `#`; later rows repeat the header only when the column
+layout changes. The compact columns are `particles`, `theta`, `bucket`, `order`,
+`ranks`, `threads`, `backend`, `leaves`, `tree_s`, `force_s`, `mean_s` and `gflops`.
+Times are means in seconds, printed to six decimal places. Columns use nine-character
+minimum widths. Detailed setup, per-repeat and work statistics remain in the console
+output. Only the coordinator writes the distributed results, outside the timed
+repetitions.
 
 The prepared `configurations/benchmark.ini` uses 32^3-particle SILO exports at
 z=0.117408174187551, 2.18800951546296 and 22.6499379613608: the snapshots strictly

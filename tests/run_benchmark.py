@@ -116,15 +116,14 @@ def main():
         results = root / 'paired' / f'bench.{case}.dat'
         lines = results.read_text().splitlines()
         headers = [line for line in lines if line.startswith('#')]
-        assert len(headers) == 1
-        columns = headers[0][1:].split()
+        assert headers
+        columns = headers[-1][1:].split()
         values = lines[-1].split()
         assert len(columns) == len(values)
         row = dict(zip(columns, values))
         assert int(row['particles']) == int(population[1])
-        assert int(row['tree_nodes']) == tree_nodes and int(row['leaves']) == tree_leaves
-        assert int(row['flops']) == solve_flops and int(row['repeats']) == 2
-        assert int(row['bucket_size']) == 8 and row['backend'] == 'cpu'
+        assert int(row['leaves']) == tree_leaves
+        assert int(row['bucket']) == 8 and row['backend'] == 'cpu'
         assert math.isclose(float(row['theta']), (0.4, 0.7)[index], rel_tol=1e-7)
         assert math.isclose(float(row['mean_s']), average[3], rel_tol=1e-3, abs_tol=1e-6)
     result_files = [root / 'paired' / f'bench.{case}.dat' for case in (1, 2)]
