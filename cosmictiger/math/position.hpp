@@ -41,6 +41,15 @@ CUDA_EXPORT inline double positionDomainCoordinate(Position position) {
     return coordinate;
 }
 
+/// Return the nonperiodic midpoint, rounding down to a fixed-point tick.
+CUDA_EXPORT inline Position midpoint(Position a, Position b) {
+    auto const aRaw = a.raw();
+    auto const bRaw = b.raw();
+    Position result;
+    result.raw() = (aRaw & bRaw) + ((aRaw ^ bRaw) >> 1);
+    return result;
+}
+
 #ifndef __CUDACC__
 using SimdPosition = SimdVector<SignedPositionInteger, kSimdFloatSize>;
 #endif
