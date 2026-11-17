@@ -78,7 +78,7 @@ def read_header(data):
     header = Reader(data).native(Header)
     require(header.magic == 0x4354535048303031 and header.version == 3,
             "unsupported checkpoint header")
-    supported = sum(1 << bit for bit in (0, 6, 7, 8, 9, 11, 12, 13, 14, 15, 17, 18, 19, 20, 21, 22, 23, 25, 26))
+    supported = sum(1 << bit for bit in (0, 6, 7, 8, 9, 11, 12, 13, 14, 15, 17, 18, 19, 20, 21, 22, 23, 25, 26, 27, 28))
     require(not header.flags & (1 << 16), "retired particle-mesh checkpoint")
     require(not header.flags & ~supported, "unsupported checkpoint feature flags")
     return header
@@ -98,7 +98,7 @@ def read_prefix(data):
             "SPH checkpoint predates the Rosswog-limited viscosity layout")
     require(not cooling or hydro, "cooling checkpoint requires SPH")
     require(not stars or cooling, "star formation checkpoint requires cooling")
-    require(hydro or not flags & ((1 << 12) | (1 << 13) | (1 << 14) | (1 << 25)),
+    require(hydro or not flags & ((1 << 12) | (1 << 13) | (1 << 14) | (1 << 25) | (1 << 27) | (1 << 28)),
             "SPH parameter flags require SPH")
     result = SimpleNamespace(header=header, dimension_count=dimension_count,
                              storage_dimensions=dimension_count if header.reserved & (1 << 30) else 3,
@@ -107,6 +107,10 @@ def read_prefix(data):
                              integer_bytes=8 if flags & (1 << 21) else 4,
                              algorithms=(), pmmm=(), particle_mesh=(), viscosity=(),
                              cooling_parameters=(), star_parameters=(), sph_parameters=())
+    result.energy_evolution = bool(flags & (1 << 27))
+    result.dual_thermal_storage = bool(flags & (1 << 28))
+    result.has_entropy_storage = hydro and (not result.energy_evolution or result.dual_thermal_storage)
+    result.has_energy_storage = hydro and (result.energy_evolution or result.dual_thermal_storage)
     if flags & (1 << 18):
         result.algorithms = reader.take("Q", 5)
         version, far, near, degree, integrator = result.algorithms
@@ -191,7 +195,8 @@ def read_prefix(data):
     result.particle_start = reader.offset
     # Version 130000 packs convergence, semiactivity and the proposed rung into
     # one byte. From 140000 Morris-Monaghan alpha is the only viscosity state, always stored.
-    result.gas_version = 140000 + (110 if stars else 100 if cooling else 2) + 2
+    result.thermal_version = (1000 if result.energy_evolution else 0) + (2000 if result.dual_thermal_storage else 0)
+    result.gas_version = 140000 + (110 if stars else 100 if cooling else 2) + 2 + result.thermal_version
     result.reader = reader
     return result
 
@@ -227,14 +232,20 @@ def decode_checkpoint(data, ranks=1):
         require(result.entropy_initialized in (0, 1) and
                 math.isfinite(result.thermal_scale_factor) and result.thermal_scale_factor > 0,
                 "invalid entropy checkpoint context")
-        result.entropies = reader.take("f", gas_count)
+        result.stored_entropies = reader.take("f", gas_count) if result.has_entropy_storage else ()
+        result.stored_internal_energies = reader.take("f", gas_count) if result.has_energy_storage else ()
         result.smoothing_lengths = reader.take("f", gas_count)
         result.gravity_indices = reader.take(integer_code, gas_count)
         result.densities = reader.take("f", gas_count)
         gamma = result.header.physics[2]
         factor = result.thermal_scale_factor ** (5 - 3 * gamma) / (gamma - 1)
-        result.internal_energies = tuple(a * rho ** (gamma - 1) * factor
-            for a, rho in zip(result.entropies, result.densities)) if result.entropy_initialized else result.entropies
+        result.internal_energies = result.stored_internal_energies if result.has_energy_storage else (
+            tuple(a * rho ** (gamma - 1) * factor for a, rho in zip(result.stored_entropies, result.densities))
+            if result.entropy_initialized else result.stored_entropies)
+        result.entropies = result.stored_entropies if result.has_entropy_storage else (
+            tuple(energy / (rho ** (gamma - 1) * factor)
+                  for energy, rho in zip(result.internal_energies, result.densities))
+            if result.entropy_initialized else result.internal_energies)
         result.gas_flags = reader.take("B", gas_count)
         result.converged = tuple(bool(value & 1) for value in result.gas_flags)
         result.semiactive = tuple(bool(value & 2) for value in result.gas_flags)
@@ -243,7 +254,7 @@ def decode_checkpoint(data, ranks=1):
                 "invalid checkpoint hydro rung bound")
         result.proposed_rungs = encoded_rungs
         flags = (result.converged, result.semiactive)
-        delta = (result.gas_version - 140000 -
+        delta = (result.gas_version - 140000 - result.thermal_version -
                  (110 if result.has_stars else 100 if result.has_cooling else 2))
         require(delta == 2, "unsupported checkpoint viscosity payload")
         viscosity = []
@@ -272,7 +283,8 @@ def decode_checkpoint(data, ranks=1):
                 *(field[gas_index] for field in flags),
                 result.proposed_rungs[gas_index],
                 *viscosity[gas_index],
-                *(result.cooling[gas_index] if result.has_cooling else ()))
+                *(result.cooling[gas_index] if result.has_cooling else ()),
+                *((result.stored_internal_energies[gas_index],) if result.has_energy_storage else ()))
     if result.has_stars:
         require(reader.take("Q", 2) == (0x4354534650415254, 2),
                 "unsupported checkpoint star-particle metadata")

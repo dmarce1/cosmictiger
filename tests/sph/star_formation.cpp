@@ -22,18 +22,27 @@
 namespace detail {
 constexpr double kSfScale = 0.25;
 struct SfRecord {
-    uint64_t id{}, eventCounter{}, formationTime{}, specificRate{}, elapsedTime{};
-    uint32_t energy{}, entropy{}, electrons{}, mass{}, bulkViscosity{};
-    int proposedRung{};
-    std::array<uint64_t, kDimensions> position{};
-    std::array<uint32_t, kDimensions> velocity{};
-    uint64_t rung{}, type{};
-    uint32_t density{};
+    uint64_t id{};               // Persistent particle identity.
+    uint64_t eventCounter{};     // Number of completed source intervals.
+    uint64_t formationTime{};    // Exact formation-time storage bits.
+    uint64_t specificRate{};     // Exact specific star-formation-rate storage bits.
+    uint64_t elapsedTime{};      // Exact accumulated physical-time storage bits.
+    uint32_t energy{};           // Stored specific energy a^2 u, derived in entropy mode.
+    uint32_t thermal{};          // Exact canonical entropy A or stored energy E bits.
+    uint32_t electrons{};        // Exact electron-fraction storage bits.
+    uint32_t mass{};             // Exact particle-mass representation.
+    uint32_t bulkViscosity{};    // Exact half-precision viscosity coefficient bits.
+    int proposedRung{};          // Proposed hydro rung, unchanged by source physics.
+    std::array<uint64_t, kDimensions> position{};    // Fixed-point coordinates by axis.
+    std::array<uint32_t, kDimensions> velocity{};    // Exact velocity bits by axis.
+    uint64_t rung{};                                 // Live timestep rung.
+    uint64_t type{};                                 // Gas, star, or dark-matter species tag.
+    uint32_t density{};                              // Endpoint density storage bits.
     bool operator==(SfRecord const&) const = default;
     template <typename Archive>
     void serialize(Archive& archive, unsigned) {
         archive & id & eventCounter & formationTime & specificRate & elapsedTime & energy &
-            entropy & electrons & mass & bulkViscosity & proposedRung & position & velocity & rung &
+            thermal & electrons & mass & bulkViscosity & proposedRung & position & velocity & rung &
             type & density;
     }
 };
@@ -109,7 +118,8 @@ std::vector<SfRecord> sfSnapshot() {
         bool const gas = particlesType(index) == kSphType;
         auto const gasIndex = particlesCatIndex(index);
         record.energy = std::bit_cast<uint32_t>(gas ? sphParticlesInternalEnergy(gasIndex) : 0.0f);
-        record.entropy = std::bit_cast<uint32_t>(gas ? sphParticlesEntropies[gasIndex] : 0.0f);
+        record.thermal =
+            std::bit_cast<uint32_t>(gas ? sphParticlesThermalVariable(gasIndex) : 0.0f);
         record.mass = std::bit_cast<uint32_t>(particlesMass(index));
         if (gas) {
             record.proposedRung = sphParticlesProposedRung(gasIndex);
@@ -190,10 +200,12 @@ std::vector<SfRecord> sfSourceReference() {
         auto const output = star_formation_backend::advance(input, parameters);
         requireSf(output.status == 0, "scalar source reference failed");
         SfRecord record;
-        auto const prepared = sph_entropy::prepareStoredEnergy(
-            output.energy, input.density, opts.hydro.heatCapacityRatio, kSfScale);
+        auto const prepared = sph_entropy::prepareStoredEnergy(output.energy, input.density,
+            opts.hydro.heatCapacityRatio, kSfScale, usesSphEnergyEvolution(opts.hydro),
+            storesSphEntropy(opts.hydro));
         record.energy = std::bit_cast<uint32_t>(prepared.storedEnergy);
-        record.entropy = std::bit_cast<uint32_t>(prepared.entropy);
+        record.thermal = std::bit_cast<uint32_t>(
+            usesSphEnergyEvolution(opts.hydro) ? prepared.storedEnergy : prepared.entropy);
         record.electrons = std::bit_cast<uint32_t>(output.electronFraction);
         record.specificRate = std::bit_cast<uint64_t>(output.state.specificStarFormationRate);
         result.push_back(record);
@@ -266,8 +278,8 @@ void starFormationTest() {
             detail::requireSf(actual.proposedRung == initial[rank][gas].proposedRung &&
                     actual.bulkViscosity == initial[rank][gas].bulkViscosity,
                 "source changed a viscosity coefficient or a hydro proposal");
-            detail::requireSf(actual.entropy == ref.entropy,
-                "survivor did not commit the prepared canonical entropy");
+            detail::requireSf(actual.thermal == ref.thermal,
+                "survivor did not commit the prepared canonical thermal state");
             detail::requireSfClose(std::bit_cast<float>(actual.energy),
                 std::bit_cast<float>(ref.energy), "source disagrees with scalar energy");
             detail::requireSfClose(std::bit_cast<float>(actual.electrons),

@@ -185,13 +185,14 @@ def check_rank_velocity_roundoff_restart(first, second, scale):
             "restart changed the particle counts")
     for field in ("types", "rungs", "gas_indices", "gravity_indices", "gas_flags",
                   "proposed_rungs", "cooling", "stars", "frozen_cells", "entropy_initialized",
-                  "thermal_scale_factor"):
+                  "thermal_scale_factor", "energy_evolution", "dual_thermal_storage"):
         require(getattr(first, field, None) == getattr(second, field, None),
                 f"restart changed {field}")
     # Densities, supports and entropies are sums over neighbors of quantities that moved
     # by the roundoff allowed below; they agree to float roundoff, not bit for bit. The
     # binary16 bulk viscosity coefficient may round to the neighboring code.
     for field, tolerance in (("entropies", 1.0e-5), ("smoothing_lengths", 1.0e-5),
+                             ("stored_internal_energies", 1.0e-5),
                              ("densities", 1.0e-5), ("bulk_viscosity_coefficients", 2.0e-3)):
         old, new = list(getattr(first, field)), list(getattr(second, field))
         require(len(old) == len(new), f"restart changed the length of {field}")
@@ -229,7 +230,7 @@ def check_rank_velocity_roundoff_restart(first, second, scale):
 
 
 def checkViscosityRestarts(executable, baseWorkdir):
-    """Check both viscosity models; the shear limiter follows the model."""
+    """Check thermal layouts and both viscosity bounds through restart and rejection."""
     configuration = Path(__file__).resolve().parents[1] / "configurations/hydro_wave.ini"
     common = [str(executable), f"--configuration={configuration}", "--hpx:threads=2",
               "--hpx:bind=none", "--run.darkMatterParticleCount=512", "--run.gasParticleCount=512",
@@ -238,10 +239,14 @@ def checkViscosityRestarts(executable, baseWorkdir):
               "--output.directory=.", "--output.silo=false", "--analysis.views=false",
               "--analysis.power=false", "--analysis.groups=false", "--lightcone.enabled=false"]
     # Equal alpha bounds give constant viscosity; the default bounds evolve alpha.
-    for model in ("constant", "evolving"):
+    for model in ("constant", "evolving", "energy", "hopkins_entropy", "hopkins_energy"):
         name = f"viscosity_{model}"
         options = common + (["--hydro.viscosityCoefficientMin=1", "--hydro.viscosityCoefficientMax=1",
                              "--hydro.conductionCoefficient=0.3"] if model == "constant" else [])
+        energy_evolution = model in ("energy", "hopkins_energy")
+        dual_thermal_storage = model.startswith("hopkins_")
+        options += ["--hydro.sphFormulation=" + ("densityEnergy" if energy_evolution else "densityEntropy"),
+                    "--hydro.hopkins=" + ("true" if dual_thermal_storage else "false")]
         reference = prepareCase(baseWorkdir, name)
         runSimulation(options + ["--run.maxIterations=2"], reference, "run.log")
         checkpoint = reference / "checkpoint.1"
@@ -251,6 +256,10 @@ def checkViscosityRestarts(executable, baseWorkdir):
             state = decode_checkpoint((path / "checkpoint.0.dat").read_bytes())
             if len(state.bulk_viscosity_coefficients) != state.gas_count:
                 raise RuntimeError(f"{name} has an incorrect viscosity payload")
+            if (bool(state.stored_entropies), bool(state.stored_internal_energies)) != (
+                    not energy_evolution or dual_thermal_storage,
+                    energy_evolution or dual_thermal_storage):
+                raise RuntimeError(f"{name} has an incorrect thermal payload")
         resumed = prepareCase(baseWorkdir, name + "_restart", checkpoint)
         output = runSimulation(options + ["--run.maxIterations=1", "--checkpoint.readIndex=1"],
                                resumed, "restart.log")
@@ -266,7 +275,11 @@ def checkViscosityRestarts(executable, baseWorkdir):
         mutations = {"ceiling": "--hydro.viscosityCoefficientMax=" + (
             "1.5" if model == "constant" else "1"),
                      "beta": "--hydro.vonNeumannRichtmyerCoefficient=3",
-                     "balsara": "--hydro.balsaraSoundSpeedCoefficient=0.01"}
+                     "balsara": "--hydro.balsaraSoundSpeedCoefficient=0.01",
+                     "thermal_formulation": "--hydro.sphFormulation=" + (
+                         "densityEntropy" if energy_evolution else "densityEnergy"),
+                     "thermal_storage": "--hydro.hopkins=" + (
+                         "false" if dual_thermal_storage else "true")}
         if model == "constant":
             mutations.update({"conduction_off": "--hydro.conductionCoefficient=0",
                               "conduction_changed": "--hydro.conductionCoefficient=0.6"})

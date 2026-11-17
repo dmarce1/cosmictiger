@@ -647,6 +647,21 @@ if(BUILD_TESTING)
         ${cosmictiger_startup_test_args})
     set_tests_properties(startup_options PROPERTIES TIMEOUT 120 PROCESSORS 2
         LABELS "build;cpu")
+    if(COSMICTIGER_WITH_SPH)
+        # Thermal storage and source fixtures also run in builds without gravity.
+        set(cosmictiger_thermal_test_args --with-silo)
+        if(COSMICTIGER_WITH_CHEMISTRY)
+            list(APPEND cosmictiger_thermal_test_args --with-chemistry)
+        endif()
+        if(COSMICTIGER_WITH_STARS)
+            list(APPEND cosmictiger_thermal_test_args --with-star-formation)
+        endif()
+        add_test(NAME sph_thermal_formulations COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tests/run_sph_thermal.py $<TARGET_FILE:cosmictiger>
+            ${PROJECT_BINARY_DIR}/tests/sph_thermal_formulations ${cosmictiger_thermal_test_args})
+        set_tests_properties(sph_thermal_formulations PROPERTIES
+            TIMEOUT 1200 PROCESSORS 2 RUN_SERIAL TRUE LABELS "sph;cpu;thermal")
+    endif()
     set(COSMICTIGER_TEST_CUDA_EXECUTABLE "" CACHE FILEPATH
         "Optional second CUDA-enabled build for cross-build SPH comparisons")
     if(COSMICTIGER_TEST_CUDA_EXECUTABLE AND NOT EXISTS "${COSMICTIGER_TEST_CUDA_EXECUTABLE}")

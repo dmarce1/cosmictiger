@@ -560,37 +560,37 @@ namespace detail {
 static MutexType pairUpdateMutex;
 static Vector<SphOwnedPairUpdate> pendingPairUpdates;
 struct SphPairBaseline {
-    ParticleInteger index;
-    ParticleVector<float> velocity;
-    float entropy;
-    char proposedRung;
+    ParticleInteger index;             // Owned gas slot receiving a midpoint pair increment.
+    ParticleVector<float> velocity;    // Incoming stored peculiar velocity a v.
+    float thermal;                     // Canonical entropy A or scaled specific energy E = a²u.
+    char proposedRung;                 // Incoming timestep proposal restored before the corrector.
 };
 static Vector<SphPairBaseline> pairBaselines;
-static float* stageEntropyRates = nullptr;
+static float* stageThermalRates = nullptr;
 }    // namespace detail
 
-/// Expose the event-local entropy-rate array used by midpoint source staging.
-float* sphStageEntropyRates() {
-    return detail::stageEntropyRates;
+/// Expose the event-local canonical thermal-rate array used by midpoint source staging.
+float* sphStageThermalRates() {
+    return detail::stageThermalRates;
 }
 
 void sphPrepareStageRates(bool initialize);
 HPX_PLAIN_ACTION(sphPrepareStageRates, SphPrepareStageRatesAction);
-/// Allocate when requested and zero entropy-rate scratch arrays across localities.
+/// Allocate when requested and zero thermal-rate scratch arrays across localities.
 void sphPrepareStageRates(bool initialize) {
     Vector<hpx::future<void>> children;
     for (auto const& child : sphCollectiveChildren()) {
         children.push_back(hpx::async<SphPrepareStageRatesAction>(child, initialize));
     }
     if (initialize) {
-        ALWAYS_ASSERT(detail::stageEntropyRates == nullptr);
+        ALWAYS_ASSERT(detail::stageThermalRates == nullptr);
         if (sphParticlesSize() != 0) {
-            detail::stageEntropyRates =
+            detail::stageThermalRates =
                 static_cast<float*>(allocateManagedMemory(sphParticlesSize() * sizeof(float)));
         }
     }
     for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
-        detail::stageEntropyRates[gas] = 0.0f;
+        detail::stageThermalRates[gas] = 0.0f;
     }
     for (auto& child : children) {
         child.get();
@@ -621,13 +621,14 @@ void sphFinishPairStages(bool restore) {
             for (int dimension = 0; dimension < spatialDimensions(); ++dimension) {
                 sphParticlesVelocity(dimension, baseline.index) = baseline.velocity[dimension];
             }
-            sphParticlesEntropy(baseline.index) = baseline.entropy;
+            sphParticlesThermalVariable(baseline.index) = baseline.thermal;
+            sphParticlesSynchronizeThermalState(baseline.index);
         }
     }
     detail::pairBaselines.clear();
     detail::pendingPairUpdates.clear();
-    freeManagedMemory(detail::stageEntropyRates);
-    detail::stageEntropyRates = nullptr;
+    freeManagedMemory(detail::stageThermalRates);
+    detail::stageThermalRates = nullptr;
     detail::stagedSphRun.reset();
     for (auto& child : children) {
         child.get();
@@ -650,7 +651,8 @@ void sphCommitPairUpdates(int stage) {
             for (int dimension = 0; dimension < spatialDimensions(); ++dimension) {
                 sphParticlesVelocity(dimension, baseline.index) = baseline.velocity[dimension];
             }
-            sphParticlesEntropy(baseline.index) = baseline.entropy;
+            sphParticlesThermalVariable(baseline.index) = baseline.thermal;
+            sphParticlesSynchronizeThermalState(baseline.index);
             sphParticlesSetProposedRung(baseline.index,
                 std::max(int(baseline.proposedRung), sphParticlesProposedRung(baseline.index)));
         }
@@ -667,23 +669,25 @@ void sphCommitPairUpdates(int stage) {
             for (int dimension = 0; dimension < spatialDimensions(); ++dimension) {
                 flops += total.velocity[dimension].merge(updates[next].update.velocity[dimension]);
             }
-            flops += total.entropy.merge(updates[next].update.entropy);
+            flops += total.thermal.merge(updates[next].update.thermal);
             ++next;
         } while (next < updates.size() && updates[next].index == gas);
         if (stage == 1) {
             detail::SphPairBaseline baseline;
             baseline.index = gas;
             baseline.velocity = particlesVelData()[sphParticlesParticleIndex(gas)];
-            baseline.entropy = sphParticlesEntropy(gas);
+            baseline.thermal = sphParticlesThermalVariable(gas);
             baseline.proposedRung = char(sphParticlesProposedRung(gas));
             detail::pairBaselines.push_back(baseline);
         }
         for (int dimension = 0; dimension < spatialDimensions(); ++dimension) {
             sphParticlesVelocity(dimension, gas) += total.velocity[dimension];
         }
-        sphParticlesEntropy(gas) += total.entropy;
+        sphParticlesThermalVariable(gas) += total.thermal;
+        sphParticlesSynchronizeThermalState(gas);
         flops += spatialDimensions() + 1;
-        ALWAYS_ASSERT(std::isfinite(sphParticlesEntropy(gas)) && sphParticlesEntropy(gas) > 0.0f);
+        ALWAYS_ASSERT(std::isfinite(sphParticlesThermalVariable(gas)) &&
+            sphParticlesThermalVariable(gas) > 0.0f);
         first = next;
     }
     Vector<SphOwnedPairUpdate>().swap(updates);
@@ -702,7 +706,7 @@ void SphRunWorkspace::deliverPairUpdates() {
     Vector<Vector<SphOwnedPairUpdate>> destinations(hpxSize());
     for (size_t i = 0; i < hostPairUpdates.size(); ++i) {
         auto const& value = hostPairUpdates[i];
-        bool nonzero = !value.entropy.isZero();
+        bool nonzero = !value.thermal.isZero();
         for (int dimension = 0; dimension < spatialDimensions(); ++dimension) {
             nonzero = nonzero || !value.velocity[dimension].isZero();
         }
@@ -848,7 +852,8 @@ SphRunReturn sphMidpointForces(SphRunParameters params, bool cuda) {
     /*
      * Explicit-midpoint RK2 for a fixed-position rung operator (local split):
      *   Y* = Y₀ + (Δτ/2) Fᵣ(Y₀),   Y₁ = Y₀ + Δτ Fᵣ(Y*).
-     * Here Y = (w,A), and Fᵣ contains only pairs whose finer rung is r.
+     * Here Y = (w,A) or (w,E), according to the SPH formulation.
+     * Fᵣ contains pairs whose finer rung is r and active-target expansion.
      * Each pair has a single owner and deposits opposite momentum increments.
      * Both stages freeze every source before any rank publishes an update.
      * Reference: Goodman, Numerical Methods II (2016), lecture 3, RK methods,
@@ -856,7 +861,8 @@ SphRunReturn sphMidpointForces(SphRunParameters params, bool cuda) {
      * The rung partition and fixed-position split are local derivations.
      * Symbol directory: Δτ -> timestep; Fᵣ -> SPH run with the due-pair filter;
      * Y₀ -> pair baselines; Y* -> predictor particle state; w -> velocity;
-     * A -> entropy. Positions and the cosmological scale stay at this event.
+     * A -> entropy; E = a²u -> scaled specific internal energy.
+     * Positions and the cosmological scale stay at this event.
      */
     // clang-format on
     double const Δτ = params.hydroKickTimestep;
@@ -1086,7 +1092,7 @@ SphRunData SphRunWorkspace::data() {
     runData.sinkBalsaraFactor = sphParticlesBalsaraFactors;
     runData.sinkBulkViscosityCoefficient = sphParticlesBulkViscosityCoefficients;
     runData.sinkSmoothingLength = sphParticlesSmoothingLengths;
-    runData.sinkEntropyRate = params.runType == kSphRunHydro ? detail::stageEntropyRates : nullptr;
+    runData.sinkThermalRate = params.runType == kSphRunHydro ? detail::stageThermalRates : nullptr;
 #if COSMICTIGER_WITH_GRAVITY
     runData.sinkGravityAccelerationX = nullptr;
     runData.sinkGravityAccelerationY = nullptr;
@@ -1096,6 +1102,7 @@ SphRunData SphRunWorkspace::data() {
     runData.selfGravityEnabled = false;
 #endif
     runData.adiabaticIndex = opts.hydro.heatCapacityRatio;
+    runData.energyEvolution = usesSphEnergyEvolution(opts.hydro);
     runData.numberOfTargetNodes = hostTargetNodeIndices.size();
     runData.centralAcceleration = opts.scenario.disc.centralAcceleration;
     runData.centralSmoothingLength = opts.scenario.disc.centralSmoothingLength;
@@ -1110,6 +1117,15 @@ SphRunData SphRunWorkspace::data() {
 /// returning.
 SphRunReturn SphRunWorkspace::compute(bool useCuda) {
     SphRunData runData = data();
+    auto const synchronizeDensityThermalState = [&]() {
+        if (getOptions().hydro.hopkins && sphParticlesEntropyInitialized &&
+            (params.runType == kSphRunSmoothingLengths ||
+                params.runType == kSphRunDensityAndGradients)) {
+            for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
+                sphParticlesSynchronizeThermalState(gas);
+            }
+        }
+    };
     for (int i = 0; i < hostTargetNodeIndices.size(); i++) {
         auto const& node = hostTrees[hostTargetNodeIndices[i]];
         bool found = false;
@@ -1159,6 +1175,7 @@ SphRunReturn SphRunWorkspace::compute(bool useCuda) {
         for (auto& worker : workers) {
             result += worker.get();
         }
+        synchronizeDensityThermalState();
         return result;
     }
 #ifdef USE_CUDA
@@ -1185,6 +1202,7 @@ SphRunReturn SphRunWorkspace::compute(bool useCuda) {
     }
     stream.wait();
 
+    synchronizeDensityThermalState();
     return rc;
 #else
     ALWAYS_ASSERT(false);

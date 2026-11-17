@@ -224,31 +224,45 @@ struct Units {
 };
 
 struct Hydro {
-    int dimensions{3};    // Active Cartesian SPH axes, from 1 through 3.
-    bool cuda{};
-    bool enabled{};
-    std::string method{"sph"};
-    std::string kernelFamily{"spline"};
-    int kernelDegree{3};
+    int dimensions{3};            // Active Cartesian SPH axes, from 1 through 3.
+    bool cuda{};                  // Run hydrodynamic kernels on the CUDA backend.
+    bool enabled{};               // Allocate gas particles and enable hydrodynamic evolution.
+    bool hopkins{false};          // Hopkins hydrodynamics selector; requires enabled hydrodynamics.
+    std::string method{"sph"};    // Hydrodynamic method; currently only sph is supported.
+    std::string sphFormulation{"densityEntropy"};    // Evolve entropy A or specific energy a^2 u.
+    std::string kernelFamily{"spline"};              // Radial density-kernel family.
+    int kernelDegree{3};    // Polynomial degree in the selected kernel family.
     // Pairs use beta_ij = vonNeumannRichtmyerCoefficient alpha_ij with Rosswog-limited alpha.
-    double vonNeumannRichtmyerCoefficient{};
-    double viscosityEpsilon{};
-    double conductionCoefficient{0.0};
-    double minimumBulkViscosityCoefficient{0.01};
-    double maximumBulkViscosityCoefficient{2.0};
-    double viscosityDecay{0.2};
-    double balsaraSoundSpeedCoefficient{1.0e-4};
-    double heatCapacityRatio{};
-    double cfl{};
-    double neighborNumber{42.0};
-    // Canonical support bounds in box units, normalized from input particle spacings.
-    double minSmoothingLength{};
-    double maxSmoothingLength{};
-    // Optional uniform external acceleration in the y direction.
-    double yAcceleration{};
-    // Velocity damping during the self-gravitating gas relaxation test.
-    double damping{};
+    double vonNeumannRichtmyerCoefficient{};    // Ratio of quadratic to bulk viscosity strength.
+    double viscosityEpsilon{};                  // Relative viscosity regularization length.
+    double conductionCoefficient{0.0};          // Artificial conduction strength; zero disables it.
+    double minimumBulkViscosityCoefficient{0.01};    // Initial and minimum bulk viscosity alpha.
+    double maximumBulkViscosityCoefficient{2.0};     // Maximum bulk viscosity alpha.
+    double viscosityDecay{0.2};                      // Dimensionless alpha relaxation coefficient.
+    double balsaraSoundSpeedCoefficient{1.0e-4};    // Sound-speed floor in the Balsara denominator.
+    double heatCapacityRatio{};                     // Ideal-gas adiabatic index gamma.
+    double cfl{};                                   // Courant timestep multiplier.
+    double neighborNumber{42.0};                    // Weighted neighbor target, including self.
+    double minSmoothingLength{};    // Minimum support in box units after input normalization.
+    double maxSmoothingLength{};    // Maximum support in box units after input normalization.
+    double yAcceleration{};         // Uniform external y acceleration in code units.
+    double damping{};    // Velocity damping for the self-gravitating gas relaxation test.
 };
+
+/// Report whether SPH evolves stored specific internal energy a^2 u rather than entropy A.
+inline bool usesSphEnergyEvolution(Hydro const& hydro) {
+    return hydro.sphFormulation == "densityEnergy";
+}
+
+/// Retain entropy for entropy-evolving SPH and for the Hopkins dual thermal state.
+inline bool storesSphEntropy(Hydro const& hydro) {
+    return !usesSphEnergyEvolution(hydro) || hydro.hopkins;
+}
+
+/// Retain specific internal energy for energy-evolving SPH and Hopkins hydrodynamics.
+inline bool storesSphInternalEnergy(Hydro const& hydro) {
+    return usesSphEnergyEvolution(hydro) || hydro.hopkins;
+}
 
 struct Chemistry {
     bool cuda{};
@@ -503,6 +517,8 @@ struct Options {
         arc & scenario.benchmark.openingAngles;
         arc & scenario.benchmark.size;
         arc & scenario.benchmark.repeats;
+        arc & hydro.hopkins;
+        arc & hydro.sphFormulation;
     }
 };
 

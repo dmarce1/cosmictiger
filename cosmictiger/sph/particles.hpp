@@ -1,5 +1,6 @@
 /*
  CosmicTiger - A cosmological N-Body code
+ Gas particle storage, thermodynamic conversion, and field accessors.
  Copyright (C) 2026  Dominic C. Marcello
 
  Distributed under the Boost Software License, Version 1.0.
@@ -40,15 +41,18 @@
 #define CHECK_SPH_PART_BOUNDS(i)
 #endif
 
-// Cooling stores an equilibrium electron-fraction guess; hydro owns entropy.
+// Cooling stores an equilibrium electron-fraction guess; hydro owns thermal state.
 SPH_PARTICLES_EXTERN float* sphParticlesElectronFractions;
 
-// Canonical A=P_physical/rho_physical^gamma. Before the first density solve these
-// slots temporarily hold the initial E=a^2 u; prepareThermodynamics converts once.
+// Marks completion of the initial density-dependent thermal conversion in either formulation.
 extern bool sphParticlesEntropyInitialized;
 extern double sphParticlesThermalScaleFactor;
 void sphParticlesPrepareThermodynamics(double scaleFactor, bool initializeEntropy);
+// A=P_physical/rho_physical^gamma, allocated for densityEntropy or Hopkins storage.
+// Before thermal initialization this array temporarily holds the initial E=a^2 u.
 SPH_PARTICLES_EXTERN float* sphParticlesEntropies;
+// E=a^2 u, allocated for densityEnergy or Hopkins storage; u is physical specific energy.
+SPH_PARTICLES_EXTERN float* sphParticlesInternalEnergies;
 // The stored smoothing length h is the full compact support of the SPH kernel.
 // For the cubic spline h = 2h_M; renaming this storage does not rescale its values.
 SPH_PARTICLES_EXTERN float* sphParticlesSmoothingLengths;
@@ -170,30 +174,71 @@ inline char& sphParticlesRung(int index) {
 /// Access initialized gas entropy storage; thermodynamic preparation must have completed.
 inline float& sphParticlesEntropy(ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
-    ALWAYS_ASSERT(sphParticlesEntropyInitialized);
+    ALWAYS_ASSERT(sphParticlesEntropyInitialized && sphParticlesEntropies != nullptr);
     return sphParticlesEntropies[index];
 }
 
-/// Return stored specific energy, converting from entropy after thermodynamic
-/// initialization.
+/// Access the formulation's canonical thermal variable: entropy A or stored energy E=a^2 u.
+inline float& sphParticlesThermalVariable(ParticleInteger index) {
+    CHECK_SPH_PART_BOUNDS(index);
+    return usesSphEnergyEvolution(getOptions().hydro) ? sphParticlesInternalEnergies[index] :
+                                                        sphParticlesEntropies[index];
+}
+
+/// Return stored specific energy E=a^2 u, converting canonical entropy when needed.
 inline float sphParticlesInternalEnergy(ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
+    auto const& opts = getOptions();
+    if (usesSphEnergyEvolution(opts.hydro)) {
+        return sphParticlesInternalEnergies[index];
+    }
     if (!sphParticlesEntropyInitialized) {
         return sphParticlesEntropies[index];
     }
-    auto const& opts = getOptions();
     return sph_entropy::storedEnergy(sphParticlesEntropies[index], sphParticlesDensities[index],
         opts.hydro.heatCapacityRatio, sphParticlesThermalScaleFactor);
 }
 
-// Initial conditions supply E before density exists. Later energy writes must convert to A.
+/// Return physical entropy even when only stored energy is resident.
+inline float sphParticlesEntropyValue(ParticleInteger index) {
+    CHECK_SPH_PART_BOUNDS(index);
+    ALWAYS_ASSERT(sphParticlesEntropyInitialized);
+    auto const& opts = getOptions();
+    return usesSphEnergyEvolution(opts.hydro) ?
+        sph_entropy::fromStoredEnergy(sphParticlesInternalEnergies[index],
+            sphParticlesDensities[index], opts.hydro.heatCapacityRatio,
+            sphParticlesThermalScaleFactor) :
+        sphParticlesEntropies[index];
+}
+
+/// Refresh Hopkins' auxiliary thermal field from the current canonical variable.
+inline void sphParticlesSynchronizeThermalState(ParticleInteger index) {
+    CHECK_SPH_PART_BOUNDS(index);
+    if (sphParticlesEntropies == nullptr || sphParticlesInternalEnergies == nullptr) {
+        return;
+    }
+    if (usesSphEnergyEvolution(getOptions().hydro)) {
+        sphParticlesEntropies[index] = sphParticlesEntropyInitialized ?
+            sphParticlesEntropyValue(index) :
+            sphParticlesInternalEnergies[index];
+    } else {
+        sphParticlesInternalEnergies[index] = sphParticlesInternalEnergy(index);
+    }
+}
+
+/// Store supplied E=a^2 u in the selected formulation and refresh any auxiliary field.
 inline void sphParticlesSetInternalEnergy(ParticleInteger index, float energy) {
     auto const& opts = getOptions();
     CHECK_SPH_PART_BOUNDS(index);
-    sphParticlesEntropies[index] = sphParticlesEntropyInitialized ?
-        sph_entropy::fromStoredEnergy(energy, sphParticlesDensities[index],
-            opts.hydro.heatCapacityRatio, sphParticlesThermalScaleFactor) :
-        energy;
+    if (usesSphEnergyEvolution(opts.hydro)) {
+        sphParticlesInternalEnergies[index] = energy;
+    } else {
+        sphParticlesEntropies[index] = sphParticlesEntropyInitialized ?
+            sph_entropy::fromStoredEnergy(energy, sphParticlesDensities[index],
+                opts.hydro.heatCapacityRatio, sphParticlesThermalScaleFactor) :
+            energy;
+    }
+    sphParticlesSynchronizeThermalState(index);
 }
 
 /// Access the gas particle's smoothing length.

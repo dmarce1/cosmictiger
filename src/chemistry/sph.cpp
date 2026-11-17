@@ -103,9 +103,9 @@ std::vector<gadget4::Result> integrateCoolingBatch(std::vector<gadget4::Input> c
     return results;
 }
 struct PendingCoolingUpdate {
-    ParticleInteger gas;
-    float entropy;
-    float electronFraction;
+    ParticleInteger gas;       // Owned gas slot whose source interval has completed.
+    float thermal;             // Canonical entropy A or scaled specific energy E = a²u.
+    float electronFraction;    // Electron abundance per hydrogen nucleus after cooling.
 };
 std::vector<PendingCoolingUpdate> pendingCooling;
 }    // namespace detail
@@ -255,7 +255,7 @@ void sphCoolingDiscard() {
         future.get();
     }
 }
-/// Compute and stage entropy/electron updates for explicit gas slots and intervals; return
+/// Compute and stage thermal/electron updates for explicit gas slots and intervals; return
 /// their heating.
 double sphCoolingPrepareLocal(std::vector<ParticleInteger> const& indices,
     std::vector<double> const& intervals, double scaleFactor) {
@@ -264,7 +264,8 @@ double sphCoolingPrepareLocal(std::vector<ParticleInteger> const& indices,
         throw std::invalid_argument("Cooling slots and intervals differ in count");
     }
     if (!sphParticlesEntropyInitialized || sphParticlesThermalScaleFactor != scaleFactor) {
-        throw std::logic_error("Cooling requires initialized entropy at the source scale factor");
+        throw std::logic_error(
+            "Cooling requires initialized thermal state at the source scale factor");
     }
     auto const& options = getOptions();
     auto const scales = units::scalesFromOptions(options);
@@ -300,19 +301,22 @@ double sphCoolingPrepareLocal(std::vector<ParticleInteger> const& indices,
     double heating = 0.0;
     for (size_t selectedIndex = 0; selectedIndex < inputs.size(); ++selectedIndex) {
         auto const thermal = sph_entropy::prepareStoredEnergy(results[selectedIndex].storedEnergy,
-            inputs[selectedIndex].storedDensity, options.hydro.heatCapacityRatio, scaleFactor);
-        prepared.push_back(
-            {indices[selectedIndex], thermal.entropy, results[selectedIndex].electronFraction});
+            inputs[selectedIndex].storedDensity, options.hydro.heatCapacityRatio, scaleFactor,
+            usesSphEnergyEvolution(options.hydro), storesSphEntropy(options.hydro));
+        prepared.push_back({indices[selectedIndex],
+            usesSphEnergyEvolution(options.hydro) ? thermal.storedEnergy : thermal.entropy,
+            results[selectedIndex].electronFraction});
         heating -= options.initial.gasMass *
             (double(thermal.storedEnergy) - inputs[selectedIndex].storedEnergy) / scaleFactor;
     }
     detail::pendingCooling = std::move(prepared);
     return heating;
 }
-/// Install the staged entropy and electron fractions, then clear local pending updates.
+/// Install the staged thermal state and electron fractions, then clear local pending updates.
 void sphCoolingCommitLocal() {
     for (auto const& update : detail::pendingCooling) {
-        sphParticlesEntropies[update.gas] = update.entropy;
+        sphParticlesThermalVariable(update.gas) = update.thermal;
+        sphParticlesSynchronizeThermalState(update.gas);
         sphParticlesElectronFractions[update.gas] = update.electronFraction;
     }
     detail::pendingCooling.clear();

@@ -27,7 +27,9 @@ import run_variational_sph
 
 def checkpoint_fixture(*, hydro=True, cooling=False, stars=False, viscosity=False, balsara=False,
                        position_bytes=4, integer_bytes=4, global_step=False, pmmm=0,
-                       ranks=1, converged=False, semiactive=True, proposed_rung=3):
+                       ranks=1, converged=False, semiactive=True, proposed_rung=3,
+                       energy_evolution=False, dual_thermal_storage=False, thermal_initialized=False,
+                       gamma=5.0 / 3.0, thermal_scale_factor=1.0):
     """Small writer-order fixture, with magic-like data inside a position array."""
     # Every SPH checkpoint stores alpha and the Balsara factor.
     viscosity = viscosity or hydro
@@ -38,11 +40,13 @@ def checkpoint_fixture(*, hydro=True, cooling=False, stars=False, viscosity=Fals
     flags |= (int(global_step) << 19) | (int(bool(pmmm)) << 17)
     flags |= int(viscosity) << 14
     flags |= int(hydro and balsara) << 13
+    flags |= int(hydro and energy_evolution) << 27
+    flags |= int(hydro and dual_thermal_storage) << 28
     header = checkpoint.Header()
     header.magic, header.version, header.flags = 0x4354535048303031, 3, flags
     header.reserved = (int(hydro) << 25) | (int(hydro) << 26)
     header.particles_per_species = 2
-    header.physics[2] = 5.0 / 3.0
+    header.physics[2] = gamma
     output = bytearray(bytes(header))
     offsets = {}
 
@@ -86,12 +90,19 @@ def checkpoint_fixture(*, hydro=True, cooling=False, stars=False, viscosity=Fals
         put(2 * integer, -1, 0)
         offsets['gas'] = len(output)
         version = 140000 + (110 if stars else 100 if cooling else 2) + (2 if viscosity else 0)
+        version += (1000 if energy_evolution else 0) + (2000 if dual_thermal_storage else 0)
         offsets['gas_version'] = len(output) + 4
         put('7I', 0x43545350, version, integer_bytes, 4, 0, 3, 4)
         put(integer, 1)
-        put('I', 0)  # initial-energy state, not yet converted to entropy
-        put('d', 1.0)  # thermal scale factor
-        put('2f', 100., .1)  # initial thermal array, then support radius array
+        put('I', int(thermal_initialized))
+        put('d', thermal_scale_factor)
+        if not energy_evolution or dual_thermal_storage:
+            put('f', 100.)  # physical entropy A, or initial stored energy before conversion
+        if energy_evolution or dual_thermal_storage:
+            energy = (100. * .6 ** (gamma - 1) * thermal_scale_factor ** (5 - 3 * gamma) /
+                      (gamma - 1)) if thermal_initialized else 100.
+            put('f', energy)
+        put('f', .1)  # support radius array
         offsets['gas_mapping'] = len(output)
         put(integer, 1)
         put('f', .6)  # density; no persistent acceleration or entropy-rate arrays
@@ -170,6 +181,37 @@ class InterruptProgressTests(unittest.TestCase):
 
 
 class CheckpointTests(unittest.TestCase):
+    def test_thermal_storage_variants(self):
+        for energy_evolution, dual_thermal_storage, thermal_initialized in itertools.product(
+                (False, True), repeat=3):
+            with self.subTest(energy_evolution=energy_evolution,
+                              dual_thermal_storage=dual_thermal_storage,
+                              thermal_initialized=thermal_initialized):
+                data, _ = checkpoint_fixture(energy_evolution=energy_evolution,
+                    dual_thermal_storage=dual_thermal_storage,
+                    thermal_initialized=thermal_initialized, gamma=1.4, thermal_scale_factor=.5)
+                result = checkpoint.decode_checkpoint(data)
+                self.assertEqual(len(result.stored_entropies), int(not energy_evolution or dual_thermal_storage))
+                self.assertEqual(len(result.stored_internal_energies), int(energy_evolution or dual_thermal_storage))
+                self.assertAlmostEqual(result.entropies[0], 100., places=4)
+                expected_energy = 100. * .6 ** .4 * .5 ** .8 / .4 if thermal_initialized else 100.
+                self.assertAlmostEqual(result.internal_energies[0], expected_energy, places=4)
+                self.assertEqual(result.gas_flags, (14,))
+                self.assertEqual(result.bulk_viscosity_coefficients, [.25])
+
+    def test_thermal_layout_mismatch_is_rejected(self):
+        for energy_evolution, dual_thermal_storage in itertools.product((False, True), repeat=2):
+            data, _ = checkpoint_fixture(energy_evolution=energy_evolution,
+                                          dual_thermal_storage=dual_thermal_storage)
+            for bit in (27, 28):
+                altered = bytearray(data)
+                header = checkpoint.Header.from_buffer(altered)
+                header.flags ^= 1 << bit
+                with self.subTest(energy_evolution=energy_evolution,
+                                  dual_thermal_storage=dual_thermal_storage, bit=bit), \
+                        self.assertRaisesRegex(RuntimeError, 'unsupported checkpoint gas layout'):
+                    checkpoint.decode_checkpoint(altered)
+
     def test_layout_variants(self):
         for position_bytes, integer_bytes, global_step, state, viscosity, balsara in itertools.product(
                 (4, 8), (4, 8), (False, True), ('hydro', 'cooling', 'stars'), (False, True),

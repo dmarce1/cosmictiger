@@ -25,54 +25,55 @@
 
 struct SphRunData {
     // Staged source arrays, including the sources that are also local sinks.
-    Position* sourcePositionX;
-    Position* sourcePositionY;
-    Position* sourcePositionZ;
-    float* sourceVelocityX;
-    float* sourceVelocityY;
-    float* sourceVelocityZ;
-    float* sourceInternalEnergy;
-    float* sourceDensity;
-    float* sourceBalsaraFactor;
-    float* sourceBulkViscosityCoefficient;
-    float* sourceSmoothingLength;    // Full compact-support h, as in particle storage.
+    Position* sourcePositionX;      // Comoving source x coordinate in box units.
+    Position* sourcePositionY;      // Comoving source y coordinate in box units.
+    Position* sourcePositionZ;      // Comoving source z coordinate in box units.
+    float* sourceVelocityX;         // Stored peculiar x velocity, a times physical velocity.
+    float* sourceVelocityY;         // Stored peculiar y velocity, a times physical velocity.
+    float* sourceVelocityZ;         // Stored peculiar z velocity, a times physical velocity.
+    float* sourceInternalEnergy;    // Stored specific energy E=a²u in both formulations.
+    float* sourceDensity;           // Comoving mass density from the current density pass.
+    float* sourceBalsaraFactor;     // Dimensionless shear suppression of artificial viscosity.
+    float* sourceBulkViscosityCoefficient;    // Dimensionless bulk viscosity coefficient α.
+    float* sourceSmoothingLength;             // Full compact-support h, as in particle storage.
     // Variational operator: zeta_i of cosmictiger/sph/volume.hpp from this step's density
     // pass.
-    float* sourceGradHCorrection;
+    float* sourceGradHCorrection;    // ζᵢ, with the same units as gasMass.
     // Frozen before sink writes; required by prehydro and rung limiting.
-    char* sourceRungs;
+    char* sourceRungs;    // Frozen source timestep rung in [0,kMaxRung).
     // Optional conservative midpoint output. Source identities and compensated float
     // increments live only for the frozen pass and its reverse MPI exchange.
-    SphPairSourceId const* sourceIds = nullptr;
-    SphPairUpdate* sourcePairUpdates = nullptr;
+    SphPairSourceId const* sourceIds = nullptr;    // Owner rank/index for unique pair scheduling.
+    SphPairUpdate* sourcePairUpdates = nullptr;    // Event-local velocity and thermal increments.
 
     // Local sink arrays indexed by the SPH particle index.
-    float* sinkEntropyRate = nullptr;    // dA/dtau from nonadiabatic heating and conduction.
-    float* sinkDensity;
+    float* sinkThermalRate = nullptr;    // dA/dτ or dE/dτ, selected by energyEvolution.
+    float* sinkDensity;            // Output comoving density, indexed by local SPH particle index.
     float* sinkGradHCorrection;    // Rebuilt with the density on every preparation pass.
-    uint8_t* sinkBalsaraFactor;
-    Float16Storage* sinkBulkViscosityCoefficient;
-    SphParticleFlags* sinkFlags;
-    float* sinkSmoothingLength;    // Full compact-support h, as in particle storage.
-    float* sinkGravityAccelerationX;
-    float* sinkGravityAccelerationY;
-    float* sinkGravityAccelerationZ;
-    ParticleInteger* sinkParticleIndices;
+    uint8_t* sinkBalsaraFactor;    // Encoded dimensionless Balsara factor.
+    Float16Storage* sinkBulkViscosityCoefficient;    // Persistent dimensionless viscosity α.
+    SphParticleFlags* sinkFlags;             // Convergence, semiactive, and proposed-rung bits.
+    float* sinkSmoothingLength;              // Full compact-support h, as in particle storage.
+    float* sinkGravityAccelerationX;         // Completed x gravity acceleration dv/dτ.
+    float* sinkGravityAccelerationY;         // Completed y gravity acceleration dv/dτ.
+    float* sinkGravityAccelerationZ;         // Completed z gravity acceleration dv/dτ.
+    ParticleInteger* sinkParticleIndices;    // Map local SPH index to full particle index.
     char* sinkParticleRungs;    // Indexed through sinkParticleIndices into the full particle array.
     // A phase-1 hydro pass can store its rung proposals in sinkFlags instead of
     // sinkParticleRungs, preserving the closing rung until the driver commits it.
-    bool proposeRungs = false;
+    bool proposeRungs = false;    // Store proposals without changing the closing rung.
     // Optional globally closed rung candidates, indexed by full particle index.
-    char* sinkRungCandidates = nullptr;
+    char* sinkRungCandidates = nullptr;    // Globally closed proposals, or null when unused.
 
-    int numberOfTargetNodes;
-    SphTreeNode* treeNodes;
-    int* targetNodeIndices;
-    int* neighborNodeIndices;
-    float targetNeighborCount;    // Weighted neighbor target for the smoothing-length solve.
-    float gasMass;
-    float adiabaticIndex;    // Ideal-gas index shared by all gas particles.
-    bool selfGravityEnabled;
+    int numberOfTargetNodes;             // Number of entries in targetNodeIndices.
+    SphTreeNode* treeNodes;              // Staged source and local target tree nodes.
+    int* targetNodeIndices;              // Target node indices in treeNodes.
+    int* neighborNodeIndices;            // Flattened neighbor node indices in treeNodes.
+    float targetNeighborCount;           // Weighted neighbor target for the smoothing-length solve.
+    float gasMass;                       // Equal mass of every gas particle, in code mass units.
+    float adiabaticIndex;                // Ideal-gas index shared by all gas particles.
+    bool energyEvolution = false;        // E=a²u evolves directly; false evolves entropy A.
+    bool selfGravityEnabled;             // Include gas self-gravity and its timestep bound.
     float gravityEffectiveRadius;        // Twice the gravity kernel standard deviation.
     float accelerationTimestepFactor;    // Coefficient of the acceleration timestep bound.
     // Optional external central potential, used by the orbiting-disc problem.

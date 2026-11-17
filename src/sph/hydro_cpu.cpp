@@ -76,14 +76,17 @@ using sph_geometry::SpatialVector;
  *   Σ𞁓 C𞁑𞁓/a → summed exchange rate, which sets the conduction timestep bound
  *   (du𞁑/dτ)ₕₑₐₜ𞁑𞁓, (du𞁓/dτ)ₕₑₐₜ𞁑𞁓 → sink, neighbor dissipative heating by one pair
  *   (du𞁑/dτ)ₕₑₐₜ → total dissipative heating, which becomes the entropy rate
- *   Ȧ𞁑𞁓, Ȧ𞁓𞁑 → sink, neighbor entropy rate of one pair; Δτ → pair kick interval
+ *   (du𞁑/dτ)_P𞁑𞁓, (du𞁓/dτ)_P𞁑𞁓 → directed reversible pressure work of the pair
+ *   (du𞁑/dτ)_H → homogeneous expansion contribution to stored energy
+ *   Δτ → pair kick interval; thermalRateA, thermalRateB → selected dA/dτ or dE/dτ
  *   (dv𞁑/dτ)_G, (dv𞁑/dτ)ₑₓₜ → gravity acceleration, external acceleration
  *   5 − 3γ → homogeneous expansion coefficient of the stored energy
  *   Code names: ia = a⁻¹; aȧ = a ȧ; m𞁓_over_a = m𞁓/a; γ_minus_1 = γ − 1
  *     ih𞁑 = h𞁑⁻¹; ih𞁓 = h𞁓⁻¹; ih_D_plus_1𞁑 = h𞁑⁻⁽ᴰ⁺¹⁾; abs_r𞁑𞁓 = |r𞁑𞁓|
  *     r2𞁑𞁓 = r𞁑𞁓²; v𞁑𞁓_dot_r𞁑𞁓 = v𞁑𞁓 · r𞁑𞁓; a_vₚₕ𞁟ₛ𞁑𞁓_dot_r𞁑𞁓 = (a vₚₕ𞁟ₛ𞁑𞁓) · r𞁑𞁓
  *     Q𞁑𞁓_over_m𞁑 = Q𞁑𞁓/m𞁑; Q𞁓𞁑_over_m𞁑 = Q𞁓𞁑/m𞁑; dv𞁑_dτ = dv𞁑/dτ; du𞁑_dτ = du𞁑/dτ
- *     du_dτ_Π𞁑𞁓 = (du/dτ)_Π𞁑𞁓; C𞁑𞁓_over_a = C𞁑𞁓/a
+ *     du𞁑_dτ_P𞁑𞁓 = (du𞁑/dτ)_P𞁑𞁓; du𞁓_dτ_P𞁑𞁓 = (du𞁓/dτ)_P𞁑𞁓
+ *     du𞁑_dτ_H = (du𞁑/dτ)_H; du_dτ_Π𞁑𞁓 = (du/dτ)_Π𞁑𞁓; C𞁑𞁓_over_a = C𞁑𞁓/a
  *     du𞁑_dτ𞁞ₒₙ𞁑𞁓 = (du𞁑/dτ)𞁞ₒₙ𞁑𞁓; ΣC𞁑𞁓_over_a = Σ𞁓 C𞁑𞁓/a
  *     du𞁑_dτₕₑₐₜ𞁑𞁓 = (du𞁑/dτ)ₕₑₐₜ𞁑𞁓; du𞁓_dτₕₑₐₜ𞁑𞁓 = (du𞁓/dτ)ₕₑₐₜ𞁑𞁓
  *     du𞁑_dτₕₑₐₜ = (du𞁑/dτ)ₕₑₐₜ; dv𞁑_dτ_G = (dv𞁑/dτ)_G; h_M_over_h = h_M/h
@@ -316,6 +319,8 @@ SphRunReturn sphCpuHydro(
             }
             SpatialVector<SimdFloat> const f𞁑𞁓Pack = (f_P𞁑𞁓 + f_Π𞁑𞁓) * r𞁑𞁓;
             dv𞁑_dτPack -= f𞁑𞁓Pack;
+            SimdFloat const du𞁑_dτ_P𞁑𞁓 = SimdFloat(ia) *
+                variational::pairWork(SimdFloat(Q𞁑𞁓_over_m𞁑), maskedF_a, v𞁑𞁓_dot_r𞁑𞁓);
             if (applyPairKicks) {
                 for (size_t lane = 0; lane < SimdFloat::size(); ++lane) {
                     if (!interacts[lane]) {
@@ -330,17 +335,29 @@ SphRunReturn sphCpuHydro(
                         continue;
                     }
                     SpatialVector<float> const a𞁑𞁓 = -detail::sphCpuLane<dimension>(f𞁑𞁓Pack, lane);
-                    float const Ȧ𞁑𞁓 = sph_entropy::fromStoredEnergy(
-                        float(du𞁑_dτₕₑₐₜ𞁑𞁓[lane]), ρ𞁑, γ, parameters.scaleFactor);
-                    float const Ȧ𞁓𞁑 = sph_entropy::fromStoredEnergy(
-                        float(du𞁓_dτₕₑₐₜ𞁑𞁓[lane]), float(ρ𞁓[lane]), γ, parameters.scaleFactor);
+                    float thermalRateA;
+                    float thermalRateB;
+                    if (data.energyEvolution) {
+                        // Reversing both the separation and velocity difference preserves
+                        // their dot product; the neighbor uses its own Q and kernel gradient.
+                        float const du𞁓_dτ_P𞁑𞁓 = ia *
+                            variational::pairWork(float(Q𞁓𞁑_over_m𞁑[lane]), float(maskedF_b[lane]),
+                                float(v𞁑𞁓_dot_r𞁑𞁓[lane]));
+                        thermalRateA = float(du𞁑_dτ_P𞁑𞁓[lane] + du𞁑_dτₕₑₐₜ𞁑𞁓[lane]);
+                        thermalRateB = du𞁓_dτ_P𞁑𞁓 + float(du𞁓_dτₕₑₐₜ𞁑𞁓[lane]);
+                        flops += 5;
+                    } else {
+                        thermalRateA = sph_entropy::fromStoredEnergy(
+                            float(du𞁑_dτₕₑₐₜ𞁑𞁓[lane]), ρ𞁑, γ, parameters.scaleFactor);
+                        thermalRateB = sph_entropy::fromStoredEnergy(
+                            float(du𞁓_dτₕₑₐₜ𞁑𞁓[lane]), float(ρ𞁓[lane]), γ, parameters.scaleFactor);
+                        flops += 2 * sph_flops::entropyConversionFlops(γ);
+                    }
                     flops += sphAccumulatePairKick<dimension>(data.sourcePairUpdates[particleIndex],
-                        data.sourcePairUpdates[neighborIndex], a𞁑𞁓, Ȧ𞁑𞁓, Ȧ𞁓𞁑, Δτ);
-                    flops += 2 * sph_flops::entropyConversionFlops(γ);
+                        data.sourcePairUpdates[neighborIndex], a𞁑𞁓, thermalRateA, thermalRateB, Δτ);
                 }
             }
-            du𞁑_dτPack += SimdFloat(ia) *
-                variational::pairWork(SimdFloat(Q𞁑𞁓_over_m𞁑), maskedF_a, v𞁑𞁓_dot_r𞁑𞁓);
+            du𞁑_dτPack += du𞁑_dτ_P𞁑𞁓;
             du𞁑_dτₕₑₐₜPack += du𞁑_dτₕₑₐₜ𞁑𞁓;
             // Common geometry, pressure, and accumulation; the vector terms are v𞁑𞁓, v𞁑𞁓 · r𞁑𞁓,
             // the pair force and its sum.
@@ -406,14 +423,26 @@ SphRunReturn sphCpuHydro(
         // bounds (docs/variational_sph.md). Free supports also satisfy
         // sum_j (xⱼ - zeta_i) rᵢⱼ . gᵢ = -3 yᵢ, so physical pair velocities would count
         // that work twice; held supports have no such identity.
-        float const five_minus_3γ = 5.0f - 3.0f * γ;
-        du𞁑_dτ += five_minus_3γ * aȧ * ia * u𞁑;
-        flops += 6;    // Homogeneous thermal expansion; force sources count separately.
-        if (data.sinkEntropyRate) {
-            // Reversible PdV and homogeneous expansion leave A unchanged.
-            data.sinkEntropyRate[sinkIndex] = sph_entropy::fromStoredEnergy(
-                simdSum(du𞁑_dτₕₑₐₜPack), ρ𞁑, γ, parameters.scaleFactor);
-            flops += sph_flops::entropyConversionFlops(γ);
+        float const five_minus_3γ = γ == 5.0f / 3.0f ? 0.0f : 5.0f - 3.0f * γ;
+        float const du𞁑_dτ_H = five_minus_3γ * aȧ * ia * u𞁑;
+        du𞁑_dτ += du𞁑_dτ_H;
+        flops += (γ == 5.0f / 3.0f ? 0 : 2) + 4;    // Coefficient, expansion, and rate sum.
+        if (applyPairKicks && data.energyEvolution) {
+            // Expansion belongs only to this active target's clock, including when it
+            // receives additional pressure work through a finer neighbor's pair event.
+            flops += data.sourcePairUpdates[particleIndex].thermal.add(Δτ * du𞁑_dτ_H) + 1;
+        }
+        if (data.sinkThermalRate) {
+            float const du𞁑_dτₕₑₐₜ = simdSum(du𞁑_dτₕₑₐₜPack);
+            if (data.energyEvolution) {
+                data.sinkThermalRate[sinkIndex] = du𞁑_dτ + du𞁑_dτₕₑₐₜ;
+                flops += 1;
+            } else {
+                // Reversible PdV and homogeneous expansion leave A unchanged.
+                data.sinkThermalRate[sinkIndex] =
+                    sph_entropy::fromStoredEnergy(du𞁑_dτₕₑₐₜ, ρ𞁑, γ, parameters.scaleFactor);
+                flops += sph_flops::entropyConversionFlops(γ);
+            }
             flops += SimdFloat::size() - 1;
         }
         if (parameters.phase == 1) {

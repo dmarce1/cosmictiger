@@ -138,7 +138,8 @@ def main():
     required = {"help", "configuration", "run.scenario", "run.endTime", "run.verbose",
                 "run.darkMatterParticleCount", "run.gasParticleCount", "compute.bucketSize",
                 "compute.sphBucketSize", "compute.sphTreeRebuildFraction", "compute.positionType",
-                "hydro.enabled", "hydro.method", "hydro.dimensions", "hydro.viscosityCoefficientMax", "hydro.vonNeumannRichtmyerCoefficient",
+                "hydro.enabled", "hydro.hopkins", "hydro.method", "hydro.sphFormulation",
+                "hydro.dimensions", "hydro.viscosityCoefficientMax", "hydro.vonNeumannRichtmyerCoefficient",
                 "hydro.viscosityEpsilon", "hydro.conductionCoefficient",
                 "hydro.neighborNumber", "gravity.enabled",
                 "gravity.kernelFamily", "gravity.kernelDegree",
@@ -186,7 +187,8 @@ def main():
 
     def assertStartupOptions(output, hydroMethod):
         assertResolvedOptions(output)
-        for key, value in (("run.verbose", "F"), ("hydro.method", hydroMethod)):
+        for key, value in (("run.verbose", "F"), ("hydro.method", hydroMethod),
+                           ("hydro.sphFormulation", "densityEntropy")):
             if not re.search(r"^" + re.escape(key) + r"\s*:\s*" + value + r"\s*$",
                              output, re.MULTILINE):
                 raise RuntimeError(f"normal startup did not print resolved {key}={value}")
@@ -379,6 +381,61 @@ mapSize = 8
         rejected = run("hydro_method_invalid_" + label, metadata_options + options, success=False)
         if "hydro.method must be sph" not in rejected:
             raise RuntimeError("invalid hydro.method lacked the allowed-method diagnostic")
+
+    def assertSphFormulation(output, formulation):
+        if not re.search(r"^hydro\.sphFormulation\s*:\s*" + formulation + r"\s*$",
+                         output, re.MULTILINE):
+            raise RuntimeError(f"hydro.sphFormulation did not resolve to {formulation}")
+
+    assertSphFormulation(configured, "densityEntropy")
+    formulationOptions = metadata_options
+    if sph_controls_available:
+        formulationOptions = [option for option in metadata_options
+                              if not option.startswith("--hydro.enabled=")] + sph_enabled_options
+    for formulation in ("densityEntropy", "densityEnergy"):
+        formulationConfig = args.workdir / f"hydro_sph_{formulation}.ini"
+        formulationConfig.write_text(f"[hydro]\nsphFormulation = {formulation}\n")
+        for label, options in (("cli", [f"--hydro.sphFormulation={formulation}"]),
+                               ("ini", [f"--configuration={formulationConfig.resolve()}"])):
+            output = run(f"hydro_sph_formulation_{formulation}_{label}",
+                         formulationOptions + options)
+            assertSphFormulation(output, formulation)
+    invalidFormulationConfig = args.workdir / "hydro_sph_invalid.ini"
+    invalidFormulationConfig.write_text("[hydro]\nsphFormulation = unknown\n")
+    for label, options in (("cli", ["--hydro.sphFormulation=unknown"]),
+                           ("ini", [f"--configuration={invalidFormulationConfig.resolve()}"])):
+        rejected = run("hydro_sph_formulation_invalid_" + label,
+                       metadata_options + options, success=False)
+        if "hydro.sphFormulation must be densityEntropy or densityEnergy" not in rejected:
+            raise RuntimeError("invalid SPH formulation lacked the allowed-formulation diagnostic")
+
+    def assertHopkinsOptions(output, hopkins, hydroEnabled):
+        for key, enabled in (("hydro.hopkins", hopkins), ("hydro.enabled", hydroEnabled)):
+            expected = "T" if enabled else "F"
+            if not re.search(r"^" + re.escape(key) + r"\s*:\s*" + expected + r"\s*$",
+                             output, re.MULTILINE):
+                raise RuntimeError(f"{key} did not resolve to {expected}")
+
+    assertHopkinsOptions(configured, False, sph_controls_available)
+    output = run("hydro_hopkins_false", metadata_options + ["--hydro.hopkins=false"])
+    assertHopkinsOptions(output, False, False)
+    hopkinsConfig = args.workdir / "hydro_hopkins.ini"
+    hopkinsConfig.write_text("[hydro]\nenabled = true\nhopkins = true\n")
+    hopkinsSources = (("cli", ["--hydro.hopkins=true"]),
+                      ("ini", [f"--configuration={hopkinsConfig.resolve()}"]))
+    for label, options in hopkinsSources:
+        rejected = run("hydro_hopkins_without_hydro_" + label,
+                       metadata_options + options, success=False)
+        if "hydro.hopkins=true requires hydro.enabled=true" not in rejected:
+            raise RuntimeError("Hopkins without hydrodynamics lacked a clear diagnostic")
+    if sph_controls_available:
+        hopkinsOptions = [option for option in metadata_options
+                          if not option.startswith("--hydro.enabled=")]
+        for label, options in hopkinsSources:
+            selected = ["--hydro.enabled=true"] if label == "cli" else []
+            output = run("hydro_hopkins_enabled_" + label,
+                         hopkinsOptions + ["--gravity.enabled=false"] + selected + options)
+            assertHopkinsOptions(output, True, True)
 
     position_type = re.search(r"^compute\.positionType\s*:\s*(fixed32|fixed64)\s*$",
                               configured, re.MULTILINE)[1]

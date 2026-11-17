@@ -91,7 +91,7 @@ void testFineNeighborsOfCoarseParticle() {
                     double(velocities[index][dimension]) + 0.5 * predictor.velocity[dimension]);
             }
             data.sourceInternalEnergy[source] =
-                float(sph_entropy::storedEnergy(entropy[index] + 0.5 * predictor.entropy,
+                float(sph_entropy::storedEnergy(entropy[index] + 0.5 * predictor.thermal,
                     data.sourceDensity[source], data.adiabaticIndex, parameters.scaleFactor));
             data.sourcePairUpdates[source] = {};
         }
@@ -120,8 +120,8 @@ void testFineNeighborsOfCoarseParticle() {
                 reference[index] = update;
             } else {
                 double const entropyScale =
-                    std::max(1.0e-12f, std::abs(float(reference[index].entropy)));
-                midpointRequire(std::abs(update.entropy - reference[index].entropy) <=
+                    std::max(1.0e-12f, std::abs(float(reference[index].thermal)));
+                midpointRequire(std::abs(update.thermal - reference[index].thermal) <=
                         32.0 * std::numeric_limits<float>::epsilon() * entropyScale,
                     "fine-neighbor evaluation order changed corrected entropy");
                 for (int dimension = 0; dimension < kDimensions; ++dimension) {
@@ -186,13 +186,13 @@ void testMidpointHydroTargets(Fixture& fixture) {
         int const source = fixture.sourceIndex(index);
         int const sink = fixture.sinkIndex(index);
         referenceAcceleration[index] = fixture.kickAcceleration(index);
-        referenceEntropyRate[index] = data.sinkEntropyRate[sink];
+        referenceEntropyRate[index] = data.sinkThermalRate[sink];
         for (int dimension = 0; dimension < spatialDimensions(); ++dimension) {
             impulseScale += std::abs(referenceAcceleration[index][dimension]);
         }
         data.sourceRungs[source] = data.sinkParticleRungs[fixture.particleIndex(index)] =
             rungs[index];
-        data.sinkEntropyRate[sink] = -123.0f;
+        data.sinkThermalRate[sink] = -123.0f;
     }
     parameters.minimumRung = parameters.maximumRung = 2;
     fixture.hydro(1);
@@ -217,7 +217,7 @@ void testMidpointHydroTargets(Fixture& fixture) {
             }
         }
         midpointRequire(
-            data.sinkEntropyRate[sink] == (active ? referenceEntropyRate[index] : -123.0f),
+            data.sinkThermalRate[sink] == (active ? referenceEntropyRate[index] : -123.0f),
             "midpoint entropy rate ignored exact-rung selection or updated an inactive target");
         midpointRequire(data.sinkFlags[sink].proposedRung() == (active ? 1 : kMaxRung - 1),
             "midpoint selection prevented coarsening or proposed an inactive rung");
@@ -251,7 +251,7 @@ void testMidpointHydroTargets(Fixture& fixture) {
         midpointRequire(data.sinkParticleRungs[fixture.particleIndex(index)] == 2,
             "neighbor timestep bound committed before the gravity boundary");
     }
-    midpointRequire(data.sinkEntropyRate[fixture.sinkIndex(2)] == -123.0f &&
+    midpointRequire(data.sinkThermalRate[fixture.sinkIndex(2)] == -123.0f &&
             data.sinkFlags[fixture.sinkIndex(2)].proposedRung() == kMaxRung - 1,
         "midpoint neighbor limiter updated a target above the selected rung");
     testFineNeighborsOfCoarseParticle<Fixture>();

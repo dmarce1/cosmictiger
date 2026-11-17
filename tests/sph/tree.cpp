@@ -1,5 +1,6 @@
 /*
  CosmicTiger - A cosmological N-Body code
+ Regression coverage for SPH trees, pair updates, and temporal integration.
  Copyright (C) 2026 Dominic C. Marcello
 
  Distributed under the Boost Software License, Version 1.0.
@@ -751,7 +752,8 @@ void verifySphMidpointUpdates() {
     sphParticlesPrepareThermodynamics(1.0, true);
     for (ParticleInteger gas = 0; gas < 2; ++gas) {
         sphParticlesVelocity(0, gas) = gas == 0 ? 0.25f : -0.25f;
-        sphParticlesEntropy(gas) = 2.0f;
+        sphParticlesThermalVariable(gas) = 2.0f;
+        sphParticlesSynchronizeThermalState(gas);
     }
     SphTreeCreateParameters treeParameters{};
     treeParameters.minimumRung = 2;
@@ -778,17 +780,18 @@ void verifySphMidpointUpdates() {
     sphMidpointForces(parameters, false);
     requireSphTree(sphParticlesVelocity(0, 0) != 0.25f && sphParticlesVelocity(0, 1) != -0.25f &&
             std::abs(sphParticlesVelocity(0, 0) + sphParticlesVelocity(0, 1)) < 1.0e-7 &&
-            sphParticlesEntropy(0) > 2.0f && sphParticlesEntropy(1) > 2.0f &&
+            sphParticlesThermalVariable(0) > 2.0f && sphParticlesThermalVariable(1) > 2.0f &&
             sphParticlesRung(0) == 0 && sphParticlesRung(1) == 2,
         "fine-owned pair did not kick and heat both endpoints conservatively");
     std::array<float, 2> velocities{sphParticlesVelocity(0, 0), sphParticlesVelocity(0, 1)};
-    std::array<float, 2> entropies{sphParticlesEntropy(0), sphParticlesEntropy(1)};
+    std::array<float, 2> thermalState{
+        sphParticlesThermalVariable(0), sphParticlesThermalVariable(1)};
     parameters.hydroKickTimestep = 0.0;
     sphMidpointForces(parameters, false);
     sphMidpointEndEvent();
     for (int gas = 0; gas < 2; ++gas) {
         requireSphTree(sphParticlesVelocity(0, gas) == velocities[gas] &&
-                sphParticlesEntropy(gas) == entropies[gas],
+                sphParticlesThermalVariable(gas) == thermalState[gas],
             "zero-duration estimate applied a physical pair impulse");
     }
     // Event bookkeeping and source reads must not replay a previous impulse
@@ -803,11 +806,13 @@ void verifySphMidpointUpdates() {
     float velocityX[2], velocityY[2], velocityZ[2], internalEnergy[2];
     sphParticlesGlobalReadVelocities(range, velocityX, velocityY, velocityZ, 0);
     sphParticlesGlobalReadInternalEnergyAndSmoothingLength(range, internalEnergy, nullptr, 0);
-    // The midpoint predictor refreshes the active particle's density (for the Balsara
-    // factor), so the expected energy uses the live density with the recorded entropy.
+    // The entropy formulation reconstructs energy from the live density after the
+    // midpoint refresh. Direct energy evolution preserves its canonical stored E.
     for (int gas = 0; gas < 2; ++gas) {
-        double const expectedEnergy = sph_entropy::storedEnergy(
-            entropies[gas], sphParticlesDensities[gas], options.hydro.heatCapacityRatio, 1.0);
+        double const expectedEnergy = usesSphEnergyEvolution(options.hydro) ?
+            thermalState[gas] :
+            sph_entropy::storedEnergy(thermalState[gas], sphParticlesDensities[gas],
+                options.hydro.heatCapacityRatio, 1.0);
         requireSphTree(velocityX[gas] == velocities[gas] &&
                 std::abs(internalEnergy[gas] - expectedEnergy) < 1.0e-6 * expectedEnergy,
             "source staging replayed a rate or used stale physical state");
@@ -819,7 +824,7 @@ void verifySphMidpointUpdates() {
     sphMidpointEndEvent();
     for (int gas = 0; gas < 2; ++gas) {
         requireSphTree(sphParticlesVelocity(0, gas) == velocities[gas] &&
-                sphParticlesEntropy(gas) == entropies[gas],
+                sphParticlesThermalVariable(gas) == thermalState[gas],
             "coarse midpoint repeated the finer-owned pair");
     }
     parameters.maximumRung = kMaxRung - 1;
@@ -847,11 +852,12 @@ void verifySphMidpointUpdates() {
     std::cout << "SPH midpoint pair, source and positive-kick regression passed\n" << std::flush;
 }
 
+// Two x velocities followed by their canonical A or E thermal coordinates.
 using SphTemporalState = std::array<double, 4>;
 
 SphTemporalState sphTemporalState() {
-    return {sphParticlesVelocity(0, 0), sphParticlesVelocity(0, 1), sphParticlesEntropy(0),
-        sphParticlesEntropy(1)};
+    return {sphParticlesVelocity(0, 0), sphParticlesVelocity(0, 1), sphParticlesThermalVariable(0),
+        sphParticlesThermalVariable(1)};
 }
 
 void verifySphTemporalOrder() {
@@ -923,7 +929,8 @@ void verifySphTemporalOrder() {
         auto const run = [&](int steps, double T) {
             for (ParticleInteger gas = 0; gas < 2; ++gas) {
                 sphParticlesVelocity(0, gas) = float(initialState[gas]);
-                sphParticlesEntropy(gas) = float(initialState[gas + 2]);
+                sphParticlesThermalVariable(gas) = float(initialState[gas + 2]);
+                sphParticlesSynchronizeThermalState(gas);
                 sphParticlesSetProposedRung(gas, sphParticlesRung(gas));
             }
             SphRunParameters parameters;
@@ -941,9 +948,9 @@ void verifySphTemporalOrder() {
                 sphMidpointForces(parameters, false);
                 sphMidpointEndEvent();
                 for (ParticleInteger gas = 0; gas < 2; ++gas) {
-                    requireSphTree(sphParticlesEntropy(gas) > 0.0f &&
+                    requireSphTree(sphParticlesInternalEnergy(gas) > 0.0f &&
                             sphParticlesRung(gas) == (gas == 0 ? 0 : 2),
-                        "temporal refinement changed rungs or lost positive entropy");
+                        "temporal refinement changed rungs or lost positive internal energy");
                 }
                 if (!damping) {
                     double const momentum =
@@ -984,7 +991,7 @@ void verifySphTemporalOrder() {
         }
         {
             std::array<double, 3> velocityErrors{};
-            std::array<double, 3> entropyErrors{};
+            std::array<double, 3> thermalErrors{};
             for (size_t refinement = 0; refinement < stepCounts.size(); ++refinement) {
                 auto const state = run(stepCounts[refinement], T);
                 for (size_t gas = 0; gas < 2; ++gas) {
@@ -996,11 +1003,11 @@ void verifySphTemporalOrder() {
                         reference[gas];
                     velocityErrors[refinement] = std::max(
                         velocityErrors[refinement], std::abs(state[gas] - expectedVelocity));
-                    entropyErrors[refinement] = std::max(
-                        entropyErrors[refinement], std::abs(state[gas + 2] - reference[gas + 2]));
+                    thermalErrors[refinement] = std::max(
+                        thermalErrors[refinement], std::abs(state[gas + 2] - reference[gas + 2]));
                     if (damping) {
                         requireSphTree(state[gas + 2] == double(float(initialState[gas + 2])),
-                            "isolated damping changed the entropy");
+                            "isolated damping changed the thermal state");
                     }
                 }
             }
@@ -1009,20 +1016,20 @@ void verifySphTemporalOrder() {
                 double const maximumRatio = 5.5;
                 double const velocityRatio =
                     velocityErrors[refinement - 1] / velocityErrors[refinement];
-                double const entropyRatio =
-                    damping ? 0.0 : entropyErrors[refinement - 1] / entropyErrors[refinement];
+                double const thermalRatio =
+                    damping ? 0.0 : thermalErrors[refinement - 1] / thermalErrors[refinement];
                 std::cout << "SPH production temporal order: case=" << testCase
                           << " integrator=rk2 steps=" << stepCounts[refinement]
                           << " velocity_error=" << velocityErrors[refinement]
                           << " velocity_ratio=" << velocityRatio
-                          << " entropy_error=" << entropyErrors[refinement]
-                          << " entropy_ratio=" << entropyRatio << '\n'
+                          << " thermal_error=" << thermalErrors[refinement]
+                          << " thermal_ratio=" << thermalRatio << '\n'
                           << std::flush;
                 requireSphTree(velocityRatio > minimumRatio && velocityRatio < maximumRatio,
                     "production hydro velocity has the wrong temporal order");
                 requireSphTree(
-                    damping || (entropyRatio > minimumRatio && entropyRatio < maximumRatio),
-                    "production hydro entropy has the wrong temporal order");
+                    damping || (thermalRatio > minimumRatio && thermalRatio < maximumRatio),
+                    "production hydro thermal state has the wrong temporal order");
             }
         }
     }
@@ -1030,7 +1037,7 @@ void verifySphTemporalOrder() {
         // Derived Strang composition at fixed positions: over a coarse interval H,
         // K_f(H/2) K𞁞(H) K_f(H/2) approximates F_f + F𞁞 through second order.
         // The three-particle chain has one coarse/coarse pair and one coarse/fine
-        // pair sharing the middle particle, so these velocity/entropy-dependent
+        // pair sharing the middle particle, so these velocity/thermal-dependent
         // operators do not commute. Production RK2 implements every K call.
         // Symbol directory: H -> coarse timestep; K -> advance rung;
         // F𞁞,F_f -> the production due-pair operators on rungs 0 and 1.
@@ -1039,7 +1046,7 @@ void verifySphTemporalOrder() {
         SplitState const initialSplitState{0.6, 0.1, -0.35, 0.08, 0.1, 0.12};
         std::array<int, 3> const splitStepCounts{4, 8, 16};
         options.hydro.damping = 0.0;
-        // Lower entropy and stronger conduction keep the thermal O(h²) signal
+        // Lower thermal state and stronger conduction keep the thermal O(h²) signal
         // above binary32 accumulation noise without crossing the approach branch.
         options.hydro.conductionCoefficient = 3.0;
         setOptions(options);
@@ -1076,7 +1083,8 @@ void verifySphTemporalOrder() {
         auto const resetState = [&]() {
             for (ParticleInteger gas = 0; gas < kParticleCount; ++gas) {
                 sphParticlesVelocity(0, gas) = float(initialSplitState[gas]);
-                sphParticlesEntropy(gas) = float(initialSplitState[kParticleCount + gas]);
+                sphParticlesThermalVariable(gas) = float(initialSplitState[kParticleCount + gas]);
+                sphParticlesSynchronizeThermalState(gas);
                 sphParticlesSetProposedRung(gas, sphParticlesRung(gas));
             }
         };
@@ -1084,7 +1092,7 @@ void verifySphTemporalOrder() {
             SplitState state{};
             for (ParticleInteger gas = 0; gas < kParticleCount; ++gas) {
                 state[gas] = sphParticlesVelocity(0, gas);
-                state[kParticleCount + gas] = sphParticlesEntropy(gas);
+                state[kParticleCount + gas] = sphParticlesThermalVariable(gas);
             }
             return state;
         };
@@ -1129,9 +1137,9 @@ void verifySphTemporalOrder() {
                 double momentum = 0.0;
                 for (ParticleInteger gas = 0; gas < kParticleCount; ++gas) {
                     momentum += sphParticlesVelocity(0, gas);
-                    requireSphTree(sphParticlesEntropy(gas) > 0.0f &&
+                    requireSphTree(sphParticlesInternalEnergy(gas) > 0.0f &&
                             sphParticlesRung(gas) == (gas == 2 ? 1 : 0),
-                        "split refinement changed rungs or lost positive entropy");
+                        "split refinement changed rungs or lost positive internal energy");
                 }
                 requireSphTree(std::abs(momentum - initialMomentum) < 8.0e-6,
                     "split refinement lost reciprocal coarse/fine momentum");
@@ -1154,13 +1162,13 @@ void verifySphTemporalOrder() {
         requireSphTree(reference[0] > reference[1] && reference[1] > reference[2],
             "split refinement crossed the viscosity approach branch");
         std::array<double, 3> velocityErrors{};
-        std::array<double, 3> entropyErrors{};
+        std::array<double, 3> thermalErrors{};
         for (size_t refinement = 0; refinement < splitStepCounts.size(); ++refinement) {
             auto const state = runSplit(splitStepCounts[refinement], duration);
             for (ParticleInteger gas = 0; gas < kParticleCount; ++gas) {
                 velocityErrors[refinement] =
                     std::max(velocityErrors[refinement], std::abs(state[gas] - reference[gas]));
-                entropyErrors[refinement] = std::max(entropyErrors[refinement],
+                thermalErrors[refinement] = std::max(thermalErrors[refinement],
                     std::abs(state[kParticleCount + gas] - reference[kParticleCount + gas]));
             }
         }
@@ -1169,24 +1177,24 @@ void verifySphTemporalOrder() {
                 std::abs(reference[gas] - refinedReference[gas]) < 0.1 * velocityErrors.back(),
                 "split velocity reference uncertainty masks the refinement signal");
             requireSphTree(std::abs(reference[kParticleCount + gas] -
-                               refinedReference[kParticleCount + gas]) < 0.1 * entropyErrors.back(),
-                "split entropy reference uncertainty masks the refinement signal");
+                               refinedReference[kParticleCount + gas]) < 0.1 * thermalErrors.back(),
+                "split thermal reference uncertainty masks the refinement signal");
         }
         for (size_t refinement = 1; refinement < splitStepCounts.size(); ++refinement) {
             double const velocityRatio =
                 velocityErrors[refinement - 1] / velocityErrors[refinement];
-            double const entropyRatio = entropyErrors[refinement - 1] / entropyErrors[refinement];
+            double const thermalRatio = thermalErrors[refinement - 1] / thermalErrors[refinement];
             std::cout << "SPH production temporal order: case=mixed_rung_split steps="
                       << splitStepCounts[refinement]
                       << " velocity_error=" << velocityErrors[refinement]
                       << " velocity_ratio=" << velocityRatio
-                      << " entropy_error=" << entropyErrors[refinement]
-                      << " entropy_ratio=" << entropyRatio << '\n'
+                      << " thermal_error=" << thermalErrors[refinement]
+                      << " thermal_ratio=" << thermalRatio << '\n'
                       << std::flush;
             requireSphTree(velocityRatio > 3.2 && velocityRatio < 5.5,
                 "production fine/coarse composition has the wrong velocity order");
-            requireSphTree(entropyRatio > 3.2 && entropyRatio < 5.5,
-                "production fine/coarse composition has the wrong entropy order");
+            requireSphTree(thermalRatio > 3.2 && thermalRatio < 5.5,
+                "production fine/coarse composition has the wrong thermal order");
         }
     }
     sphTreeDestroy(true);
@@ -1536,7 +1544,6 @@ void verifyDistributedSphOctree(std::vector<DistributedSphLeafRecord> const& all
 }
 HPX_PLAIN_ACTION(verifyDistributedSphOctree, VerifyDistributedSphOctreeAction);
 
-
 void initializeSphRungChain(bool emptyRemoteRank) {
     ParticleInteger const first = hpxSize() == 1 || hpxRank() == 0 ? 0 : 4;
     ParticleInteger const count = emptyRemoteRank ? (hpxRank() == 0 ? 7 : 0) :
@@ -1552,7 +1559,7 @@ void initializeSphRungChain(bool emptyRemoteRank) {
         sphParticlesRung(gas) = identity == 0 ? 7 : 0;
         sphParticlesSetProposedRung(gas, sphParticlesRung(gas));
         sphParticlesDensities[gas] = 1.0f;
-        sphParticlesEntropies[gas] = 1.0f;
+        sphParticlesSetInternalEnergy(gas, 1.0f);
     }
 }
 HPX_PLAIN_ACTION(initializeSphRungChain, InitializeSphRungChainAction);

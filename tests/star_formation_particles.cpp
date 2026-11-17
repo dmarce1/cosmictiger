@@ -37,11 +37,13 @@ void requireFixtureChemistry(ParticleInteger gasIndex, int rank, int originalGas
     requireStarParticles(sphParticlesElectronFractions[gasIndex] == expected,
         "combined persistence changed the GADGET-4 electron guess");
     auto const thermal = sph_entropy::prepareStoredEnergy(float(2 + originalGasIndex),
-        float(3 + originalGasIndex), opts.hydro.heatCapacityRatio, 1.0);
+        float(3 + originalGasIndex), opts.hydro.heatCapacityRatio, 1.0,
+        usesSphEnergyEvolution(opts.hydro), storesSphEntropy(opts.hydro));
     requireStarParticles(sphParticlesEntropyInitialized &&
-            sphParticlesEntropies[gasIndex] == thermal.entropy &&
+            sphParticlesThermalVariable(gasIndex) ==
+                (usesSphEnergyEvolution(opts.hydro) ? thermal.storedEnergy : thermal.entropy) &&
             sphParticlesProposedRung(gasIndex) == 3 + originalGasIndex,
-        "compaction, checkpoint or migration changed canonical entropy or hydro proposal");
+        "compaction, checkpoint or migration changed canonical thermal state or hydro proposal");
     if (sphParticlesBulkViscosityCoefficients != nullptr) {
         requireStarParticles(
             sphParticlesBulkViscosityCoefficients[gasIndex] == 0.25f + 0.125f * originalGasIndex,

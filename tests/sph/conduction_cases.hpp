@@ -52,7 +52,7 @@ void testConductionPair(Fixture& fixture) {
             std::array<sph_geometry::SpatialVector<float>, 2> pressureAccelerations;
             for (int index = 0; index < 2; ++index) {
                 pressureAccelerations[index] = fixture.kickAcceleration(index);
-                pairKickRequire(data.sinkEntropyRate[fixture.sinkIndex(index)] == 0.0f,
+                pairKickRequire(data.sinkThermalRate[fixture.sinkIndex(index)] == 0.0f,
                     "disabled conduction changed entropy without viscosity");
             }
             parameters.conductionCoefficient = 0.3f;
@@ -90,7 +90,7 @@ void testConductionPair(Fixture& fixture) {
             for (int index = 0; index < 2; ++index) {
                 int const source = fixture.sourceIndex(index);
                 int const sink = fixture.sinkIndex(index);
-                double const energyRate = sph_entropy::storedEnergy(data.sinkEntropyRate[sink],
+                double const energyRate = sph_entropy::storedEnergy(data.sinkThermalRate[sink],
                     data.sourceDensity[source], data.adiabaticIndex, scaleFactor);
                 pairKickClose(energyRate, index == 0 ? expectedHotRate : -expectedHotRate,
                     "conductive rate differs from the Monaghan (1992) exchange");
@@ -124,7 +124,7 @@ void testConductionPair(Fixture& fixture) {
     pairKickClose(fixture.reduction_->minimumTimestep, 0.5 * conductionTimestep,
         "diffusion timestep does not scale inversely with g");
     for (int index = 0; index < 2; ++index) {
-        pairKickRequire(data.sinkEntropyRate[fixture.sinkIndex(index)] == 0.0f,
+        pairKickRequire(data.sinkThermalRate[fixture.sinkIndex(index)] == 0.0f,
             "uniform-temperature conduction generated a thermal rate");
     }
     // A fine particle owns the exchange and updates its inactive coarse neighbor.
@@ -135,7 +135,7 @@ void testConductionPair(Fixture& fixture) {
     parameters.hydroKickTimestep = conductionTimestep;
     identities[hot] = {0, 11};
     identities[cold] = {1, 37};
-    data.sinkEntropyRate = nullptr;
+    data.sinkThermalRate = nullptr;
     for (int owner = 0; owner < 3; ++owner) {
         int const hotRung = owner == 1 ? 1 : 3;
         int const coldRung = owner == 0 ? 1 : 3;
@@ -150,7 +150,7 @@ void testConductionPair(Fixture& fixture) {
         for (int index = 0; index < 2; ++index) {
             int const source = fixture.sourceIndex(index);
             double const increment =
-                sph_entropy::storedEnergy(data.sourcePairUpdates[source].entropy,
+                sph_entropy::storedEnergy(data.sourcePairUpdates[source].thermal,
                     data.sourceDensity[source], data.adiabaticIndex, parameters.scaleFactor);
             pairKickRequire(index == 0 ? increment < 0.0 : increment > 0.0,
                 "pair ownership lost conductive exchange");
@@ -159,7 +159,7 @@ void testConductionPair(Fixture& fixture) {
             entropyChange += std::log1p(increment / initialEnergy);
             totalIncrement += increment;
         }
-        double const hotIncrement = sph_entropy::storedEnergy(data.sourcePairUpdates[hot].entropy,
+        double const hotIncrement = sph_entropy::storedEnergy(data.sourcePairUpdates[hot].thermal,
             data.sourceDensity[hot], data.adiabaticIndex, parameters.scaleFactor);
         pairKickRequire(std::abs(totalIncrement) < 2.0e-6 * std::abs(hotIncrement),
             "mixed-rung conductive kick failed energy conservation");
@@ -211,7 +211,7 @@ void testDissipativeRateSuperposition(Fixture& fixture, bool morrisAndMonaghan =
         std::array<float, 2> entropyRates;
         for (int index = 0; index < 2; ++index) {
             hydroAccelerations[index] = fixture.kickAcceleration(index);
-            entropyRates[index] = data.sinkEntropyRate[fixture.sinkIndex(index)];
+            entropyRates[index] = data.sinkThermalRate[fixture.sinkIndex(index)];
         }
         // These forces must affect integration but never the entropy rate.
         parameters.uniformAccelerationY = 0.25f;
@@ -219,7 +219,7 @@ void testDissipativeRateSuperposition(Fixture& fixture, bool morrisAndMonaghan =
         fixture.hydro();
         for (int index = 0; index < 2; ++index) {
             int const sink = fixture.sinkIndex(index);
-            pairKickClose(data.sinkEntropyRate[sink], entropyRates[index],
+            pairKickClose(data.sinkThermalRate[sink], entropyRates[index],
                 "external sources changed the entropy rate");
             pairKickClose(fixture.kickAcceleration(index)[1], hydroAccelerations[index][1] + 0.25f,
                 "external acceleration was not applied to the integrator");

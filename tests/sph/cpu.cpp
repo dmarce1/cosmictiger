@@ -249,8 +249,8 @@ public:
     }
 
     void enableEntropyRateOutput() {
-        if (!data_.sinkEntropyRate) {
-            data_.sinkEntropyRate = allocate<float>(count_ + sinkOffset_ + 3);
+        if (!data_.sinkThermalRate) {
+            data_.sinkThermalRate = allocate<float>(count_ + sinkOffset_ + 3);
         }
     }
 
@@ -315,8 +315,8 @@ public:
 
     // (du𞁑/dτ)ₕₑₐₜ of one sink, inverting the kernel's Ȧ𞁑 = (du𞁑/dτ)ₕₑₐₜ / (E/A)(ρ𞁑, γ, a).
     double dissipativeHeating(int index) const {
-        require(data_.sinkEntropyRate, "dissipative heating requires the entropy-rate output");
-        return sph_entropy::storedEnergy(data_.sinkEntropyRate[sinkIndex(index)],
+        require(data_.sinkThermalRate, "dissipative heating requires the entropy-rate output");
+        return sph_entropy::storedEnergy(data_.sinkThermalRate[sinkIndex(index)],
             data_.sourceDensity[sourceIndex(index)], data_.adiabaticIndex, params_.scaleFactor);
     }
 
@@ -400,12 +400,12 @@ public:
         run(kSphRunHydro);
         for (int i = 0; i < count_; i++) {
             int const sink = sinkIndex(i);
-            if (data_.sinkEntropyRate) {
-                require(isFinite(data_.sinkEntropyRate[sink]), "finite active-kernel entropy rate");
+            if (data_.sinkThermalRate) {
+                require(isFinite(data_.sinkThermalRate[sink]), "finite active-kernel entropy rate");
             }
             if (data_.sourcePairUpdates) {
                 auto const& update = data_.sourcePairUpdates[sourceIndex(i)];
-                require(isFinite(float(update.entropy)), "finite active-kernel entropy kick");
+                require(isFinite(float(update.thermal)), "finite active-kernel entropy kick");
                 for (int dim = 0; dim < spatialDimensions(); dim++) {
                     require(
                         isFinite(float(update.velocity[dim])), "finite active-kernel pair kick");
@@ -1154,10 +1154,10 @@ void testPeriodicTailsAndOffsets() {
         }
         for (int i = 0; i < fixture->sinkOffset_; i++) {
             data.sinkDensity[i] = -91.0f;
-            data.sinkEntropyRate[i] = -92.0f;
+            data.sinkThermalRate[i] = -92.0f;
         }
         data.sinkDensity[fixture->sinkIndex(count)] = -91.0f;
-        data.sinkEntropyRate[fixture->sinkIndex(count)] = -92.0f;
+        data.sinkThermalRate[fixture->sinkIndex(count)] = -92.0f;
         // Pair updates are indexed by the staged source; guard both ends of that range.
         for (int i = 0; i < fixture->sourceOffset_; i++) {
             data.sourcePairUpdates[i].velocity[kXi].add(-93.0f);
@@ -1194,11 +1194,11 @@ void testPeriodicTailsAndOffsets() {
         fixture->checkConservation();
         for (int i = 0; i < fixture->sinkOffset_; i++) {
             requireClose("density guard before sinks", data.sinkDensity[i], -91.0, 0.0);
-            requireClose("entropy guard before sinks", data.sinkEntropyRate[i], -92.0, 0.0);
+            requireClose("entropy guard before sinks", data.sinkThermalRate[i], -92.0, 0.0);
         }
         requireClose(
             "density guard after sinks", data.sinkDensity[fixture->sinkIndex(count)], -91.0, 0.0);
-        requireClose("entropy guard after sinks", data.sinkEntropyRate[fixture->sinkIndex(count)],
+        requireClose("entropy guard after sinks", data.sinkThermalRate[fixture->sinkIndex(count)],
             -92.0, 0.0);
         for (int i = 0; i < fixture->sourceOffset_; i++) {
             requireClose("kick guard before sources",
@@ -1239,7 +1239,7 @@ void testActivity() {
         data.sourceRungs[source] = data.sinkParticleRungs[fixture.particleIndex(i)] =
             i == 0 ? 4 : 1;
         data.sinkDensity[sink] = -11.0f;
-        data.sinkEntropyRate[sink] = -12.0f;
+        data.sinkThermalRate[sink] = -12.0f;
     }
     // The out-of-range inactive source must receive no recoil either.
     for (int dim = 0; dim < spatialDimensions(); dim++) {
@@ -1275,7 +1275,7 @@ void testActivity() {
     sphCpuHydro(fixture.params_, data, 0);
     auto const activeAcceleration = fixture.kickAcceleration(0);
     require(activeAcceleration[kXi] < 0.0f, "active particle feels its semiactive neighbor");
-    require(isFinite(data.sinkEntropyRate[fixture.sinkIndex(0)]),
+    require(isFinite(data.sinkThermalRate[fixture.sinkIndex(0)]),
         "excluded zero-density neighbor leaves finite heating");
     for (int dim = 0; dim < spatialDimensions(); dim++) {
         require(isFinite(activeAcceleration[dim]),
@@ -1292,7 +1292,7 @@ void testActivity() {
     }
     for (int i = 1; i < 3; i++) {
         int const sink = fixture.sinkIndex(i);
-        requireClose("inactive entropy rate is preserved", data.sinkEntropyRate[sink], -12.0, 0.0);
+        requireClose("inactive entropy rate is preserved", data.sinkThermalRate[sink], -12.0, 0.0);
         require(data.sinkParticleRungs[fixture.particleIndex(i)] == 1,
             "inactive timestep rung is preserved");
     }
@@ -1809,12 +1809,12 @@ void testVariationalUniformLattice() {
 // error is not hidden by float accumulation; the kernels read float snapshots. Rates are
 // conformal-time rates of the stored w = a v_pec and E = a^2 u, and the comoving drift is
 // dx/dtau = w/a. The acceleration is the production pair kick Δv/Δτ; production integrates
-// entropy and publishes no reversible work rate, so dE/dtau comes from the double reference of
-// the same variational equations at the production supports.
+// entropy by default, so that mode obtains dE/dtau from the double reference. Direct-energy
+// tests instead integrate the complete production thermal pair kicks divided by their interval.
 class GlobalStepper {
-    Fixture& fixture_;
-    std::vector<Vector3<double>> acceleration_;
-    std::vector<double> energyRate_;
+    Fixture& fixture_;    // Kernel fixture supplying current positions and thermodynamic state.
+    std::vector<Vector3<double>> acceleration_;    // Stored peculiar velocity rates dv/dτ.
+    std::vector<double> energyRate_;               // Stored specific energy rates dE/dτ.
 
     double scaleFactor(double time) const {
         return cosmological_ ? std::pow(time / initialTime_, 2) : 1.0;
@@ -1843,13 +1843,13 @@ class GlobalStepper {
     }
 
 public:
-    std::vector<Vector3<double>> position_;
-    std::vector<Vector3<double>> velocity_;
-    std::vector<double> energy_;
-    double time_;
-    double initialTime_;
-    bool cosmological_;
-    double expansionWork_ = 0.0;    // integral of (5 - 3 gamma)(da/dtau)/a sum m E dtau
+    std::vector<Vector3<double>> position_;    // Unwrapped comoving positions in box units.
+    std::vector<Vector3<double>> velocity_;    // Stored peculiar velocities a v_physical.
+    std::vector<double> energy_;               // Stored specific energies E=a²u.
+    double time_;                              // Current conformal time τ.
+    double initialTime_;                       // Initial conformal time, where a=1.
+    bool cosmological_;                        // Use Einstein-de Sitter expansion instead of a=1.
+    double expansionWork_ = 0.0;               // integral of (5 - 3 gamma)(da/dtau)/a sum m E dtau
 
     explicit GlobalStepper(Fixture& fixture, bool cosmological = false, double initialTime = 1.0)
       : fixture_(fixture)
@@ -1887,18 +1887,21 @@ public:
         fixture_.publishSupport();
         fixture_.density();
         fixture_.hydro();
-        // The energy budgets of the tests below therefore compare the production force with
-        // the reference work.
-        std::vector<double> supports(fixture_.count_);
-        for (int i = 0; i < fixture_.count_; i++) {
-            supports[i] = data.sourceSmoothingLength[fixture_.sourceIndex(i)];
+        std::vector<double> referenceEnergyRate;
+        if (!data.energyEvolution) {
+            std::vector<double> supports(fixture_.count_);
+            for (int i = 0; i < fixture_.count_; i++) {
+                supports[i] = data.sourceSmoothingLength[fixture_.sourceIndex(i)];
+            }
+            referenceEnergyRate = variationalReference<false>(fixture_, supports).energyRate;
         }
-        // Acceleration comes from the production kick; only the reference work is needed.
-        auto const reference = variationalReference<false>(fixture_, supports);
         for (int i = 0; i < fixture_.count_; i++) {
             auto const a = fixture_.kickAcceleration(i);
             acceleration_[i] = {a[kXi], a[kYi], a[kZi]};
-            energyRate_[i] = reference.energyRate[i];
+            energyRate_[i] = data.energyEvolution ?
+                compensatedKickSum(data.sourcePairUpdates[fixture_.sourceIndex(i)].thermal) /
+                    fixture_.params_.hydroKickTimestep :
+                referenceEnergyRate[i];
         }
     }
 
@@ -2007,11 +2010,12 @@ struct WaveRun {
     double profileError;    // L2 error of vₓ after half a period, over the amplitude
 };
 
-WaveRun runSoundWave(int steps) {
+WaveRun runSoundWave(int steps, bool energyEvolution = false) {
     constexpr int kSide = 8;
     constexpr double kAmplitude = 0.05;
     double const gamma = 5.0 / 3.0;
     Fixture fixture(kSide * kSide * kSide);
+    fixture.data_.energyEvolution = energyEvolution;
     initializeSoundWave(fixture, kSide, kAmplitude, gamma);
     GlobalStepper stepper(fixture);
     std::vector<double> initialEntropy(fixture.count_);
@@ -2043,16 +2047,16 @@ WaveRun runSoundWave(int steps) {
 // Kick-drift-kick energy error falls as dt^2. The wave profile error is
 // the spatial error at eight particles per wavelength; the entropy error is limited by the
 // support-solve tolerance once the time error is small.
-void testSoundWaveTimestepRefinement() {
+void testSoundWaveTimestepRefinement(bool energyEvolution = false) {
     std::array<WaveRun, 3> runs{};
     int const steps[] = {12, 24, 48};
-    for (int k = 0; k < 3; k++) {
-        runs[k] = runSoundWave(steps[k]);
+    for (size_t k = 0; k < runs.size(); k++) {
+        runs[k] = runSoundWave(steps[k], energyEvolution);
         std::printf("variational sound wave, %d steps per half period: energy %.3e, entropy %.3e, "
                     "profile %.3e\n",
             steps[k], runs[k].energyError, runs[k].entropyError, runs[k].profileError);
     }
-    for (int k = 1; k < 3; k++) {
+    for (size_t k = 1; k < runs.size(); k++) {
         require(runs[k].energyError < 0.35 * runs[k - 1].energyError,
             "kick-drift-kick energy error converges at second order");
     }
@@ -2638,6 +2642,22 @@ TEST_F(SphCpuTest, ConservativeMorrisMonaghanPairKicks) {
     detail::testConservativePairKick(fixture, true);
 }
 
+TEST_F(SphCpuTest, DensityEnergyPressureWorkAndConservativePairKicks) {
+    detail::Fixture fixture(2, 2, 2, 4, 6);
+    detail::testDensityEnergyPair(fixture);
+}
+
+TEST_F(SphCpuTest, DensityEnergyHomogeneousExpansion) {
+    for (int const count : {1, 2}) {
+        detail::Fixture fixture(count, 1, 2, 4, 6);
+        detail::testDensityEnergyExpansion(fixture);
+    }
+}
+
+TEST_F(SphCpuTest, DensityEnergySoundWaveTimestepRefinement) {
+    detail::testSoundWaveTimestepRefinement(true);
+}
+
 TEST_F(SphCpuTest, ColdShockTimestep) {
     detail::testColdShockTimestep();
 }
@@ -2693,6 +2713,40 @@ TEST_F(SphCpuTest, EntropyThermodynamics) {
     }
 }
 
+TEST_F(SphCpuTest, StoredEnergyRemainsCanonicalDuringThermalPreparation) {
+    for (float const energy : {0.7f, std::nextafter(0.7f, 1.0f), 1.0e-12f, 1.0e12f}) {
+        for (bool const retainEntropy : {false, true}) {
+            auto const prepared =
+                sph_entropy::prepareStoredEnergy(energy, 2.3f, 1.4f, 0.37f, true, retainEntropy);
+            EXPECT_EQ(
+                std::bit_cast<uint32_t>(prepared.storedEnergy), std::bit_cast<uint32_t>(energy));
+            if (retainEntropy) {
+                EXPECT_EQ(
+                    prepared.entropy, sph_entropy::fromStoredEnergy(energy, 2.3f, 1.4f, 0.37f));
+            } else {
+                EXPECT_EQ(prepared.entropy, 0.0f);
+            }
+        }
+        auto const entropyMode = sph_entropy::prepareStoredEnergy(energy, 2.3f, 1.4f, 0.37f);
+        EXPECT_EQ(entropyMode.storedEnergy,
+            sph_entropy::storedEnergy(entropyMode.entropy, 2.3f, 1.4f, 0.37f));
+    }
+}
+
+TEST_F(SphCpuTest, EnergyOnlyThermalPreparationDoesNotRequireRepresentableEntropy) {
+    // E is a normal float, but A=E/rho for gamma=2 is below the minimum normal
+    // float. Energy-only storage should accept it; modes retaining A must reject it.
+    constexpr float kEnergy = 0.5f;
+    constexpr float kDensity = 1.0e38f;
+    auto const prepared =
+        sph_entropy::prepareStoredEnergy(kEnergy, kDensity, 2.0f, 1.0f, true, false);
+    EXPECT_EQ(prepared.storedEnergy, kEnergy);
+    EXPECT_EQ(prepared.entropy, 0.0f);
+    EXPECT_THROW(sph_entropy::prepareStoredEnergy(kEnergy, kDensity, 2.0f, 1.0f, true, true),
+        std::range_error);
+    EXPECT_THROW(sph_entropy::prepareStoredEnergy(kEnergy, kDensity, 2.0f, 1.0f), std::range_error);
+}
+
 TEST_F(SphCpuTest, CompensatedFloatPairAccumulation) {
     // Each increment is below half an ULP of the starting sum. Naive float
     // summation loses every increment; Kahan must retain their exact total.
@@ -2740,7 +2794,7 @@ TEST_F(SphCpuTest, EntropyProduction) {
     detail::Fixture fixture(2);
     auto& data = fixture.data_;
     std::array<float, 2> rates{};
-    data.sinkEntropyRate = rates.data();
+    data.sinkThermalRate = rates.data();
     data.sourcePositionX[0] = 0.4;
     data.sourcePositionX[1] = 0.6;
     for (int i = 0; i < 2; ++i) {

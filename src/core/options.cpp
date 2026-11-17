@@ -54,6 +54,9 @@
 #include <cosmictiger/scenarios/rayleigh_taylor.hpp>
 #include <cosmictiger/scenarios/scenario.hpp>
 #include <cosmictiger/sph/geometry.hpp>
+#if COSMICTIGER_WITH_SPH
+#include <cosmictiger/sph/particles.hpp>
+#endif
 #if !COSMICTIGER_WITH_GRAVITY && COSMICTIGER_WITH_SPH
 #include <cosmictiger/sph/tree.hpp>
 #endif
@@ -220,10 +223,17 @@ void validateCudaBackends(Options const& opts) {
 #endif
 }
 
-/// Require the implemented SPH hydrodynamics method.
+/// Validate the hydrodynamics method and selectors that require gas evolution.
 void validateHydroMethod(Options const& opts) {
+    if (opts.hydro.hopkins && !opts.hydro.enabled) {
+        throw std::invalid_argument("hydro.hopkins=true requires hydro.enabled=true");
+    }
     if (opts.hydro.method != "sph") {
         throw std::invalid_argument("hydro.method must be sph");
+    }
+    if (opts.hydro.sphFormulation != "densityEntropy" &&
+        opts.hydro.sphFormulation != "densityEnergy") {
+        throw std::invalid_argument("hydro.sphFormulation must be densityEntropy or densityEnergy");
     }
 }
 
@@ -396,6 +406,14 @@ void setOptions(Options const& requested) {
         throw std::invalid_argument(
             "hydro.dimensions cannot be changed after particle storage allocation");
     }
+#if COSMICTIGER_WITH_SPH
+    if ((sphParticlesEntropies != nullptr || sphParticlesInternalEnergies != nullptr) &&
+        (opts.hydro.sphFormulation != globalOpts.hydro.sphFormulation ||
+            opts.hydro.hopkins != globalOpts.hydro.hopkins)) {
+        throw std::invalid_argument("hydro.sphFormulation and hydro.hopkins cannot be changed "
+                                    "after gas storage allocation");
+    }
+#endif
     detail::validateSpatialDimensions(opts);
     setSpatialDimensions(opts.hydro.dimensions);
     opts.run.hierarchicalGravity = opts.gravity.enabled;
@@ -624,7 +642,9 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"chemistry.initializationTemperature", options.chemistry.initializationTemperature},
         {"chemistry.minimumSpecificEnergy", options.chemistry.minimumSpecificEnergy},
         {"hydro.enabled", options.hydro.enabled},
+        {"hydro.hopkins", options.hydro.hopkins},
         {"hydro.method", options.hydro.method},
+        {"hydro.sphFormulation", options.hydro.sphFormulation},
         {"hydro.dimensions", options.hydro.dimensions},
         {"hydro.kernelFamily", options.hydro.kernelFamily},
         {"hydro.kernelDegree", options.hydro.kernelDegree},
@@ -1012,9 +1032,13 @@ bool processOptions(int argc, char* argv[]) {
         "hydro.cuda", po::value<bool>(&opts.hydro.cuda)->default_value(false), "use CUDA for SPH");
     hydroOpts.add_options()("hydro.enabled",
         po::value<bool>(&opts.hydro.enabled)->default_value(false), "enable gas hydrodynamics")(
-        "hydro.method", po::value<std::string>(&opts.hydro.method)->default_value("sph"),
-        "hydrodynamic method: sph")("hydro.dimensions",
-        po::value<int>(&opts.hydro.dimensions)->default_value(3),
+        "hydro.hopkins", po::value<bool>(&opts.hydro.hopkins)->default_value(false),
+        "select Hopkins hydrodynamics; requires hydro.enabled=true")("hydro.method",
+        po::value<std::string>(&opts.hydro.method)->default_value("sph"),
+        "hydrodynamic method: sph")("hydro.sphFormulation",
+        po::value<std::string>(&opts.hydro.sphFormulation)->default_value("densityEntropy"),
+        "SPH formulation: densityEntropy or densityEnergy (specific internal energy a^2 u)")(
+        "hydro.dimensions", po::value<int>(&opts.hydro.dimensions)->default_value(3),
         "active Cartesian SPH dimensions: 1, 2, or 3")("hydro.kernelFamily",
         po::value<std::string>(&opts.hydro.kernelFamily)->default_value("spline"),
         "density kernel family: spline, wendland, or ferrers")("hydro.kernelDegree",

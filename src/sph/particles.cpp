@@ -46,8 +46,7 @@ static ParticleInteger capacity = 0;
 static ParticleInteger size = 0;
 
 HPX_PLAIN_ACTION(sphParticlesPrepareThermodynamics, SphParticlesPrepareThermodynamicsAction);
-/// Publish the thermal scale and optionally convert initial gas energy to persistent
-/// entropy across localities.
+/// Publish the thermal scale and optionally initialize the selected persistent thermal fields.
 void sphParticlesPrepareThermodynamics(double scaleFactor, bool initializeEntropy) {
     auto const& opts = getOptions();
     ALWAYS_ASSERT(scaleFactor > 0.0);
@@ -59,11 +58,19 @@ void sphParticlesPrepareThermodynamics(double scaleFactor, bool initializeEntrop
     sphParticlesThermalScaleFactor = scaleFactor;
     if (initializeEntropy && !sphParticlesEntropyInitialized) {
         for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
-            ALWAYS_ASSERT(sphParticlesDensity(gas) > 0.0f && sphParticlesEntropies[gas] > 0.0f);
-            sphParticlesEntropies[gas] = sph_entropy::fromStoredEnergy(sphParticlesEntropies[gas],
-                sphParticlesDensity(gas), opts.hydro.heatCapacityRatio, scaleFactor);
+            float const energy = sphParticlesInternalEnergy(gas);
+            ALWAYS_ASSERT(sphParticlesDensity(gas) > 0.0f && energy > 0.0f);
+            if (sphParticlesEntropies != nullptr) {
+                sphParticlesEntropies[gas] = sph_entropy::fromStoredEnergy(
+                    energy, sphParticlesDensity(gas), opts.hydro.heatCapacityRatio, scaleFactor);
+            }
         }
         sphParticlesEntropyInitialized = true;
+    }
+    if (sphParticlesEntropyInitialized && opts.hydro.hopkins) {
+        for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
+            sphParticlesSynchronizeThermalState(gas);
+        }
     }
     for (auto& child : children) {
         child.get();
@@ -79,7 +86,12 @@ void visitSphCheckpointArrays(
     Visitor&& visit, bool includeChemistry = true, bool includeViscosity = true) {
     size_t const count = sphParticlesSize();
     // Persistent physical state and timestep/viscosity state only; force rates are event-local.
-    visit(sphParticlesEntropies, count);
+    if (sphParticlesEntropies != nullptr) {
+        visit(sphParticlesEntropies, count);
+    }
+    if (sphParticlesInternalEnergies != nullptr) {
+        visit(sphParticlesInternalEnergies, count);
+    }
     visit(sphParticlesSmoothingLengths, count);
     visit(sphParticlesParticleIndices, count);
     visit(sphParticlesDensities, count);
@@ -165,7 +177,12 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
         sphParticlesArrayResize(sphParticlesGradHCorrections, newCapacity);
         sphParticlesArrayResize(sphParticlesFlags, newCapacity);
         sphParticlesArrayResize(sphParticlesBulkViscosityCoefficients, newCapacity);
-        sphParticlesArrayResize(sphParticlesEntropies, newCapacity);
+        if (storesSphEntropy(opts.hydro)) {
+            sphParticlesArrayResize(sphParticlesEntropies, newCapacity);
+        }
+        if (storesSphInternalEnergy(opts.hydro)) {
+            sphParticlesArrayResize(sphParticlesInternalEnergies, newCapacity);
+        }
         sphParticlesArrayResize(sphParticlesSmoothingLengths, newCapacity);
         sphParticlesArrayResize(sphParticlesParticleIndices, newCapacity);
         if (opts.chemistry.enabled) {
@@ -182,7 +199,12 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
     size = particleCount;
     for (int i = 0; i < numberOfNewParticles; i++) {
         ParticleInteger const slot = previousSize + i;
-        sphParticlesEntropies[slot] = 0.0f;
+        if (sphParticlesEntropies != nullptr) {
+            sphParticlesEntropies[slot] = 0.0f;
+        }
+        if (sphParticlesInternalEnergies != nullptr) {
+            sphParticlesInternalEnergies[slot] = 0.0f;
+        }
         sphParticlesSmoothingLengths[slot] = 0.0f;
         if (opts.chemistry.enabled) {
             sphParticlesElectronFractions[slot] = 1.0f;
@@ -369,6 +391,8 @@ namespace detail {
 
 // Gas payloads below this version carried retired viscosity-model state.
 constexpr uint32_t kSphCheckpointBaseVersion = 140000U;
+constexpr uint32_t kSphEnergyEvolutionVersion = 1000U;
+constexpr uint32_t kSphDualThermalVersion = 2000U;
 
 /// Encode the current persistent gas layout and optional physics state into its checkpoint
 /// version.
@@ -387,8 +411,11 @@ uint32_t sphCheckpointVersion() {
     // From 70000 no force rates persist; retired viscosity models checkpoint their history.
     // From 130000 two working flags and the proposed rung share one byte.
     // From 140000 Morris-Monaghan alpha is the only viscosity state, always stored (+2).
+    // +1000 identifies density-energy evolution; +2000 stores both A and E for Hopkins.
     return kSphCheckpointBaseVersion +
-        (options.starFormation.enabled ? 110U : (options.chemistry.enabled ? 100U : 2U)) + 2U;
+        (options.starFormation.enabled ? 110U : (options.chemistry.enabled ? 100U : 2U)) + 2U +
+        (usesSphEnergyEvolution(options.hydro) ? kSphEnergyEvolutionVersion : 0U) +
+        (options.hydro.hopkins ? kSphDualThermalVersion : 0U);
 }
 
 }    // namespace detail
@@ -413,14 +440,14 @@ void sphParticlesLoad(FILE* fp) {
         header[5] != spatialDimensions() || header[6] != sizeof(float) ||
         savedCount != sphParticlesSize()) {
         throw std::runtime_error("Incompatible SPH checkpoint payload (requires matching "
-                                 "integrator/viscosity/chemistry layout)");
+                                 "thermal/integrator/viscosity/chemistry layout)");
     }
     uint32_t entropyInitialized;
     FREAD(&entropyInitialized, sizeof(entropyInitialized), 1, fp);
     FREAD(&sphParticlesThermalScaleFactor, sizeof(sphParticlesThermalScaleFactor), 1, fp);
     if (entropyInitialized > 1 || !(sphParticlesThermalScaleFactor > 0.0) ||
         !std::isfinite(sphParticlesThermalScaleFactor)) {
-        throw std::runtime_error("Invalid SPH entropy checkpoint context");
+        throw std::runtime_error("Invalid SPH thermal checkpoint context");
     }
     sphParticlesEntropyInitialized = entropyInitialized != 0;
     detail::visitSphCheckpointArrays(
@@ -488,6 +515,11 @@ void sphParticlesSave(FILE* fp) {
 /// particle state.
 void sphCheckpointTest() {
     auto const& opts = getOptions();
+    if (sphParticlesSize() != 0) {
+        ALWAYS_ASSERT((sphParticlesEntropies != nullptr) == storesSphEntropy(opts.hydro));
+        ALWAYS_ASSERT(
+            (sphParticlesInternalEnergies != nullptr) == storesSphInternalEnergy(opts.hydro));
+    }
     // Every valid combination roundtrips and each setter preserves the other fields.
     for (int encoded = 0; encoded < 256; ++encoded) {
         SphParticleFlags flags;

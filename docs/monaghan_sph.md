@@ -9,7 +9,8 @@ ADS bibcode `1992ARA&A..30..543M`
 ([open-access scan](https://articles.adsabs.harvard.edu/pdf/1992ARA%26A..30..543M)).
 Equation and printed-page references below were checked against that scan.
 
-The active fluid model uses density and entropy (with derived internal energy) with the
+The active fluid model uses density and either entropy (the default) or scaled specific
+internal energy, selected by [`hydro.sphFormulation`](sph_thermal_formulations.md), with the
 [variational pressure operator](variational_sph.md), including grad-H corrections.
 It supports an ideal gas, primordial chemistry, and the SH03 star-formation
 closure. Ordinary particle advection is used; the optional XSPH variant in
@@ -89,12 +90,12 @@ Global, traditional, and hierarchical integration share the chronological
 two-call explicit-midpoint RK2 hydro operator; it is the only positive-duration
 hydro integration scheme. Gravity applies its own driver-scheduled kicks and
 never invokes SPH from a gravity kick. Each of the two hydro stages freezes its
-source velocities, entropies, densities and viscosity coefficients before any
+source velocities, thermal states, densities and viscosity coefficients before any
 CPU/CUDA worker changes particles. The finer-rung endpoint owns each interacting
 pair; its impulse is accumulated with equal and opposite signs, including the
-reaction on an inactive neighbor. Event-local velocity and entropy increments
+reaction on an inactive neighbor. Event-local velocity and canonical thermal increments
 are returned to their owning MPI ranks and summed before publishing the predictor
-or the final state. A gas-indexed acceleration vector and entropy-rate scalar,
+or the final state. A gas-indexed acceleration vector and thermal-rate scalar,
 plus sparse baseline records for recipients, exist only within the event.
 Timestep selection retains the scalar hydro rung bound (or the global raw
 timestep); force-rate scratch is released before migration and checkpoints.

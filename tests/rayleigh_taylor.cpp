@@ -35,6 +35,7 @@ ParticleVector<float>* particlesV;
 char* particlesR;
 ParticleInteger* sphParticlesParticleIndices;
 float* sphParticlesEntropies;
+float* sphParticlesInternalEnergies;
 float* sphParticlesDensities;
 bool sphParticlesEntropyInitialized = false;
 double sphParticlesThermalScaleFactor = 1.0;
@@ -53,6 +54,7 @@ std::array<std::vector<Position>, kDimensions> positions;
 std::vector<ParticleVector<float>> velocities;
 std::vector<char> rungs;
 std::vector<ParticleInteger> indices;
+std::vector<float> entropies;
 std::vector<float> internalEnergies;
 std::vector<float> smoothingLengths;
 
@@ -104,12 +106,16 @@ void sphParticlesResize(ParticleInteger count, bool) {
     detail::velocities.resize(count);
     detail::rungs.resize(count);
     detail::indices.resize(count);
-    detail::internalEnergies.resize(count);
+    auto const& hydro = getOptions().hydro;
+    detail::entropies.resize(storesSphEntropy(hydro) ? count : 0);
+    detail::internalEnergies.resize(storesSphInternalEnergy(hydro) ? count : 0);
     detail::smoothingLengths.resize(count);
     particlesV = detail::velocities.data();
     particlesR = detail::rungs.data();
     sphParticlesParticleIndices = detail::indices.data();
-    sphParticlesEntropies = detail::internalEnergies.data();
+    sphParticlesEntropies = storesSphEntropy(hydro) ? detail::entropies.data() : nullptr;
+    sphParticlesInternalEnergies =
+        storesSphInternalEnergy(hydro) ? detail::internalEnergies.data() : nullptr;
     sphParticlesSmoothingLengths = detail::smoothingLengths.data();
     for (ParticleInteger i = oldCount; i < count; i++) {
         sphParticlesParticleIndices[i] = i;

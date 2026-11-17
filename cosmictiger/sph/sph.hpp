@@ -288,9 +288,9 @@ SphRunReturn sphRun(SphRunParameters params, bool cuda = false);
 // saved incoming state, including every inactive recipient of a pair impulse.
 // A zero interval performs only a nonmutating force/timestep estimate.
 SphRunReturn sphMidpointForces(SphRunParameters params, bool cuda = true);
-// Event-local, gas-indexed irreversible entropy rate.
+// Event-local, gas-indexed rate of canonical entropy A or scaled specific energy E = a²u.
 // Allocated after gas sorting and released before migration/checkpoint/output.
-float* sphStageEntropyRates();
+float* sphStageThermalRates();
 #ifndef __CUDACC__
 hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
     SphTreeNeighborParameters params, TreeId self, Vector<TreeId> checklist, int level = 0);

@@ -426,17 +426,24 @@ void domainsTransmitParticles(Vector<Particle> parts) {
 // Ordinary SPH timesteps migrate the complete gas state together with its
 // gravity particle. Category indices are local and are rebuilt at the receiver.
 struct GasMigrationState {
-    float smoothingLength, entropy, density;
-    SphParticleFlags flags;
-    Float16Storage bulkViscosityCoefficient;
-    float electronFraction{1.0f};
-    /// Archive `smoothingLength`, `entropy`, `density`, `flags.bits`,
-    /// `bulkViscosityCoefficient.bits`, `electronFraction` in transport order.
+    float smoothingLength;     // Full compact-support kernel radius in stored coordinates.
+    float entropy;             // Physical A=P/rho^gamma when entropy storage is enabled.
+    float internalEnergy;      // Stored specific thermal energy E=a^2 u when enabled.
+    float density;             // Stored gas mass density.
+    SphParticleFlags flags;    // Working flags and the retained proposed hydro rung.
+    Float16Storage bulkViscosityCoefficient;    // Evolved artificial-viscosity alpha.
+    float electronFraction{1.0f};               // Equilibrium-cooling electron guess.
+    /// Archive enabled persistent thermal and viscosity fields in transport order.
     template <class Archive>
     void serialize(Archive& arc, unsigned) {
         auto const& opts = getOptions();
         arc & smoothingLength;
-        arc & entropy;
+        if (storesSphEntropy(opts.hydro)) {
+            arc & entropy;
+        }
+        if (storesSphInternalEnergy(opts.hydro)) {
+            arc & internalEnergy;
+        }
         arc & density;
         arc & flags.bits;
         arc & bulkViscosityCoefficient.bits;
@@ -485,7 +492,12 @@ static SphMigrationParticle packSphParticle(ParticleInteger index) {
         gas.smoothingLength = sphParticlesSmoothingLengths[i];
         gas.density = sphParticlesDensities[i];
         gas.flags = sphParticlesFlags[i];
-        gas.entropy = sphParticlesEntropies[i];
+        if (storesSphEntropy(opts.hydro)) {
+            gas.entropy = sphParticlesEntropies[i];
+        }
+        if (storesSphInternalEnergy(opts.hydro)) {
+            gas.internalEnergy = sphParticlesInternalEnergies[i];
+        }
         gas.bulkViscosityCoefficient = sphParticlesBulkViscosityCoefficients[i];
         if (opts.chemistry.enabled) {
             gas.electronFraction = sphParticlesElectronFractions[i];
@@ -509,7 +521,12 @@ static void unpackSphParticle(
         sphParticlesDensities[i] = gas.density;
         ALWAYS_ASSERT(gas.flags.valid());
         sphParticlesFlags[i] = gas.flags;
-        sphParticlesEntropies[i] = gas.entropy;
+        if (storesSphEntropy(opts.hydro)) {
+            sphParticlesEntropies[i] = gas.entropy;
+        }
+        if (storesSphInternalEnergy(opts.hydro)) {
+            sphParticlesInternalEnergies[i] = gas.internalEnergy;
+        }
         sphParticlesBulkViscosityCoefficients[i] = gas.bulkViscosityCoefficient;
         if (opts.chemistry.enabled) {
             sphParticlesElectronFractions[i] = gas.electronFraction;

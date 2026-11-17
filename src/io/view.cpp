@@ -825,7 +825,7 @@ ViewSnapshot collectViewParticles(double a) {
             static_cast<DarkMatterParticleInfo&>(gas) = info;
             int const index = particlesCatIndex(i);
             gas.entropy = sphParticlesEntropyInitialized ?
-                sphParticlesEntropy(index) :
+                sphParticlesEntropyValue(index) :
                 sph_entropy::fromStoredEnergy(sphParticlesInternalEnergy(index),
                     sphParticlesDensity(index), opts.hydro.heatCapacityRatio, a);
             gas.rho = sphParticlesDensity(index);

@@ -167,6 +167,8 @@ constexpr uint32_t kScalarViscosityLayout = 1U << 25;
 constexpr uint32_t kRosswogViscosityLayout = 1U << 26;
 constexpr uint32_t kArtificialConduction = 1U << 25;
 constexpr uint32_t kIndependentParticleCounts = 1U << 26;
+constexpr uint32_t kSphEnergyEvolution = 1U << 27;
+constexpr uint32_t kSphDualThermalStorage = 1U << 28;
 constexpr uint32_t kChemistry = 1U << 11;
 constexpr uint32_t kZPlaneAcceleration = 1U << 12;
 constexpr uint32_t kBalsaraSwitch = 1U << 13;
@@ -537,6 +539,8 @@ uint32_t checkpointFlags(Options const& opts) {
         (opts.hydro.enabled && opts.hydro.conductionCoefficient > 0.0 ? kArtificialConduction :
                                                                         0U) |
         (opts.hydro.enabled ? kVariableViscosity : 0U) |
+        (opts.hydro.enabled && usesSphEnergyEvolution(opts.hydro) ? kSphEnergyEvolution : 0U) |
+        (opts.hydro.enabled && opts.hydro.hopkins ? kSphDualThermalStorage : 0U) |
         (opts.compute.positionType == "fixed64" ? kFixed64Positions : 0U) |
         (opts.starFormation.enabled ? kStarFormation : 0U);
 }
@@ -1058,6 +1062,24 @@ void checkpointStateTest() {
     auto hydroOnlyOptions = opts;
     hydroOnlyOptions.gravity.enabled = false;
     hydroOnlyOptions.hydro.enabled = true;
+    {
+        auto thermalOptions = hydroOnlyOptions;
+        thermalOptions.hydro.sphFormulation = "densityEntropy";
+        thermalOptions.hydro.hopkins = false;
+        auto const entropyHeader = detail::checkpointHeader(thermalOptions);
+        ALWAYS_ASSERT(detail::checkpointCompatible(entropyHeader, thermalOptions));
+        thermalOptions.hydro.sphFormulation = "densityEnergy";
+        ALWAYS_ASSERT(!detail::checkpointCompatible(entropyHeader, thermalOptions));
+        auto const energyHeader = detail::checkpointHeader(thermalOptions);
+        ALWAYS_ASSERT(detail::checkpointCompatible(energyHeader, thermalOptions));
+        thermalOptions.hydro.hopkins = true;
+        ALWAYS_ASSERT(!detail::checkpointCompatible(energyHeader, thermalOptions));
+        auto const dualHeader = detail::checkpointHeader(thermalOptions);
+        ALWAYS_ASSERT(detail::checkpointCompatible(dualHeader, thermalOptions));
+        thermalOptions.hydro.sphFormulation = "densityEntropy";
+        ALWAYS_ASSERT(!detail::checkpointCompatible(dualHeader, thermalOptions));
+        ALWAYS_ASSERT(!detail::checkpointCompatible(entropyHeader, thermalOptions));
+    }
     {
         auto const algorithms = detail::checkpointAlgorithms(hydroOnlyOptions);
         ALWAYS_ASSERT(algorithms[1] == 0 && algorithms[2] == 0 && algorithms[3] == 0);

@@ -1,3 +1,4 @@
+// Verify distributed output ownership, field associations and physical unit conversions.
 /*
  Copyright (C) 2026 Dominic C. Marcello
  Distributed under the Boost Software License, Version 1.0.
@@ -394,6 +395,7 @@ void distributedOutputParticleFixture(int activeRanks, bool verify, bool segrega
 HPX_PLAIN_ACTION(distributedOutputParticleFixture, DistributedOutputParticleFixtureAction);
 
 void distributedOutputParticleFixture(int activeRanks, bool verify, bool segregated) {
+    auto const& options = getOptions();
     Vector<hpx::future<void>> pending;
     for (auto const& child : hpxChildren()) {
         pending.push_back(hpx::async<DistributedOutputParticleFixtureAction>(
@@ -411,14 +413,21 @@ void distributedOutputParticleFixture(int activeRanks, bool verify, bool segrega
     for (int i = 0; i < gasCount; i++) {
         int const global = globals[i];
         auto const position = detail::distributedFixturePosition(global);
+        float const density = 1000.0f + global;
+        float const entropy = 10.0f + global;
+        float const thermal = usesSphEnergyEvolution(options.hydro) ?
+            sph_entropy::storedEnergy(entropy, density, options.hydro.heatCapacityRatio, 0.25f) :
+            entropy;
         if (verify) {
             for (int dim = 0; dim < 3; dim++) {
                 detail::requireDistributedOutput(particlesPos(dim, i).toDouble() == position[dim],
                     "output leaves physical particle coordinates unchanged");
             }
-            detail::requireDistributedOutput(sphParticlesDensity(i) == 1000.0f + global &&
-                    sphParticlesEntropy(i) == 10.0f + global,
+            detail::requireDistributedOutput(
+                sphParticlesDensity(i) == density && sphParticlesThermalVariable(i) == thermal,
                 "output leaves gas state unchanged");
+            detail::nearDistributedOutput(
+                sphParticlesEntropyValue(i), entropy, "derived entropy remains associated");
             continue;
         }
         for (int dim = 0; dim < 3; dim++) {
@@ -430,8 +439,9 @@ void distributedOutputParticleFixture(int activeRanks, bool verify, bool segrega
         particlesCatIndex(i) = i;
         sphParticlesParticleIndex(i) = i;
         sphParticlesSmoothingLength(i) = 0.03125 + global / 4096.0;
-        sphParticlesDensity(i) = 1000.0f + global;
-        sphParticlesEntropy(i) = 10.0f + global;
+        sphParticlesDensity(i) = density;
+        sphParticlesThermalVariable(i) = thermal;
+        sphParticlesSynchronizeThermalState(i);
     }
     if (!verify) {
         for (int i = 0; i < darkCount; i++) {

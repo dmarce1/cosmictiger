@@ -1,4 +1,4 @@
-// Conservative SPH pair ownership and compensated velocity and entropy increments.
+// Conservative SPH pair ownership and compensated velocity and thermal increments.
 /* CosmicTiger - conservative SPH pair impulses; BSL-1.0. */
 #pragma once
 
@@ -131,13 +131,13 @@ static_assert(sizeof(SphCompensatedSum) == 2 * sizeof(float));
 struct SphPairUpdate {
     SphCompensatedSum velocity[kDimensions] =
         {};                       // Velocity increments; inactive axes stay zero.
-    SphCompensatedSum entropy;    // Specific entropy increment for this pair event.
+    SphCompensatedSum thermal;    // ΔA or ΔE for this event, selected by the SPH formulation.
 
     /// Archive this record in the field order required by distributed transport.
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
         archive & velocity;
-        archive & entropy;
+        archive & thermal;
     }
 };
 
@@ -156,28 +156,31 @@ CUDA_EXPORT inline bool sphOwnsPairKick(SphPairSourceId const& target,
 /*
  * Derived discrete kick for the antisymmetric SPH pair force of Hopkins (2013),
  * equation (12), https://arxiv.org/abs/1206.5006:
- *   Δv𞁑 = Δτ a𞁑𞁓, Δv𞁓 = −Δv𞁑, ΔA𞁑 = Δτ Ȧ𞁑𞁓, ΔA𞁓 = Δτ Ȧ𞁓𞁑.
+ *   Δv𞁑 = Δτ a𞁑𞁓, Δv𞁓 = −Δv𞁑, ΔΘ𞁑 = Δτ Θ̇𞁑𞁓, ΔΘ𞁓 = Δτ Θ̇𞁓𞁑.
  * All production gas masses are equal. Evaluate a pair once at the midpoint of
  * its finer endpoint's interval and reuse the identical impulse with opposite
- * signs. Only nonadiabatic energy exchange contributes to Ȧ; directed viscous heating
- * can differ between endpoints. The scheduling and accumulation are local
+ * signs. The selected thermal coordinate is Θ=A (entropy tracer) or Θ=E=a²u
+ * (stored specific energy). Only nonadiabatic exchange contributes to Ȧ; Ė also
+ * includes each endpoint's own reversible pressure work. The scheduling and accumulation are local
  * derivations, not a time integrator prescribed by Hopkins (2013).
  * Symbol directory:
- *   Δτ → timestep; a𞁑𞁓 → acceleration; Ȧ𞁑𞁓/Ȧ𞁓𞁑 → target, neighbor entropy rates;
+ *   Δτ → timestep; a𞁑𞁓 → acceleration; Θ̇𞁑𞁓/Θ̇𞁓𞁑 → target, neighbor thermal rates;
  *   Δv𞁑 → increment; a, b → target, neighbor.
+ *   Code names: thermalRateA = Θ̇𞁑𞁓; thermalRateB = Θ̇𞁓𞁑.
  */
 // clang-format on
 template <int dimension = 0>
 CUDA_EXPORT inline FlopCount sphAccumulatePairKick(SphPairUpdate& a, SphPairUpdate& b,
-    sph_geometry::SpatialVector<float> const& a𞁑𞁓, float Ȧ𞁑𞁓, float Ȧ𞁓𞁑, float Δτ) {
-    FlopCount operations = spatialDimensions<dimension>() + 2;    // Impulse and entropy products.
+    sph_geometry::SpatialVector<float> const& a𞁑𞁓, float thermalRateA, float thermalRateB,
+    float Δτ) {
+    FlopCount operations = spatialDimensions<dimension>() + 2;    // Impulse and thermal products.
     for (int axis = 0; axis < spatialDimensions<dimension>(); ++axis) {
         float const Δv𞁑 = Δτ * a𞁑𞁓[axis];
         operations += a.velocity[axis].add(Δv𞁑);
         operations += b.velocity[axis].add(-Δv𞁑);
     }
-    operations += a.entropy.add(Δτ * Ȧ𞁑𞁓);
-    operations += b.entropy.add(Δτ * Ȧ𞁓𞁑);
+    operations += a.thermal.add(Δτ * thermalRateA);
+    operations += b.thermal.add(Δτ * thermalRateB);
     return operations;
 }
 

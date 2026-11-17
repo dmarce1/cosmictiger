@@ -1,3 +1,4 @@
+// Verify output units, frames and derived fields for either canonical gas thermal variable.
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
@@ -440,7 +441,11 @@ void unitsOutputParticleFixture(bool initialize) {
         sphParticlesDensity(0) = 8.0;
         sphParticlesEntropyInitialized = true;
         sphParticlesThermalScaleFactor = 0.25;
-        sphParticlesEntropy(0) = 4.0;
+        sphParticlesThermalVariable(0) = usesSphEnergyEvolution(opts.hydro) ?
+            sph_entropy::storedEnergy(4.0f, sphParticlesDensity(0), opts.hydro.heatCapacityRatio,
+                sphParticlesThermalScaleFactor) :
+            4.0f;
+        sphParticlesSynchronizeThermalState(0);
         // Distinct from the scalar CLI alpha; unchanged by unit/frame conversion.
         sphParticlesBulkViscosityCoefficients[0] = detail::kUnitsOutputViscosityAlpha;
     } else {

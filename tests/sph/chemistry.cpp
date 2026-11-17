@@ -21,17 +21,17 @@
 namespace detail {
 constexpr double kChemistryTestScale = 0.02;
 struct ChemistryRecord {
-    uint32_t electronFractionBits;
-    uint32_t energyBits;
-    uint32_t entropyBits;
-    uint32_t densityBits;
-    uint64_t rung;
+    uint32_t electronFractionBits;    // Exact equilibrium electron-fraction storage bits.
+    uint32_t energyBits;              // Stored specific energy a^2 u, derived in entropy mode.
+    uint32_t thermalBits;             // Exact canonical entropy A or stored energy E bits.
+    uint32_t densityBits;             // Endpoint density storage bits.
+    uint64_t rung;                    // Live timestep rung, unchanged by cooling.
 
     bool operator==(ChemistryRecord const&) const = default;
 
     template <typename Archive>
     void serialize(Archive& archive, unsigned) {
-        archive & electronFractionBits & energyBits & entropyBits & densityBits & rung;
+        archive & electronFractionBits & energyBits & thermalBits & densityBits & rung;
     }
 };
 using ChemistryLocalSnapshot = std::vector<ChemistryRecord>;
@@ -88,7 +88,7 @@ ChemistryLocalSnapshot chemistryFixtureSnapshot() {
         ChemistryRecord record;
         record.electronFractionBits = std::bit_cast<uint32_t>(sphParticlesElectronFractions[i]);
         record.energyBits = std::bit_cast<uint32_t>(sphParticlesInternalEnergy(i));
-        record.entropyBits = std::bit_cast<uint32_t>(sphParticlesEntropy(i));
+        record.thermalBits = std::bit_cast<uint32_t>(sphParticlesThermalVariable(i));
         record.densityBits = std::bit_cast<uint32_t>(sphParticlesDensity(i));
         record.rung = uint64_t(sphParticlesRung(i));
         records.push_back(record);
@@ -126,22 +126,34 @@ void rejectDuplicateCoolingTargets() {
 void checkThermalProjection() {
     auto const& opts = getOptions();
     double const gamma = opts.hydro.heatCapacityRatio;
-    auto const prepared = sph_entropy::prepareStoredEnergy(3.0f, 7.0f, gamma, kChemistryTestScale);
+    bool const energyEvolution = usesSphEnergyEvolution(opts.hydro);
+    bool const retainEntropy = storesSphEntropy(opts.hydro);
+    auto const prepared = sph_entropy::prepareStoredEnergy(
+        3.0f, 7.0f, gamma, kChemistryTestScale, energyEvolution, retainEntropy);
     double const expectedEntropy = (gamma - 1.0) * 3.0 * std::pow(7.0, 1.0 - gamma);
-    requireChemistry(std::abs(double(prepared.entropy) - expectedEntropy) <
-            2.0 * std::numeric_limits<float>::epsilon() * expectedEntropy,
-        "source projection does not produce canonical entropy");
+    if (retainEntropy) {
+        requireChemistry(std::abs(double(prepared.entropy) - expectedEntropy) <
+                2.0 * std::numeric_limits<float>::epsilon() * expectedEntropy,
+            "source projection does not produce the retained entropy");
+    }
+    if (energyEvolution) {
+        requireChemistry(
+            prepared.storedEnergy == 3.0f, "source projection changed directly stored energy");
+    }
     for (auto const& input :
         std::vector<std::pair<float, float>>{{std::numeric_limits<float>::quiet_NaN(), 1.0f},
             {std::numeric_limits<float>::max(), std::numeric_limits<float>::min()},
             {std::numeric_limits<float>::min(), std::numeric_limits<float>::max()}}) {
         bool rejected = false;
         try {
-            sph_entropy::prepareStoredEnergy(input.first, input.second, gamma, kChemistryTestScale);
+            sph_entropy::prepareStoredEnergy(input.first, input.second, gamma, kChemistryTestScale,
+                energyEvolution, retainEntropy);
         } catch (std::exception const&) {
             rejected = true;
         }
-        requireChemistry(rejected, "invalid or unrepresentable source entropy was accepted");
+        bool const mustReject = !std::isfinite(input.first) || retainEntropy;
+        requireChemistry(rejected == mustReject,
+            "source projection rejected valid energy or accepted invalid retained state");
     }
 }
 }    // namespace detail
@@ -188,21 +200,23 @@ void requireCompletedSource(ChemistrySnapshot const& before, ChemistrySnapshot c
             auto const& newRecord = after[rank][particle];
             requireChemistry(oldRecord.energyBits != newRecord.energyBits,
                 "completed cooling did not change energy");
-            requireChemistry(oldRecord.entropyBits != newRecord.entropyBits,
-                "completed cooling did not change entropy");
+            requireChemistry(oldRecord.thermalBits != newRecord.thermalBits,
+                "completed cooling did not change the canonical thermal state");
             requireChemistry(oldRecord.densityBits == newRecord.densityBits,
                 "cooling changed the endpoint density");
             requireChemistry(oldRecord.rung == newRecord.rung, "cooling reselected a hydro rung");
             float const oldEnergy = std::bit_cast<float>(oldRecord.energyBits);
             float const newEnergy = std::bit_cast<float>(newRecord.energyBits);
             double const density = std::bit_cast<float>(newRecord.densityBits);
-            double const entropy = std::bit_cast<float>(newRecord.entropyBits);
+            double const thermal = std::bit_cast<float>(newRecord.thermalBits);
             double const gamma = opts.hydro.heatCapacityRatio;
             double const expectedEntropy =
                 (gamma - 1.0) * double(newEnergy) * std::pow(density, 1.0 - gamma);
-            requireChemistry(std::abs(entropy - expectedEntropy) <=
-                    4.0 * std::numeric_limits<float>::epsilon() * expectedEntropy,
-                "committed source energy and entropy are inconsistent");
+            double const expectedThermal =
+                usesSphEnergyEvolution(opts.hydro) ? double(newEnergy) : expectedEntropy;
+            requireChemistry(std::abs(thermal - expectedThermal) <=
+                    4.0 * std::numeric_limits<float>::epsilon() * expectedThermal,
+                "committed source energy and canonical thermal state are inconsistent");
             expectedHeating -=
                 opts.initial.gasMass * (double(newEnergy) - oldEnergy) / kChemistryTestScale;
         }

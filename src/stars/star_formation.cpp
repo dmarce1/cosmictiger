@@ -147,19 +147,20 @@ std::vector<Output> run(
     return outputs;
 }
 struct Pending {
-    ParticleInteger particle;
-    Output output;
-    float entropy;
+    ParticleInteger particle;    // Parent particle index, stable across gas-slot compaction.
+    Output output;               // Validated backend state and gas-to-star conversion decision.
+    float thermal;               // Canonical entropy A or scaled specific energy E = a²u.
 };
 std::vector<Pending> pending;
 
-/// Validate backend outputs and prepare entropy, identity, and conversion updates without
+/// Validate backend outputs and prepare thermal, identity, and conversion updates without
 /// committing live state.
 StarFormationUpdate stage(std::vector<ParticleInteger> const& gasIndices,
     std::vector<Input> const& inputs, std::vector<Output> const& outputs, double scaleFactor) {
     auto const& opts = getOptions();
     if (!sphParticlesEntropyInitialized || sphParticlesThermalScaleFactor != scaleFactor) {
-        throw std::logic_error("Star formation requires endpoint density and canonical entropy");
+        throw std::logic_error(
+            "Star formation requires endpoint density and canonical thermal state");
     }
     StarFormationUpdate result;
     std::vector<Pending> staged;
@@ -167,7 +168,7 @@ StarFormationUpdate stage(std::vector<ParticleInteger> const& gasIndices,
     for (size_t index = 0; index < outputs.size(); ++index) {
         auto output = outputs[index];
         auto const& input = inputs[index];
-        float entropy = 0.0f;
+        float thermal = 0.0f;
         if (output.state.id != input.state.id ||
             (output.convert &&
                 (!(output.state.formationTime >= 0.0) ||
@@ -176,24 +177,26 @@ StarFormationUpdate stage(std::vector<ParticleInteger> const& gasIndices,
             throw std::invalid_argument("Invalid prepared star-formation identity or birth state");
         }
         // Validate even a converting particle before any rank may commit.
-        auto const original = sph_entropy::prepareStoredEnergy(
-            input.energy, input.density, opts.hydro.heatCapacityRatio, scaleFactor);
+        auto const original = sph_entropy::prepareStoredEnergy(input.energy, input.density,
+            opts.hydro.heatCapacityRatio, scaleFactor, usesSphEnergyEvolution(opts.hydro),
+            storesSphEntropy(opts.hydro));
         (void) original;
         if (!output.convert) {
-            auto const prepared = sph_entropy::prepareStoredEnergy(
-                output.energy, input.density, opts.hydro.heatCapacityRatio, scaleFactor);
-            entropy = prepared.entropy;
+            auto const prepared = sph_entropy::prepareStoredEnergy(output.energy, input.density,
+                opts.hydro.heatCapacityRatio, scaleFactor, usesSphEnergyEvolution(opts.hydro),
+                storesSphEntropy(opts.hydro));
+            thermal = usesSphEnergyEvolution(opts.hydro) ? prepared.storedEnergy : prepared.entropy;
             output.energy = prepared.storedEnergy;
         }
         // Derived source ledger in the existing a(K+W+U) normalization:
         // ΔQ = −m (Eₒᵤₜ − Eᵢₙ)/a, E = a²u.
         // m -> gas mass; Eₒᵤₜ -> output energy; Eᵢₙ -> input energy;
-        // a -> scale factor. Use the actual representable committed entropy.
+        // a -> scale factor. Use the actual representable committed thermal state.
         output.value =
             -opts.initial.gasMass * (double(output.energy) - double(input.energy)) / scaleFactor;
         result.heating += output.value;
         result.converted += output.convert;
-        staged.push_back({sphParticlesParticleIndex(gasIndices[index]), output, entropy});
+        staged.push_back({sphParticlesParticleIndex(gasIndices[index]), output, thermal});
     }
     pending = std::move(staged);
     return result;
@@ -397,7 +400,8 @@ void starFormationCommitLocal() {
             starFormationConvertGas(gas, output.state);
         } else {
             particlesStarFormationStates[update.particle] = output.state;
-            sphParticlesEntropies[gas] = update.entropy;
+            sphParticlesThermalVariable(gas) = update.thermal;
+            sphParticlesSynchronizeThermalState(gas);
             sphParticlesElectronFractions[gas] = output.electronFraction;
         }
     }

@@ -29,21 +29,21 @@ constexpr int kSourceParticleCount = kSourceGridSide * kSourceGridSide * kSource
 constexpr double kSourceScale = 0.3;
 
 struct SourceTimingRecord {
-    uint64_t identity{};
-    uint64_t eventCounter{};
-    double elapsedPhysicalTime{};
-    double formationTime{};
-    int rung{};
-    int type{};
-    uint32_t mass{};
-    uint32_t entropy{};
-    uint32_t bulkViscosity{};
-    std::array<uint64_t, kDimensions> position{};
-    std::array<uint32_t, kDimensions> velocity{};
+    uint64_t identity{};             // Persistent particle identity.
+    uint64_t eventCounter{};         // Number of completed source intervals.
+    double elapsedPhysicalTime{};    // Accumulated source duration in physical seconds.
+    double formationTime{};          // Stellar birth scale factor or physical time.
+    int rung{};                      // Live timestep rung.
+    int type{};                      // Gas or star species tag.
+    uint32_t mass{};                 // Exact particle-mass representation.
+    uint32_t thermal{};              // Exact canonical entropy A or stored energy E bits.
+    uint32_t bulkViscosity{};        // Exact half-precision viscosity coefficient bits.
+    std::array<uint64_t, kDimensions> position{};    // Fixed-point coordinates by axis.
+    std::array<uint32_t, kDimensions> velocity{};    // Exact velocity bits by axis.
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
         archive & identity & eventCounter & elapsedPhysicalTime & formationTime & rung & type &
-            mass & entropy & bulkViscosity & position & velocity;
+            mass & thermal & bulkViscosity & position & velocity;
     }
 };
 
@@ -93,7 +93,7 @@ void initializeSourceTiming() {
 }
 
 std::vector<SourceTimingRecord> sourceTimingSnapshot() {
-    requireSourceTiming(sphParticlesEntropyInitialized, "entropy was not canonical");
+    requireSourceTiming(sphParticlesEntropyInitialized, "thermal state was not initialized");
     requireSourceTiming(sphParticlesThermalScaleFactor == kSourceScale,
         "source estimate lost the exact endpoint scale");
     std::vector<SourceTimingRecord> records;
@@ -109,7 +109,7 @@ std::vector<SourceTimingRecord> sourceTimingSnapshot() {
         record.mass = std::bit_cast<uint32_t>(particlesMass(particle));
         if (record.type == kSphType) {
             auto const gas = particlesCatIndex(particle);
-            record.entropy = std::bit_cast<uint32_t>(sphParticlesEntropies[gas]);
+            record.thermal = std::bit_cast<uint32_t>(sphParticlesThermalVariable(gas));
             record.bulkViscosity = uint32_t(sphParticlesBulkViscosityCoefficients[gas].bits);
         }
         for (int dimension = 0; dimension < kDimensions; ++dimension) {
@@ -208,7 +208,7 @@ void verifySourceTiming(std::vector<SourceTimingRecord> const& before,
                 }
             }
             if (!selected) {
-                requireSourceTiming(current.entropy == previous.entropy,
+                requireSourceTiming(current.thermal == previous.thermal,
                     "inactive gas received source heat or a hydro kick");
             }
         }

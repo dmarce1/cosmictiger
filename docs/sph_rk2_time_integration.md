@@ -2,13 +2,18 @@
 
 **Status: implemented and focused validation passed, November 4, 2026.**
 The default and only positive-duration SPH update is the chronological midpoint
-construction below. It uses two hydro evaluations and one entropy-rate scalar per
+construction below. It uses two hydro evaluations and one thermal-rate scalar per
 gas particle, plus temporary affected-particle baseline and exchange records. No
 event scratch enters migration or checkpoints.
 SPH hydro is orchestrated by the driver, never called from a gravity kick.
 The published Morris–Monaghan endpoint update is retained; its accuracy
 limitation is explicit in section 7. Section 9 explains the alternative
 nested endpoint construction and its additional state requirements.
+
+The equations below describe the default density-entropy formulation. The selectable
+[density-energy formulation](sph_thermal_formulations.md) uses the same midpoint staging
+and pair clocks, with E = a²u replacing A in baselines and increments. Its thermal
+rate includes reversible pressure work and active-target cosmological expansion.
 
 The essential rule is that an interacting pair shares one integration clock:
 the finer of its two particle rungs. At a pair event, both endpoints receive the

@@ -1,5 +1,6 @@
 /*
  CosmicTiger - A cosmological N-Body code
+ Convert and validate entropy and scaled specific internal energy for gas storage.
  Copyright (C) 2026 Dominic C. Marcello
 
  Distributed under the Boost Software License, Version 1.0.
@@ -68,8 +69,8 @@ CUDA_EXPORT inline float fromStoredEnergy(float E, float ρ𞁞, float γ, float
 }
 
 struct PreparedThermalState {
-    float entropy;
-    float storedEnergy;
+    float entropy;         // Entropy tracer A, or zero when entropy storage is not requested.
+    float storedEnergy;    // Scaled specific internal energy E = a²u represented by the state.
 };
 
 namespace detail {
@@ -92,24 +93,34 @@ namespace detail {
     }
 }    // namespace detail
 
-// Stage the canonical float A before changing any particle. Reconstruct E from
-// that exact representation so the source ledger matches the committed state.
+// Stage the canonical float A or E before changing any particle. In entropy mode,
+// reconstruct E from that exact A so the source ledger matches the committed state.
+// Energy-only storage need not represent the unused entropy tracer as a float.
 // Symbol directory: E → energy; ρ𞁞 → density; γ → adiabatic index; a → scale factor;
 // E/A → conversion factor. Code names: E_over_A = E/A.
-inline PreparedThermalState prepareStoredEnergy(float E, float ρ𞁞, float γ, float a) {
+inline PreparedThermalState prepareStoredEnergy(
+    float E, float ρ𞁞, float γ, float a, bool energyEvolution = false, bool retainEntropy = true) {
     if (!detail::finiteThermalValue(E) || !(E > 0.0f) || !detail::finiteThermalValue(ρ𞁞) ||
         !(ρ𞁞 > 0.0f) || !detail::finiteThermalValue(γ) || !(γ > 1.0f) ||
         !detail::finiteThermalValue(a) || !(a > 0.0f)) {
         throw std::invalid_argument(
             "SPH source requires finite positive energy, density and scale");
     }
+    PreparedThermalState result{};
+    if (energyEvolution) {
+        result.storedEnergy = detail::thermalStorageValue(E);
+        if (!retainEntropy) {
+            return result;
+        }
+    }
     float const E_over_A = energyPerEntropy(ρ𞁞, γ, a);
     if (!detail::finiteThermalValue(E_over_A) || !(E_over_A > 0.0f)) {
         throw std::range_error("SPH source has an invalid entropy conversion factor");
     }
-    PreparedThermalState result;
     result.entropy = detail::thermalStorageValue(E / E_over_A);
-    result.storedEnergy = detail::thermalStorageValue(result.entropy * E_over_A);
+    if (!energyEvolution) {
+        result.storedEnergy = detail::thermalStorageValue(result.entropy * E_over_A);
+    }
     return result;
 }
 

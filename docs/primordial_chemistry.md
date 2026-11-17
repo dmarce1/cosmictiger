@@ -82,9 +82,10 @@ seconds. This retains first-order operator splitting without extra source clocks
 
 The bridge prepares all updated gas states, checks the results and only then
 commits them. The electron estimate follows gas particles through sorting,
-migration and checkpoints. Hydrodynamic entropy is authoritative: the backend's
-updated `a^2 u` is converted to a representable float entropy before any commit,
-and the energy ledger uses the reconstructed energy of that same stored value.
+migration and checkpoints. The selected [SPH thermal variable](sph_thermal_formulations.md)
+is authoritative: the backend's updated `a^2 u` is stored directly in density-energy
+mode or converted to a representable float entropy in density-entropy mode.
+The energy ledger uses the energy represented by that same stored value.
 Failed preparation discards staged results on every locality. A subsequent
 zero-kick hydro estimate refreshes timestep bounds without advancing viscosity
 history; gas rung changes retain the common-boundary policy.

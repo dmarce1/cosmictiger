@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <initializer_list>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -64,6 +65,31 @@ void sphOnlyDiagnosticsTest() {
         }
     };
     sphParticlesResize(kParticleCount);
+    // Live selectors cannot change the meaning or allocation of resident thermal fields.
+    for (bool const changeFormulation : {true, false}) {
+        auto altered = options;
+        if (changeFormulation) {
+            altered.hydro.sphFormulation =
+                usesSphEnergyEvolution(options.hydro) ? "densityEntropy" : "densityEnergy";
+        } else {
+            altered.hydro.hopkins = !options.hydro.hopkins;
+        }
+        auto const* const entropyStorage = sphParticlesEntropies;
+        auto const* const energyStorage = sphParticlesInternalEnergies;
+        bool rejected = false;
+        try {
+            setOptions(altered);
+        } catch (std::invalid_argument const& error) {
+            rejected =
+                std::string(error.what()).find("after gas storage allocation") != std::string::npos;
+        }
+        if (!rejected || getOptions().hydro.sphFormulation != options.hydro.sphFormulation ||
+            getOptions().hydro.hopkins != options.hydro.hopkins ||
+            sphParticlesEntropies != entropyStorage ||
+            sphParticlesInternalEnergies != energyStorage) {
+            throw std::runtime_error("A live thermal selector change escaped its storage guard");
+        }
+    }
     checkDiagnostics(0, kParticleCount, "new allocation");
     auto const rejectDimensionChange = [&options]() {
         int const originalDimensions = spatialDimensions();
@@ -130,15 +156,24 @@ void sphOnlyDiagnosticsTest() {
         throw std::runtime_error("SPH-only checkpoint failed to preserve the gas payload");
     }
     sphCheckpointTest();
-    // Exercise canonical entropy, live source staging, and the actual frozen midpoint pass.
+    // Exercise the selected canonical thermal field and live source staging.
     sphParticlesPrepareThermodynamics(0.5, true);
-    float const initialEntropy = sphParticlesEntropy(0);
+    float const initialEntropy = sphParticlesEntropyValue(0);
     float const initialEnergy = sphParticlesInternalEnergy(0);
+    float const initialThermal = sphParticlesThermalVariable(0);
     sphParticlesDensity(0) *= 8.0f;
-    if (sphParticlesEntropy(0) != initialEntropy ||
-        std::abs(sphParticlesInternalEnergy(0) / initialEnergy -
-            std::pow(8.0, options.hydro.heatCapacityRatio - 1.0)) > 1.e-5) {
-        throw std::runtime_error("Adiabatic compression did not preserve entropy");
+    sphParticlesPrepareThermodynamics(0.5, false);
+    double const energyRatio = usesSphEnergyEvolution(options.hydro) ?
+        1.0 :
+        std::pow(8.0, options.hydro.heatCapacityRatio - 1.0);
+    if (sphParticlesThermalVariable(0) != initialThermal ||
+        std::abs(sphParticlesInternalEnergy(0) / initialEnergy - energyRatio) > 1.e-5) {
+        throw std::runtime_error("Density refresh changed the canonical thermal variable");
+    }
+    if (options.hydro.hopkins &&
+        (sphParticlesEntropies[0] != sphParticlesEntropyValue(0) ||
+            sphParticlesInternalEnergies[0] != sphParticlesInternalEnergy(0))) {
+        throw std::runtime_error("Density refresh left the auxiliary Hopkins field stale");
     }
     float predictedEnergy, support;
     ParticleGlobalRange range;
@@ -146,10 +181,12 @@ void sphOnlyDiagnosticsTest() {
     range.range.first = 0;
     range.range.second = 1;
     sphParticlesGlobalReadInternalEnergyAndSmoothingLength(range, &predictedEnergy, &support, 0);
-    double const expectedEnergy = sph_entropy::storedEnergy(
-        initialEntropy, sphParticlesDensity(0), options.hydro.heatCapacityRatio, 0.5);
+    double const expectedEnergy = usesSphEnergyEvolution(options.hydro) ?
+        initialEnergy :
+        sph_entropy::storedEnergy(
+            initialEntropy, sphParticlesDensity(0), options.hydro.heatCapacityRatio, 0.5);
     if (std::abs(predictedEnergy - expectedEnergy) > 1.e-5 * expectedEnergy) {
-        throw std::runtime_error("Staging did not derive energy from live canonical entropy");
+        throw std::runtime_error("Staging did not read the selected canonical thermal state");
     }
     for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
         for (int dimension = 0; dimension < kDimensions; ++dimension) {
@@ -166,7 +203,7 @@ void sphOnlyDiagnosticsTest() {
             for (int dimension = 0; dimension < kDimensions; ++dimension) {
                 values[dimension] += sphParticlesVelocity(dimension, gas);
             }
-            values[3] += sphParticlesEntropy(gas);
+            values[3] += sphParticlesThermalVariable(gas);
         }
         return values;
     };
@@ -192,10 +229,10 @@ void sphOnlyDiagnosticsTest() {
     if (!(kicked[3] > initial[3])) {
         throw std::runtime_error("Converging midpoint SPH flow produced no irreversible heating");
     }
-    std::printf("SPH-only midpoint entropy increment: %.9e\n", kicked[3] - initial[3]);
+    std::printf("SPH-only midpoint thermal increment: %.9e\n", kicked[3] - initial[3]);
     checkDiagnostics(0, kParticleCount, "midpoint kick");
     sphCheckpointTest();
-    std::cout << "SPH-only diagnostics and entropy lifecycle passed (live sources, midpoint pairs, "
+    std::cout << "SPH-only diagnostics and thermal lifecycle passed (live sources, midpoint pairs, "
                  "checkpoint)\n"
               << std::flush;
 }

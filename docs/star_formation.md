@@ -65,11 +65,12 @@ coarser hydro midpoint executes afterward in the next boundary pass. A source is
 never called merely to initialize forces, refresh output, or reload a checkpoint.
 
 The endpoint density solve supplies the thermal conversion. The backend consumes
-temporary `E = a²u` and returns an updated energy; the bridge stages canonical
-float entropy `A = (gamma-1) E rho_c^(1-gamma)` for the required `gamma=5/3`.
+temporary `E = a²u` and returns an updated energy; the bridge stages the selected
+canonical float [thermal variable](sph_thermal_formulations.md): E in density-energy
+mode, or entropy `A = (gamma-1) E rho_c^(1-gamma)` for the required `gamma=5/3`.
 Every rank must prepare and validate successfully before any rank commits.
-The source energy ledger uses the energy reconstructed from the staged entropy,
-including its storage rounding. Only entropy and the electron estimate change
+The source energy ledger uses the energy represented by the staged thermal state,
+including its storage rounding. Only thermal state and the electron estimate change
 for surviving gas. The fixed-endpoint physical duration `a Δtau` retains the
 existing first-order source splitting; it is not a second-order cooling scheme.
 

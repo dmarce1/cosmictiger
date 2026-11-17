@@ -296,8 +296,8 @@ public:
     }
 
     void enableEntropyRateOutput() {
-        if (!data_.sinkEntropyRate) {
-            data_.sinkEntropyRate = allocate<float>(count_);
+        if (!data_.sinkThermalRate) {
+            data_.sinkThermalRate = allocate<float>(count_);
         }
     }
 
@@ -362,8 +362,8 @@ public:
 
     // (du𞁑/dτ)ₕₑₐₜ of one sink, inverting the kernel's Ȧ𞁑 = (du𞁑/dτ)ₕₑₐₜ / (E/A)(ρ𞁑, γ, a).
     double dissipativeHeating(int index) const {
-        require(data_.sinkEntropyRate, "dissipative heating requires the entropy-rate output");
-        return sph_entropy::storedEnergy(data_.sinkEntropyRate[sinkIndex(index)],
+        require(data_.sinkThermalRate, "dissipative heating requires the entropy-rate output");
+        return sph_entropy::storedEnergy(data_.sinkThermalRate[sinkIndex(index)],
             data_.sourceDensity[sourceIndex(index)], data_.adiabaticIndex, params_.scaleFactor);
     }
 
@@ -402,13 +402,13 @@ public:
         });
         checkFlops();
         for (int i = 0; i < count_; i++) {
-            if (data_.sinkEntropyRate) {
+            if (data_.sinkThermalRate) {
                 require(
-                    std::isfinite(data_.sinkEntropyRate[i]), "finite active-kernel entropy rate");
+                    std::isfinite(data_.sinkThermalRate[i]), "finite active-kernel entropy rate");
             }
             if (data_.sourcePairUpdates) {
                 auto const& update = data_.sourcePairUpdates[i];
-                require(std::isfinite(float(update.entropy)), "finite active-kernel entropy kick");
+                require(std::isfinite(float(update.thermal)), "finite active-kernel entropy kick");
                 for (int dim = 0; dim < spatialDimensions(); dim++) {
                     require(std::isfinite(float(update.velocity[dim])),
                         "finite active-kernel pair kick");
@@ -464,9 +464,9 @@ void compareCpuCudaPhase(Fixture& fixture, int runType, int phase = 0) {
         data.sourceGradHCorrection, data.sourceGradHCorrection + fixture.count_);
     cpuData.sinkGradHCorrection = gradHCorrection.data();
     std::vector<float> entropyRate;
-    if (data.sinkEntropyRate) {
-        entropyRate.assign(data.sinkEntropyRate, data.sinkEntropyRate + fixture.count_);
-        cpuData.sinkEntropyRate = entropyRate.data();
+    if (data.sinkThermalRate) {
+        entropyRate.assign(data.sinkThermalRate, data.sinkThermalRate + fixture.count_);
+        cpuData.sinkThermalRate = entropyRate.data();
     }
     // Both backends start the pass from cleared pair updates; the CPU writes a host copy.
     bool const comparesKicks = data.sourcePairUpdates && fixture.params_.hydroKickTimestep > 0.0;
@@ -584,8 +584,8 @@ void compareCpuCudaPhase(Fixture& fixture, int runType, int phase = 0) {
         require(data.sourceBalsaraFactor[i] == sourceBalsaraFactor[i],
             "CPU/CUDA phases must preserve Balsara source snapshots");
         requireClose("CPU/CUDA support", smoothingLengths[i], data.sinkSmoothingLength[i], 3.0e-5);
-        if (data.sinkEntropyRate) {
-            requireClose("CPU/CUDA entropy rate", entropyRate[i], data.sinkEntropyRate[i], 5.0e-5);
+        if (data.sinkThermalRate) {
+            requireClose("CPU/CUDA entropy rate", entropyRate[i], data.sinkThermalRate[i], 5.0e-5);
         }
         require(flags[i].bits == data.sinkFlags[i].bits, "CPU/CUDA packed-flag byte parity");
         if (data.sinkRungCandidates) {
@@ -603,8 +603,8 @@ void compareCpuCudaPhase(Fixture& fixture, int runType, int phase = 0) {
                     compensatedKickSum(gpu.velocity[dim]) / kickTimestep, 5.0e-5);
             }
             requireClose("CPU/CUDA kick entropy rate",
-                compensatedKickSum(cpu.entropy) / kickTimestep,
-                compensatedKickSum(gpu.entropy) / kickTimestep, 5.0e-5);
+                compensatedKickSum(cpu.thermal) / kickTimestep,
+                compensatedKickSum(gpu.thermal) / kickTimestep, 5.0e-5);
         }
         require(rungs[i] == data.sinkParticleRungs[i], "CPU/CUDA particle-rung parity");
         require(data.sourceDensity[i] == sourceDensity[i] &&
@@ -1892,6 +1892,18 @@ TEST_F(SphCudaTest, SharedNeighborStorageAndResize) {
 TEST_F(SphCudaTest, ArtificialConduction) {
     detail::Fixture fixture(2, 2, true);
     detail::testConductionPair(fixture);
+}
+
+TEST_F(SphCudaTest, DensityEnergyPressureWorkAndConservativePairKicks) {
+    detail::Fixture fixture(2, 2, true);
+    detail::testDensityEnergyPair(fixture);
+}
+
+TEST_F(SphCudaTest, DensityEnergyHomogeneousExpansion) {
+    for (int const count : {1, 2}) {
+        detail::Fixture fixture(count, 1, true);
+        detail::testDensityEnergyExpansion(fixture);
+    }
 }
 
 TEST_F(SphCudaTest, ArtificialConductionCpuParity) {
