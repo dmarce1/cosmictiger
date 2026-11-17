@@ -34,6 +34,7 @@
 #include <cosmictiger/particles/particle_partition.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_SPH
+#include <cosmictiger/mfm/particles.hpp>
 #include <cosmictiger/sph/particles.hpp>
 #include <cosmictiger/sph/tree.hpp>
 #endif
@@ -433,6 +434,7 @@ struct GasMigrationState {
     SphParticleFlags flags;    // Working flags and the retained proposed hydro rung.
     Float16Storage bulkViscosityCoefficient;    // Evolved artificial-viscosity alpha.
     float electronFraction{1.0f};               // Equilibrium-cooling electron guess.
+    mfm::MigrationState<float> mfmGeometry;     // Hopkins inverse moment and validity.
     /// Archive enabled persistent thermal and viscosity fields in transport order.
     template <class Archive>
     void serialize(Archive& arc, unsigned) {
@@ -449,6 +451,9 @@ struct GasMigrationState {
         arc & bulkViscosityCoefficient.bits;
         if (opts.chemistry.enabled) {
             arc & electronFraction;
+        }
+        if (opts.hydro.hopkins) {
+            mfmGeometry.serialize(arc, spatialDimensions());
         }
     }
 };
@@ -502,6 +507,9 @@ static SphMigrationParticle packSphParticle(ParticleInteger index) {
         if (opts.chemistry.enabled) {
             gas.electronFraction = sphParticlesElectronFractions[i];
         }
+        if (opts.hydro.hopkins) {
+            gas.mfmGeometry = mfm::packParticle<float>(i, spatialDimensions());
+        }
     }
     return result;
 }
@@ -530,6 +538,9 @@ static void unpackSphParticle(
         sphParticlesBulkViscosityCoefficients[i] = gas.bulkViscosityCoefficient;
         if (opts.chemistry.enabled) {
             sphParticlesElectronFractions[i] = gas.electronFraction;
+        }
+        if (opts.hydro.hopkins) {
+            mfm::unpackParticle<float>(gas.mfmGeometry, i, spatialDimensions());
         }
     }
 }

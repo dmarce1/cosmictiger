@@ -1897,6 +1897,19 @@ if(BUILD_TESTING)
             PROPERTIES TIMEOUT 120 PROCESSORS 1
             CASE_PROCESSORS SphCpuTest.CompensatedFloatPairAccumulation=4)
 
+        add_executable(mfm_cpu_test tests/mfm/cpu.cpp src/mfm/prehydro_cpu.cpp
+            src/mfm/particles.cpp)
+        target_include_directories(mfm_cpu_test PRIVATE ${PROJECT_SOURCE_DIR})
+        target_compile_definitions(mfm_cpu_test PRIVATE ORDER=${cosmictiger_default_fmm_order})
+        cosmictiger_use_generated_kernels(mfm_cpu_test)
+        target_link_libraries(mfm_cpu_test PRIVATE HPX::hpx)
+        target_compile_options(mfm_cpu_test PRIVATE -ffast-math)
+        if(COMPILER_SUPPORTS_MARCH_NATIVE)
+            target_compile_options(mfm_cpu_test PRIVATE -march=native)
+        endif()
+        cosmictiger_add_gtest(NAME mfm_cpu TARGET mfm_cpu_test
+            PROPERTIES TIMEOUT 120 PROCESSORS 1 LABELS "mfm;cpu")
+
     endif()
 
     foreach(matrix_variant IN ITEMS standard fast_math)
@@ -2045,6 +2058,25 @@ if(BUILD_TESTING)
             PROPERTIES RUN_SERIAL TRUE TIMEOUT 120 SKIP_RETURN_CODE 77)
 
         if(COSMICTIGER_WITH_SPH)
+            add_executable(mfm_cuda_test tests/mfm/cuda.cu tests/cuda_memory_backend.cpp
+                src/mfm/prehydro.cu src/mfm/prehydro_cpu.cpp
+                src/cuda/cuda_memory.cu src/cuda/cuda_stream.cpp src/core/assert.cu)
+            target_include_directories(mfm_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
+            target_compile_definitions(mfm_cuda_test PRIVATE
+                USE_CUDA ORDER=${cosmictiger_default_fmm_order})
+            cosmictiger_use_generated_kernels(mfm_cuda_test)
+            target_link_libraries(mfm_cuda_test PRIVATE CUDA::cudart HPX::hpx)
+            target_compile_options(mfm_cuda_test PRIVATE
+                $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr;--use_fast_math>
+                $<$<COMPILE_LANGUAGE:CXX>:-ffast-math>)
+            if(COMPILER_SUPPORTS_MARCH_NATIVE)
+                target_compile_options(mfm_cuda_test PRIVATE
+                    $<$<COMPILE_LANGUAGE:CXX>:-march=native>)
+            endif()
+            set_target_properties(mfm_cuda_test PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+            cosmictiger_add_gtest(NAME mfm_cuda TARGET mfm_cuda_test
+                PROPERTIES RUN_SERIAL TRUE TIMEOUT 120 RESOURCE_LOCK cuda LABELS "mfm;cuda")
+
             add_executable(monaghan_sph_cuda_test tests/sph/cuda.cu
                 tests/cuda_memory_backend.cpp
                 src/core/flops.cu

@@ -169,6 +169,8 @@ constexpr uint32_t kArtificialConduction = 1U << 25;
 constexpr uint32_t kIndependentParticleCounts = 1U << 26;
 constexpr uint32_t kSphEnergyEvolution = 1U << 27;
 constexpr uint32_t kSphDualThermalStorage = 1U << 28;
+// Hopkins geometry adds an independently versioned compact B=E^-1 payload.
+constexpr uint32_t kMfmInverseMomentLayout = 1U << 29;
 constexpr uint32_t kChemistry = 1U << 11;
 constexpr uint32_t kZPlaneAcceleration = 1U << 12;
 constexpr uint32_t kBalsaraSwitch = 1U << 13;
@@ -541,6 +543,7 @@ uint32_t checkpointFlags(Options const& opts) {
         (opts.hydro.enabled ? kVariableViscosity : 0U) |
         (opts.hydro.enabled && usesSphEnergyEvolution(opts.hydro) ? kSphEnergyEvolution : 0U) |
         (opts.hydro.enabled && opts.hydro.hopkins ? kSphDualThermalStorage : 0U) |
+        (opts.hydro.enabled && opts.hydro.hopkins ? kMfmInverseMomentLayout : 0U) |
         (opts.compute.positionType == "fixed64" ? kFixed64Positions : 0U) |
         (opts.starFormation.enabled ? kStarFormation : 0U);
 }
@@ -841,6 +844,11 @@ DriverParameters readDriverState(FILE* fp) {
                             "requires the variational pressure operator",
                     saved == kRetiredMonaghanSph ? "monaghan" : "unknown"));
         }
+        if ((header.flags & kSphDualThermalStorage) != 0U &&
+            (header.flags & kMfmInverseMomentLayout) == 0U) {
+            throw std::runtime_error("Hopkins checkpoint predates persistent MFM inverse moments; "
+                                     "restart requires the versioned geometry payload");
+        }
         if (!checkpointCompatible(header, opts)) {
             throw std::runtime_error(
                 "Checkpoint physics, particle layout or integrator differs from the requested run");
@@ -1076,6 +1084,9 @@ void checkpointStateTest() {
         ALWAYS_ASSERT(!detail::checkpointCompatible(energyHeader, thermalOptions));
         auto const dualHeader = detail::checkpointHeader(thermalOptions);
         ALWAYS_ASSERT(detail::checkpointCompatible(dualHeader, thermalOptions));
+        auto oldHopkinsHeader = dualHeader;
+        oldHopkinsHeader.flags &= ~detail::kMfmInverseMomentLayout;
+        ALWAYS_ASSERT(!detail::checkpointCompatible(oldHopkinsHeader, thermalOptions));
         thermalOptions.hydro.sphFormulation = "densityEntropy";
         ALWAYS_ASSERT(!detail::checkpointCompatible(dualHeader, thermalOptions));
         ALWAYS_ASSERT(!detail::checkpointCompatible(entropyHeader, thermalOptions));

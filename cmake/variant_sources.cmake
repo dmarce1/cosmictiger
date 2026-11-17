@@ -89,6 +89,9 @@ function(cosmictiger_feature_sources output)
             src/scenarios/gresho.cpp
             src/scenarios/exact_sod.cpp
             src/scenarios/sedov.cpp
+            src/mfm/particles.cpp
+            src/mfm/prehydro_cpu.cpp
+            src/mfm/prehydro.cu
             src/sph/sph.cpp
             src/sph/cuda.cu
             src/sph/cpu.cpp

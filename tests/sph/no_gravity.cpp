@@ -15,6 +15,7 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #include <cosmictiger/sph/particles.hpp>
+#include <tests/mfm/persistence_cases.hpp>
 
 void sphOnlyDiagnosticsTest() {
     static_assert(COSMICTIGER_WITH_SPH);
@@ -48,7 +49,7 @@ void sphOnlyDiagnosticsTest() {
             if (std::bit_cast<uint32_t>(particlesPot(index)) != 0U) {
                 throw std::runtime_error(std::string(stage) + ": nonzero saved gravity potential");
             }
-            for (int dim = 0; dim < kDimensions; ++dim) {
+            for (int dim = 0; dim < spatialDimensions(); ++dim) {
                 if (std::bit_cast<uint32_t>(particlesGravityAcceleration(dim, index)) != 0U) {
                     throw std::runtime_error(
                         std::string(stage) + ": nonzero saved gravity acceleration");
@@ -59,7 +60,7 @@ void sphOnlyDiagnosticsTest() {
     auto const poisonDiagnostics = []() {
         for (ParticleInteger index = 0; index < particlesSize(); ++index) {
             particlesPot(index) = -100.0f - index;
-            for (int dim = 0; dim < kDimensions; ++dim) {
+            for (int dim = 0; dim < spatialDimensions(); ++dim) {
                 particlesGravityAcceleration(dim, index) = 100.0f + 3 * index + dim;
             }
         }
@@ -127,7 +128,7 @@ void sphOnlyDiagnosticsTest() {
     sphParticlesResize(kParticleCount);
     checkDiagnostics(kParticleCount / 2, kParticleCount, "reused allocation");
     for (ParticleInteger index = 0; index < kParticleCount; ++index) {
-        for (int dim = 0; dim < kDimensions; ++dim) {
+        for (int dim = 0; dim < spatialDimensions(); ++dim) {
             particlesPos(dim, index) = 0.125 * index;
             particlesVel(dim, index) = 0.25f * (dim + 1);
         }
@@ -136,6 +137,7 @@ void sphOnlyDiagnosticsTest() {
         sphParticlesSmoothingLength(index) = 0.25f;
         sphParticlesDensity(index) = 1.0f;
         sphParticlesSetProposedRung(index, 3);
+        detail::setMfmFixtureGeometry(index, index);
     }
     UniqueFile checkpoint(std::tmpfile());
     if (checkpoint == nullptr) {
@@ -146,10 +148,14 @@ void sphOnlyDiagnosticsTest() {
     sphParticlesSetInternalEnergy(0, 99.0f);
     particlesVel(kXi, 0) = 99.0f;
     sphParticlesSetProposedRung(0, 9);
+    detail::setMfmFixtureGeometry(0, 99);
     std::rewind(checkpoint.get());
     // This deliberately retains the same particle count, bypassing allocation.
     particlesLoad(checkpoint.get());
     checkDiagnostics(0, kParticleCount, "same-size checkpoint load");
+    for (ParticleInteger index = 0; index < kParticleCount; ++index) {
+        detail::requireMfmFixtureGeometry(index, index);
+    }
     if (particlesSize() != kParticleCount || sphParticlesSize() != kParticleCount ||
         sphParticlesInternalEnergy(0) != 2.0f || particlesVel(kXi, 0) != 0.25f ||
         sphParticlesProposedRung(0) != 3) {
@@ -189,7 +195,7 @@ void sphOnlyDiagnosticsTest() {
         throw std::runtime_error("Staging did not read the selected canonical thermal state");
     }
     for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
-        for (int dimension = 0; dimension < kDimensions; ++dimension) {
+        for (int dimension = 0; dimension < spatialDimensions(); ++dimension) {
             // The neighboring diagonal particles lie near the edge of h=0.25.
             // A weak compression heats by less than one float entropy unit at
             // dt=0.0005; use a resolved shock without changing that short step.
@@ -200,7 +206,7 @@ void sphOnlyDiagnosticsTest() {
     auto const totals = []() {
         Array<double, 4> values{};
         for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
-            for (int dimension = 0; dimension < kDimensions; ++dimension) {
+            for (int dimension = 0; dimension < spatialDimensions(); ++dimension) {
                 values[dimension] += sphParticlesVelocity(dimension, gas);
             }
             values[3] += sphParticlesThermalVariable(gas);
@@ -221,7 +227,7 @@ void sphOnlyDiagnosticsTest() {
     }
     sphMidpointStep(1, 0.00025, 0.0005, 0.001, 0.5, 0.0, energies);
     auto const kicked = totals();
-    for (int dimension = 0; dimension < kDimensions; ++dimension) {
+    for (int dimension = 0; dimension < spatialDimensions(); ++dimension) {
         if (std::abs(kicked[dimension] - initial[dimension]) > 3.0e-6) {
             throw std::runtime_error("SPH midpoint pair impulses failed momentum conservation");
         }

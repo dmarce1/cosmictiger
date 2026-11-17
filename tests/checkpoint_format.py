@@ -78,7 +78,7 @@ def read_header(data):
     header = Reader(data).native(Header)
     require(header.magic == 0x4354535048303031 and header.version == 3,
             "unsupported checkpoint header")
-    supported = sum(1 << bit for bit in (0, 6, 7, 8, 9, 11, 12, 13, 14, 15, 17, 18, 19, 20, 21, 22, 23, 25, 26, 27, 28))
+    supported = sum(1 << bit for bit in (0, 6, 7, 8, 9, 11, 12, 13, 14, 15, 17, 18, 19, 20, 21, 22, 23, 25, 26, 27, 28, 29))
     require(not header.flags & (1 << 16), "retired particle-mesh checkpoint")
     require(not header.flags & ~supported, "unsupported checkpoint feature flags")
     return header
@@ -98,7 +98,7 @@ def read_prefix(data):
             "SPH checkpoint predates the Rosswog-limited viscosity layout")
     require(not cooling or hydro, "cooling checkpoint requires SPH")
     require(not stars or cooling, "star formation checkpoint requires cooling")
-    require(hydro or not flags & ((1 << 12) | (1 << 13) | (1 << 14) | (1 << 25) | (1 << 27) | (1 << 28)),
+    require(hydro or not flags & ((1 << 12) | (1 << 13) | (1 << 14) | (1 << 25) | (1 << 27) | (1 << 28) | (1 << 29)),
             "SPH parameter flags require SPH")
     result = SimpleNamespace(header=header, dimension_count=dimension_count,
                              storage_dimensions=dimension_count if header.reserved & (1 << 30) else 3,
@@ -109,6 +109,9 @@ def read_prefix(data):
                              cooling_parameters=(), star_parameters=(), sph_parameters=())
     result.energy_evolution = bool(flags & (1 << 27))
     result.dual_thermal_storage = bool(flags & (1 << 28))
+    result.has_mfm_geometry = bool(flags & (1 << 29))
+    require(result.has_mfm_geometry == result.dual_thermal_storage,
+            "Hopkins checkpoint requires versioned persistent MFM inverse moments")
     result.has_entropy_storage = hydro and (not result.energy_evolution or result.dual_thermal_storage)
     result.has_energy_storage = hydro and (result.energy_evolution or result.dual_thermal_storage)
     if flags & (1 << 18):
@@ -220,6 +223,7 @@ def decode_checkpoint(data, ranks=1):
     result.types = reader.take("b", count) if result.hydro else (0,) * count
     result.gas_indices = reader.take(integer_code, count) if result.hydro else ()
     result.cooling, result.stars = (), ()
+    result.inverse_moments, result.geometry_valid = (), ()
     result.gas = [() for _ in range(gas_count)]
     if result.hydro:
         result.gas_start = reader.offset
@@ -270,6 +274,21 @@ def decode_checkpoint(data, ranks=1):
             viscosity.append(values)
         if result.has_cooling:
             result.cooling = tuple(reader.take("f", 1) for _ in range(gas_count))
+        if result.has_mfm_geometry:
+            components = result.dimension_count * (result.dimension_count + 1) // 2
+            result.mfm_header_offset = reader.offset
+            mfm_header = reader.take("I", 7)
+            require(mfm_header == (0x43544D46, 1, result.dimension_count, 4, 1, 1, components),
+                    f"unsupported checkpoint MFM geometry layout: {mfm_header}")
+            require(reader.take("Q")[0] == gas_count, "checkpoint MFM gas counts disagree")
+            result.mfm_matrix_offset = reader.offset
+            result.inverse_moments = tuple(reader.take("f", components) for _ in range(gas_count))
+            result.mfm_validity_offset = reader.offset
+            result.geometry_valid = reader.take("B", gas_count)
+            require(all(value in (0, 1) for value in result.geometry_valid),
+                    "invalid checkpoint MFM geometry-valid byte")
+            require(all(math.isfinite(value) for matrix in result.inverse_moments for value in matrix),
+                    "nonfinite checkpoint MFM inverse moment")
         result.gas_end = reader.offset
         require(all(kind in (0, 1, 2) for kind in result.types) and
                 result.types.count(1) == gas_count, "invalid checkpoint particle species")
@@ -284,7 +303,9 @@ def decode_checkpoint(data, ranks=1):
                 result.proposed_rungs[gas_index],
                 *viscosity[gas_index],
                 *(result.cooling[gas_index] if result.has_cooling else ()),
-                *((result.stored_internal_energies[gas_index],) if result.has_energy_storage else ()))
+                *((result.stored_internal_energies[gas_index],) if result.has_energy_storage else ()),
+                *((*result.inverse_moments[gas_index], result.geometry_valid[gas_index])
+                  if result.has_mfm_geometry else ()))
     if result.has_stars:
         require(reader.take("Q", 2) == (0x4354534650415254, 2),
                 "unsupported checkpoint star-particle metadata")

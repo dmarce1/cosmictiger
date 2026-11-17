@@ -27,8 +27,10 @@
 #include <hpx/threading_base/annotated_function.hpp>
 
 #define SPH_PARTICLES_CPP
+#include <cosmictiger/core/file_handle.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/math/vector3.hpp>
+#include <cosmictiger/mfm/particles.hpp>
 #include <cosmictiger/sph/ghosts.hpp>
 #include <cosmictiger/sph/parent_tree.hpp>
 #include <cosmictiger/sph/sph.hpp>
@@ -117,6 +119,9 @@ void sphParticlesSwap(ParticleInteger i, ParticleInteger j) {
     std::swap(sphParticlesGradHCorrections[i], sphParticlesGradHCorrections[j]);
     detail::visitSphCheckpointArrays(
         [i, j](auto* values, size_t) { std::swap(values[i], values[j]); });
+    if (getOptions().hydro.hopkins) {
+        mfm::swapParticles<float>(i, j, spatialDimensions());
+    }
 }
 
 /// Partition a gas range along one position coordinate and return the split index.
@@ -190,6 +195,7 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
         }
         capacity = newCapacity;
     }
+    mfm::resizeParticles<float>(particleCount, capacity, spatialDimensions(), opts.hydro.hopkins);
     ParticleInteger numberOfNewParticles = particleCount - size;
     ParticleInteger offset = particlesSize();
     if (resizeGravityParticles) {
@@ -240,6 +246,7 @@ void sphParticlesRemove(ParticleInteger index) {
 /// initialization state.
 void sphParticlesFree() {
     sphTreeInvalidate();
+    mfm::freeParticles<float>();
     sphParticlesEntropyInitialized = false;
     sphParticlesThermalScaleFactor = 1.0;
     if (sphParticlesBalsaraFactors != nullptr) {
@@ -480,6 +487,9 @@ void sphParticlesLoad(FILE* fp) {
             sphParticlesElectronFractions[index] = electronFraction;
         }
     }
+    if (opts.hydro.hopkins) {
+        mfm::loadParticles<float>(fp, sphParticlesSize(), spatialDimensions());
+    }
 }
 
 /// Write the versioned persistent gas arrays and thermal context to the checkpoint stream.
@@ -508,6 +518,9 @@ void sphParticlesSave(FILE* fp) {
             float const electronFraction = sphParticlesElectronFractions[index];
             FWRITE(&electronFraction, sizeof(float), 1, fp);
         }
+    }
+    if (opts.hydro.hopkins) {
+        mfm::saveParticles<float>(fp, spatialDimensions());
     }
 }
 
@@ -651,12 +664,17 @@ void sphCheckpointTest() {
         }
     }
     ParticleInteger const savedSize = size;
-    size = 0;
-    std::rewind(file);
-    sphParticlesSave(file);
+    UniqueFile emptyFile(std::tmpfile());
+    if (!emptyFile) {
+        throw std::ios_base::failure("Unable to create empty SPH checkpoint test file");
+    }
+    sphParticlesResize(0, false);
+    sphParticlesSave(emptyFile.get());
+    std::rewind(emptyFile.get());
+    sphParticlesLoad(emptyFile.get());
+    sphParticlesResize(savedSize, false);
     std::rewind(file);
     sphParticlesLoad(file);
-    size = savedSize;
     std::fclose(file);
     if (testChemistry) {
         sphParticlesElectronFractions[0] = originalElectronFraction;

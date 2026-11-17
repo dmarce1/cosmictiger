@@ -29,7 +29,8 @@ def checkpoint_fixture(*, hydro=True, cooling=False, stars=False, viscosity=Fals
                        position_bytes=4, integer_bytes=4, global_step=False, pmmm=0,
                        ranks=1, converged=False, semiactive=True, proposed_rung=3,
                        energy_evolution=False, dual_thermal_storage=False, thermal_initialized=False,
-                       gamma=5.0 / 3.0, thermal_scale_factor=1.0):
+                       gamma=5.0 / 3.0, thermal_scale_factor=1.0, dimensions=3,
+                       geometry_valid=True):
     """Small writer-order fixture, with magic-like data inside a position array."""
     # Every SPH checkpoint stores alpha and the Balsara factor.
     viscosity = viscosity or hydro
@@ -42,9 +43,11 @@ def checkpoint_fixture(*, hydro=True, cooling=False, stars=False, viscosity=Fals
     flags |= int(hydro and balsara) << 13
     flags |= int(hydro and energy_evolution) << 27
     flags |= int(hydro and dual_thermal_storage) << 28
+    flags |= int(hydro and dual_thermal_storage) << 29
     header = checkpoint.Header()
     header.magic, header.version, header.flags = 0x4354535048303031, 3, flags
     header.reserved = (int(hydro) << 25) | (int(hydro) << 26)
+    header.reserved |= ((3 - dimensions) << 28) | (int(dimensions < 3) << 30)
     header.particles_per_species = 2
     header.physics[2] = gamma
     output = bytearray(bytes(header))
@@ -81,9 +84,9 @@ def checkpoint_fixture(*, hydro=True, cooling=False, stars=False, viscosity=Fals
     put(integer, 2)
     if hydro:
         put(integer, 1)
-    for dimension in range(3):
+    for dimension in range(dimensions):
         put('2Q' if position_bytes == 8 else '2I', 0x43545350 + dimension, 20 + dimension)
-    put('6f', 1., 2., 3., 4., 5., 6.)
+    put(f'{2 * dimensions}f', *range(1, 2 * dimensions + 1))
     put('2b', 0, 0)
     if hydro:
         put('2b', 0, 1)
@@ -92,7 +95,7 @@ def checkpoint_fixture(*, hydro=True, cooling=False, stars=False, viscosity=Fals
         version = 140000 + (110 if stars else 100 if cooling else 2) + (2 if viscosity else 0)
         version += (1000 if energy_evolution else 0) + (2000 if dual_thermal_storage else 0)
         offsets['gas_version'] = len(output) + 4
-        put('7I', 0x43545350, version, integer_bytes, 4, 0, 3, 4)
+        put('7I', 0x43545350, version, integer_bytes, 4, 0, dimensions, 4)
         put(integer, 1)
         put('I', int(thermal_initialized))
         put('d', thermal_scale_factor)
@@ -115,6 +118,16 @@ def checkpoint_fixture(*, hydro=True, cooling=False, stars=False, viscosity=Fals
             put('e', .25)
         if cooling:
             put('f', 1.)  # electron fraction
+        if dual_thermal_storage:
+            components = dimensions * (dimensions + 1) // 2
+            offsets['mfm_header'] = len(output)
+            put('7I', 0x43544D46, 1, dimensions, 4, 1, 1, components)
+            offsets['mfm_count'] = len(output)
+            put('Q', 1)
+            offsets['mfm_matrix'] = len(output)
+            put(f'{components}f', *range(1, components + 1))
+            offsets['mfm_validity'] = len(output)
+            put('B', int(geometry_valid))
     if stars:
         offsets['metadata'] = len(output)
         put('2Q', 0x4354534650415254, 2)
@@ -209,8 +222,55 @@ class CheckpointTests(unittest.TestCase):
                 header.flags ^= 1 << bit
                 with self.subTest(energy_evolution=energy_evolution,
                                   dual_thermal_storage=dual_thermal_storage, bit=bit), \
-                        self.assertRaisesRegex(RuntimeError, 'unsupported checkpoint gas layout'):
+                        self.assertRaisesRegex(RuntimeError,
+                            'unsupported checkpoint gas layout|requires versioned persistent MFM'):
                     checkpoint.decode_checkpoint(altered)
+
+    def test_mfm_geometry_compact_dimensions_and_following_blocks(self):
+        for dimensions, geometry_valid, state in itertools.product(
+                (1, 2, 3), (False, True), ('hydro', 'cooling', 'stars')):
+            with self.subTest(dimensions=dimensions, geometry_valid=geometry_valid, state=state):
+                data, offsets = checkpoint_fixture(dual_thermal_storage=True,
+                    dimensions=dimensions, geometry_valid=geometry_valid,
+                    cooling=state != 'hydro', stars=state == 'stars')
+                result = checkpoint.decode_checkpoint(data)
+                components = dimensions * (dimensions + 1) // 2
+                self.assertEqual(result.inverse_moments, (tuple(range(1, components + 1)),))
+                self.assertEqual(result.geometry_valid, (int(geometry_valid),))
+                self.assertEqual(result.mfm_header_offset, offsets['mfm_header'])
+                self.assertEqual(result.mfm_validity_offset - result.mfm_matrix_offset,
+                                 components * 4)
+                self.assertEqual(len(result.stars), 2 if state == 'stars' else 0)
+
+    def test_mfm_geometry_metadata_and_state_corruption(self):
+        data, offsets = checkpoint_fixture(dual_thermal_storage=True)
+        mutations = [
+            (offsets['mfm_header'] + field * 4, 'I', value, 'MFM geometry layout')
+            for field, value in enumerate((0, 2, 2, 8, 2, 2, 3))
+        ]
+        mutations += [(offsets['mfm_count'], 'Q', 2, 'MFM gas counts'),
+                      (offsets['mfm_validity'], 'B', 2, 'MFM geometry-valid'),
+                      (offsets['mfm_matrix'], 'f', math.nan, 'nonfinite checkpoint MFM'),
+                      (offsets['mfm_matrix'], 'f', math.inf, 'nonfinite checkpoint MFM')]
+        for offset, code, value, message in mutations:
+            altered = bytearray(data)
+            struct.pack_into('=' + code, altered, offset, value)
+            with self.subTest(offset=offset, value=value), \
+                    self.assertRaisesRegex(RuntimeError, message):
+                checkpoint.decode_checkpoint(altered)
+        for end in range(offsets['mfm_header'], offsets['mfm_validity'] + 1):
+            with self.subTest(end=end), self.assertRaisesRegex(RuntimeError, 'truncated checkpoint'):
+                checkpoint.decode_checkpoint(data[:end])
+
+    def test_mfm_geometry_layout_flags_reject_old_hopkins_and_spurious_extension(self):
+        for dual_thermal_storage in (False, True):
+            data, _ = checkpoint_fixture(dual_thermal_storage=dual_thermal_storage)
+            altered = bytearray(data)
+            header = checkpoint.Header.from_buffer(altered)
+            header.flags ^= 1 << 29
+            with self.subTest(dual_thermal_storage=dual_thermal_storage), \
+                    self.assertRaisesRegex(RuntimeError, 'requires versioned persistent MFM'):
+                checkpoint.decode_checkpoint(altered)
 
     def test_layout_variants(self):
         for position_bytes, integer_bytes, global_step, state, viscosity, balsara in itertools.product(

@@ -18,6 +18,7 @@
 #include <cosmictiger/sph/thermodynamics.hpp>
 #include <cosmictiger/sph/tree.hpp>
 #include <cosmictiger/stars/star_formation.hpp>
+#include <tests/mfm/persistence_cases.hpp>
 
 namespace detail {
 
@@ -32,6 +33,7 @@ float fixtureElectronFraction(int rank, int originalGasIndex) {
 }
 
 void requireFixtureChemistry(ParticleInteger gasIndex, int rank, int originalGasIndex) {
+    requireMfmFixtureGeometry(gasIndex, 1000 * rank + originalGasIndex);
     auto const& opts = getOptions();
     auto const expected = fixtureElectronFraction(rank, originalGasIndex);
     requireStarParticles(sphParticlesElectronFractions[gasIndex] == expected,
@@ -77,6 +79,7 @@ void initializeStarParticleFixture() {
                 sphParticlesBulkViscosityCoefficients[gasIndex] = 0.25f + 0.125f * gasIndex;
             }
             sphParticlesElectronFractions[gasIndex] = fixtureElectronFraction(hpxRank(), gasIndex);
+            setMfmFixtureGeometry(gasIndex, 1000 * hpxRank() + gasIndex);
         }
     }
 }
@@ -125,6 +128,7 @@ std::vector<Particle> exerciseStarParticleFixture() {
         particlesStarFormationStates[index] = {};
     }
     sphParticlesElectronFractions[0] = 1.0f;
+    setMfmFixtureGeometry(0, 999);
     std::rewind(file);
     particlesLoad(file);
     FILE* const mixedCheckpoint = file;
@@ -174,15 +178,13 @@ std::vector<Particle> starParticleMigrationSnapshot() {
     return result;
 }
 
-
 }    // namespace detail
 
 HPX_PLAIN_ACTION(detail::initializeStarParticleFixture, InitializeStarParticleFixtureAction);
 HPX_PLAIN_ACTION(detail::exerciseStarParticleFixture, ExerciseStarParticleFixtureAction);
 HPX_PLAIN_ACTION(detail::starParticleMigrationSnapshot, StarParticleMigrationSnapshotAction);
 
-namespace detail {
-}    // namespace detail
+namespace detail {}    // namespace detail
 
 void starFormationParticlesTest() {
     auto const& opts = getOptions();
